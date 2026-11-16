@@ -42,8 +42,16 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "parent-binding",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "pending-contract",
       "implementationStatus": "pending"
+    },
+    {
+      "path": "rejected-binding-initializer",
+      "implementationStatus": "ready"
     },
     {
       "path": "rejected-image",
