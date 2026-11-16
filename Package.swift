@@ -26,6 +26,7 @@ let package = Package(
             name: "RefractFrontend",
             dependencies: [
                 "RefractIR",
+                "RefractMapping",
                 .product(name: "SwiftParser", package: "swift-syntax"),
                 .product(name: "SwiftParserDiagnostics", package: "swift-syntax"),
                 .product(name: "SwiftSyntax", package: "swift-syntax"),

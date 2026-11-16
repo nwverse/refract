@@ -30,7 +30,8 @@ struct Generation {
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
         }
-        for declaration in resolver.imports(for: .harmonyOS) where declaration.symbols.contains(where: emittedImports.contains) {
+        for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module })
+            where declaration.symbols.contains(where: emittedImports.contains) {
             importLines.append("import { \(declaration.symbols.filter(emittedImports.contains).joined(separator: ", ")) } from '\(declaration.module)';")
         }
         for native in usedNativeComponents(in: module.screens.map(\.body)) {
@@ -116,6 +117,8 @@ struct Generation {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
             }
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
+        case let .component(component, location):
+            try ArkDesignSystem().emit(component, location: location, mapping: mapping, writer: &writer)
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
                 try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
@@ -147,6 +150,21 @@ struct Generation {
         for child in node.children(for: .harmonyOS) { try collectImports(child, resolver: resolver, into: &emittedImports) }
         if case let .native(component, location) = node {
             emittedImports.insert(try resolver.target(for: component, platform: .harmonyOS, location: location).symbol)
+        }
+        if case let .component(component, location) = node {
+            emittedImports.insert(try mapping.component(named: component.name, platform: .harmonyOS,
+                                                       location: location).target)
+            for modifier in component.modifiers {
+                for argument in modifier.arguments {
+                    if case let .reference(reference) = argument.value {
+                        for category in TokenCategory.allCases {
+                            if let target = mapping.harmonyOS.tokens[category][reference] {
+                                emittedImports.insert(target.split(separator: ".").first.map(String.init) ?? target)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

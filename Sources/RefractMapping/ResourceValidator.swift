@@ -21,6 +21,9 @@ public enum LocalizationResourceValidator {
                 return visit(label) + modifiers.flatMap(\.arguments)
             case let .native(component, _):
                 return component.arguments.map(\.expression)
+            case let .component(component, _):
+                return component.arguments.map(\.expression) + component.children.flatMap(visit)
+                    + component.modifiers.flatMap(\.arguments)
             case let .platformView(alternatives, _):
                 return (alternatives.android + alternatives.harmonyOS).flatMap(visit)
             case let .conditional(branches, _):
