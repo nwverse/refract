@@ -35,7 +35,7 @@ private func stateType(_ type: ValueType) throws -> String {
 }
 
 func emitLocalExpression(_ expression: Expression, item: String? = nil,
-                         mapping: Mapping = .empty) throws -> String {
+                         mapping: Mapping = .empty, itemParameters: Set<String> = []) throws -> String {
     switch expression.value {
     case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
         guard ArkText.isIdentifier(name) else {
@@ -46,7 +46,7 @@ func emitLocalExpression(_ expression: Expression, item: String? = nil,
     case let .valueProperty(.model(model, property)):
         return "this.\(model).\(property)"
     case let .valueProperty(.itemBinding(binding)):
-        guard binding.item == item else {
+        guard item == binding.item || itemParameters.contains(binding.item) else {
             throw Diagnostic(code: "arkui.invalid_control_binding", message: "An item binding must read the current typed list item.",
                              suggestion: "Use the current LazyForEach item.", location: expression.location)
         }

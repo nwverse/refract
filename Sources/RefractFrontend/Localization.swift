@@ -29,8 +29,52 @@ extension Builder {
 
     func typedInputScreen(_ node: StructDeclSyntax,
                           members: MemberBlockItemListSyntax) -> Screen? {
+        var parameters: [ScreenParameter] = []
+        let savedParameters = self.parameters
+        defer { self.parameters = savedParameters }
+        let hasItemInput = members.contains { member in
+            guard let type = member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
+                .trimmedDescription else { return false }
+            return itemTypes.contains(where: { $0.name == type })
+        }
+        guard let states = hasItemInput ? localInputStates(node) : localStateDeclarations(node) else { return nil }
+        if states.contains(where: {
+            guard case .state = $0 else { return false }
+            return true
+        }) {
+            error("state.invalid_declaration", "A typed-input child View cannot mix local state with model/item inputs.",
+                  "Keep local state in the parent or use a dedicated state-only View.", at: node.name)
+            return nil
+        }
+        currentModels = states.compactMap {
+            guard case let .model(reference, _) = $0 else { return nil }
+            return reference
+        }
+        currentStates = states
+        let savedItem = currentListItem
+        let savedItemType = currentListItemType
+        defer {
+            currentModels = []
+            currentStates = []
+            currentListItem = savedItem
+            currentListItemType = savedItemType
+        }
+        var itemInput: (name: String, type: ItemType)?
         var body: VariableDeclSyntax?
         for member in members {
+            let inputType = member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
+                .trimmedDescription ?? ""
+            let isItemInput = itemTypes.contains(where: { $0.name == inputType })
+            guard let variable = member.decl.as(VariableDeclSyntax.self),
+                  variable.attributes.isEmpty, variable.modifiers.isEmpty,
+                  variable.bindings.count == 1, let binding = variable.bindings.first,
+                  let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier,
+                  identifier.text == "body" || isItemInput || !hasItemInput ||
+                    (models.contains(where: { $0.name == binding.typeAnnotation?.type.trimmedDescription ?? "" })) else {
+                error("RFVIEW006", "This child View accepts only declared model and Identifiable item stored inputs.",
+                      "Remove other stored inputs or move them into the declared model contract.", at: member)
+                return nil
+            }
             guard let variable = member.decl.as(VariableDeclSyntax.self),
                   variable.attributes.isEmpty, variable.modifiers.isEmpty,
                   variable.bindings.count == 1, let binding = variable.bindings.first,
@@ -69,6 +113,18 @@ extension Builder {
                 continue
             }
             if diagnostics.contains(where: { $0.code == "RFCTRL006" }) { return nil }
+            if let type = binding.typeAnnotation?.type.trimmedDescription,
+               let item = itemTypes.first(where: { $0.name == type }) {
+                guard itemInput == nil else {
+                    error("RFVIEW006", "This child View slice accepts one Identifiable item input.",
+                          "Keep one typed current item and any declared model owners.", at: member)
+                    return nil
+                }
+                itemInput = (identifier.text, item)
+                parameters.append(ScreenParameter(name: identifier.text, type: item.identity.type, itemType: item.name,
+                                                  location: location(of: identifier)))
+                continue
+            }
             guard let valueType = ValueType(frontendName: type.trimmedDescription) else {
                 error("RFSEM001", "View inputs must use a supported scalar, optional scalar or declared enum type.",
                       "Declare a supported immutable input type explicitly", at: member)
@@ -89,8 +145,14 @@ extension Builder {
                   "Use `refractValue`, `refractView`, or a declared `RefractNativeView`", at: body)
             return nil
         }
+        self.parameters = parameters
+        currentBindings = [:]
+        if let itemInput {
+            currentListItem = itemInput.name
+            currentListItemType = itemInput.type
+        }
         guard let root = viewStatements(items, body: binding) else { return nil }
-        return Screen(name: node.name.text, parameters: parameters, body: root,
+        return Screen(name: node.name.text, parameters: parameters, states: states, body: root,
                       location: location(of: node.name))
     }
 }

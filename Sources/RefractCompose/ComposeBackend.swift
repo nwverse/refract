@@ -93,7 +93,7 @@ public struct ComposeBackend: Sendable {
         var parameters: [String] = []
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
-            parameters.append("\(input.name): \(input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
+            parameters.append("\(input.name): \(input.itemType ?? input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
         }
         for state in screen.states {
             switch state {
@@ -146,7 +146,7 @@ public struct ComposeBackend: Sendable {
         switch node {
         case let .stack(axis, children, modifiers, location):
             try emitStack(axis: axis, children: children, modifiers: modifiers, isRoot: isRoot,
-                          location: location, into: &out, context: &context)
+                          parentAxis: parentAxis, location: location, into: &out, context: &context)
         case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput,
              .label, .divider, .spacer:
             try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
@@ -154,7 +154,7 @@ public struct ComposeBackend: Sendable {
             try emitToggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
         case let .text(expression, modifiers, location):
-            try emitText(expression, modifiers: modifiers, isRoot: isRoot, location: location,
+            try emitText(expression, modifiers: modifiers, isRoot: isRoot, parentAxis: parentAxis, location: location,
                          into: &out, context: &context)
         case let .button(label, action, modifiers, location):
             try emitButton(label: label, action: action, modifiers: modifiers, isRoot: isRoot,
@@ -166,10 +166,13 @@ public struct ComposeBackend: Sendable {
                                              into: &out, context: &context)
         case let .component(component, location):
             try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .child(child, _):
+            let arguments = child.arguments.map { "\($0.label) = \($0.expression)" }
+            out.line("\(child.name)(\(arguments.joined(separator: ", ")))")
         case let .platformView(alternatives, _):
             // The Android branch is selected at build time; no runtime dispatch is emitted.
             for child in alternatives.android {
-                try emit(child, isRoot: isRoot, into: &out, context: &context)
+                try emit(child, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
             }
         case let .switchExpression(subject, enumName, cases, location):
             try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases, isRoot: isRoot,
@@ -183,7 +186,7 @@ public struct ComposeBackend: Sendable {
     }
 
     private func emitStack(axis: ViewNode.StackAxis, children: [ViewNode], modifiers: [Modifier],
-                           isRoot: Bool, location: SourceLocation?, into out: inout KotlinWriter,
+                           isRoot: Bool, parentAxis: ViewNode.StackAxis?, location: SourceLocation?, into out: inout KotlinWriter,
                            context: inout Context) throws {
         let call: String
         switch axis {
@@ -197,7 +200,7 @@ public struct ComposeBackend: Sendable {
             context.imports.insert("androidx.compose.foundation.layout.Box")
             call = "Box"
         }
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, context: &context)
         out.open("\(call)(modifier = \(modifierChain))")
         for child in children {
             try emit(child, parentAxis: axis, into: &out, context: &context)
@@ -205,12 +208,12 @@ public struct ComposeBackend: Sendable {
         out.close()
     }
 
-    private func emitText(_ expression: Expression, modifiers: [Modifier], isRoot: Bool,
+    private func emitText(_ expression: Expression, modifiers: [Modifier], isRoot: Bool, parentAxis: ViewNode.StackAxis?,
                           location: SourceLocation?, into out: inout KotlinWriter,
                           context: inout Context) throws {
         context.imports.insert("androidx.compose.material3.Text")
         let text = try renderExpression(expression, context: &context)
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, parentAxis: parentAxis, context: &context)
         let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
         let styled = modifiers.contains { $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle" }

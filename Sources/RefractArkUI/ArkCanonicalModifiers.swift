@@ -5,11 +5,16 @@ extension ArkModifiers {
     static func emitCanonical(_ modifiers: [Modifier], mapping: Mapping, item: String? = nil,
                               isText: Bool = false) throws -> String {
         var parts: [String] = []
+        var sawLayoutPriority = false
         var index = 0
         while index < modifiers.count {
             let modifier = modifiers[index]
             let arguments = ModifierArguments(modifier: modifier)
             switch modifier.name {
+            case "layoutPriority":
+                guard !sawLayoutPriority else { throw arguments.invalid("Use one explicit stack-child layout priority.") }
+                sawLayoutPriority = true
+                parts.append(".layoutWeight(1)")
             case "padding":
                 if modifier.arguments.isEmpty {
                     parts.append(".padding(0)")

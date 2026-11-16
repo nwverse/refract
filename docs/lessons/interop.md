@@ -19,5 +19,10 @@
   native metadata typed until its emitter can place the modifier on Switch/Toggle itself.
 - Retained callback keys include every captured stable value. A source action name is a discriminator, not a
   substitute for the current model or the list item's declared `Identifiable` id.
+- A generated child call needs an ordered typed argument list with the child's label and the caller's expression.
+  Kotlin named arguments use `label = value`, not Swift's `label: value`; ArkTS uses `label: value` in its object
+  literal. Golden text alone does not catch that distinction, so compile a child call whose model label differs
+  from the caller's model name. Resolve each View's immutable inputs in local scope and restore the caller's
+  item/model context after its body; a child's item alias is not the parent's `LazyForEach` item.
 - In a modifier `while` loop, even an operation that emits no chain must advance the index before `continue`.
   Otherwise a retained callback can make generation spin instead of producing output or a diagnostic.

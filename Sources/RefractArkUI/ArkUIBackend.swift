@@ -6,15 +6,18 @@ public struct ArkUIBackend: Sendable {
     public init() {}
 
     public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        try Generation(module: module, mapping: mapping).generate()
+        var generation = Generation(module: module, mapping: mapping)
+        return try generation.generate()
     }
 }
 
 struct Generation {
     let module: Module
     let mapping: Mapping
+    var screenItemTypes: [String: String] = [:]
+    var listItemTypes: [String: String] = [:]
 
-    func generate() throws -> String {
+    mutating func generate() throws -> String {
         guard mapping.schemaVersion == 1 else {
             throw Diagnostic(code: "arkui.unsupported_mapping_version",
                              message: "ArkUI output supports mapping schema version 1, not \(mapping.schemaVersion).",
@@ -56,7 +59,7 @@ struct Generation {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for input in screen.parameters {
-                writer.line("@Param @Require public var \(input.name): \(try input.enumName ?? arkType(input.type))\(input.isOptional ? " | null | undefined" : "")")
+                writer.line("@Param @Require public var \(input.name): \(try input.itemType ?? input.enumName ?? arkType(input.type))\(input.isOptional ? " | null | undefined" : "")")
             }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
@@ -64,7 +67,25 @@ struct Generation {
             // Local-state emission already supplies the separator before build().
             if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
-            try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver)
+            let previousItemParameters = screenItemTypes
+            screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
+                input.itemType.map { (input.name, $0) }
+            })
+            listItemTypes = [:]
+            for state in screen.states {
+                if case let .model(reference, _) = state,
+                   let model = module.models.first(where: { $0.name == reference.protocolName }) {
+                    for property in model.properties {
+                        if let collection = property.collection {
+                            screenItemTypes[reference.propertyName] = collection.itemType
+                            listItemTypes[reference.propertyName] = collection.itemType
+                        }
+                    }
+                }
+            }
+            defer { screenItemTypes = previousItemParameters }
+            try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver,
+                     itemTypeName: listItemTypes.values.first)
             writer.close()
             writer.close()
         }
@@ -73,11 +94,16 @@ struct Generation {
 
     func emit(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
               lazyOwner: Bool = false, mapping: Mapping = .empty,
-              resolver: InteropResolver? = nil) throws {
+              resolver: InteropResolver? = nil, parentAxis: ViewNode.StackAxis? = nil,
+              itemTypeName: String? = nil) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
+            let children = try stackChildren(children, parentAxis: axis)
             writer.open("\(containerName(axis))()")
-            for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
+            for child in children {
+                try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                         parentAxis: axis, itemTypeName: itemTypeName)
+            }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .text(value, modifiers, _):
             writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, isText: true))")
@@ -159,6 +185,18 @@ struct Generation {
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):
             try ArkDesignSystem().emit(component, location: location, mapping: mapping, writer: &writer)
+        case let .child(child, _):
+            let arguments = try child.arguments.map { argument in
+                if child.item == argument {
+                    return "\(argument.label): \(try emitLocalExpression(Expression(.reference(argument.expression)), item: item))"
+                }
+                return "\(argument.label): this.\(argument.expression)"
+            }
+            writer.line("\(child.name)({ \(arguments.joined(separator: ", ")) })")
+        case let .toggle(title, value, modifiers, nativeModifiers, location):
+            try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers, location: location),
+                             into: &writer, item: item, mapping: mapping, resolver: resolver,
+                             itemParameters: screenItemTypes, itemTypeName: itemTypeName)
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
                 try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)

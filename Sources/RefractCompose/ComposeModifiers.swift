@@ -2,12 +2,26 @@ import RefractIR
 import RefractMapping
 
 extension ComposeBackend {
-    func modifierChain(_ modifiers: [Modifier], isRoot: Bool, isText: Bool = false, context: inout Context) throws -> String {
+    func modifierChain(_ modifiers: [Modifier], isRoot: Bool, isText: Bool = false,
+                       parentAxis: ViewNode.StackAxis? = nil, context: inout Context) throws -> String {
         var parts: [String] = []
+        var sawLayoutPriority = false
         var index = 0
         while index < modifiers.count {
             let modifier = modifiers[index]
             switch modifier.name {
+            case "layoutPriority":
+                guard parentAxis == .horizontal, !sawLayoutPriority, modifier.arguments.count == 1,
+                      case let .numberLiteral(priority) = modifier.arguments[0].value, priority == "1" else {
+                    throw Diagnostic(code: "RFVIEW003",
+                        message: "The supported stack-child layoutPriority is exactly 1 on a direct HStack child.",
+                        suggestion: "Apply `.layoutPriority(1)` directly to a supported HStack child; other layout weights are outside this slice.",
+                        location: modifier.location)
+                }
+                sawLayoutPriority = true
+                parts.append(".weight(1f)")
+                index += 1
+                continue
             case "font", "foregroundColor", "foregroundStyle":
                 guard isText else {
                     throw Diagnostic(code: "RFVIEW003",

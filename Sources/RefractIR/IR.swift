@@ -108,6 +108,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case native(NativeComponent, location: SourceLocation?)
     case nativeModifier(child: ViewNode, operations: [NativeModifier], location: SourceLocation?)
     case component(ComponentReference, location: SourceLocation?)
+    case child(ChildView, location: SourceLocation?)
     case platformView(PlatformAlternatives<[ViewNode]>, location: SourceLocation?)
     case conditional(conditions: [ConditionBranch], location: SourceLocation?)
     case optionalBinding(subject: Expression, binding: String, children: [ViewNode],

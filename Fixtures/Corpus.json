@@ -6,6 +6,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "child-view-layout-priority",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "child-view-reject-recursion",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "compose-image",
       "implementationStatus": "ready"
     },
