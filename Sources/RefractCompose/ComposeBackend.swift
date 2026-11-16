@@ -14,6 +14,8 @@ public struct ComposeBackend: Sendable {
         var context = Context(mapping: mapping)
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
+        if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
+        try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
         }
@@ -312,6 +314,8 @@ public struct ComposeBackend: Sendable {
             return "\(name).value"
         case let .valueProperty(.binding(name)):
             return name
+        case let .valueProperty(.model(model, property)):
+            return "\(model).\(property).value"
         case let .interpolatedString(segments):
             var result = "\""
             for segment in segments {
@@ -336,6 +340,12 @@ public struct ComposeBackend: Sendable {
             return "on\(name.uppercasingFirst())Change(\(try renderExpression(value, context: &context)))"
         case let .increment(.binding(name), value):
             return "on\(name.uppercasingFirst())Change(\(name) + \(try renderExpression(value, context: &context)))"
+        case let .modelMethod(model, name, arguments):
+            let arguments = try arguments.map { argument -> String in
+                let value = try renderExpression(argument.value, context: &context)
+                return argument.label.map { "\($0) = \(value)" } ?? value
+            }.joined(separator: ", ")
+            return "\(model).\(name)(\(arguments))"
         }
     }
 
@@ -366,7 +376,7 @@ public struct ComposeBackend: Sendable {
 
 // MARK: - Writer
 
-private struct KotlinWriter {
+struct KotlinWriter {
     private(set) var text: String = ""
     var depth: Int = 0
 

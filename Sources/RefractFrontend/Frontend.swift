@@ -10,7 +10,8 @@ public struct Frontend {
         let builder = Builder(file: source.path, tree: tree)
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
-                                              nativeDeclarations: builder.interop.declarations),
+                                              nativeDeclarations: builder.interop.declarations,
+                                              models: builder.models),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -23,12 +24,15 @@ final class Builder: SyntaxVisitor {
     var interop: InteropFrontend
     var parameters: [ScreenParameter] = []
     var currentStates: [StateDeclaration] = []
+    var models: [ModelProtocol] = []
+    var currentModels: [ModelReference] = []
 
     init(file: String, tree: SourceFileSyntax) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
         super.init(viewMode: .sourceAccurate)
+        collectModels(tree)
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -70,7 +74,14 @@ final class Builder: SyntaxVisitor {
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
         currentStates = states
-        defer { currentStates = [] }
+        currentModels = states.compactMap {
+            guard case let .model(reference, _) = $0 else { return nil }
+            return reference
+        }
+        defer {
+            currentStates = []
+            currentModels = []
+        }
         guard let root = view(expression) else { return .skipChildren }
 
         screens.append(Screen(name: node.name.text, parameters: parameters, states: states,
