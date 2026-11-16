@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "path": "hello",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "pending-contract",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-image",
+      "implementationStatus": "ready"
+    }
+  ]
+}

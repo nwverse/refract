@@ -29,5 +29,5 @@ import RefractIR
     struct Bad: View { var body: some View { Image("photo") } }
     """))
     #expect(unit.hasErrors)
-    #expect(unit.diagnostics.map(\.code) == ["unsupportedView"])
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
 }

@@ -114,6 +114,11 @@ public struct ComposeBackend: Sendable {
                            location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, into: &out, context: &context)
+        case let .platformView(alternatives, _):
+            // The Android branch is selected at build time; no runtime dispatch is emitted.
+            for child in alternatives.android {
+                try emit(child, isRoot: isRoot, into: &out, context: &context)
+            }
         case let .conditional(branches, location):
             try emitConditional(branches, location: location, into: &out, context: &context)
         }
@@ -287,6 +292,8 @@ public struct ComposeBackend: Sendable {
             return name
         case let .binding(name):
             return name
+        case let .platformValue(alternatives):
+            return try renderExpression(alternatives.android, context: &context)
         }
     }
 
