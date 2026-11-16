@@ -1,0 +1,1 @@
+refract.json:148:21: error [mappingPlatformMismatch]: The component `CardRow` parameter `title` has different types on Android and HarmonyOS (`stringKey` and `string`). Suggestion: Use the same type on both platforms.
