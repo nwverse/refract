@@ -9,3 +9,4 @@ add to it when you hit something new: what happened, why, and what to do instead
 | Working with many Agents in one repository | `docs/lessons/workflow.md` |
 | ArkUI generation | `docs/lessons/arkui.md` |
 | Compose backend | `docs/lessons/compose-backend.md` |
+| Building mixed-code examples | `docs/lessons/examples.md` |
