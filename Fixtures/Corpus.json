@@ -23,6 +23,7 @@
     { "path": "rejected-image", "implementationStatus": "ready" },
     { "path": "rejected-model-associated-type", "implementationStatus": "ready" },
     { "path": "rejected-model-async", "implementationStatus": "ready" },
+    { "path": "rejected-model-overload", "implementationStatus": "ready" },
     { "path": "rejected-model-property", "implementationStatus": "ready" },
     { "path": "state-counter", "implementationStatus": "ready" },
     { "path": "v0-binding-state", "implementationStatus": "ready" },
