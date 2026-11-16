@@ -7,6 +7,11 @@ public struct Frontend {
 
     public static func parse(_ source: SourceFile) -> TranslationUnit {
         let tree = Parser.parse(source: source.contents)
+        let parserDiagnostics = ParserDiagnostics.validate(tree: tree, file: source.path)
+        guard parserDiagnostics.isEmpty else {
+            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
+                                   diagnostics: parserDiagnostics)
+        }
         let builder = Builder(file: source.path, tree: tree)
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
