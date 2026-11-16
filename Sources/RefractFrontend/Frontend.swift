@@ -15,7 +15,7 @@ public struct Frontend {
     }
 }
 
-private final class Builder: SyntaxVisitor {
+final class Builder: SyntaxVisitor {
     let file: String
     let converter: SourceLocationConverter
     var screens: [Screen] = []
@@ -69,7 +69,7 @@ private final class Builder: SyntaxVisitor {
         return .skipChildren
     }
 
-    private func view(_ expression: ExprSyntax) -> ViewNode? {
+    func view(_ expression: ExprSyntax) -> ViewNode? {
         if let call = expression.as(FunctionCallExprSyntax.self) {
             // SwiftSyntax represents `Text("x").padding() { ... }` as a call whose called expression
             // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure
@@ -84,10 +84,12 @@ private final class Builder: SyntaxVisitor {
                 guard let node = view(base) else { return nil }
                 return modifier(call, name: member.declName.baseName.text, on: node)
             }
+            if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
+                return extendedView(call)
+            }
             return view(call)
         }
-        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {
-            guard let node = view(base) else { return nil }
+        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
             return modifier(member, on: node)
         }
         error("unsupportedExpression", "The expression `\(expression.trimmedDescription)` is not a supported view.",
@@ -95,7 +97,7 @@ private final class Builder: SyntaxVisitor {
         return nil
     }
 
-    private func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+    func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
         guard name == "padding", call.arguments.count <= 1, call.trailingClosure == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
                   "Use a supported subset modifier.", at: call)
@@ -137,7 +139,7 @@ private final class Builder: SyntaxVisitor {
         }
     }
 
-    private func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
+    func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard let reference = call.calledExpression.as(DeclReferenceExprSyntax.self) else {
             error("unsupportedView", "This view call is not supported.",
                   "Use VStack, HStack, Text, or Button.", at: call)
@@ -296,7 +298,7 @@ private final class Builder: SyntaxVisitor {
         }
     }
 
-    private func children(of closure: ClosureExprSyntax?) -> [ViewNode]? {
+    func children(of closure: ClosureExprSyntax?) -> [ViewNode]? {
         guard let closure else { return [] }
         var result: [ViewNode] = []
         for item in closure.statements {
@@ -317,18 +319,18 @@ private final class Builder: SyntaxVisitor {
         return item.item.as(ReturnStmtSyntax.self)?.expression
     }
 
-    private func stringLiteral(_ expression: ExprSyntax) -> String? {
+    func stringLiteral(_ expression: ExprSyntax) -> String? {
         guard let literal = expression.as(StringLiteralExprSyntax.self), literal.segments.count == 1,
             case let .stringSegment(segment)? = literal.segments.first else { return nil }
         return segment.content.text
     }
 
-    private func location(of node: some SyntaxProtocol) -> RefractIR.SourceLocation {
+    func location(of node: some SyntaxProtocol) -> RefractIR.SourceLocation {
         let position = converter.location(for: node.positionAfterSkippingLeadingTrivia)
         return RefractIR.SourceLocation(file: file, line: position.line, column: position.column)
     }
 
-    private func error(_ code: String, _ message: String, _ suggestion: String? = nil,
+    func error(_ code: String, _ message: String, _ suggestion: String? = nil,
                        at node: some SyntaxProtocol) {
         diagnostics.append(Diagnostic(code: code, message: message, suggestion: suggestion,
                                       location: location(of: node)))
