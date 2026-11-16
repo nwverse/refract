@@ -1,0 +1,1 @@
+Input.swift:4:5: error [RFSTATE001]: @EnvironmentObject has implicit ownership and is outside the declared model-input contract Suggestion: Use a plain let model input whose protocol inherits RefractModel

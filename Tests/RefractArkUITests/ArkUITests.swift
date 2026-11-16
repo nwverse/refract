@@ -32,7 +32,7 @@ import RefractIR
                 Modifier(name: "cornerRadius", arguments: [Expression(.numberLiteral("8"))]),
             ], location: nil),
             .button(label: .text(Expression(.stringLiteral("Go")), modifiers: [], location: nil),
-                    action: Expression(.reference("model.open")), modifiers: [], location: nil),
+                    action: nil, modifiers: [], location: nil),
         ], modifiers: [Modifier(name: "padding")], location: nil)),
         Screen(name: "Empty", body: .stack(axis: .depth, children: [], modifiers: [], location: nil)),
     ])
@@ -49,9 +49,6 @@ import RefractIR
           Button() {
             Text("Go")
           }
-          .onClick(() => {
-            this.model.open();
-          })
         }.padding(0)
       }
     }

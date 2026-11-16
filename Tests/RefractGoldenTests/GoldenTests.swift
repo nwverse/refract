@@ -22,7 +22,7 @@ struct GoldenTests {
 struct CorpusTests {
     @Test func malformedMappingUsesTheGoldenDiagnosticContract() throws {
         let fixture = FixtureCase(name: "bad-mapping", status: .ready,
-                                  input: "struct Bad: View { var body: some View { Image(\"photo\") } }",
+                                  input: "struct Bad: View { var body: some View { Gauge(\"photo\") } }",
                                   mapping: "not JSON", expectedKotlin: nil, expectedArkTS: nil,
                                   expectedDiagnostics: "ignored")
         let result = try GoldenRunner.generate(fixture)

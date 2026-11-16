@@ -1,0 +1,1 @@
+Input.swift:4:5: error [RFSTATE003]: @Binding cannot create an independent initial value because the parent owns this state Suggestion: Pass the parent's value and change callback without an initializer
