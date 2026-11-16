@@ -26,7 +26,7 @@ def regenerate_hello() -> None:
         "kotlin": ROOT / "examples/android/app/src/main/java/refract/generated",
         "arkts": ROOT / "examples/harmony/entry/src/main/ets/generated",
     }
-    sources = ("Hello.swift", "NativeComponentScreen.swift")
+    sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift")
     with tempfile.TemporaryDirectory(prefix="refract-example-check.") as temporary:
         output = Path(temporary)
         for source in sources:
@@ -47,7 +47,7 @@ def regenerate_hello() -> None:
                 expected = directory / f"{Path(source).stem}.{extension}"
                 if actual.read_bytes() != expected.read_bytes():
                     fail(f"regenerated {platform} differs from {expected.relative_to(ROOT)}; regenerate and review it")
-    print("Hello and native-component Kotlin/ArkTS are identical to actual regenerated output")
+    print("Hello, native-component and full-settings Kotlin/ArkTS are identical to actual regenerated output")
 
 
 def regenerate_identified_list() -> None:
@@ -75,7 +75,17 @@ def regenerate_identified_list() -> None:
     print("Identified-list Kotlin/ArkTS are identical to actual regenerated canonical output")
 
 
+    source = ROOT / "examples/shared/SettingsScreen.swift"
+    canonical = ROOT / "Fixtures/v0-settings-screen/Input.swift"
+    if source.read_bytes() != canonical.read_bytes():
+        fail("the settings example must retain the canonical model/state/binding source")
 def check_resources() -> None:
+    source = ROOT / "examples/shared/SettingsScreen.swift"
+    canonical = ROOT / "Fixtures/v0-settings-screen/Input.swift"
+    if source.read_bytes() != canonical.read_bytes():
+        fail("the settings example must retain the canonical model/state/binding source")
+    print("Settings example retains the canonical model/state/binding source")
+
     mapping = json.loads((ROOT / "examples/refract.json").read_text(encoding="utf-8"))
     if mapping.get("schemaVersion") != 1:
         fail("example mapping must use the current schemaVersion 1 registry")

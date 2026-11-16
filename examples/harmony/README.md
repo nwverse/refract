@@ -1,13 +1,12 @@
 # HarmonyOS mixed-code example
 
 The Stage-model app keeps `EntryAbility`, both routes and `NativeProfile` hand-written. `GeneratedProfile` imports
-and calls the generated `Hello` `@ComponentV2` directly. There is no Refract library, second application entry point,
-runtime registry or observation adapter.
+and calls the generated `Hello` and full `SettingsScreen` components directly. There is no Refract library, second
+application entry point, runtime registry or observation adapter.
 
-`entry/src/main/ets/generated/Hello.ets` is actual output from the repository CLI using
-`examples/shared/Hello.swift`; its body matches `Fixtures/hello/Expected.ets`, with the source filename changed
-accordingly. The larger profile/settings screen will be added from the canonical #2
-fixture once its model and native-component contract is complete.
+`entry/src/main/ets/generated/SettingsScreen.ets` is actual output from the canonical shared settings source. The
+hand-written `AppSettingsModel` is `@ObservedV2` with `@Trace title`; the page owns model, binding and
+`useGeneratedSettings`. `HandWrittenSettingsScreen` uses the same `@Param`/`@Event` contract for rollback.
 
 ## Toolchain: use official Command Line Tools
 
@@ -87,10 +86,12 @@ Generate the same screen for both native apps from the repository root:
 ```sh
 refract generate \
   --input examples/shared/Hello.swift \
+  --input examples/shared/SettingsScreen.swift \
+  --mapping examples/refract.json \
   --android-out examples/android/app/src/main/java/refract/generated \
   --harmony-out examples/harmony/entry/src/main/ets/generated
 ```
 
-The generated files are `Hello.kt`/`Hello.ets`; compare their bodies with the canonical fixture apart from the
-source-name header. The full settings adoption
+The generated files include `Hello.kt`/`Hello.ets` and `SettingsScreen.kt`/`SettingsScreen.ets`; compare their bodies
+with the canonical fixture apart from the source-name header. The full settings adoption
 walkthrough and rollback are in `../../docs/adoption.md`.
