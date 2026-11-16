@@ -8,7 +8,6 @@ export interface StatusModel {
 @ComponentV2
 export struct ConditionalContent {
   @Require @Param model: StatusModel;
-
   build() {
     if (this.model.isEnabled) {
       Text($r('app.string.settings_enabled'))
