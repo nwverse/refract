@@ -6,7 +6,6 @@ export struct EnabledRow {
   @Require @Param isEnabled: boolean;
   @Event onIsEnabledChange: (value: boolean) => void = (value: boolean): void => {};
 
-
   build() {
     Column({ space: 8 }) {
       Text(`Enabled: ${this.isEnabled}`)

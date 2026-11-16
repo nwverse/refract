@@ -21,7 +21,7 @@ public fun BindingState(
         modifier = modifier,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = stringResource(refract.generated.R.string.settings_enabled)
+        Text(text = stringResource(refract.generated.R.string.settings_enabled))
         Switch(
             checked = isEnabled,
             onCheckedChange = onIsEnabledChange,

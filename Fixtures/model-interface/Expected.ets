@@ -10,7 +10,6 @@ export interface ExtensionSettingsModel {
 @ComponentV2
 export struct ExtensionSettings {
   @Require @Param model: ExtensionSettingsModel;
-
   build() {
     Column({ space: 8 }) {
       Text(this.model.title)

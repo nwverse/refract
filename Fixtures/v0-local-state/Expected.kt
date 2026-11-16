@@ -22,7 +22,7 @@ public fun LocalState(modifier: Modifier = Modifier) {
         modifier = modifier,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = stringResource(refract.generated.R.string.settings_enabled)
+        Text(text = stringResource(refract.generated.R.string.settings_enabled))
         Switch(
             checked = isEnabled,
             onCheckedChange = { value -> isEnabled = value },

@@ -49,7 +49,10 @@ extension ComposeBackend {
                              message: "Dynamic list lowering requires the resolved model collection contract.",
                              suggestion: "Declare an Identifiable item with a stable String or Int id through the model interface.",
                              location: location ?? items.location)
-        case .toggle, .textInput:
+        case let .textInput(placeholder, value, modifiers, location):
+            try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
+                              location: location, into: &out, context: &context)
+        case .toggle:
             throw Diagnostic(code: "RF-C001",
                              message: "This control needs an explicit typed value and update path.",
                              suggestion: "Use the state/binding contract before lowering this control.",

@@ -60,6 +60,6 @@
     { "path": "v0-stack-layout", "implementationStatus": "ready" },
     { "path": "v0-static-list", "implementationStatus": "pending" },
     { "path": "v0-styled-text", "implementationStatus": "pending" },
-    { "path": "v0-text-input", "implementationStatus": "pending" }
+    { "path": "v0-text-input", "implementationStatus": "ready" }
   ]
 }

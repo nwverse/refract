@@ -59,7 +59,7 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
-            if !screen.parameters.isEmpty || !screen.states.isEmpty { writer.line() }
+            if !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
             try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver)
             writer.close()
