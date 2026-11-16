@@ -54,12 +54,15 @@ renamed, update its original documentation references in the owning change rathe
 
 Both Swift jobs run `swift build`, the complete `swift test`, and the documented `swift test --filter GoldenTests`
 regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. The
-jobs use Swift 6.4.2, the verified toolchain selected for this phase, on Ubuntu 24.04 and macOS 26. The manifest's
-Swift 6 language mode is preserved, but `Package.swift` currently also enables an upcoming compiler feature that is
-redundant in Swift 6; Swift 6.0.3 rejects it. #1 owns the package compatibility fix, recorded in that issue, and #11
-does not bypass it by lowering language mode or changing shared compiler flags. Dependencies stay locked by
-`Package.resolved`. There is no skip for the Swift or fixture jobs. macOS CI verifies generator portability; it does
-not constitute an iOS device or simulator measurement.
+jobs request Swift 6.4.2 on Ubuntu 24.04 and macOS 26. The stable setup-swift release has a hard-coded catalog that
+ends at 6.2.1, so the workflow uses the pinned v3.0.0-beta.1 commit that installs through Swiftly. Its Linux path
+verifies the Swiftly archive with Swift's official GPG keys; signature verification is not disabled. The pinned
+installer does not modify the developer's shell profile. This pin needs a follow-up when a stable setup-swift release
+supports the requested version. The manifest's Swift 6 language mode is preserved, but `Package.swift` currently also
+enables an upcoming compiler feature that is redundant in Swift 6; Swift 6.0.3 rejects it. #1 owns the package
+compatibility fix, recorded in that issue, and #11 does not bypass it by lowering language mode or changing shared
+compiler flags. Dependencies stay locked by `Package.resolved`. There is no skip for the Swift or fixture jobs.
+macOS CI verifies generator portability; it does not constitute an iOS device or simulator measurement.
 
 ## Branch integration
 
