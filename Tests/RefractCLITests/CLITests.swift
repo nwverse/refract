@@ -10,10 +10,9 @@ import Foundation
     #if os(Linux) || os(macOS)
     let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    let executable = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        .appendingPathComponent("refract")
+    let executable = builtCLIExecutable()
     guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-        Issue.record("Build the refract executable with `swift build` before running `swift test`.")
+        Issue.record("Build the refract executable with `swift build` before running `swift test`. Candidate: \(executable.path)")
         return
     }
     let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -50,7 +49,56 @@ import Foundation
                                 "--android-out", temporary.appendingPathComponent("android").path,
                                 "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(rejection.status != 0)
-    #expect(rejection.stderr.contains("[RFNATIVE001]"))
+    #expect(rejection.stderr.contains("[RF-C001]"))
+    #endif
+}
+
+private func builtCLIExecutable() -> URL {
+    if let path = ProcessInfo.processInfo.environment["REFRACT_CLI_PATH"] {
+        return URL(fileURLWithPath: path)
+    }
+    return URL(fileURLWithPath: CommandLine.arguments[0])
+        .deletingLastPathComponent()
+        .appendingPathComponent("refract")
+}
+
+@Test func cliGeneratesMultipleInputsAndDoesNotWriteOnAnyDiagnostic() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable with `swift build` before running `swift test`.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let first = temporary.appendingPathComponent("First.swift")
+    let second = temporary.appendingPathComponent("Second.swift")
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    try Data("struct First: View { var body: some View { Text(verbatim: \"First\") } }".utf8).write(to: first)
+    try Data("struct Second: View { var body: some View { Text(verbatim: \"Second\") } }".utf8).write(to: second)
+    let arguments = ["--input", first.path, "--input", second.path,
+                     "--android-out", android.path, "--harmony-out", harmony.path]
+    let generated = try runCLI(["generate"] + arguments, executable: executable)
+    #expect(generated.status == 0, Comment(rawValue: generated.stderr))
+    for directory in [android, harmony] {
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+            == [directory == android ? "First.kt" : "First.ets", directory == android ? "Second.kt" : "Second.ets"])
+    }
+
+    let rejectedAndroid = temporary.appendingPathComponent("rejected-android")
+    let rejectedHarmony = temporary.appendingPathComponent("rejected-harmony")
+    let rejected = try runCLI(["generate", "--input", first.path, "--input",
+                               root.appendingPathComponent("Fixtures/rejected-image/Input.swift").path,
+                               "--android-out", rejectedAndroid.path, "--harmony-out", rejectedHarmony.path],
+                              executable: executable)
+    #expect(rejected.status != 0)
+    #expect(rejected.stderr.contains("[RF-C001]"))
+    #expect(!FileManager.default.fileExists(atPath: rejectedAndroid.path))
+    #expect(!FileManager.default.fileExists(atPath: rejectedHarmony.path))
     #endif
 }
 

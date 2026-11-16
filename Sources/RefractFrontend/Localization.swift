@@ -7,6 +7,8 @@ extension Builder {
     func hasTypedInputs(_ members: MemberBlockItemListSyntax) -> Bool {
         members.contains { member in
             guard let variable = member.decl.as(VariableDeclSyntax.self),
+                  variable.attributes.isEmpty,
+                  variable.bindingSpecifier.tokenKind == .keyword(.let),
                   let binding = variable.bindings.first,
                   let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier else { return false }
             return identifier.text != "body"
@@ -66,21 +68,29 @@ struct LocalizationFrontend {
     let file: String
     let converter: SourceLocationConverter
     let scalar: (ExprSyntax) -> TypedExpression?
+    let stateText: (ExprSyntax) -> Expression?
     private(set) var diagnostics: [Diagnostic] = []
 
-    mutating func text(_ call: FunctionCallExprSyntax, arguments: LabeledExprListSyntax) -> Expression? {
-        guard let result = tryParse(call, arguments: arguments) else { return nil }
+    mutating func text(_ call: FunctionCallExprSyntax, arguments: LabeledExprListSyntax,
+                       allowsTrailingClosure: Bool = false) -> Expression? {
+        guard let result = tryParse(call, arguments: arguments,
+                                    allowsTrailingClosure: allowsTrailingClosure) else { return nil }
         return Expression(result.value, type: result.type, location: location(of: call))
     }
 
     private mutating func tryParse(_ call: FunctionCallExprSyntax,
-                                   arguments: LabeledExprListSyntax) -> Expression? {
-        guard arguments.count == 1, let argument = arguments.first, call.trailingClosure == nil else {
+                                   arguments: LabeledExprListSyntax,
+                                   allowsTrailingClosure: Bool) -> Expression? {
+        guard arguments.count == 1, let argument = arguments.first,
+              allowsTrailingClosure || call.trailingClosure == nil else {
             error("R.string.unsupported_expression", "Text requires one localized key or an explicitly verbatim string.",
                   "Use Text(\"key\") or Text(verbatim: \"literal\")", at: call)
             return nil
         }
         if argument.label?.text == "verbatim" {
+            if let value = stateText(argument.expression) {
+                return value
+            }
             guard let literal = argument.expression.as(StringLiteralExprSyntax.self),
                   let value = literal.representedLiteralValue else {
                 error("R.string.literal", "Verbatim text must be a literal without interpolation.",
@@ -98,6 +108,11 @@ struct LocalizationFrontend {
     }
 
     mutating func localized(_ expression: ExprSyntax) -> Expression? {
+        if expression.as(StringLiteralExprSyntax.self) != nil, let value = stateText(expression) {
+            if case .interpolatedString = value.value {
+                return value
+            }
+        }
         if let literal = expression.as(StringLiteralExprSyntax.self) {
             if let key = literal.representedLiteralValue, !LocalizationKey.isCanonical(key) {
                 let diagnostic = Diagnostic(code: "R.string.invalid_key",

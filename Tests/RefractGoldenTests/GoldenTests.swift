@@ -22,7 +22,7 @@ struct GoldenTests {
 struct CorpusTests {
     @Test func malformedMappingUsesTheGoldenDiagnosticContract() throws {
         let fixture = FixtureCase(name: "bad-mapping", status: .ready,
-                                  input: "struct Bad: View { var body: some View { Image(\"photo\") } }",
+                                  input: "struct Bad: View { var body: some View { Gauge(\"photo\") } }",
                                   mapping: "not JSON", expectedKotlin: nil, expectedArkTS: nil,
                                   expectedDiagnostics: "ignored")
         let result = try GoldenRunner.generate(fixture)
@@ -34,12 +34,24 @@ struct CorpusTests {
     @Test func repositoryManifestIsExplicitAndDeterministic() throws {
         let root = GoldenTests.repository
         let cases = try CorpusLoader.load(repository: root)
-        #expect(cases.map(\.name) == [
-            "hello", "pending-contract", "rejected-image",
-            "localization/plain", "localization/formatted",
-            "localization/missing-android", "localization/missing-harmony",
+        #expect(cases.map(\.name) == cases.map(\.name).sorted())
+        for required in ["hello", "pending-contract", "rejected-image", "localization/plain",
+                         "localization/formatted", "localization/missing-android", "localization/missing-harmony"] {
+            #expect(cases.map(\.name).contains(required))
+        }
+        #expect(cases.map(\.name).count == Set(cases.map(\.name)).count)
+        #expect(cases.contains { $0.status == .ready })
+        #expect(cases.contains { $0.name == "hello" && $0.status == .ready })
+        #expect(cases.contains { $0.name == "rejected-image" && $0.status == .ready })
+        #expect(cases.filter { $0.name.hasPrefix("localization/") }.allSatisfy { $0.status == .ready })
+        #expect(cases.filter { $0.name.hasPrefix("interop-") && $0.status == .ready }.map(\.name) == [
+            "interop-native-undeclared", "interop-platform-value-incomplete",
+            "interop-reject-conditional-compilation",
         ])
-        #expect(cases.allSatisfy { $0.status == .ready })
+        #expect(cases.filter { $0.name.hasPrefix("interop-") && $0.status == .pending }.map(\.name) == [
+            "interop-native-callers", "interop-native-component", "interop-native-mismatch",
+            "interop-native-missing", "interop-platform-value", "interop-platform-view",
+        ])
         #expect(try CorpusLoader.load(repository: root).map(\.name) == cases.map(\.name))
     }
 

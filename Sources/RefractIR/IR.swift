@@ -51,6 +51,8 @@ public struct Expression: Codable, Equatable, Sendable {
         case numberLiteral(String)
         case reference(String)
         case binding(String)
+        case valueProperty(ValueProperty)
+        case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
     }
 
@@ -87,10 +89,22 @@ public struct Modifier: Codable, Equatable, Sendable {
 public indirect enum ViewNode: Codable, Equatable, Sendable {
     case stack(axis: StackAxis, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case text(Expression, modifiers: [Modifier], location: SourceLocation?)
-    case button(label: ViewNode, action: Expression?, modifiers: [Modifier], location: SourceLocation?)
+    case button(label: ViewNode, action: StateAction?, modifiers: [Modifier], location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
     case platformView(PlatformAlternatives<[ViewNode]>, location: SourceLocation?)
     case conditional(conditions: [ConditionBranch], location: SourceLocation?)
+    case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
+    case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    case section(header: Expression?, children: [ViewNode], location: SourceLocation?)
+    case listItem(child: ViewNode, location: SourceLocation?)
+    case forEach(ListItems, location: SourceLocation?)
+    case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
+    case toggle(title: Expression, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
+    case divider(modifiers: [Modifier], location: SourceLocation?)
+    case spacer(location: SourceLocation?)
 
     public enum StackAxis: String, Codable, Sendable { case vertical, horizontal, depth }
 

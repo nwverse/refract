@@ -17,8 +17,8 @@ public enum LocalizationResourceValidator {
                 return [expression] + modifiers.flatMap(\.arguments)
             case let .stack(_, children, modifiers, _):
                 return children.flatMap(visit) + modifiers.flatMap(\.arguments)
-            case let .button(label, action, modifiers, _):
-                return visit(label) + (action.map { [$0] } ?? []) + modifiers.flatMap(\.arguments)
+            case let .button(label, _, modifiers, _):
+                return visit(label) + modifiers.flatMap(\.arguments)
             case let .native(component, _):
                 return component.arguments.map(\.expression)
             case let .platformView(alternatives, _):
@@ -27,6 +27,30 @@ public enum LocalizationResourceValidator {
                 return branches.flatMap { branch in
                     (branch.condition.map { [$0] } ?? []) + branch.children.flatMap(visit)
                 }
+            case let .layout(layout, children, modifiers, _):
+                return (layout.spacing.map { [$0] } ?? []) + children.flatMap(visit) + modifiers.flatMap(\.arguments)
+            case let .scroll(_, child, modifiers, _):
+                return visit(child) + modifiers.flatMap(\.arguments)
+            case let .list(children, modifiers, _):
+                return children.flatMap(visit) + modifiers.flatMap(\.arguments)
+            case let .section(header, children, _):
+                return (header.map { [$0] } ?? []) + children.flatMap(visit)
+            case let .listItem(child, _):
+                return visit(child)
+            case let .forEach(items, _):
+                return [items.collection] + visit(items.content)
+            case let .image(_, modifiers, _):
+                return modifiers.flatMap(\.arguments)
+            case let .toggle(title, value, modifiers, _):
+                return [title, value] + modifiers.flatMap(\.arguments)
+            case let .textInput(placeholder, value, modifiers, _):
+                return (placeholder.map { [$0] } ?? []) + [value] + modifiers.flatMap(\.arguments)
+            case let .label(title, _, modifiers, _):
+                return [title] + modifiers.flatMap(\.arguments)
+            case let .divider(modifiers, _):
+                return modifiers.flatMap(\.arguments)
+            case .spacer:
+                return []
             }
         }
         func expressions(in value: Expression) -> [Expression] {
