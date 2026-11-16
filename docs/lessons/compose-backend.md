@@ -31,6 +31,10 @@ Compose examples, and add to it when something surprises you.
   import it. Do not guess a drawable package or invent a cross-platform symbol name.
 - **Scope extensions need their receiver.** `Modifier.weight(1f)` resolves inside `RowScope`/`ColumnScope`; importing
   `androidx.compose.foundation.layout.weight` is not available to ordinary generated packages.
-- **Tests that import a module's API need its explicit test dependency.** Importing `RefractFrontend` from Compose
-  tests without listing it in the test target can surface as a missing SwiftSyntax C shim on Linux. Declare the real
-  module dependency rather than adding compiler search paths.
+- **Text input is a typed value/callback boundary.** `TextField("key", text: $name)` needs a declared String
+  `@State`/`@Binding` and a `LocalizedText` placeholder. Compose uses Material3 `TextField` with `label`; ArkUI uses
+  `TextInput` with `placeholder` and `@Event` for parent bindings, never assignment to `@Param`. Reject other types
+  and ad-hoc projected values rather than inventing writes.
+- **Closing delimiters are part of golden correctness.** A composable call and a trailing closure have different
+  closing shapes. Do not use a generic writer close for a plain `TextField(...)` call; validate actual generated
+  syntax and compare both native goldens. Formatting-only changes must be reviewed in every affected fixture.

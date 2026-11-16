@@ -70,7 +70,6 @@ struct ConditionalContent: View {
     @ComponentV2
     export struct ConditionalContent {
       @Require @Param model: StatusModel;
-
       build() {
         if (this.model.isEnabled) {
           Text('Enabled')

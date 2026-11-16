@@ -1,67 +1,37 @@
 // Generated from Fixtures/performance/arkui-lazy-list/Input.swift by Refract; do not edit.
 // Hand-written expected pattern pending generator and ArkTS compiler support.
 
-export interface SettingItem {
-  id: number;
-  title: string;
-  enabled: boolean;
+@ObservedV2
+export class SettingItem {
+  @Trace id: number;
+  @Trace title: string;
+  @Trace enabled: boolean;
+
+  constructor(id: number, title: string, enabled: boolean) {
+    this.id = id;
+    this.title = title;
+    this.enabled = enabled;
+  }
+}
+
+export interface SettingsListModel {
+  items: BasicDataSource<SettingItem>;
 }
 
 @ComponentV2
 export struct SettingsList {
-  @Require @Param items: Array<SettingItem>;
-  private dataSource: SettingsDataSource = new SettingsDataSource();
+  @Require @Param model: SettingsListModel;
 
-  aboutToAppear(): void {
-    this.dataSource.setItems(this.items);
-  }
-
-  @Monitor('items')
-  private onItemsChanged(): void {
-    this.dataSource.setItems(this.items);
-  }
-
-  build(): void {
+  build() {
     List() {
-      LazyForEach(this.dataSource, (item: SettingItem): void => {
+      LazyForEach(this.model.items, (item: SettingItem) => {
         ListItem() {
           Row() {
             Text(item.title)
             Text(item.enabled ? 'Enabled' : 'Disabled')
           }
         }
-      }, (item: SettingItem): string => item.id.toString())
-    }
-  }
-}
-
-class SettingsDataSource implements IDataSource {
-  private items: Array<SettingItem> = [];
-  private listeners: Array<DataChangeListener> = [];
-
-  setItems(items: Array<SettingItem>): void {
-    this.items = items;
-    this.listeners.forEach((listener: DataChangeListener): void => listener.onDataReloaded());
-  }
-
-  totalCount(): number {
-    return this.items.length;
-  }
-
-  getData(index: number): SettingItem {
-    return this.items[index];
-  }
-
-  registerDataChangeListener(listener: DataChangeListener): void {
-    if (this.listeners.indexOf(listener) < 0) {
-      this.listeners.push(listener);
-    }
-  }
-
-  unregisterDataChangeListener(listener: DataChangeListener): void {
-    const index: number = this.listeners.indexOf(listener);
-    if (index >= 0) {
-      this.listeners.splice(index, 1);
+      }, (item: SettingItem): string => String(item.id))
     }
   }
 }

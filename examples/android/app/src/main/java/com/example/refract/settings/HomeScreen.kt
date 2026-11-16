@@ -13,7 +13,11 @@ import androidx.compose.ui.unit.dp
 
 /** This screen remains hand-written before and after adopting Refract. */
 @Composable
-fun HomeScreen(onOpenProfile: () -> Unit) {
+fun HomeScreen(
+    onOpenProfile: () -> Unit,
+    useGeneratedSettings: Boolean,
+    onUseGeneratedSettingsChange: (Boolean) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -25,6 +29,12 @@ fun HomeScreen(onOpenProfile: () -> Unit) {
             "The next screen is generated, while navigation and this screen stay native.",
             modifier = Modifier.padding(top = 8.dp),
         )
+        Button(
+            onClick = { onUseGeneratedSettingsChange(!useGeneratedSettings) },
+            modifier = Modifier.padding(top = 24.dp),
+        ) {
+            Text(if (useGeneratedSettings) "Use hand-written settings" else "Use generated settings")
+        }
         Button(
             onClick = onOpenProfile,
             modifier = Modifier.padding(top = 24.dp),

@@ -6,7 +6,6 @@ export struct BindingState {
   @Require @Param isEnabled: boolean;
   @Event onIsEnabledChange: (value: boolean) => void = (value: boolean): void => {};
 
-
   build() {
     Row() {
       Text($r('app.string.settings_enabled'))

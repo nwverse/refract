@@ -61,7 +61,8 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
-            if !screen.parameters.isEmpty || !screen.states.isEmpty { writer.line() }
+            // Local-state emission already supplies the separator before build().
+            if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
             try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver)
             writer.close()
@@ -79,7 +80,7 @@ struct Generation {
             for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .text(value, modifiers, _):
-            writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
+            writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, isText: true))")
         case let .button(label, action, modifiers, _):
             if case let .text(title, _, _) = label, case let .stringKey(key) = title.value {
                 let resource = try mapping.stringResource(key, platform: .harmonyOS, location: title.location)
@@ -165,6 +166,7 @@ struct Generation {
         if case let .native(component, location) = node {
             emittedImports.insert(try resolver.target(for: component, platform: .harmonyOS, location: location).symbol)
         }
+        collectModifierImports(node, mapping: mapping, into: &emittedImports)
         if case let .component(component, location) = node {
             emittedImports.insert(try mapping.component(named: component.name, platform: .harmonyOS,
                                                        location: location).target)
@@ -180,6 +182,35 @@ struct Generation {
                 }
             }
         }
+    }
+
+    private func collectModifierImports(_ node: ViewNode, mapping: Mapping, into emittedImports: inout Set<String>) {
+        let modifiers: [Modifier]
+        switch node {
+        case let .stack(_, _, values, _), let .layout(_, _, values, _), let .scroll(_, _, values, _),
+             let .list(_, values, _), let .text(_, values, _), let .button(_, _, values, _),
+             let .image(_, values, _), let .toggle(_, _, values, _), let .textInput(_, _, values, _),
+             let .label(_, _, values, _), let .divider(values, _):
+            modifiers = values
+        default:
+            return
+        }
+        for modifier in modifiers {
+            for argument in modifier.arguments {
+                for expression in [argument] + platformBranches(argument) {
+                    guard case let .reference(name) = expression.value, name.contains(".") else { continue }
+                    for category in TokenCategory.allCases {
+                        guard let target = mapping.harmonyOS.tokens[category][name] else { continue }
+                        emittedImports.insert(target.split(separator: ".").first.map(String.init) ?? target)
+                    }
+                }
+            }
+        }
+    }
+
+    private func platformBranches(_ expression: Expression) -> [Expression] {
+        guard case let .platformValue(alternatives) = expression.value else { return [] }
+        return [alternatives.android, alternatives.harmonyOS]
     }
 
     private func containerName(_ axis: ViewNode.StackAxis) -> String {
@@ -206,8 +237,12 @@ struct ArkWriter {
     mutating func line(_ value: String = "", unlessEmpty: Bool = false) {
         if value.isEmpty {
             if !unlessEmpty { text += "\n" }
-        } else {
-            text += String(repeating: "  ", count: depth) + value + "\n"
+            return
+        }
+        for line in value.split(separator: "\n", omittingEmptySubsequences: false) {
+            let continuation = line.hasPrefix("\u{1}")
+            let content = continuation ? line.dropFirst() : line
+            text += String(repeating: "  ", count: depth + (continuation ? 1 : 0)) + content + "\n"
         }
     }
 

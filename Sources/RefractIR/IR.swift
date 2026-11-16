@@ -78,12 +78,26 @@ public struct Expression: Codable, Equatable, Sendable {
 public struct Modifier: Codable, Equatable, Sendable {
     public let name: String
     public let arguments: [Expression]
+    /// Nil denotes an unlabeled Swift argument. Empty means a legacy zero-argument modifier.
+    public let argumentLabels: [String?]
     public let location: SourceLocation?
 
-    public init(name: String, arguments: [Expression] = [], location: SourceLocation? = nil) {
+    public init(name: String, arguments: [Expression] = [], argumentLabels: [String?] = [],
+                location: SourceLocation? = nil) {
         self.name = name
         self.arguments = arguments
+        self.argumentLabels = argumentLabels
         self.location = location
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, arguments, argumentLabels, location }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        arguments = try values.decode([Expression].self, forKey: .arguments)
+        argumentLabels = try values.decodeIfPresent([String?].self, forKey: .argumentLabels) ?? []
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 

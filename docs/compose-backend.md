@@ -98,10 +98,15 @@ argument labels per the mapping and fails with a diagnostic when a required para
 
 A static `List` lowers to one `LazyColumn.item` per source row. Resource-keyed text rows and section headers have
 unique source-derived keys and a `contentType`. Duplicate or non-portable derived text keys are rejected rather than
-silently aliasing two rows; other row shapes need an explicit identity in the IR before they are accepted. These are
-source-stable identities, not index fallbacks for a dynamic model. `compose-typed-layout` demonstrates static sections
-and rows; `compose-scroll` demonstrates remembered vertical scroll state; `compose-image` demonstrates a mapped
-application drawable. `Divider` and `Spacer` are emitted directly in ordinary layouts.
+silently aliasing two rows. Model-property text rows use the declared property name. Static `TextField` and `Toggle`
+rows use their state/binding declaration name in kebab-case, with a terminal `Enabled` suffix treated as the control's
+form marker rather than part of the setting name (`displayName` → `display-name`, `notificationsEnabled` →
+`notifications`). A static Button whose action is one zero-argument model method uses that method name; any other
+action shape needs an explicit identity and is rejected. These are source-stable identities, not index fallbacks for a
+dynamic model. `v0-settings-screen` demonstrates all four forms and the `row:save` action key.
+`compose-typed-layout` demonstrates resource-text static sections and rows; `compose-scroll` demonstrates remembered
+vertical scroll state; `compose-image` demonstrates a mapped application drawable. `Divider` and `Spacer` are emitted
+directly in ordinary layouts.
 
 ### Modifiers
 

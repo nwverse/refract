@@ -147,6 +147,19 @@ final class Builder: SyntaxVisitor {
     }
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        let before = diagnostics.count
+        if let builtin = builtinModifier(call, name: name) {
+            if diagnostics.count > before { return nil }
+            if !builtin.arguments.isEmpty || call.arguments.isEmpty {
+                guard let updated = node.appendingModifier(builtin) else {
+                    error("unsupportedModifierTarget", "This modifier target is not supported yet.",
+                          "Apply the modifier to a supported built-in view.", at: call)
+                    return nil
+                }
+                return updated
+            }
+        }
+        if diagnostics.count > before { return nil }
         guard name == "padding" || name == "background" || designSystem != nil, call.arguments.count <= 1, call.trailingClosure == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
                   "Use a supported subset modifier.", at: call)
@@ -341,7 +354,7 @@ final class Builder: SyntaxVisitor {
         return nil
     }
 
-    private func platformValue(_ call: FunctionCallExprSyntax) -> TypedExpression? {
+    func platformValue(_ call: FunctionCallExprSyntax) -> TypedExpression? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractValue` requires exactly `ios`, `android`, and `harmonyOS` arguments with compatible types.",
                   "Supply all three typed platform values", at: call)
