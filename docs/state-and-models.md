@@ -77,8 +77,9 @@ struct ExtensionSettings: View {
 
 `@State` is private component-owned storage with a local, type-correct initializer. `@Binding` has no independent
 initial value: its parent supplies both the current value and the write path. A plain `let` whose type is a declared
-`RefractModel` protocol is an external model input. A `var` model property or a model property wrapper is not accepted
-as another ownership mechanism.
+`RefractModel` protocol is an external model input. The consuming iOS source declares the empty `RefractModel` marker
+protocol (or later adopts a compile-time-only support declaration); the generated native sources do not import a
+runtime library. A `var` model property or a model property wrapper is not accepted as another ownership mechanism.
 
 `$property` is accepted only for a binding passed to a supported control or child component. Arbitrary projected
 values, key-path expressions, `wrappedValue` and `projectedValue` are rejected. A button action may call a supported

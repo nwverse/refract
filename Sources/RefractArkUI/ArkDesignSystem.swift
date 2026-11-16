@@ -32,7 +32,11 @@ struct ArkDesignSystem {
                 writer.line(String(attribute))
             }
         } else {
-            writer.line(call + (try chains(component, declaration: declaration, mapping: mapping)))
+            writer.line(call)
+            let attributes = try chains(component, declaration: declaration, mapping: mapping)
+            for attribute in attributes.split(separator: "\n") {
+                writer.line("  " + attribute)
+            }
         }
     }
 

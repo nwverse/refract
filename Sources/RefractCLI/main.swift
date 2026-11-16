@@ -46,9 +46,6 @@ struct RefractCommand {
             index += 2
         }
         guard !inputs.isEmpty else { throw CLIError.message("missing --input") }
-        if command == "generate", options["--android-out"] == nil || options["--harmony-out"] == nil {
-            throw CLIError.message("generate requires --android-out and --harmony-out")
-        }
         if command == "check", options["--android-out"] != nil || options["--harmony-out"] != nil {
             throw CLIError.message("check does not accept output directories")
         }
@@ -62,6 +59,11 @@ struct RefractCommand {
         } catch let diagnostic as Diagnostic {
             writeError(diagnostic.rendered)
             throw CLIError.message("validation stopped because the mapping has errors")
+        }
+
+        if command == "generate", (options["--android-out"] == nil && mapping.android.output.directory.isEmpty)
+            || (options["--harmony-out"] == nil && mapping.harmonyOS.output.directory.isEmpty) {
+            throw CLIError.message("generate requires output directories in refract.json or explicit --android-out and --harmony-out")
         }
 
         var hasErrors = false
@@ -87,8 +89,8 @@ struct RefractCommand {
             let compose = try ComposeBackend().generate(module: unit.module, mapping: mapping)
             let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
             guard command == "generate" else { continue }
-            outputs.append((options["--android-out"]!, name + ".kt", compose))
-            outputs.append((options["--harmony-out"]!, name + ".ets", ark))
+            outputs.append((options["--android-out"] ?? mapping.android.output.directory, name + ".kt", compose))
+            outputs.append((options["--harmony-out"] ?? mapping.harmonyOS.output.directory, name + ".ets", ark))
         }
         for output in outputs {
             let folder = URL(fileURLWithPath: output.directory, isDirectory: true)

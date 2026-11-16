@@ -11,7 +11,8 @@ public struct Frontend {
         let builder = Builder(file: source.path, tree: tree, mapping: mapping)
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
-                                              nativeDeclarations: builder.interop.declarations),
+                                              nativeDeclarations: builder.interop.declarations,
+                                              models: builder.models),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -24,6 +25,8 @@ final class Builder: SyntaxVisitor {
     var interop: InteropFrontend
     var designSystem: DesignSystemFrontend?
     var currentStates: [StateDeclaration] = []
+    var models: [ModelProtocol] = []
+    var currentModels: [ModelReference] = []
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -32,6 +35,7 @@ final class Builder: SyntaxVisitor {
         self.designSystem = nil
         super.init(viewMode: .sourceAccurate)
         if let mapping { self.designSystem = DesignSystemFrontend(builder: self, mapping: mapping) }
+        collectModels(tree)
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -66,7 +70,14 @@ final class Builder: SyntaxVisitor {
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
         currentStates = states
-        defer { currentStates = [] }
+        currentModels = states.compactMap {
+            guard case let .model(reference, _) = $0 else { return nil }
+            return reference
+        }
+        defer {
+            currentStates = []
+            currentModels = []
+        }
         guard let root = view(expression) else { return .skipChildren }
 
         screens.append(Screen(name: node.name.text, states: states, body: root, location: location(of: node.name)))
@@ -227,7 +238,9 @@ final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
-            if let component = designSystem?.component(call, name: name) { return component }
+            if designSystem?.isCandidate(name) == true {
+                return designSystem?.component(call, name: name)
+            }
             guard interop.declarations.contains(where: { $0.name == name }) else {
                 let component = NativeComponent(name: name)
                 diagnostics.append(contentsOf: interop.validate(component, declaration: nil, location: nodeLocation))

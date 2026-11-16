@@ -1,0 +1,2 @@
+Input.swift:4:5: error [model.unsupported_requirement]: This model protocol requirement is not supported. Suggestion: Use get-only scalar properties and synchronous Void actions
+Input.swift:8:5: error [state.invalid_declaration]: A model input must be a let property of a declared RefractModel protocol. Suggestion: Use `let model: YourModel` with `protocol YourModel: RefractModel`

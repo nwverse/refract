@@ -16,6 +16,8 @@ public struct ComposeBackend: Sendable {
         for item in mapping.android.imports { context.imports.insert(item.module) }
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
+        if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
+        try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
         }
@@ -314,6 +316,8 @@ public struct ComposeBackend: Sendable {
             return "\(name).value"
         case let .valueProperty(.binding(name)):
             return name
+        case let .valueProperty(.model(model, property)):
+            return "\(model).\(property).value"
         case let .interpolatedString(segments):
             var result = "\""
             for segment in segments {
@@ -338,6 +342,12 @@ public struct ComposeBackend: Sendable {
             return "on\(name.uppercasingFirst())Change(\(try renderExpression(value, context: &context)))"
         case let .increment(.binding(name), value):
             return "on\(name.uppercasingFirst())Change(\(name) + \(try renderExpression(value, context: &context)))"
+        case let .modelMethod(model, name, arguments):
+            let arguments = try arguments.map { argument -> String in
+                let value = try renderExpression(argument.value, context: &context)
+                return argument.label.map { "\($0) = \(value)" } ?? value
+            }.joined(separator: ", ")
+            return "\(model).\(name)(\(arguments))"
         }
     }
 
@@ -413,7 +423,7 @@ struct ComposeDesignSystem {
         }
         if !chains.isEmpty || isRoot {
             let base = isRoot ? "modifier" : "Modifier"
-            let chainText = chains.isEmpty ? "" : "\n" + chains.map { "        \($0)" }.joined(separator: "\n")
+            let chainText = chains.isEmpty ? "" : chains.count == 1 ? chains[0] : "\n" + chains.map { "        \($0)" }.joined(separator: "\n")
             let receiver = declaration.modifierParameter ?? "modifier"
             let modifierArgument = "\(receiver) = \(base)\(chainText)"
             if let index = declaration.parameters.firstIndex(where: { $0.label == receiver }) {
@@ -431,7 +441,7 @@ struct ComposeDesignSystem {
             if arguments.isEmpty {
                 opening = declaration.target + (declaration.hasContent ? "" : "()")
             } else if arguments.count == 1 {
-                opening = declaration.target + "(" + arguments[0] + ")"
+                opening = declaration.target + "(" + arguments[0] + (isRoot ? ",)" : ")")
             } else {
                 opening = declaration.target + "(\n" + arguments.map { "    \($0)," }.joined(separator: "\n") + "\n)"
             }
@@ -483,7 +493,7 @@ struct ComposeDesignSystem {
 
 // MARK: - Writer
 
-private struct KotlinWriter {
+struct KotlinWriter {
     private(set) var text: String = ""
     var depth: Int = 0
 

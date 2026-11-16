@@ -32,7 +32,7 @@ public enum GoldenRunner {
         }
         // A mapping diagnostic is evaluated even when Swift parsing also fails: source and project
         // configuration are independent errors, and both must be reported before generation is skipped.
-        guard diagnostics.isEmpty || !mapping.android.components.isEmpty || !mapping.harmonyOS.components.isEmpty else {
+        guard diagnostics.isEmpty || mapping != .empty else {
             return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
         }
         let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input), mapping: mapping)

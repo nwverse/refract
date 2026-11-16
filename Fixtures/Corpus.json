@@ -50,6 +50,22 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "mapping/missing-component",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-resource",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-token",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "model-interface",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "parent-binding",
       "implementationStatus": "ready"
     },
@@ -63,6 +79,18 @@
     },
     {
       "path": "rejected-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-model-associated-type",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-model-async",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-model-property",
       "implementationStatus": "ready"
     },
     {
@@ -83,7 +111,7 @@
     },
     {
       "path": "v0-design-system",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-formatted-text",

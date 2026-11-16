@@ -8,11 +8,14 @@ struct DesignSystemFrontend {
     unowned let builder: Builder
     let mapping: Mapping
 
+    func isCandidate(_ name: String) -> Bool {
+        mapping.android.nativeComponents[name] == nil && mapping.harmonyOS.nativeComponents[name] == nil
+    }
+
     func component(_ call: FunctionCallExprSyntax, name: String) -> ViewNode? {
         if mapping.android.nativeComponents[name] != nil || mapping.harmonyOS.nativeComponents[name] != nil {
             return nil // Native declarations and their source signature remain #7's responsibility.
         }
-        guard mapping.android.components[name] != nil || mapping.harmonyOS.components[name] != nil else { return nil }
         do {
             let android = try mapping.component(named: name, platform: .android, location: builder.location(of: call))
             _ = try mapping.component(named: name, platform: .harmonyOS, location: builder.location(of: call))

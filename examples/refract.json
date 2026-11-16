@@ -28,7 +28,8 @@
         "settings.display.name": "settings_display_name",
         "settings.preferences": "settings_preferences",
         "settings.notifications": "settings_notifications",
-        "settings.save": "settings_save"
+        "settings.save": "settings_save",
+        "settings.native.component": "settings_native_component"
       }
     }
   },
@@ -62,7 +63,8 @@
         "settings.display.name": "settings_display_name",
         "settings.preferences": "settings_preferences",
         "settings.notifications": "settings_notifications",
-        "settings.save": "settings_save"
+        "settings.save": "settings_save",
+        "settings.native.component": "settings_native_component"
       }
     }
   }
