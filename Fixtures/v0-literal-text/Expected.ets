@@ -4,6 +4,6 @@
 @ComponentV2
 export struct LiteralText {
   build() {
-    Text("Debug")
+    Text('Debug')
   }
 }
