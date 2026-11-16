@@ -91,16 +91,10 @@ final class Builder: SyntaxVisitor {
     }
 
     func view(_ expression: ExprSyntax) -> ViewNode? {
-        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {
-            guard let node = view(base) else { return nil }
-            if let call = member.parent?.as(FunctionCallExprSyntax.self),
-               call.calledExpression.id == member.id {
-                return modifier(call, name: member.declName.baseName.text, on: node)
-            }
-            return modifier(member, on: node)
-        }
         if let call = expression.as(FunctionCallExprSyntax.self) {
-            // Preserve an outer trailing closure when SwiftSyntax nests it on a modified call.
+            // SwiftSyntax represents `Text("x").padding() { ... }` as a call whose called expression
+            // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure
+            // when classifying the inner call as a view or a modifier.
             if let base = call.calledExpression.as(FunctionCallExprSyntax.self) {
                 var inner = base
                 inner.trailingClosure = call.trailingClosure
@@ -116,33 +110,11 @@ final class Builder: SyntaxVisitor {
             }
             return view(call)
         }
-        error("unsupportedExpression", "The expression `\(expression.trimmedDescription)` is not a supported view.",
-              "Use VStack, HStack, Text, or Button.", at: expression)
-        return nil
-    }
-
-    func designSystemModifiers(before closure: ClosureExprSyntax?) -> [Modifier]? {
-        guard let closure, let call = closure.parent?.as(FunctionCallExprSyntax.self),
-              call.trailingClosure?.id == closure.id,
-              let member = call.calledExpression.as(MemberAccessExprSyntax.self) else { return nil }
-        guard let base = member.base,
-              case let .component(component, _)? = view(base) else { return nil }
-        let arguments = call.arguments.compactMap { argument -> Expression? in
-            guard let value = scalar(argument.expression) else { return nil }
-            return value.expression
-        }
-        return component.modifiers + [Modifier(name: member.declName.baseName.text, arguments: arguments,
-                                               location: location(of: member))]
-    }
-
-    func modifier(_ expression: ExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
-        if let call = expression.as(FunctionCallExprSyntax.self) {
-            return modifier(call, name: name, on: node)
-        }
-        if let member = expression.as(MemberAccessExprSyntax.self) {
+        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
             return modifier(member, on: node)
         }
-        error("unsupportedModifier", "The modifier `\(name)` is not supported.", at: expression)
+        error("unsupportedExpression", "The expression `\(expression.trimmedDescription)` is not a supported view.",
+              "Use VStack, HStack, Text, or Button.", at: expression)
         return nil
     }
 
@@ -160,7 +132,7 @@ final class Builder: SyntaxVisitor {
         return modifier(name, arguments: arguments, on: node, at: call)
     }
 
-    func modifier(_ member: MemberAccessExprSyntax, on node: ViewNode) -> ViewNode? {
+    private func modifier(_ member: MemberAccessExprSyntax, on node: ViewNode) -> ViewNode? {
         let name = member.declName.baseName.text
         guard name == "padding", member.declName.argumentNames == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
@@ -170,24 +142,15 @@ final class Builder: SyntaxVisitor {
         return modifier(name, arguments: [], on: node, at: member)
     }
 
-    func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
+    private func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
                           at syntax: some SyntaxProtocol) -> ViewNode? {
-        switch node {
-        case let .component(component, _):
+        if case let .component(component, _) = node {
             return designSystem?.modifiers([Modifier(name: name, arguments: arguments, location: location(of: syntax))], on: component)
-        case let .stack(axis, children, modifiers, location):
-            return .stack(axis: axis, children: children, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
-        case let .text(expression, modifiers, location):
-            return .text(expression, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
-        case let .button(label, action, modifiers, location):
-            return .button(label: label, action: action, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
-        case .native, .conditional, .platformView:
-            error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
-            return nil
-        default:
-            error("unsupportedModifierTarget", "This extended view modifier target is not supported yet.", at: syntax)
-            return nil
         }
+        let modifier = Modifier(name: name, arguments: arguments, location: location(of: syntax))
+        if let updated = node.appendingModifier(modifier) { return updated }
+        error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
+        return nil
     }
 
     func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
@@ -255,7 +218,7 @@ final class Builder: SyntaxVisitor {
         }
     }
 
-    func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
+    private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
         let name = call.calledExpression.trimmedDescription
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
             guard let label = argument.label?.text, let value = scalar(argument.expression) else {
@@ -269,7 +232,7 @@ final class Builder: SyntaxVisitor {
         return NativeComponent(name: name, arguments: arguments)
     }
 
-    func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
+    private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractView` requires exactly `ios`, `android`, and `harmonyOS` view-builder closures.",
                   "Supply all three typed platform view branches", at: call)
@@ -316,11 +279,6 @@ final class Builder: SyntaxVisitor {
                                              location: location(of: expression)), nil)
         }
         if let call = expression.as(FunctionCallExprSyntax.self),
-           call.arguments.isEmpty,
-           call.calledExpression.as(MemberAccessExprSyntax.self) != nil {
-            return TypedExpression(Expression(.reference(call.trimmedDescription), location: location(of: expression)), nil)
-        }
-        if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
             return platformValue(call)
         }
@@ -329,7 +287,7 @@ final class Builder: SyntaxVisitor {
         return nil
     }
 
-    func platformValue(_ call: FunctionCallExprSyntax) -> TypedExpression? {
+    private func platformValue(_ call: FunctionCallExprSyntax) -> TypedExpression? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractValue` requires exactly `ios`, `android`, and `harmonyOS` arguments with compatible types.",
                   "Supply all three typed platform values", at: call)
@@ -375,7 +333,7 @@ final class Builder: SyntaxVisitor {
         return result
     }
 
-    func expression(in items: CodeBlockItemListSyntax) -> ExprSyntax? {
+    private func expression(in items: CodeBlockItemListSyntax) -> ExprSyntax? {
         guard items.count == 1, let item = items.first else { return nil }
         if let expression = item.item.as(ExprSyntax.self) { return expression }
         return item.item.as(ReturnStmtSyntax.self)?.expression

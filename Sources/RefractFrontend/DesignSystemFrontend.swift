@@ -38,10 +38,6 @@ struct DesignSystemFrontend {
                 children = []
             }
             let reference = ComponentReference(name: name, arguments: arguments, children: children)
-            if let hostModifiers = builder.designSystemModifiers(before: call.trailingClosure) {
-                return .component(ComponentReference(name: name, arguments: arguments, children: children,
-                    modifiers: hostModifiers), location: builder.location(of: call))
-            }
             return .component(reference, location: builder.location(of: call))
         } catch let diagnostic as Diagnostic {
             builder.diagnostics.append(diagnostic)
