@@ -82,6 +82,18 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case native(NativeComponent, location: SourceLocation?)
     case platformView(PlatformAlternatives<[ViewNode]>, location: SourceLocation?)
     case conditional(conditions: [ConditionBranch], location: SourceLocation?)
+    case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
+    case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    case section(header: Expression?, children: [ViewNode], location: SourceLocation?)
+    case listItem(child: ViewNode, location: SourceLocation?)
+    case forEach(ListItems, location: SourceLocation?)
+    case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
+    case toggle(title: Expression, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
+    case divider(modifiers: [Modifier], location: SourceLocation?)
+    case spacer(location: SourceLocation?)
 
     public enum StackAxis: String, Codable, Sendable { case vertical, horizontal, depth }
 

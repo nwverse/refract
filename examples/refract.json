@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": {
+      "directory": "generated",
+      "packageName": "refract.generated"
+    },
+    "imports": ["com.example.refract.settings.NativeProfileStatusBadge"],
+    "components": {},
+    "nativeComponents": {
+      "NativeProfileStatusBadge": {
+        "parameters": [],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeProfileStatusBadge",
+        "argumentStyle": "named",
+        "modifierParameter": "modifier",
+        "arguments": [],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "com.example.refract.R",
+      "strings": {
+        "settings.profile": "settings_profile",
+        "settings.display.name": "settings_display_name",
+        "settings.preferences": "settings_preferences",
+        "settings.notifications": "settings_notifications",
+        "settings.save": "settings_save"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [
+      {
+        "module": "../native/NativeProfileStatusBadge",
+        "symbols": ["NativeProfileStatusBadge"]
+      }
+    ],
+    "components": {},
+    "nativeComponents": {
+      "NativeProfileStatusBadge": {
+        "parameters": [],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeProfileStatusBadge",
+        "argumentStyle": "object",
+        "arguments": [],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "strings": {
+        "settings.profile": "settings_profile",
+        "settings.display.name": "settings_display_name",
+        "settings.preferences": "settings_preferences",
+        "settings.notifications": "settings_notifications",
+        "settings.save": "settings_save"
+      }
+    }
+  }
+}

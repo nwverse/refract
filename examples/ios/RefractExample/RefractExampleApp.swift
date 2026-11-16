@@ -10,6 +10,9 @@ struct RefractExampleApp: App {
 }
 
 private struct NativeNavigation: View {
+    @StateObject private var model = AppSettingsModel()
+    @State private var notificationsEnabled = true
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
@@ -18,8 +21,14 @@ private struct NativeNavigation: View {
                 NavigationLink("Open shared layout") {
                     Hello()
                 }
-                NavigationLink("Keep native profile") {
-                    NativeProfile()
+                NavigationLink("Generated settings") {
+                    SettingsScreen(model: model, notificationsEnabled: $notificationsEnabled)
+                }
+                NavigationLink("Hand-written settings (rollback)") {
+                    HandWrittenSettingsScreen(model: model, notificationsEnabled: $notificationsEnabled)
+                }
+                NavigationLink("Native component in shared UI") {
+                    NativeComponentScreen()
                 }
             }
             .padding()

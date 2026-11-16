@@ -37,7 +37,7 @@ import Foundation
                                 "--android-out", temporary.appendingPathComponent("android").path,
                                 "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(rejection.status != 0)
-    #expect(rejection.stderr.contains("[RFNATIVE001]"))
+    #expect(rejection.stderr.contains("[RF-C001]"))
     #endif
 }
 
@@ -76,7 +76,7 @@ import Foundation
                                "--android-out", rejectedAndroid.path, "--harmony-out", rejectedHarmony.path],
                               executable: executable)
     #expect(rejected.status != 0)
-    #expect(rejected.stderr.contains("[RFNATIVE001]"))
+    #expect(rejected.stderr.contains("[RF-C001]"))
     #expect(!FileManager.default.fileExists(atPath: rejectedAndroid.path))
     #expect(!FileManager.default.fileExists(atPath: rejectedHarmony.path))
     #endif

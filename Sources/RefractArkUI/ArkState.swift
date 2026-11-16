@@ -13,7 +13,7 @@ func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWrite
     writer.line("@Local private \(name): \(type == .string ? "string" : type == .bool ? "boolean" : "number") = \(try emitLocalExpression(initial))")
 }
 
-func emitLocalExpression(_ expression: Expression) throws -> String {
+func emitLocalExpression(_ expression: Expression, item: String? = nil) throws -> String {
     switch expression.value {
     case let .valueProperty(.state(name)):
         guard ArkText.isIdentifier(name) else {
@@ -28,12 +28,12 @@ func emitLocalExpression(_ expression: Expression) throws -> String {
             case let .literal(text):
                 result += try ArkText.string(text).dropFirst().dropLast()
             case let .expression(value):
-                result += "${\(try emitLocalExpression(value))}"
+                result += "${\(try emitLocalExpression(value, item: item))}"
             }
         }
         return result + "`"
     default:
-        return try ArkExpression.emit(expression)
+        return try ArkExpression.emit(expression, item: item)
     }
 }
 

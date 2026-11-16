@@ -236,11 +236,12 @@ public struct Component: Codable, Equatable, Sendable {
     public var attributes: [String: Attribute]
     /// The native interop compatibility form's imported module; canonical mappings use `imports`.
     public var module: String?
+    public var kind: String?
 
     public init(parameters: [Parameter] = [], content: ContentKind = .none, contentParameter: String? = nil,
                 modifiers: [String] = [], target: String, argumentStyle: ArgumentStyle = .named,
                 arguments: [ArgumentBinding] = [], modifierParameter: String? = nil,
-                attributes: [String: Attribute] = [:], module: String? = nil) {
+                attributes: [String: Attribute] = [:], module: String? = nil, kind: String? = nil) {
         self.parameters = parameters
         self.content = content
         self.contentParameter = contentParameter
@@ -251,6 +252,7 @@ public struct Component: Codable, Equatable, Sendable {
         self.modifierParameter = modifierParameter
         self.attributes = attributes
         self.module = module
+        self.kind = kind
     }
 
     public var hasContent: Bool { content != .none }
@@ -415,6 +417,6 @@ private struct LegacyMapping: Decodable {
     private func convert(_ target: Entry.Target, parameters: [Parameter], style: ArgumentStyle) -> Component {
         Component(parameters: parameters, target: target.symbol, argumentStyle: style,
                   arguments: target.parameters.map { ArgumentBinding(source: $0.swift, target: $0.name) },
-                  module: target.module)
+                  module: target.module, kind: target.kind)
     }
 }

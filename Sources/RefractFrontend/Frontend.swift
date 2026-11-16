@@ -75,7 +75,7 @@ final class Builder: SyntaxVisitor {
         return .skipChildren
     }
 
-    private func view(_ expression: ExprSyntax) -> ViewNode? {
+    func view(_ expression: ExprSyntax) -> ViewNode? {
         if let call = expression.as(FunctionCallExprSyntax.self) {
             // SwiftSyntax represents `Text("x").padding() { ... }` as a call whose called expression
             // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure
@@ -90,10 +90,12 @@ final class Builder: SyntaxVisitor {
                 guard let node = view(base) else { return nil }
                 return modifier(call, name: member.declName.baseName.text, on: node)
             }
+            if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
+                return extendedView(call)
+            }
             return view(call)
         }
-        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {
-            guard let node = view(base) else { return nil }
+        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
             return modifier(member, on: node)
         }
         error("unsupportedExpression", "The expression `\(expression.trimmedDescription)` is not a supported view.",
@@ -101,7 +103,7 @@ final class Builder: SyntaxVisitor {
         return nil
     }
 
-    private func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+    func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
         guard name == "padding", call.arguments.count <= 1, call.trailingClosure == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
                   "Use a supported subset modifier.", at: call)
@@ -137,10 +139,13 @@ final class Builder: SyntaxVisitor {
         case .native, .conditional, .platformView:
             error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
             return nil
+        default:
+            error("unsupportedModifierTarget", "This extended view modifier target is not supported yet.", at: syntax)
+            return nil
         }
     }
 
-    private func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
+    func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard let reference = call.calledExpression.as(DeclReferenceExprSyntax.self) else {
             error("unsupportedView", "This view call is not supported.",
                   "Use VStack, HStack, Text, or Button.", at: call)
@@ -297,7 +302,7 @@ final class Builder: SyntaxVisitor {
         }
     }
 
-    private func children(of closure: ClosureExprSyntax?) -> [ViewNode]? {
+    func children(of closure: ClosureExprSyntax?) -> [ViewNode]? {
         guard let closure else { return [] }
         var result: [ViewNode] = []
         for item in closure.statements {
@@ -318,7 +323,7 @@ final class Builder: SyntaxVisitor {
         return item.item.as(ReturnStmtSyntax.self)?.expression
     }
 
-    private func stringLiteral(_ expression: ExprSyntax) -> String? {
+    func stringLiteral(_ expression: ExprSyntax) -> String? {
         guard let literal = expression.as(StringLiteralExprSyntax.self), literal.segments.count == 1,
             case let .stringSegment(segment)? = literal.segments.first else { return nil }
         return segment.content.text
