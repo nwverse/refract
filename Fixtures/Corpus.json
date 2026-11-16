@@ -27,6 +27,7 @@
     { "path": "rejected-image", "implementationStatus": "ready" },
     { "path": "rejected-model-associated-type", "implementationStatus": "ready" },
     { "path": "rejected-model-async", "implementationStatus": "ready" },
+    { "path": "rejected-model-overload", "implementationStatus": "ready" },
     { "path": "rejected-model-property", "implementationStatus": "ready" },
     { "path": "rejected-view-declaration", "implementationStatus": "ready" },
     { "path": "state-counter", "implementationStatus": "ready" },
