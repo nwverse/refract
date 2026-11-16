@@ -1,17 +1,23 @@
 /// Typed view additions shared by frontends and native backends.
+public enum LayoutSpacing: String, Codable, Sendable {
+    case small, medium
+
+    public var points: Int { self == .small ? 4 : 8 }
+}
+
 public struct LayoutContainer: Codable, Equatable, Sendable {
     public let axis: ViewNode.StackAxis
-    public let alignment: LayoutAlignment
+    public let alignment: LayoutAlignment?
     public let spacing: Expression?
 
-    public init(axis: ViewNode.StackAxis, alignment: LayoutAlignment = .center, spacing: Expression? = nil) {
+    public init(axis: ViewNode.StackAxis, alignment: LayoutAlignment? = nil, spacing: Expression? = nil) {
         self.axis = axis
         self.alignment = alignment
         self.spacing = spacing
     }
 }
 
-public enum LayoutAlignment: String, Codable, Sendable {
+public enum LayoutAlignment: String, Codable, Hashable, Sendable {
     case center, leading, trailing, top, bottom, topLeading, bottomTrailing
 }
 

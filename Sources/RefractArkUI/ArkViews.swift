@@ -6,15 +6,8 @@ extension Generation {
                       lazyOwner: Bool = false, resolver: InteropResolver? = nil) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
-            var arguments: [String] = []
-            if let spacing = layout.spacing { arguments.append("space: \(try ArkExpression.emit(spacing, item: item, mapping: mapping))") }
-            if layout.axis == .depth { arguments.append("alignContent: \(alignment(layout))") }
-            let name = containerName(layout.axis)
-            writer.open("\(name)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
-            for child in children { try emit(child, into: &writer, item: item, resolver: resolver) }
-            writer.close()
-            if layout.axis != .depth { writer.line(".alignItems(\(alignment(layout)))") }
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            try emitLayout(layout, children: children, modifiers: modifiers,
+                           into: &writer, item: item, resolver: resolver)
         case let .scroll(axis, child, modifiers, _):
             writer.open("Scroll()")
             try emit(child, into: &writer, item: item, resolver: resolver)
@@ -105,19 +98,6 @@ extension Generation {
         switch axis { case .vertical: "Column"; case .horizontal: "Row"; case .depth: "Stack" }
     }
 
-    private func alignment(_ layout: LayoutContainer) -> String {
-        switch (layout.axis, layout.alignment) {
-        case (.vertical, .leading): "HorizontalAlign.Start"
-        case (.vertical, .trailing): "HorizontalAlign.End"
-        case (.vertical, _): "HorizontalAlign.Center"
-        case (.horizontal, .top): "VerticalAlign.Top"
-        case (.horizontal, .bottom): "VerticalAlign.Bottom"
-        case (.horizontal, _): "VerticalAlign.Center"
-        case (.depth, .topLeading): "Alignment.TopStart"
-        case (.depth, .bottomTrailing): "Alignment.BottomEnd"
-        case (.depth, _): "Alignment.Center"
-        }
-    }
 }
 
 enum ArkValueType {

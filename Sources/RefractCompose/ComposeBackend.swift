@@ -310,6 +310,8 @@ public struct ComposeBackend: Sendable {
             return value ? "true" : "false"
         case let .numberLiteral(text):
             return text
+        case let .layoutSpacing(token):
+            return String(token.points)
         case let .reference(name):
             return name
         case let .binding(name):

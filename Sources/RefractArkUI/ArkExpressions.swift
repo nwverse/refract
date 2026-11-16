@@ -19,6 +19,8 @@ enum ArkExpression {
                                  location: expression.location)
             }
             return value
+        case let .layoutSpacing(token):
+            return String(token.points)
         case let .reference(name):
             if let item, name == item || name.hasPrefix(item + ".") {
                 return try referenceName(name, location: expression.location)
