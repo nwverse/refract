@@ -1,0 +1,1 @@
+RF-C002 IconView.swift:6:13 error: 'Image(systemName:)' uses an SF Symbol, which has no Android equivalent; use 'Image("name", bundle:)' with a drawable resource, or declare a native component in refract.json
