@@ -127,7 +127,7 @@
     },
     {
       "path": "pending-contract",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "performance/arkui-lazy-list",
@@ -239,11 +239,11 @@
     },
     {
       "path": "v0-reject-implicit-identity",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-list-identity",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-literal-text",

@@ -1,1 +1,3 @@
-Input.swift:7:9: error [RFLIST001]: List collection String has no stable typed identity and cannot preserve row identity Suggestion: Use Identifiable with a stored String or Int id
+Input.swift:4:17: error [RFLIST001]: Model collection `String` has no stable typed identity and cannot preserve row identity. Suggestion: Use Identifiable with a stored String or Int id
+Input.swift:4:5: error [model.invalid_property]: Model properties must be get-only scalar instance requirements. Suggestion: Use a form such as `var title: String { get }`
+Input.swift:8:5: error [state.invalid_declaration]: A model input must be a let property of a declared RefractModel protocol. Suggestion: Use `let model: YourModel` with `protocol YourModel: RefractModel`
