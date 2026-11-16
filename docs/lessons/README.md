@@ -10,3 +10,4 @@ add to it when you hit something new: what happened, why, and what to do instead
 | ArkUI generation | `docs/lessons/arkui.md` |
 | Compose backend | `docs/lessons/compose-backend.md` |
 | Mapping configuration | `docs/lessons/mapping.md` |
+| Native string resources | `docs/lessons/localization.md` |
