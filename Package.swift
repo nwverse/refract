@@ -30,7 +30,11 @@ let package = Package(
             ],
             swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
         ),
-        .target(name: "RefractMapping", dependencies: ["RefractIR"]),
+        .target(
+            name: "RefractMapping",
+            dependencies: ["RefractIR"],
+            resources: [.process("Resources")]
+        ),
         .target(name: "RefractCompose", dependencies: ["RefractIR", "RefractMapping"]),
         .target(name: "RefractArkUI", dependencies: ["RefractIR", "RefractMapping"]),
         .executableTarget(
@@ -39,7 +43,11 @@ let package = Package(
         ),
         .testTarget(name: "RefractIRTests", dependencies: ["RefractIR"]),
         .testTarget(name: "RefractFrontendTests", dependencies: ["RefractFrontend"]),
-        .testTarget(name: "RefractMappingTests", dependencies: ["RefractMapping"]),
+        .testTarget(
+            name: "RefractMappingTests",
+            dependencies: ["RefractMapping"],
+            exclude: ["Fixtures"]
+        ),
         .testTarget(name: "RefractComposeTests", dependencies: ["RefractCompose"]),
         .testTarget(name: "RefractArkUITests", dependencies: ["RefractArkUI"]),
         .testTarget(name: "RefractCLITests"),
