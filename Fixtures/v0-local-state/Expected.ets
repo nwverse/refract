@@ -5,7 +5,6 @@
 export struct LocalState {
   @Local private isEnabled: boolean = false;
 
-
   build() {
     Row() {
       Text($r('app.string.settings_enabled'))

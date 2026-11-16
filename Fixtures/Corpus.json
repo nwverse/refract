@@ -271,7 +271,7 @@
     },
     {
       "path": "v0-text-input",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     }
   ]
 }
