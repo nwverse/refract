@@ -97,7 +97,7 @@ class ReportTest(unittest.TestCase):
         ]))
         result = report.make_report([path], 5.0, 0.1)
         self.assertEqual(result["comparisons"][0]["metric"], "timeMs")
-        self.assertTrue(result["comparisons"][0]["comparison_only"])
+        self.assertEqual(result["status"], "fail")
 
     def test_missing_pair_is_an_error(self):
         path = Path(self.directory.name) / "input.json"
@@ -156,8 +156,8 @@ class ReportTest(unittest.TestCase):
         for value in (generated, reference):
             value["context"].pop("emulator")
         path.write_text(json.dumps([generated, reference]))
-        with self.assertRaisesRegex(report.ReportError, "context.emulator"):
-            report.make_report([path], 5.0, 0.1)
+        with self.assertRaisesRegex(report.ReportError, "verified emulator"):
+            report.make_report([path], 5.0, 0.1, {"emulator": False})
 
     def test_aggregate_only_micro_result_has_no_p99_gate(self):
         metrics = {"timeNs": {"minimum": 1.0, "maximum": 2.0, "median": 1.0}}
@@ -169,7 +169,8 @@ class ReportTest(unittest.TestCase):
         result = report.make_report([path], 5.0, 0.1)
         self.assertEqual(result["measurements"][0]["sample_kind"], "aggregate")
         self.assertNotIn("p99", result["comparisons"][0])
-        self.assertEqual(result["measurements"][0]["sample_count"], 3)
+        self.assertEqual(result["measurements"][0]["sample_count"], 1)
+        self.assertEqual(result["measurements"][0]["repeat_iterations"], 3)
 
     def test_memory_does_not_use_millisecond_threshold(self):
         path = Path(self.directory.name) / "input.json"

@@ -16,9 +16,16 @@ not a fictitious p99 sample.
 - The app compiles for release with the pinned Compose BOM, material3 `Switch`, stable lazy-list keys/content type,
   and narrow `State<T>` reads.
 - `report_test.py` verifies parsing, pairing, quantiles, environment checks and threshold behavior.
-- Macrobenchmark/Microbenchmark execution and an emulator-labelled report are **not yet complete**. Their
-  instrumentation integration is a separate follow-up for issue #9. Compiling this app is not a passing performance
-  measurement, and no physical-device result exists.
+- Both real setting-row microbenchmark variants pass on an AOSP API 35 x86_64 emulator and produce actual AndroidX
+  JSON with 50 timing samples and 5 allocation samples per variant. The parser accepts this real format, including
+  top-level context and `EMULATOR_` method prefixes. The real-row comparison (generated p50 100.541ms, reference
+  149.006ms; generated p99 170.044ms, reference 615.354ms) passed the emulator gate. Earlier duplicate toy-row
+  measurements used different content and are not comparable baselines; these results are not physical-device
+  evidence or a generator-wide performance guarantee.
+- Macrobenchmark/Microbenchmark instrumentation is present. On the available software-only emulator, startup
+  frame completion can exceed the platform's fixed activity-launch deadline (`lastFrameNs=null`) or the system can
+  become unresponsive. No successful macrobenchmark result is claimed from that environment. The runner fails
+  rather than converting an incomplete trace into a passing report.
 - The app disables shrinking to preserve both variant function boundaries, uses debug signing for local
   instrumentation and has a `profileable` release manifest. These are harness choices, not production performance
   claims.
@@ -32,8 +39,16 @@ and `GRADLE_USER_HOME` for your machine, not in repository files. Dependency ver
 ```sh
 # No device needed:
 python3 -I bench/android/report_test.py
-bench/android/gradlew -p bench/android :app:assembleRelease
+bench/android/gradlew -p bench/android :app:assembleRelease :benchmark:assembleRelease
+
+# One fully booted emulator, with a responsive system and external storage mounted:
+bench/android/run-emulator.sh bench/android/results/emulator-01
 ```
+
+`run-emulator.sh` checks `ro.kernel.qemu`, boot completion, external-storage writability, disables animations,
+runs the release instrumentation, reads only `*benchmarkData.json`, and records the emulator probe in the report.
+It exits nonzero for build/test failures, timeouts or missing results. AOSP images without Google services need the
+same startup/rendering stability checks; slow first frames are not accepted as passing startup measurements.
 
 The Gradle wrapper bootstrap and distribution have pinned versions. On a new machine the wrapper downloads its
 distribution from the public Gradle service; no local proxy or internal mirror is configured in this project.

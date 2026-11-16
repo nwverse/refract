@@ -37,6 +37,7 @@ class Measurement:
     values: list[float]
     sample_kind: str
     sample_count: int
+    repeat_iterations: int
     context: dict[str, Any]
 
 
@@ -85,10 +86,11 @@ def extract(payload: Any, source: Path) -> list[Measurement]:
     else:
         raise ReportError(f"{source} has no benchmarks array")
     output = []
+    shared_context = payload.get("context") if isinstance(payload, dict) else None
     for benchmark in benchmarks:
         if not isinstance(benchmark, dict):
             raise ReportError(f"{source} contains a non-object benchmark")
-        context = benchmark.get("context")
+        context = benchmark.get("context", shared_context)
         metrics = benchmark.get("metrics")
         if not isinstance(context, dict) or not isinstance(metrics, dict) or not metrics:
             raise ReportError(f"{source} has an incomplete benchmark record")
@@ -102,8 +104,11 @@ def extract(payload: Any, source: Path) -> list[Measurement]:
         ):
             raise ReportError(f"Unexpected benchmark className in {name!r}")
         kind = "Micro" if class_name.endswith("Microbenchmark") else "Macro"
-        suffix = name.removeprefix(class_name + ".")
-        if suffix == name or not suffix:
+        benchmark_name = name.removeprefix("EMULATOR_")
+        suffix = benchmark_name.removeprefix(class_name + ".")
+        if suffix == benchmark_name:
+            suffix = benchmark_name
+        if not suffix:
             raise ReportError(f"Unexpected benchmark name in {name!r}")
         method, separator, macro_scenario = suffix.partition(".")
         scenarios = {
@@ -126,7 +131,7 @@ def extract(payload: Any, source: Path) -> list[Measurement]:
         if not isinstance(iterations, int) or iterations < 1:
             raise ReportError(f"{source} has no valid iteration count for {name!r}")
         for metric, unit, values, sample_count in samples(metrics, iterations):
-            output.append(Measurement(key, metric, unit, values, "runs" if unit == "native" else "aggregate", sample_count, context))
+            output.append(Measurement(key, metric, unit, values, "runs" if unit == "native" else "aggregate", sample_count, iterations, context))
     if not output:
         raise ReportError(f"{source} has no benchmark metrics")
     return output
@@ -154,7 +159,8 @@ def normalize(measurement: Measurement) -> dict[str, Any]:
         "metric": metric,
         "raw_unit": unit,
         "sample_kind": measurement.sample_kind,
-        "sample_count": measurement.sample_count,
+        "sample_count": len(values),
+        "repeat_iterations": measurement.repeat_iterations,
         "samples": values,
         "p50": percentile(values, 0.5),
         "p99": percentile(values, 0.99),
@@ -165,13 +171,18 @@ def normalize(measurement: Measurement) -> dict[str, Any]:
 
 def environment(context: dict[str, Any]) -> dict[str, Any]:
     build = context.get("build")
-    device = context.get("device")
+    device = context.get("device", {})
     if not isinstance(build, dict) or not isinstance(device, dict):
-        raise ReportError("Benchmark context must include build and device objects")
-    if context.get("emulator") is not True:
-        raise ReportError("This report is explicitly for emulator runs; context.emulator must be true")
+        raise ReportError("Benchmark context must include build information")
+    device_info = {
+        "model": build.get("model", "unknown"),
+        "device": build.get("device", "unknown"),
+        **device,
+    }
+    if context.get("emulator", True) is not True:
+        raise ReportError("This report is explicitly for emulator runs; context.emulator must be true when present")
     return {
-        "device": device,
+        "device": device_info,
         "build": build,
         "type": "emulator",
         "android_version": build.get("version", {}).get("sdk"),
@@ -207,13 +218,8 @@ def compare_pairs(rows: list[dict[str, Any]], percent: float, absolute_ms: float
             "reference": reference,
         }
         if metric in HIGHER_IS_WORSE:
-            # AndroidX Microbenchmark usually persists only aggregate statistics.
-            # Do not turn its median into a fictitious p99 gate; macrobenchmark
-            # frame/startup samples carry the strict latency comparisons.
-            if generated["benchmark_kind"] == "Micro":
-                row["comparison_only"] = True
-                results.append(row)
-                continue
+            # Microbenchmark aggregate-only output has no p99 distribution.
+            # Its raw runs, when present, are samples and remain gateable.
             quantiles = ("p50", "p99") if generated["sample_kind"] == "runs" else ("p50",)
             for quantile in quantiles:
                 before, after = reference[quantile], generated[quantile]
@@ -258,9 +264,13 @@ def markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def make_report(inputs: list[Path], percent: float, absolute_ms: float) -> dict[str, Any]:
+def make_report(inputs: list[Path], percent: float, absolute_ms: float, environment_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     if not inputs:
         raise ReportError("At least one AndroidX JSON result is required")
+    if environment_metadata is None:
+        environment_metadata = {"emulator": True, "source": "unit-test fixture"}
+    if environment_metadata.get("emulator") is not True:
+        raise ReportError("Report generation requires a verified emulator environment")
     if percent < 0 or absolute_ms < 0 or not math.isfinite(percent) or not math.isfinite(absolute_ms):
         raise ReportError("Thresholds must be finite and non-negative")
     measurements = []
@@ -279,7 +289,7 @@ def make_report(inputs: list[Path], percent: float, absolute_ms: float) -> dict[
         "platform": "android",
         "environment_label": "emulator",
         "device_result": False,
-        "environment": environment(measurements[0].context),
+        "environment": {**environment(measurements[0].context), "verification": environment_metadata},
         "threshold": {"relative_percent": percent, "absolute_ms": absolute_ms, "conjunction": "AND"},
         "measurements": rows,
         "comparisons": comparisons,
@@ -293,9 +303,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True, type=Path, help="Output directory for report.json/report.md")
     parser.add_argument("--threshold-percent", type=float, default=5.0)
     parser.add_argument("--threshold-ms", type=float, default=0.1)
+    parser.add_argument("--environment", type=Path, help="JSON metadata recorded by the runner's emulator probe")
     args = parser.parse_args(argv)
     try:
-        report = make_report(args.inputs, args.threshold_percent, args.threshold_ms)
+        report = make_report(
+            args.inputs,
+            args.threshold_percent,
+            args.threshold_ms,
+            load_json(args.environment) if args.environment else None,
+        )
     except ReportError as error:
         print(f"benchmark-report: ERROR: {error}", file=sys.stderr)
         return 2
