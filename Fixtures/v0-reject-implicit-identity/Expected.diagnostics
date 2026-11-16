@@ -1,1 +1,1 @@
-Input.swift:7:22: error [RFLIST002]: The id key path uses the row value rather than a stable logical identity, so duplicates or edits can corrupt row state Suggestion: Use the item's stable stored id instead of \.self or an array index
+Input.swift:16:31: error [RFLIST002]: An explicit List identity must use the item's stable stored id. Suggestion: Use `List(model.items)` with a stored String or Int id; never use `\.self` or an array index

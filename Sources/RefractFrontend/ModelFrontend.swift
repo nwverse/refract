@@ -90,8 +90,8 @@ extension Builder {
             // A type that failed Identifiable validation is not a scalar model property.
             // Keep the specific list-identity error rather than manufacturing a scalar fallback.
             if diagnostics.contains(where: { $0.code == "RFLIST001" }) { return nil }
-            error("model.invalid_property", "Model collection `\(name)` is not a declared Identifiable item type.",
-                  "Declare a stored scalar Identifiable item with a stable String or Int id", at: array)
+            error("RFLIST001", "Model collection `\(name)` has no stable typed identity and cannot preserve row identity.",
+                  "Use Identifiable with a stored String or Int id", at: array)
             return nil
         }
         return .some(ModelCollection(itemType: name, key: item.identity.name, keyType: item.identity.type))

@@ -1,10 +1,14 @@
 import SwiftUI
 
+protocol TitlesModel: RefractModel {
+    var titles: [String] { get }
+}
+
 struct MissingIdentity: View {
-    let titles: [String]
+    let model: TitlesModel
 
     var body: some View {
-        List(titles) { title in
+        List(model.titles) { title in
             Text(title)
         }
     }

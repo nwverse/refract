@@ -1,11 +1,20 @@
 import SwiftUI
 
+struct SettingItem: Identifiable {
+    let id: String
+    let title: String
+}
+
+protocol TitlesModel: RefractModel {
+    var items: [SettingItem] { get }
+}
+
 struct ImplicitIdentity: View {
-    let titles: [String]
+    let model: TitlesModel
 
     var body: some View {
-        List(titles, id: \.self) { title in
-            Text(title)
+        List(model.items, id: \.self) { item in
+            Text(item.title)
         }
     }
 }
