@@ -12,19 +12,25 @@ public struct ModelCollection: Codable, Equatable, Sendable {
 }
 
 /// Typed view additions shared by frontends and native backends.
+public enum LayoutSpacing: String, Codable, Sendable {
+    case small, medium
+
+    public var points: Int { self == .small ? 4 : 8 }
+}
+
 public struct LayoutContainer: Codable, Equatable, Sendable {
     public let axis: ViewNode.StackAxis
-    public let alignment: LayoutAlignment
+    public let alignment: LayoutAlignment?
     public let spacing: Expression?
 
-    public init(axis: ViewNode.StackAxis, alignment: LayoutAlignment = .center, spacing: Expression? = nil) {
+    public init(axis: ViewNode.StackAxis, alignment: LayoutAlignment? = nil, spacing: Expression? = nil) {
         self.axis = axis
         self.alignment = alignment
         self.spacing = spacing
     }
 }
 
-public enum LayoutAlignment: String, Codable, Sendable {
+public enum LayoutAlignment: String, Codable, Hashable, Sendable {
     case center, leading, trailing, top, bottom, topLeading, bottomTrailing
 }
 
@@ -84,6 +90,13 @@ public struct ItemType: Codable, Equatable, Sendable {
 }
 
 public extension ViewNode {
+    func children(for platform: TargetPlatform) -> [ViewNode] {
+        if case let .platformView(alternatives, _) = self {
+            return platform == .android ? alternatives.android : alternatives.harmonyOS
+        }
+        return children
+    }
+
     var children: [ViewNode] {
         switch self {
         case let .stack(_, children, _, _), let .layout(_, children, _, _), let .list(children, _, _): children

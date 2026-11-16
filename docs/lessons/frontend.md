@@ -15,3 +15,12 @@
   to call the local value.
 - Generated backend output is not an error channel. A backend with an unsupported IR node throws the shared typed
   `Diagnostic`; it never emits a comment that looks like successful output.
+- SwiftParser always returns a recovery tree, including for malformed input. Before visiting it, check `tree.hasError`
+  and convert `SwiftParserDiagnostics.ParseDiagnosticsGenerator.diagnostics(for:)` errors into `RFSYN001` with their
+  source positions. On the pinned `600.0.1` release the implementation is `ParseDiagnosticsGenerator`, not an API named
+  `ParserDiagnosticsEngine`. Importing `SwiftDiagnostics` introduces another `Diagnostic` type, so qualify the IR type.
+- Never build IR from a recovered malformed tree: the recovery may look valid enough to emit plausible but wrong code.
+- A supported `body` does not make every sibling declaration valid. Before selecting the typed-input or state/model
+  parsing path, reject methods, initializers, nested types and arbitrary computed/observed properties with `RFSYN004`.
+  Let the specialized parsers retain their diagnostics for malformed `@State`, `@Binding` and model inputs rather than
+  replacing those codes with a generic declaration error.
