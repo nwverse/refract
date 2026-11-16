@@ -34,11 +34,14 @@ public struct ComposeBackend: Sendable {
         for item in context.imports.sorted() {
             out.line("import \(item)")
         }
+        var emittedImports = Set(context.imports)
         for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
-            out.line("import \(item.module)")
+            if emittedImports.insert(item.module).inserted {
+                out.line("import \(item.module)")
+            }
         }
         for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
-            if let module = item.value.module {
+            if let module = item.value.module, emittedImports.insert("\(module).\(item.value.target)").inserted {
                 out.line("import \(module).\(item.value.target)")
             }
         }

@@ -12,19 +12,19 @@ extension Generation {
             if layout.axis == .depth { arguments.append("alignContent: \(alignment(layout))") }
             let name = containerName(layout.axis)
             writer.open("\(name)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
-            for child in children { try emit(child, into: &writer, item: item, resolver: resolver) }
+            for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close()
             if layout.axis != .depth { writer.line(".alignItems(\(alignment(layout)))") }
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .scroll(axis, child, modifiers, _):
             writer.open("Scroll()")
-            try emit(child, into: &writer, item: item, resolver: resolver)
+            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
             writer.close()
             writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .list(children, modifiers, _):
             writer.open("List()")
-            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true, resolver: resolver) }
+            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver) }
             writer.close()
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .section(header, children, _):
@@ -42,7 +42,7 @@ extension Generation {
             }
             writer.open("LazyForEach(\(try ArkExpression.emit(items.collection, mapping: mapping)), (item: \(items.itemType)) =>")
             writer.open("ListItem()")
-            try emit(items.content, into: &writer, item: items.itemName, resolver: resolver)
+            try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver)
             writer.close()
             let key = "item.\(items.key)"
             writer.close(suffix: ", (item: \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")

@@ -8,6 +8,13 @@ public enum LocalizationKey {
     }
 }
 
+extension Expression {
+    public var isLocalizedText: Bool {
+        if case .localizedText = value { return true }
+        return false
+    }
+}
+
 /// An immutable input used by a generated native component's public signature.
 public struct ScreenParameter: Codable, Equatable, Sendable {
     public let name: String
