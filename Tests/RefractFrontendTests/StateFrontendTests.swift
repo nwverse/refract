@@ -44,9 +44,46 @@ import RefractIR
     #expect(amount.value == .numberLiteral("1"))
 }
 
+@Test func frontendCapturesParentBindingReadAndWrite() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct EnabledRow: View {
+        @Binding var isEnabled: Bool
+        var body: some View {
+            VStack {
+                Text("Enabled: \\(isEnabled)")
+                Button("Disable") { isEnabled = false }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let screen = try #require(unit.module.screens.first)
+    guard case let .binding(bindingName, bindingType, bindingLocation) = screen.states.first else {
+        Issue.record("Expected a parent binding")
+        return
+    }
+    #expect(bindingName == "isEnabled")
+    #expect(bindingType == .bool)
+    #expect(bindingLocation?.line == 2)
+    guard case let .stack(_, children, _, _) = screen.body,
+          case let .text(text, _, _) = children[0],
+          case let .button(_, action, _, _) = children[1],
+          case let .interpolatedString(segments) = text.value,
+          case let .expression(read) = segments[1] else {
+        Issue.record("Expected a binding read and write")
+        return
+    }
+    #expect(read.value == .valueProperty(.binding("isEnabled")))
+    guard case let .assign(.binding("isEnabled"), value) = action else {
+        Issue.record("Expected a binding assignment")
+        return
+    }
+    #expect(value.value == .boolLiteral(false))
+    #expect(value.location != nil)
+}
+
 @Test(arguments: [
     "@ObservedObject var model: SettingsModel",
-    "@Binding var isEnabled: Bool",
     "@State private var count: Int",
 ])
 func frontendRejectsUnsupportedStoredProperties(_ declaration: String) {

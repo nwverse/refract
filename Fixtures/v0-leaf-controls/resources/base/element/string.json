@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "settings_profile", "value": "Profile" },
+    { "name": "settings_save", "value": "Save" }
+  ]
+}

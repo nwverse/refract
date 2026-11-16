@@ -310,6 +310,8 @@ public struct ComposeBackend: Sendable {
             return name
         case let .valueProperty(.state(name)):
             return "\(name).value"
+        case let .valueProperty(.binding(name)):
+            return name
         case let .interpolatedString(segments):
             var result = "\""
             for segment in segments {
@@ -330,6 +332,10 @@ public struct ComposeBackend: Sendable {
             return "\(name).value = \(try renderExpression(value, context: &context))"
         case let .increment(.state(name), value):
             return "\(name).value += \(try renderExpression(value, context: &context))"
+        case let .assign(.binding(name), value):
+            return "on\(name.uppercasingFirst())Change(\(try renderExpression(value, context: &context)))"
+        case let .increment(.binding(name), value):
+            return "on\(name.uppercasingFirst())Change(\(name) + \(try renderExpression(value, context: &context)))"
         }
     }
 
