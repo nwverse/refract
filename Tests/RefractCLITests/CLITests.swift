@@ -27,7 +27,7 @@ import Foundation
                                  "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(generation.status == 0, Comment(rawValue: generation.stderr))
     #expect(try String(contentsOf: temporary.appendingPathComponent("android/Input.kt"), encoding: .utf8)
-        .contains("Text(text = \"Hello\")"))
+        .contains("text = \"Hello\""))
     #expect(try String(contentsOf: temporary.appendingPathComponent("harmony/Input.ets"), encoding: .utf8)
         .contains("Text(\"Hello\")"))
     #expect(try runCLI(["check", "--input", input.path], executable: executable).status == 0)

@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Native and generated ArkUI example"
+    },
+    {
+      "name": "entry_desc",
+      "value": "Refract example entry ability"
+    },
+    {
+      "name": "entry_label",
+      "value": "Refract example"
+    }
+  ]
+}
