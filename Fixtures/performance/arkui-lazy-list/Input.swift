@@ -6,11 +6,15 @@ struct SettingItem: Identifiable {
     let enabled: Bool
 }
 
+protocol SettingsListModel: RefractModel {
+    var items: [SettingItem] { get }
+}
+
 struct SettingsList: View {
-    let items: [SettingItem]
+    let model: SettingsListModel
 
     var body: some View {
-        List(items) { item in
+        List(model.items) { item in
             HStack {
                 Text(item.title)
                 Text(item.enabled ? "Enabled" : "Disabled")
