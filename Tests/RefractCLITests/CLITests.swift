@@ -89,8 +89,38 @@ private func builtCLIExecutable() -> URL {
     #endif
 }
 
-private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {
-    let process = Process()
+@Test func cliRejectsMissingNativeMappingsWithoutPartialOutput() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    let valid = temporary.appendingPathComponent("Valid.swift")
+    try Data("struct Valid: View { var body: some View { Text(\"Valid\") } }".utf8).write(to: valid)
+    let missing = root.appendingPathComponent("Fixtures/interop-native-missing")
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input", valid.path,
+        "--input", missing.appendingPathComponent("Input.swift").path,
+        "--mapping", missing.appendingPathComponent("refract.json").path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status != 0)
+    #expect(result.stderr.contains("has no Android mapping"))
+    #expect(result.stderr.contains("has no HarmonyOS mapping"))
+    #expect(result.stderr.components(separatedBy: "has no Android mapping").count == 2)
+    #expect(result.stderr.components(separatedBy: "has no HarmonyOS mapping").count == 2)
+    #expect(!FileManager.default.fileExists(atPath: android.path))
+    #expect(!FileManager.default.fileExists(atPath: harmony.path))
+    #endif
+}
+
+private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {    let process = Process()
     process.executableURL = executable
     process.arguments = arguments
     let stderr = Pipe()
