@@ -21,42 +21,34 @@ def fail(message: str) -> None:
     raise ValueError(message)
 
 
-def generated_files(root: Path, source: str) -> dict[str, Path]:
-    stem = Path(source).stem
-    return {
-        "kotlin": root / f"{stem}.kt",
-        "arkts": root / f"{stem}.ets",
-    }
-
-
 def regenerate_hello() -> None:
     outputs = {
         "kotlin": ROOT / "examples/android/app/src/main/java/refract/generated",
         "arkts": ROOT / "examples/harmony/entry/src/main/ets/generated",
     }
+    sources = ("Hello.swift", "NativeComponentScreen.swift")
     with tempfile.TemporaryDirectory(prefix="refract-example-check.") as temporary:
         output = Path(temporary)
-        subprocess.run(
-            [
+        for source in sources:
+            command = [
                 str(ROOT / ".build/debug/refract"),
                 "generate",
-                "--input", str(ROOT / "examples/shared/Hello.swift"),
-                "--mapping", str(ROOT / "examples/refract.json"),
+                "--input", str(ROOT / "examples/shared" / source),
+            ]
+            if source != "Hello.swift":
+                command += ["--mapping", str(ROOT / "examples/refract.json")]
+            command += [
                 "--android-out", str(output / "android"),
                 "--harmony-out", str(output / "harmony"),
-            ],
-            cwd=ROOT,
-            check=True,
-        )
-        actual = generated_files(output / "android", "Hello.swift")["kotlin"]
-        expected = outputs["kotlin"] / "Hello.kt"
-        if actual.read_bytes() != expected.read_bytes():
-            fail(f"regenerated Kotlin differs from {expected.relative_to(ROOT)}; regenerate and review it")
-        actual = generated_files(output / "harmony", "Hello.swift")["arkts"]
-        expected = outputs["arkts"] / "Hello.ets"
-        if actual.read_bytes() != expected.read_bytes():
-            fail(f"regenerated ArkTS differs from {expected.relative_to(ROOT)}; regenerate and review it")
-    print("Hello Kotlin and ArkTS are identical to actual regenerated output")
+            ]
+            subprocess.run(command, cwd=ROOT, check=True)
+            for platform, directory in outputs.items():
+                extension = "kt" if platform == "kotlin" else "ets"
+                actual = output / ("android" if platform == "kotlin" else "harmony") / f"{Path(source).stem}.{extension}"
+                expected = directory / f"{Path(source).stem}.{extension}"
+                if actual.read_bytes() != expected.read_bytes():
+                    fail(f"regenerated {platform} differs from {expected.relative_to(ROOT)}; regenerate and review it")
+    print("Hello and native-component Kotlin/ArkTS are identical to actual regenerated output")
 
 
 def check_resources() -> None:

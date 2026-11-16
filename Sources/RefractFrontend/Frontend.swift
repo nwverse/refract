@@ -11,7 +11,7 @@ public struct Frontend {
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
                                               nativeDeclarations: builder.interop.declarations,
-                                              models: builder.models),
+                                              models: builder.models, itemTypes: builder.itemTypes),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -26,7 +26,9 @@ final class Builder: SyntaxVisitor {
     var declaredModelNames: Set<String> = []
     var currentStates: [StateDeclaration] = []
     var models: [ModelProtocol] = []
+    var itemTypes: [ItemType] = []
     var currentModels: [ModelReference] = []
+    var currentListItem: String?
 
     init(file: String, tree: SourceFileSyntax) {
         self.file = file
@@ -40,6 +42,7 @@ final class Builder: SyntaxVisitor {
                   }) == true else { return nil }
             return declaration.name.text
         })
+        collectItemTypes(tree)
         collectModels(tree)
     }
 

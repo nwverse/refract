@@ -15,7 +15,9 @@ extension Builder {
         switch name {
         case "VStack", "HStack", "ZStack": return stack(call)
         case "ScrollView": return scroll(call)
-        case "List": return staticList(call)
+        case "List":
+            if call.arguments.isEmpty { return staticList(call) }
+            return dynamicList(call)
         case "Section": return section(call)
         case "Image": return image(call)
         case "Label": return label(call)

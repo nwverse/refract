@@ -173,12 +173,24 @@ public struct Module: Codable, Equatable, Sendable {
     public let screens: [Screen]
     public let nativeDeclarations: [NativeDeclaration]
     public let models: [ModelProtocol]
+    public let itemTypes: [ItemType]
     public init(sourceFile: String, screens: [Screen], nativeDeclarations: [NativeDeclaration] = [],
-                models: [ModelProtocol] = []) {
+                models: [ModelProtocol] = [], itemTypes: [ItemType] = []) {
         self.sourceFile = sourceFile
         self.screens = screens
         self.nativeDeclarations = nativeDeclarations
         self.models = models
+        self.itemTypes = itemTypes
+    }
+
+    private enum CodingKeys: String, CodingKey { case sourceFile, screens, nativeDeclarations, models, itemTypes }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        sourceFile = try values.decode(String.self, forKey: .sourceFile)
+        screens = try values.decode([Screen].self, forKey: .screens)
+        nativeDeclarations = try values.decodeIfPresent([NativeDeclaration].self, forKey: .nativeDeclarations) ?? []
+        models = try values.decodeIfPresent([ModelProtocol].self, forKey: .models) ?? []
+        itemTypes = try values.decodeIfPresent([ItemType].self, forKey: .itemTypes) ?? []
     }
 }
 

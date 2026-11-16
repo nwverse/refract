@@ -16,6 +16,9 @@
   followed by a corner radius should become a shaped `background(color, shape)`, not a rectangular background with
   later clipping. ArkUI background color and border radius are attributes, not that same ordered operation.
   Review the rendered result, not just a one-call-per-source-modifier mapping.
+- **Do not invent default spacing.** An omitted SwiftUI stack `spacing` is not a universal 8 dp/fp value. Leave
+  native default behavior intact unless the source supplies a typed spacing token. Explicit values still need a
+  common typed representation accepted by both backends.
 - **Target-specific collection boundaries need explicit semantics.** ArkUI `LazyForEach` consumes `IDataSource`;
   an array-to-data-source mirror can miss changes or add work. The source contract must say who owns updates instead
   of hiding synchronization in `build()` or an undocumented lifecycle callback.

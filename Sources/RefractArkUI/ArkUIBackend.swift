@@ -41,6 +41,7 @@ struct Generation {
             }
         }
         for line in importLines { writer.line(line) }
+        try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
             guard ArkText.isIdentifier(screen.name) else {
@@ -58,9 +59,7 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
-            if !screen.parameters.isEmpty {
-                writer.line()
-            }
+            if !screen.parameters.isEmpty || !screen.states.isEmpty { writer.line() }
             writer.open("build()")
             try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver)
             writer.close()

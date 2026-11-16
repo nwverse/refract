@@ -1,1 +1,1 @@
-Input.swift:4:5: error [RFSTATE001]: @EnvironmentObject has implicit ownership and is outside the declared model-input contract Suggestion: Use a plain let model input whose protocol inherits RefractModel
+Input.swift:8:5: error [state.invalid_declaration]: Stored View properties require a supported scalar @State or @Binding declaration. Suggestion: Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`

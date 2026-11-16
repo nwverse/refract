@@ -31,19 +31,16 @@ public struct ComposeBackend: Sendable {
         for item in mapping.android.imports.map(\.module) {
             context.imports.insert(item)
         }
-        for item in context.imports.sorted() {
-            out.line("import \(item)")
-        }
-        var emittedImports = Set(context.imports)
         for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
-            if emittedImports.insert(item.module).inserted {
-                out.line("import \(item.module)")
-            }
+            context.imports.insert(item.module)
         }
         for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
-            if let module = item.value.module, emittedImports.insert("\(module).\(item.value.target)").inserted {
-                out.line("import \(module).\(item.value.target)")
+            if let module = item.value.module {
+                context.imports.insert("\(module).\(item.value.target)")
             }
+        }
+        for item in context.imports.sorted() {
+            out.line("import \(item)")
         }
         out.append(bodyWriter.text)
         return out.text

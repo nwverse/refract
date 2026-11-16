@@ -3,7 +3,7 @@ import RefractMapping
 
 func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWriter) throws {
     if case let .model(reference, _) = declaration {
-        writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName)")
+        writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName);")
         return
     }
     if case let .binding(name, type, _) = declaration {
