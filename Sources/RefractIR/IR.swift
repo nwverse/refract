@@ -149,10 +149,13 @@ public struct Module: Codable, Equatable, Sendable {
     public let sourceFile: String
     public let screens: [Screen]
     public let nativeDeclarations: [NativeDeclaration]
-    public init(sourceFile: String, screens: [Screen], nativeDeclarations: [NativeDeclaration] = []) {
+    public let models: [ModelProtocol]
+    public init(sourceFile: String, screens: [Screen], nativeDeclarations: [NativeDeclaration] = [],
+                models: [ModelProtocol] = []) {
         self.sourceFile = sourceFile
         self.screens = screens
         self.nativeDeclarations = nativeDeclarations
+        self.models = models
     }
 }
 
