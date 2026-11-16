@@ -5,8 +5,8 @@ struct EnabledRow: View {
 
     var body: some View {
         VStack {
-            Text("Enabled: \(isEnabled)")
-            Button("Disable") { isEnabled = false }
+            Text(verbatim: "Enabled: \(isEnabled)")
+            Button(verbatim: "Disable") { isEnabled = false }
         }
     }
 }

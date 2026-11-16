@@ -5,7 +5,7 @@ struct RoutePreview: RefractNativeView {
     let showsTraffic: Bool
 
     var body: some View {
-        Text("Route at \(zoom), traffic: \(showsTraffic)")
+        Text(verbatim: "Route at \(zoom), traffic: \(showsTraffic)")
     }
 }
 

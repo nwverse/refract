@@ -1,0 +1,5 @@
+<resources>
+  <string name="settings_title">Settings</string>
+  <string name="settings_subtitle">Account &amp; privacy</string>
+  <string name="settings_footer">Version information</string>
+</resources>

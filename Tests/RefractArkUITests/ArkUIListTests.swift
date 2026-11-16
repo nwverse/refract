@@ -73,7 +73,7 @@ struct IdentifiedList: View {
 
 @Test func frontendValidatesTypedItemScope() throws {
     let unknown = Frontend.parse(identifiedListSource(row: "Text(item.missing)"))
-    #expect(unknown.diagnostics.map(\.code) == ["RFSEM001", "RFSEM001", "RFSEM001", "unsupportedText"])
+    #expect(unknown.diagnostics.map(\.code) == ["RFSEM001", "RFSEM001", "R.string.invalid_key"])
 
     let wrongType = Frontend.parse(identifiedListSource(row: "Text(item.id)"))
     #expect(wrongType.diagnostics.isEmpty)
@@ -81,10 +81,10 @@ struct IdentifiedList: View {
 
     let integerText = Frontend.parse(identifiedListSource(itemFields: "let id: Int\n  let title: String",
                                                         row: "Text(item.id)"))
-    #expect(integerText.diagnostics.isEmpty, Comment(rawValue: integerText.diagnostics.map(\.rendered).joined(separator: "\n")))
+    #expect(integerText.diagnostics.map(\.code) == ["RFSEM001"])
 
     let collectionText = Frontend.parse(identifiedListSource(row: "Text(model.items)"))
-    #expect(collectionText.diagnostics.map(\.code) == ["RFSEM001", "unsupportedText"])
+    #expect(collectionText.diagnostics.map(\.code) == ["RFSEM001", "R.string.invalid_key"])
 
     let numeric = Frontend.parse(identifiedListSource(itemFields: "let id: Int\n    let title: String"))
     #expect(numeric.diagnostics.isEmpty)

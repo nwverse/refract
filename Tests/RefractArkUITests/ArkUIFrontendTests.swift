@@ -9,11 +9,11 @@ import RefractIR
       var body: some View {
         ScrollView {
           List {
-            Section("settings.general") {
+            Section(verbatim: "settings.general") {
               Text(verbatim: "Profile")
               Image(systemName: "gear")
             }
-            Label("settings.profile", systemImage: "person")
+            Label(verbatim: "settings.profile", systemImage: "person")
             Divider()
             Spacer()
           }
