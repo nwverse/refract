@@ -6,14 +6,14 @@ export struct TypedLayout {
   build() {
     Column({ space: 8 }) {
       List() {
-        ListItemGroup({ header: Text("settings.general") }) {
+        ListItemGroup({ header: Text('settings.general') }) {
           ListItem() {
-            Text("settings.profile").padding(4)
+            Text('settings.profile').padding(4)
           }
         }
       }
       Row({ space: 4 }) {
-        Text("Enabled")
+        Text('Enabled')
         Blank()
       }
       .alignItems(VerticalAlign.Center)

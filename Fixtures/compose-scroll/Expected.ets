@@ -6,8 +6,8 @@ export struct TypedScroll {
   build() {
     Scroll() {
       Column({ space: 0 }) {
-        Text("One")
-        Text("Two")
+        Text('One')
+        Text('Two')
       }
       .alignItems(HorizontalAlign.Start)
     }
