@@ -13,9 +13,10 @@ export struct EnabledRow {
       Button() {
         Text('Disable')
       }
-      .onClick(() => {
+        .onClick(() => {
         this.onIsEnabledChange(false);
       })
     }
+    .alignItems(HorizontalAlign.Center)
   }
 }

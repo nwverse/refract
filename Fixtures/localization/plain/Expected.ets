@@ -10,5 +10,6 @@ export struct LocalizedPlain {
       Text($r('app.string.settings_footer'))
       Text('Debug: \$value')
     }
+    .alignItems(HorizontalAlign.Center)
   }
 }

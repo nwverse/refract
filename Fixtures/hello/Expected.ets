@@ -10,5 +10,6 @@ export struct Hello {
         Text($r('app.string.hello_go'))
       }
     }
+    .alignItems(HorizontalAlign.Center)
   }
 }

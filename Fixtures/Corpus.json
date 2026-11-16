@@ -41,7 +41,7 @@
     { "path": "v0-leaf-controls", "implementationStatus": "pending" },
     { "path": "v0-literal-text", "implementationStatus": "ready" },
     { "path": "v0-local-state", "implementationStatus": "ready" },
-    { "path": "v0-model-screen", "implementationStatus": "pending" },
+    { "path": "v0-model-screen", "implementationStatus": "ready" },
     { "path": "v0-native-component", "implementationStatus": "ready" },
     { "path": "v0-reject-binding-initializer", "implementationStatus": "ready" },
     { "path": "v0-reject-body-mutation", "implementationStatus": "ready" },

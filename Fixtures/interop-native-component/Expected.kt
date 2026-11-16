@@ -4,15 +4,22 @@
 
 package refract.generated
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import example.maps.RoutePreview
 
 @Composable
 public fun RouteScreen(modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(text = "Route")
         RoutePreview(cameraZoom = 12.0, showsTraffic = true)
     }

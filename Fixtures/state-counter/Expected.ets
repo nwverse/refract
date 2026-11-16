@@ -12,9 +12,10 @@ export struct Counter {
       Button() {
         Text('Increment')
       }
-      .onClick(() => {
+        .onClick(() => {
         this.count += 1;
       })
     }
+    .alignItems(HorizontalAlign.Center)
   }
 }

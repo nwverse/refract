@@ -76,14 +76,20 @@ struct Generation {
             writer.open("\(containerName(axis))(\(axis == .depth ? "" : "{ space: 8 }"))")
             for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
+            if axis == .vertical { writer.line(".alignItems(HorizontalAlign.Center)") }
         case let .text(value, modifiers, _):
             writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .button(label, action, modifiers, _):
-            writer.open("Button()")
-            try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver)
-            writer.close()
+            if case let .text(title, _, _) = label, case let .stringKey(key) = title.value {
+                let resource = try mapping.stringResource(key, platform: .harmonyOS, location: title.location)
+                writer.line("Button($r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)'))")
+            } else {
+                writer.open("Button()")
+                try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver)
+                writer.close()
+            }
             if let action {
-                writer.open(".onClick(() =>")
+                writer.open("  .onClick(() =>")
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
