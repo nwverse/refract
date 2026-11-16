@@ -4,7 +4,7 @@
 @ComponentV2
 export struct Hello {
   build() {
-    Column() {
+    Column({ space: 8 }) {
       Text($r('app.string.hello_title'))
       Button() {
         Text($r('app.string.hello_go'))

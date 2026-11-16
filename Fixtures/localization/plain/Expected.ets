@@ -4,11 +4,11 @@
 @ComponentV2
 export struct LocalizedPlain {
   build() {
-    Column() {
+    Column({ space: 8 }) {
       Text($r('app.string.settings_title'))
       Text($r('app.string.settings_subtitle'))
       Text($r('app.string.settings_footer'))
-      Text("Debug: \$value")
+      Text('Debug: \$value')
     }
   }
 }

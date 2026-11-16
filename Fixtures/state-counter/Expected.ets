@@ -5,10 +5,10 @@
 export struct Counter {
   @Local private count: number = 0
   build() {
-    Column() {
+    Column({ space: 8 }) {
       Text(`Count: ${this.count}`)
       Button() {
-        Text("Increment")
+        Text('Increment')
       }
       .onClick(() => {
         this.count += 1;
