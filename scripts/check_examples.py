@@ -87,7 +87,18 @@ def check_resources() -> None:
             fail(f"HarmonyOS base string catalog is missing {native_name}")
     if mapping["android"]["resources"]["className"] != "com.example.refract.R":
         fail("generated Compose must use the application R class, not a generated-package R class")
-    print("Both native base catalogs contain every mapped settings key")
+    ios_keys = set()
+    ios_path = ROOT / "examples/ios/RefractExample/en.lproj/Localizable.strings"
+    for line in ios_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("//"):
+            continue
+        key, separator, _ = line.partition("=")
+        if not separator:
+            fail(f"invalid iOS localized string declaration: {line}")
+        ios_keys.add(key.strip().strip('"'))
+    if ios_keys != set(android):
+        fail("iOS and generated-platform localized key sets differ")
+    print("Android, HarmonyOS and iOS base catalogs contain every mapped settings key")
 
 
 def check_ios_references() -> None:
