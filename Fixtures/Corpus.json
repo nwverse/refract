@@ -1,66 +1,269 @@
 {
   "schemaVersion": 1,
   "cases": [
-    { "path": "compose-image", "implementationStatus": "ready" },
-    { "path": "compose-rejected-nested-scroll", "implementationStatus": "ready" },
-    { "path": "compose-rejected-system-image", "implementationStatus": "ready" },
-    { "path": "compose-scroll", "implementationStatus": "ready" },
-    { "path": "compose-typed-layout", "implementationStatus": "ready" },
-    { "path": "hello", "implementationStatus": "ready" },
-    { "path": "interop-native-callers", "implementationStatus": "ready" },
-    { "path": "interop-native-component", "implementationStatus": "ready" },
-    { "path": "interop-native-mismatch", "implementationStatus": "ready" },
-    { "path": "interop-native-missing", "implementationStatus": "ready" },
-    { "path": "interop-native-undeclared", "implementationStatus": "ready" },
-    { "path": "interop-platform-value", "implementationStatus": "ready" },
-    { "path": "interop-platform-value-incomplete", "implementationStatus": "ready" },
-    { "path": "interop-platform-view", "implementationStatus": "ready" },
-    { "path": "interop-reject-conditional-compilation", "implementationStatus": "ready" },
-    { "path": "localization/formatted", "implementationStatus": "ready" },
-    { "path": "localization/missing-android", "implementationStatus": "ready" },
-    { "path": "localization/missing-harmony", "implementationStatus": "ready" },
-    { "path": "localization/plain", "implementationStatus": "ready" },
-    { "path": "model-interface", "implementationStatus": "ready" },
-    { "path": "parent-binding", "implementationStatus": "ready" },
-    { "path": "pending-contract", "implementationStatus": "pending" },
-    { "path": "rejected-binding-initializer", "implementationStatus": "ready" },
-    { "path": "rejected-image", "implementationStatus": "ready" },
-    { "path": "rejected-model-associated-type", "implementationStatus": "ready" },
-    { "path": "rejected-model-async", "implementationStatus": "ready" },
-    { "path": "rejected-model-overload", "implementationStatus": "ready" },
-    { "path": "rejected-model-property", "implementationStatus": "ready" },
-    { "path": "rejected-view-declaration", "implementationStatus": "ready" },
-    { "path": "state-counter", "implementationStatus": "ready" },
-    { "path": "v0-binding-state", "implementationStatus": "ready" },
-    { "path": "v0-button-action", "implementationStatus": "pending" },
-    { "path": "v0-conditional-content", "implementationStatus": "pending" },
-    { "path": "v0-design-system", "implementationStatus": "pending" },
-    { "path": "v0-formatted-text", "implementationStatus": "pending" },
-    { "path": "v0-hello-text", "implementationStatus": "pending" },
-    { "path": "v0-identified-list", "implementationStatus": "pending" },
-    { "path": "v0-leaf-controls", "implementationStatus": "pending" },
-    { "path": "v0-literal-text", "implementationStatus": "ready" },
-    { "path": "v0-local-state", "implementationStatus": "ready" },
-    { "path": "v0-model-screen", "implementationStatus": "ready" },
-    { "path": "v0-native-component", "implementationStatus": "ready" },
-    { "path": "v0-reject-binding-initializer", "implementationStatus": "ready" },
-    { "path": "v0-reject-body-mutation", "implementationStatus": "ready" },
-    { "path": "v0-reject-implicit-identity", "implementationStatus": "pending" },
-    { "path": "v0-reject-list-identity", "implementationStatus": "pending" },
-    { "path": "v0-reject-literal-text", "implementationStatus": "pending" },
-    { "path": "v0-reject-missing-resource", "implementationStatus": "pending" },
-    { "path": "v0-reject-native-missing", "implementationStatus": "ready" },
-    { "path": "v0-reject-native-type", "implementationStatus": "ready" },
-    { "path": "v0-reject-platform-if", "implementationStatus": "ready" },
-    { "path": "v0-reject-state-wrapper", "implementationStatus": "ready" },
-    { "path": "v0-reject-undefined-spacing", "implementationStatus": "ready" },
-    { "path": "v0-reject-unsupported-modifier", "implementationStatus": "ready" },
-    { "path": "v0-reject-unsupported-view", "implementationStatus": "ready" },
-    { "path": "v0-scroll-content", "implementationStatus": "ready" },
-    { "path": "v0-settings-screen", "implementationStatus": "pending" },
-    { "path": "v0-stack-layout", "implementationStatus": "ready" },
-    { "path": "v0-static-list", "implementationStatus": "pending" },
-    { "path": "v0-styled-text", "implementationStatus": "pending" },
-    { "path": "v0-text-input", "implementationStatus": "pending" }
+    {
+      "path": "compose-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "compose-rejected-nested-scroll",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "compose-rejected-system-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "compose-scroll",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "compose-typed-layout",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "hello",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-native-callers",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-native-component",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-native-mismatch",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-native-missing",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-native-undeclared",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-platform-value",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-platform-value-incomplete",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-platform-view",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-reject-conditional-compilation",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/formatted",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-android",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-harmony",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/plain",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/brand-a",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/brand-b",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-component",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-resource",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-token",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "model-interface",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "parent-binding",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "pending-contract",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "rejected-binding-initializer",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-model-associated-type",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-model-async",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-model-overload",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-model-property",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-view-declaration",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "state-counter",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-binding-state",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-button-action",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-conditional-content",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-design-system",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-formatted-text",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-hello-text",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-identified-list",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-leaf-controls",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-literal-text",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-local-state",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-model-screen",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-native-component",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-binding-initializer",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-body-mutation",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-implicit-identity",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-reject-list-identity",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-reject-literal-text",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-reject-missing-resource",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-reject-native-missing",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-native-type",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-platform-if",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-state-wrapper",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-undefined-spacing",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-unsupported-modifier",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-unsupported-view",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-scroll-content",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-settings-screen",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-stack-layout",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-static-list",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-styled-text",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "v0-text-input",
+      "implementationStatus": "pending"
+    }
   ]
 }

@@ -154,6 +154,8 @@ public struct ComposeBackend: Sendable {
                            location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .component(component, location):
+            try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .platformView(alternatives, _):
             // The Android branch is selected at build time; no runtime dispatch is emitted.
             for child in alternatives.android {
@@ -239,6 +241,15 @@ public struct ComposeBackend: Sendable {
             arguments.append("\(modifier) = modifier")
         }
         out.line("\(target.symbol)(\(arguments.joined(separator: ", ")))")
+    }
+
+    private func emitDesignSystem(_ component: ComponentReference, location: SourceLocation?, isRoot: Bool,
+                                  into out: inout KotlinWriter, context: inout Context) throws {
+        let source = try ComposeDesignSystem().emit(component, location: location, isRoot: isRoot,
+            mapping: context.mapping, addImport: { context.imports.insert($0) })
+        for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
+            out.line(String(line))
+        }
     }
 
     private func emitConditional(_ branches: [ViewNode.ConditionBranch], location: SourceLocation?,
