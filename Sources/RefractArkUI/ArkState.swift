@@ -1,6 +1,10 @@
 import RefractIR
 
 func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWriter) throws {
+    if case let .model(reference, _) = declaration {
+        writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName)")
+        return
+    }
     if case let .binding(name, type, _) = declaration {
         let type = try stateType(type)
         writer.line("@Require @Param \(name): \(type);")
@@ -37,6 +41,8 @@ func emitLocalExpression(_ expression: Expression, item: String? = nil) throws -
                              suggestion: "Use a Swift identifier.", location: expression.location)
         }
         return "this.\(name)"
+    case let .valueProperty(.model(model, property)):
+        return "this.\(model).\(property)"
     case let .interpolatedString(segments):
         var result = "`"
         for segment in segments {
@@ -61,5 +67,8 @@ func emitLocalAction(_ action: StateAction) throws -> String {
         return "this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(\(try emitLocalExpression(value)));"
     case let .increment(.binding(name), value):
         return "this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(this.\(name) + \(try emitLocalExpression(value)));"
+    case let .modelMethod(model, name, arguments):
+        let arguments = try arguments.map { try emitLocalExpression($0.value) }.joined(separator: ", ")
+        return "this.\(model).\(name)(\(arguments));"
     }
 }

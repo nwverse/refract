@@ -101,11 +101,13 @@ gh pr create --title "<type>(<area>): <English title>" --body-file <file>   # fi
 
 - Branch types: `feat`, `fix`, `docs`, `test`, `perf`, `chore`.
 - `gh pr create --body-file` skips `.github/pull_request_template.md`; copy its sections into the body yourself.
-- **Merging**: after the PR's local verification passes, `scripts/hooks/merge-pr.sh <number>`, not `gh pr merge`
-  directly. It scans the PR's changes, commit messages, title and body with this machine's private values, then
-  squash-merges exactly the head it scanned and deletes the branch.
-- After merging, remove your worktree by its literal path (`git worktree remove .worktrees/<branch>`) and make sure
-  the issue is closed.
+- **Merging**: first require all four CI checks to pass: Linux Swift, macOS Swift, repository checks and workflow
+  lint. A local test run is not a substitute for the macOS CI job. Then run `scripts/hooks/merge-pr.sh <number>`, not
+  `gh pr merge` directly. The hook scans the PR's changes, commit messages, title and body with this machine's private
+  values, then squash-merges exactly the head it scanned and deletes the branch. Any exception needs an explicit
+  maintainer decision recorded on the PR.
+- After merging, check the `main` CI run too and fix any failure promptly. Remove your worktree by its literal path
+  (`git worktree remove .worktrees/<branch>`) and make sure the issue is closed.
 
 ## Checking PRs with no linked issue
 

@@ -10,10 +10,13 @@ public struct NativeTarget: Codable, Equatable, Sendable {
         public let label: String
         public let type: ValueType
         public let required: Bool
-        public init(label: String, type: ValueType, required: Bool = true) {
+        /// Explicit target type for compatibility declarations; canonical mappings use the source ValueType.
+        public let targetType: String?
+        public init(label: String, type: ValueType, required: Bool = true, targetType: String? = nil) {
             self.label = label
             self.type = type
             self.required = required
+            self.targetType = targetType
         }
     }
 
@@ -46,19 +49,27 @@ public struct NativeTarget: Codable, Equatable, Sendable {
 
 public enum InteropMapping {
     /// Check the source-owned signature before emitting either target. JSON parsing alone cannot establish this.
+    public static func validate(declaration: NativeDeclaration, target: NativeTarget?, platform: TargetPlatform,
+                                location: SourceLocation? = nil) throws -> NativeTarget {
+        let name = platform == .android ? "Android" : "HarmonyOS"
+        guard let target else {
+            throw InteropMappingError(diagnostics: [Diagnostic(code: "RFMAP002",
+                message: "Native component `\(declaration.name)` has no \(name) mapping.",
+                suggestion: "Declare a typed implementation with ordered parameters `\(signature(declaration.parameters))`.",
+                location: location ?? declaration.location)])
+        }
+        let diagnostics = validate(target: target, declaration: declaration, platform: name, location: location)
+        guard diagnostics.isEmpty else { throw InteropMappingError(diagnostics: diagnostics) }
+        return target
+    }
+
+    /// Check both platforms together for declarations that have no call site.
     public static func validate(declaration: NativeDeclaration, android: NativeTarget?, harmonyOS: NativeTarget?,
                                 location: SourceLocation? = nil) throws -> (android: NativeTarget, harmonyOS: NativeTarget) {
         var diagnostics: [Diagnostic] = []
-        for (platform, target) in [("Android", android), ("HarmonyOS", harmonyOS)] {
-            guard let target else {
-                diagnostics.append(Diagnostic(code: "RFMAP002",
-                    message: "Native component `\(declaration.name)` has no \(platform) mapping.",
-                    suggestion: "Declare a typed implementation with ordered parameters `\(signature(declaration.parameters))`.",
-                    location: location ?? declaration.location))
-                continue
-            }
-            diagnostics.append(contentsOf: validate(target: target, declaration: declaration,
-                                                   platform: platform, location: location))
+        for (platform, target) in [(TargetPlatform.android, android), (TargetPlatform.harmonyOS, harmonyOS)] {
+            do { _ = try validate(declaration: declaration, target: target, platform: platform, location: location) }
+            catch let error as InteropMappingError { diagnostics.append(contentsOf: error.diagnostics) }
         }
         guard diagnostics.isEmpty, let android, let harmonyOS else {
             throw InteropMappingError(diagnostics: diagnostics)
@@ -93,10 +104,17 @@ public enum InteropMapping {
                 suggestion: "Match `\(signature(declaration.parameters))` exactly.", location: location ?? declaration.location))
         } else {
             for (actual, expected) in zip(target.parameters, declaration.parameters) {
-                if actual.label != expected.label || actual.type != expected.type || !actual.required {
+                let expectedTargetType = targetType(expected.type, platform: platform)
+                let actualTargetType = actual.targetType ?? actual.type.rawValue
+                if actual.label != expected.label || (actual.targetType == nil && actual.type != expected.type) || !actual.required {
                     diagnostics.append(Diagnostic(code: "RFMAP003",
-                        message: "Native component `\(declaration.name)` expects \(platform) `\(expected.label): \(expected.type.rawValue)`, required; mapping declares `\(actual.label): \(actual.type.rawValue)`, required: \(actual.required).",
+                        message: "Native component `\(declaration.name)` expects Swift `\(expected.label): \(expected.type.rawValue)`, required; \(platform) mapping declares `\(actual.label): \(actualTargetType)`, required: \(actual.required).",
                         suggestion: "Match the stored-property signature in declaration order.",
+                        location: location ?? declaration.location))
+                } else if actual.targetType != nil && actual.targetType != expectedTargetType {
+                    diagnostics.append(Diagnostic(code: "RFMAP003",
+                        message: "Native component `\(declaration.name)` maps Swift `\(expected.label): \(expected.type.rawValue)` to \(platform) `\(actualTargetType)`; expected `\(expectedTargetType)`.",
+                        suggestion: "Use the declared target type for this source scalar.",
                         location: location ?? declaration.location))
                 }
             }
@@ -121,6 +139,16 @@ public enum InteropMapping {
             }
         }
         return diagnostics
+    }
+
+    private static func targetType(_ type: ValueType, platform: String) -> String {
+        if platform == "HarmonyOS" { return type == .string ? "string" : type == .bool ? "boolean" : "number" }
+        return switch type {
+        case .string: "String"
+        case .bool: "Boolean"
+        case .int: "Int"
+        case .double: "Double"
+        }
     }
 
     private static func signature(_ parameters: [NativeParameter]) -> String {

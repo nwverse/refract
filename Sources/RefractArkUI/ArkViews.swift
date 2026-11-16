@@ -3,7 +3,7 @@ import RefractMapping
 
 extension ArkUIBackend {
     func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
-                      lazyOwner: Bool = false, mapping: Mapping = .empty) throws {
+                      lazyOwner: Bool = false, resolver: InteropResolver? = nil) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
             var arguments: [String] = []
@@ -11,27 +11,27 @@ extension ArkUIBackend {
             if layout.axis == .depth { arguments.append("alignContent: \(alignment(layout))") }
             let name = containerName(layout.axis)
             writer.open("\(name)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
-            for child in children { try emit(child, into: &writer, item: item) }
+            for child in children { try emit(child, into: &writer, item: item, resolver: resolver) }
             writer.close()
             if layout.axis != .depth { writer.line(".alignItems(\(alignment(layout)))") }
             writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
         case let .scroll(axis, child, modifiers, _):
             writer.open("Scroll()")
-            try emit(child, into: &writer, item: item)
+            try emit(child, into: &writer, item: item, resolver: resolver)
             writer.close()
             writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
             writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
         case let .list(children, modifiers, _):
             writer.open("List()")
-            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true) }
+            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true, resolver: resolver) }
             writer.close()
             writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
         case let .section(header, children, _):
             writer.open("ListItemGroup(\(try header.map { "{ header: Text(\(try ArkExpression.emit($0))) }" } ?? ""))")
-            for child in children { try emitListItem(child, into: &writer, item: item) }
+            for child in children { try emitListItem(child, into: &writer, item: item, resolver: resolver) }
             writer.close()
         case let .listItem(child, _):
-            try emitListItem(child, into: &writer, item: item)
+            try emitListItem(child, into: &writer, item: item, resolver: resolver)
         case let .forEach(items, location):
             guard lazyOwner else {
                 throw Diagnostic(code: "arkui.lazy_list_owner",
@@ -41,7 +41,7 @@ extension ArkUIBackend {
             }
             writer.open("LazyForEach(\(try ArkExpression.emit(items.collection)), (item: \(items.itemType)) =>")
             writer.open("ListItem()")
-            try emit(items.content, into: &writer, item: items.itemName)
+            try emit(items.content, into: &writer, item: items.itemName, resolver: resolver)
             writer.close()
             let key = "item.\(items.key)"
             writer.close(suffix: ", (item: \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
@@ -49,7 +49,11 @@ extension ArkUIBackend {
             writer.line("Image(\(try image(source)))\(try ArkModifiers.emit(modifiers, item: item))")
         case let .toggle(title, value, modifiers, _):
             writer.open("Row()")
-            writer.line("Text(\(try resourceReference(title, mapping: mapping)))")
+            guard let resolver else {
+                throw Diagnostic(code: "R.string.not_configured", message: "A localized toggle needs a resolved mapping.",
+                                 suggestion: "Provide a version 1 refract.json.", location: title.location)
+            }
+            writer.line("Text(\(try resourceReference(title, mapping: resolver.mapping)))")
             writer.line("Blank()")
             writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value)) })")
             writer.depth += 1
@@ -93,13 +97,15 @@ extension ArkUIBackend {
         }
     }
 
-    private func emitListItem(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil) throws {
+    private func emitListItem(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
+                              resolver: InteropResolver? = nil) throws {
         writer.open("ListItem()")
         if case let .layout(layout, children, modifiers, location) = node {
             // A static List row is a single item; its content stays one native subtree.
-            try emitExtended(.layout(layout, children: children, modifiers: modifiers, location: location), into: &writer, item: item)
+            try emitExtended(.layout(layout, children: children, modifiers: modifiers, location: location),
+                             into: &writer, item: item, resolver: resolver)
         } else {
-            try emit(node, into: &writer, item: item)
+            try emit(node, into: &writer, item: item, resolver: resolver)
         }
         writer.close()
     }

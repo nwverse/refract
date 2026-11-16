@@ -8,6 +8,21 @@ extension Builder {
             guard let declaration = member.decl.as(VariableDeclSyntax.self),
                   declaration.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body"
             else { continue }
+            if declaration.bindingSpecifier.tokenKind == .keyword(.let), declaration.attributes.isEmpty {
+                guard declaration.bindings.count == 1,
+                      let binding = declaration.bindings.first,
+                      let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
+                      let typeName = binding.typeAnnotation?.type.trimmedDescription,
+                      let contract = models.first(where: { $0.name == typeName }),
+                      binding.initializer == nil, binding.accessorBlock == nil else {
+                    error("state.invalid_declaration", "A model input must be a let property of a declared RefractModel protocol.",
+                          "Use `let model: YourModel` with `protocol YourModel: RefractModel`", at: member)
+                    return nil
+                }
+                states.append(.model(ModelReference(propertyName: name, protocolName: contract.name),
+                                     location: location(of: declaration)))
+                continue
+            }
             guard declaration.attributes.count == 1,
                   let attribute = declaration.attributes.first?.as(AttributeSyntax.self),
                   ["State", "Binding"].contains(attribute.attributeName.trimmedDescription),
@@ -45,6 +60,7 @@ extension Builder {
     }
 
     func stateText(_ expression: ExprSyntax) -> Expression? {
+        if let property = modelProperty(expression) { return property }
         guard let literal = expression.as(StringLiteralExprSyntax.self) else { return nil }
         if literal.segments.count == 1, case let .stringSegment(segment)? = literal.segments.first {
             return Expression(.stringLiteral(segment.content.text), location: location(of: expression))
@@ -70,6 +86,10 @@ extension Builder {
 
     func localStateAction(_ closure: ClosureExprSyntax?) -> StateAction? {
         guard let closure, !closure.statements.isEmpty else { return nil }
+        if closure.statements.count == 1, let expression = closure.statements.first?.item.as(ExprSyntax.self),
+           let action = modelAction(expression) {
+            return action
+        }
         guard closure.statements.count == 1, let statement = closure.statements.first,
               let expression = statement.item.as(ExprSyntax.self),
               let sequence = expression.as(SequenceExprSyntax.self), sequence.elements.count == 3 else {
@@ -126,7 +146,17 @@ extension Builder {
         return nil
     }
 
-    private func literal(_ expression: ExprSyntax, expected: ValueType) -> Expression? {
+    func scalarType(_ name: String) -> ValueType? {
+        switch name {
+        case "String": .string
+        case "Bool": .bool
+        case "Int": .int
+        case "Double": .double
+        default: nil
+        }
+    }
+
+    func literal(_ expression: ExprSyntax, expected: ValueType) -> Expression? {
         let at = location(of: expression)
         switch expected {
         case .string:
@@ -147,16 +177,6 @@ extension Builder {
                 return Expression(.numberLiteral(value.literal.text), location: at)
             }
             return nil
-        }
-    }
-
-    private func scalarType(_ name: String) -> ValueType? {
-        switch name {
-        case "String": .string
-        case "Bool": .bool
-        case "Int": .int
-        case "Double": .double
-        default: nil
         }
     }
 }
