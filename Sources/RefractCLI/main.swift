@@ -52,11 +52,23 @@ struct RefractCommand {
             index += 2
         }
         guard !inputs.isEmpty else { throw CLIError.message("missing --input") }
-        if command == "generate", options["--android-out"] == nil || options["--harmony-out"] == nil {
-            throw CLIError.message("generate requires --android-out and --harmony-out")
-        }
         if command == "check", options["--android-out"] != nil || options["--harmony-out"] != nil {
             throw CLIError.message("check does not accept output directories")
+        }
+
+        let mapping: Mapping
+        do {
+            mapping = try options["--mapping"].map { try Mapping.load(contentsOf: URL(fileURLWithPath: $0)) } ?? .empty
+        } catch let diagnostic as Diagnostic {
+            writeError(diagnostic.rendered)
+            throw CLIError.message("validation stopped because the mapping has errors")
+        } catch let error as MappingError {
+            for diagnostic in error.diagnostics { writeError(diagnostic.rendered) }
+            throw CLIError.message("validation stopped because the mapping has errors")
+        }
+        if command == "generate", (options["--android-out"] == nil && mapping.android.output.directory.isEmpty)
+            || (options["--harmony-out"] == nil && mapping.harmonyOS.output.directory.isEmpty) {
+            throw CLIError.message("generate requires output directories in refract.json or explicit --android-out and --harmony-out")
         }
 
         var hasErrors = false
@@ -69,22 +81,10 @@ struct RefractCommand {
                 throw CLIError.message("input base filenames must be nonempty and unique: \(input)")
             }
             let unit = Frontend.parse(SourceFile(path: url.lastPathComponent,
-                                                  contents: try String(contentsOf: url, encoding: .utf8)))
+                                                  contents: try String(contentsOf: url, encoding: .utf8)), mapping: mapping)
             hasErrors = hasErrors || unit.hasErrors
             unit.diagnostics.forEach { writeError($0.rendered) }
             units.append(unit)
-        }
-        let mapping: Mapping
-        do {
-            mapping = try options["--mapping"].map { try Mapping.load(contentsOf: URL(fileURLWithPath: $0)) } ?? .empty
-        } catch let diagnostic as Diagnostic {
-            writeError(diagnostic.rendered)
-            hasErrors = true
-            mapping = .empty
-        } catch let error as MappingError {
-            for diagnostic in error.diagnostics { writeError(diagnostic.rendered) }
-            hasErrors = true
-            mapping = .empty
         }
         guard !hasErrors else { throw CLIError.message("validation stopped because the input has errors") }
         for unit in units {
@@ -101,8 +101,8 @@ struct RefractCommand {
             do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
             catch { hasErrors = true; reportGeneration(error) }
             guard command == "generate", let compose, let ark else { continue }
-            outputs.append((options["--android-out"]!, name + ".kt", compose))
-            outputs.append((options["--harmony-out"]!, name + ".ets", ark))
+            outputs.append((options["--android-out"] ?? mapping.android.output.directory, name + ".kt", compose))
+            outputs.append((options["--harmony-out"] ?? mapping.harmonyOS.output.directory, name + ".ets", ark))
         }
         guard !hasErrors else { throw CLIError.message("generation stopped because validation failed") }
         for output in outputs {

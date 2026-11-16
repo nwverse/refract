@@ -1,18 +1,19 @@
 import RefractIR
+import RefractMapping
 import SwiftParser
 import SwiftSyntax
 
 public struct Frontend {
     public init() {}
 
-    public static func parse(_ source: SourceFile) -> TranslationUnit {
+    public static func parse(_ source: SourceFile, mapping: Mapping? = nil) -> TranslationUnit {
         let tree = Parser.parse(source: source.contents)
         let parserDiagnostics = ParserDiagnostics.validate(tree: tree, file: source.path)
         guard parserDiagnostics.isEmpty else {
             return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
                                    diagnostics: parserDiagnostics)
         }
-        let builder = Builder(file: source.path, tree: tree)
+        let builder = Builder(file: source.path, tree: tree, mapping: mapping)
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
                                               nativeDeclarations: builder.interop.declarations,
@@ -27,6 +28,7 @@ final class Builder: SyntaxVisitor {
     var screens: [Screen] = []
     var diagnostics: [Diagnostic] = []
     var interop: InteropFrontend
+    var designSystem: DesignSystemFrontend?
     var parameters: [ScreenParameter] = []
     var declaredModelNames: Set<String> = []
     var currentStates: [StateDeclaration] = []
@@ -35,11 +37,13 @@ final class Builder: SyntaxVisitor {
     var currentModels: [ModelReference] = []
     var currentListItem: String?
 
-    init(file: String, tree: SourceFileSyntax) {
+    init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
+        self.designSystem = nil
         super.init(viewMode: .sourceAccurate)
+        if let mapping { self.designSystem = DesignSystemFrontend(builder: self, mapping: mapping) }
         declaredModelNames = Set(tree.statements.compactMap { statement in
             guard let declaration = statement.item.as(ProtocolDeclSyntax.self),
                   declaration.inheritanceClause?.inheritedTypes.contains(where: {
@@ -139,7 +143,7 @@ final class Builder: SyntaxVisitor {
     }
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
-        guard name == "padding", call.arguments.count <= 1, call.trailingClosure == nil else {
+        guard name == "padding" || name == "background" || designSystem != nil, call.arguments.count <= 1, call.trailingClosure == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
                   "Use a supported subset modifier.", at: call)
             return nil
@@ -162,8 +166,11 @@ final class Builder: SyntaxVisitor {
         return modifier(name, arguments: [], on: node, at: member)
     }
 
-    private func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
+    func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
                           at syntax: some SyntaxProtocol) -> ViewNode? {
+        if case let .component(component, _) = node {
+            return designSystem?.modifiers([Modifier(name: name, arguments: arguments, location: location(of: syntax))], on: component)
+        }
         let modifier = Modifier(name: name, arguments: arguments, location: location(of: syntax))
         if let updated = node.appendingModifier(modifier) { return updated }
         error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
@@ -229,6 +236,10 @@ final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
+            if interop.declarations.contains(where: { $0.name == name }) == false,
+               designSystem?.isCandidate(name) == true {
+                return designSystem?.component(call, name: name)
+            }
             guard interop.declarations.contains(where: { $0.name == name }) else {
                 let component = NativeComponent(name: name)
                 diagnostics.append(contentsOf: interop.validate(component, declaration: nil, location: nodeLocation))
@@ -276,7 +287,7 @@ final class Builder: SyntaxVisitor {
                              location: location(of: call))
     }
 
-    private func scalar(_ expression: ExprSyntax) -> TypedExpression? {
+    func scalar(_ expression: ExprSyntax) -> TypedExpression? {
         if let string = stringLiteral(expression) {
             return TypedExpression(Expression(.stringLiteral(string), type: .string,
                                              location: location(of: expression)), .string)
@@ -292,6 +303,10 @@ final class Builder: SyntaxVisitor {
         if let literal = expression.as(FloatLiteralExprSyntax.self) {
             return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .double,
                                              location: location(of: expression)), .double)
+        }
+        if expression.as(MemberAccessExprSyntax.self) != nil {
+            return TypedExpression(Expression(.reference(expression.trimmedDescription),
+                                             location: location(of: expression)), nil)
         }
         if let reference = expression.as(DeclReferenceExprSyntax.self) {
             // A bare screen input carries its declared type; nested model members are refined by the state frontend.

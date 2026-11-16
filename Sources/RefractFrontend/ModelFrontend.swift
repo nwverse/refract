@@ -34,8 +34,31 @@ extension Builder {
                 return
             }
         }
+        guard validateUniqueMembers(properties: properties, actions: actions, at: node) else { return }
         models.append(ModelProtocol(name: node.name.text, properties: properties, actions: actions,
                                     location: location(of: node.name)))
+    }
+
+    private func validateUniqueMembers(properties: [ModelProperty], actions: [ModelAction],
+                                       at node: ProtocolDeclSyntax) -> Bool {
+        let propertyNames = Set(properties.map(\.name))
+        for action in actions where propertyNames.contains(action.name) {
+            error("model.duplicate_member", "Model member `\(action.name)` duplicates another property or action.",
+                      "Use uniquely named native properties and actions", at: node.name)
+            return false
+        }
+        var signatures = Set<String>()
+        for action in actions {
+            let signature = action.name + "(" + action.parameters.map(\.type.rawValue).joined(separator: ",") + ")"
+            guard signatures.insert(signature).inserted else {
+                diagnostics.append(Diagnostic(code: "model.duplicate_member",
+                    message: "Model action `\(signature)` collides with another requirement after Swift external labels are erased on Kotlin.",
+                    suggestion: "Use uniquely named native actions instead of overloading only by external argument label",
+                    location: action.location ?? location(of: node.name)))
+                return false
+            }
+        }
+        return true
     }
 
     private func modelProperty(_ declaration: VariableDeclSyntax) -> ModelProperty? {
