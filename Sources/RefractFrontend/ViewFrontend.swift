@@ -35,7 +35,7 @@ extension Builder {
             return .stack(axis: axis, children: children, modifiers: [], location: location(of: call))
         }
         var alignment: LayoutAlignment = .center
-        var spacing: Expression? = axis == .depth ? nil : Expression(.numberLiteral(name == "HStack" ? "4" : "8"))
+        var spacing: Expression?
         for argument in call.arguments {
             switch argument.label?.text {
             case "alignment":

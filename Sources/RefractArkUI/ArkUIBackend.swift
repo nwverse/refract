@@ -73,7 +73,7 @@ struct Generation {
               resolver: InteropResolver? = nil) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
-            writer.open("\(containerName(axis))(\(axis == .depth ? "" : "{ space: 8 }"))")
+            writer.open("\(containerName(axis))()")
             for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .text(value, modifiers, _):

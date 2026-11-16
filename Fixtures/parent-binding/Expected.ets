@@ -8,7 +8,7 @@ export struct EnabledRow {
 
 
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text(`Enabled: ${this.isEnabled}`)
       Button() {
         Text('Disable')
