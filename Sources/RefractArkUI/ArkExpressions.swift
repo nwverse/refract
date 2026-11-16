@@ -6,6 +6,12 @@ enum ArkExpression {
         switch expression.value {
         case let .stringLiteral(value):
             return try ArkText.string(value)
+        case let .verbatimText(value):
+            return try ArkText.string(value)
+        case .localizedText:
+            return try LocalizedTextEmitter.arkUI(expression, mapping: mapping) {
+                try ArkExpression.emit($0, mapping: mapping)
+            }
         case let .stringKey(key):
             let resource = try mapping.stringResource(key, platform: .harmonyOS, location: expression.location)
             return "$r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)')"

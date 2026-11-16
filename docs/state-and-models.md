@@ -92,8 +92,8 @@ iOS form; ordinary SwiftUI `Toggle` takes a `Binding<Bool>`, not a model propert
 ```kotlin
 @Composable
 public fun CounterRow() {
-    val count = remember { mutableStateOf(0) }
-    Button(onClick = { count.value += 1 }) {
+    var count by remember { mutableStateOf(0) }
+    Button(onClick = { count += 1 }) {
         Text("Increment")
     }
 }
@@ -103,7 +103,7 @@ public fun EnabledRow(
     isEnabled: Boolean,
     onIsEnabledChange: (Boolean) -> Unit,
 ) {
-    Toggle("Enabled", isOn = isEnabled, onIsEnabledChange = onIsEnabledChange)
+    Switch(checked = isEnabled, onCheckedChange = onIsEnabledChange)
 }
 
 public interface ExtensionSettingsModel {
@@ -124,8 +124,8 @@ public fun ExtensionSettings(model: ExtensionSettingsModel) {
 The concrete control names are illustrative here; the shared Compose backend owns the final view signatures. State
 lowering owns the observable property access, not a second implementation of view generation.
 
-A local `@State` declaration produces `remember { mutableStateOf(initialValue) }`. `.value` is appended at a local
-state read and at a model property read. Binding reads use the value parameter directly and binding writes call its
+A local `@State` declaration produces `var property by remember { mutableStateOf(initialValue) }`; delegated reads
+and writes retain the same native snapshot observation. Model property reads append `.value` at the leaf. Binding reads use the value parameter directly and binding writes call its
 setter callback. A state passed into a child binding uses `childState.value` and `{ value -> childState.value = value
 }`. A model-to-child binding is allowed only when the model declares the matching setter action; it cannot synthesize
 a write to a get-only property.
@@ -223,7 +223,7 @@ ownership reason is explained, and a supported alternative is suggested.
 
 | Code | Rejected construct | Alternative |
 | --- | --- | --- |
-| `state.unsupported_wrapper` | `@ObservedObject`, `@StateObject`, `@EnvironmentObject`, `@Environment`, `@AppStorage`, `@SceneStorage`, `@FocusState`, `@GestureState` | local `@State`, parent `@Binding`, or a declared model interface |
+| `state.invalid_declaration` | `@ObservedObject`, `@StateObject`, `@EnvironmentObject`, `@Environment`, `@AppStorage`, `@SceneStorage`, `@FocusState`, `@GestureState` | local `@State`, parent `@Binding`, or a declared model interface |
 | `state.invalid_declaration` | multiple bindings in one wrapped declaration, missing explicit type, unsupported wrapper arguments | one typed stored property with the supported wrapper |
 | `state.missing_initializer` | `@State` without a local initializer | initialize the local value |
 | `state.binding_initializer` | `@Binding` with an initial value | pass the parent's value and callback instead |

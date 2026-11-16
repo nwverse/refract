@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "settings_general", "value": "General" },
+    { "name": "settings_profile", "value": "Profile" }
+  ]
+}

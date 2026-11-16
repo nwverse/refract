@@ -6,9 +6,9 @@ export struct TypedLayout {
   build() {
     Column({ space: 8 }) {
       List() {
-        ListItemGroup({ header: Text('settings.general') }) {
+        ListItemGroup({ header: Text($r('app.string.settings_general')) }) {
           ListItem() {
-            Text('settings.profile').padding(4)
+            Text($r('app.string.settings_profile')).padding(4)
           }
         }
       }
