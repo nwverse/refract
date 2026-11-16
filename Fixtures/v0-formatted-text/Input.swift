@@ -8,6 +8,6 @@ struct FormattedText: View {
     let model: CountModel
 
     var body: some View {
-        Text("settings.item.count \(model.count)")
+        Text("settings.item.count\(model.count)")
     }
 }

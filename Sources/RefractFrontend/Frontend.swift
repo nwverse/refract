@@ -227,6 +227,7 @@ final class Builder: SyntaxVisitor {
                 return .text(value.expression, modifiers: [], location: nodeLocation)
             }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
+                                              typedScalar: modelTypedProperty,
                                               stateText: currentStates.isEmpty ? { _ in nil } : stateText,
                                               enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
             guard let value = parser.text(call, arguments: call.arguments) else {
@@ -247,6 +248,7 @@ final class Builder: SyntaxVisitor {
             let action = localStateAction(call.trailingClosure)
             guard action != nil || call.trailingClosure?.statements.isEmpty != false else { return nil }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
+                                              typedScalar: modelTypedProperty,
                                               stateText: currentStates.isEmpty ? { _ in nil } : stateText,
                                               enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
             guard let labelText = parser.text(call, arguments: call.arguments,

@@ -199,7 +199,7 @@
     },
     {
       "path": "v0-formatted-text",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-hello-text",
