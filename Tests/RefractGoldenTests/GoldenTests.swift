@@ -35,7 +35,9 @@ struct CorpusTests {
         let root = GoldenTests.repository
         let cases = try CorpusLoader.load(repository: root)
         #expect(cases.map(\.name) == cases.map(\.name).sorted())
-        #expect(cases.map(\.name).contains(["hello", "pending-contract", "rejected-image"]))
+        for required in ["hello", "pending-contract", "rejected-image"] {
+            #expect(cases.map(\.name).contains(required))
+        }
         #expect(cases.map(\.name).count == Set(cases.map(\.name)).count)
         #expect(cases.contains { $0.status == .ready })
         #expect(cases.contains { $0.name == "hello" && $0.status == .ready })
