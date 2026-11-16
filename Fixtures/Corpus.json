@@ -247,7 +247,7 @@
     },
     {
       "path": "v0-reject-literal-text",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-missing-resource",

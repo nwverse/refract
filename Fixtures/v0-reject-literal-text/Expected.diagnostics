@@ -1,1 +1,1 @@
-Input.swift:5:9: error [R.string.literal]: User-facing String("Hello") is not a validated resource key or explicitly verbatim text Suggestion: Use a canonical localized key or Text(verbatim:) for intentional literal text
+Input.swift:5:14: error [R.string.unsupported_expression]: String(localized:) requires one literal key in this subset. Suggestion: Use String(localized: "key"), typed interpolation, or Text(verbatim:) for intentional non-localized text

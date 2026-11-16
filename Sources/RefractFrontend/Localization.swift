@@ -189,7 +189,7 @@ struct LocalizationFrontend {
                       let literal = call.arguments.first?.expression.as(StringLiteralExprSyntax.self),
                       literal.representedLiteralValue != nil else {
                     error("R.string.unsupported_expression", "String(localized:) requires one literal key in this subset.",
-                          "Use String(localized: \"key\") or SwiftUI Text interpolation with typed scalar arguments", at: call)
+                          "Use String(localized: \"key\"), typed interpolation, or Text(verbatim:) for intentional non-localized text", at: call)
                     return nil
                 }
                 return localizedLiteral(literal)
