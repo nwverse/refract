@@ -69,7 +69,7 @@ def check_resources() -> None:
         fail("Android and HarmonyOS string registries differ")
     if set(android) != {
         "settings.profile", "settings.display.name", "settings.preferences",
-        "settings.notifications", "settings.save",
+        "settings.notifications", "settings.save", "settings.native.component",
     }:
         fail("settings resource registry does not match the shared source keys")
 
