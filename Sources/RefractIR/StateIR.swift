@@ -2,11 +2,22 @@
 public struct ModelProperty: Codable, Equatable, Sendable {
     public let name: String
     public let type: ValueType
+    public let collection: ModelCollection?
     public let location: SourceLocation?
-    public init(name: String, type: ValueType, location: SourceLocation? = nil) {
+    public init(name: String, type: ValueType, collection: ModelCollection? = nil, location: SourceLocation? = nil) {
         self.name = name
         self.type = type
+        self.collection = collection
         self.location = location
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, type, collection, location }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        type = try values.decode(ValueType.self, forKey: .type)
+        collection = try values.decodeIfPresent(ModelCollection.self, forKey: .collection)
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 

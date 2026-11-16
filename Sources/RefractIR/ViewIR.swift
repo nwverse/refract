@@ -1,17 +1,36 @@
+/// A typed model collection; its native observation/data-source behavior is supplied by the app.
+public struct ModelCollection: Codable, Equatable, Sendable {
+    public let itemType: String
+    public let key: String
+    public let keyType: ValueType
+
+    public init(itemType: String, key: String = "id", keyType: ValueType) {
+        self.itemType = itemType
+        self.key = key
+        self.keyType = keyType
+    }
+}
+
 /// Typed view additions shared by frontends and native backends.
+public enum LayoutSpacing: String, Codable, Sendable {
+    case small, medium
+
+    public var points: Int { self == .small ? 4 : 8 }
+}
+
 public struct LayoutContainer: Codable, Equatable, Sendable {
     public let axis: ViewNode.StackAxis
-    public let alignment: LayoutAlignment
+    public let alignment: LayoutAlignment?
     public let spacing: Expression?
 
-    public init(axis: ViewNode.StackAxis, alignment: LayoutAlignment = .center, spacing: Expression? = nil) {
+    public init(axis: ViewNode.StackAxis, alignment: LayoutAlignment? = nil, spacing: Expression? = nil) {
         self.axis = axis
         self.alignment = alignment
         self.spacing = spacing
     }
 }
 
-public enum LayoutAlignment: String, Codable, Sendable {
+public enum LayoutAlignment: String, Codable, Hashable, Sendable {
     case center, leading, trailing, top, bottom, topLeading, bottomTrailing
 }
 
@@ -71,12 +90,20 @@ public struct ItemType: Codable, Equatable, Sendable {
 }
 
 public extension ViewNode {
+    func children(for platform: TargetPlatform) -> [ViewNode] {
+        if case let .platformView(alternatives, _) = self {
+            return platform == .android ? alternatives.android : alternatives.harmonyOS
+        }
+        return children
+    }
+
     var children: [ViewNode] {
         switch self {
         case let .stack(_, children, _, _), let .layout(_, children, _, _), let .list(children, _, _): children
         case let .scroll(_, child, _, _), let .listItem(child, _): [child]
         case let .button(label, _, _, _): [label]
         case let .section(_, children, _): children
+        case let .component(component, _): component.children
         case let .forEach(items, _): [items.content]
         case let .conditional(branches, _): branches.flatMap(\.children)
         case let .platformView(alternatives, _): alternatives.ios + alternatives.android + alternatives.harmonyOS
@@ -87,7 +114,7 @@ public extension ViewNode {
     var sourceLocation: SourceLocation? {
         switch self {
         case let .stack(_, _, _, location), let .text(_, _, location), let .button(_, _, _, location),
-             let .native(_, location), let .platformView(_, location), let .conditional(_, location),
+             let .native(_, location), let .component(_, location), let .platformView(_, location), let .conditional(_, location),
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
              let .image(_, _, location), let .toggle(_, _, _, location), let .textInput(_, _, _, location),

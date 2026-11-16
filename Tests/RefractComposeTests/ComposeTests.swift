@@ -1,6 +1,7 @@
 import Testing
 @testable import RefractCompose
 import RefractIR
+import RefractMapping
 
 @Test func composeEmitsNativeComposable() throws {
     let module = Module(sourceFile: "Input.swift", screens: [
@@ -85,7 +86,7 @@ import RefractIR
     let output = try ComposeBackend().generate(module: module)
     #expect(output.contains("import androidx.compose.runtime.remember"))
     #expect(output.contains("import androidx.compose.runtime.mutableStateOf"))
-    #expect(output.contains("val count = remember { mutableStateOf(0) }"))
+    #expect(output.contains("var count by remember { mutableStateOf(0) }"))
 }
 
 @Test func composeEmitsBindingParameters() throws {
@@ -127,6 +128,21 @@ import RefractIR
     #expect(throws: Diagnostic.self) {
         _ = try ComposeBackend().generate(module: module)
     }
+}
+
+@Test func composeEmitsCompleteLocalizedToggleTitle() throws {
+    let android = PlatformMapping(output: Output(directory: "generated", packageName: "refract.generated"),
+                                 resources: Resources(className: "refract.generated.R",
+                                                      strings: ["settings.enabled": "settings_enabled"]))
+    let mapping = Mapping(android: android)
+    let module = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "ToggleRow", body: .toggle(title: Expression(.stringKey("settings.enabled")),
+            value: Expression(.valueProperty(.binding("isEnabled"))), modifiers: [], location: nil)),
+    ])
+    let output = try ComposeBackend().generate(module: module, mapping: mapping)
+    #expect(output.contains("import androidx.compose.material3.Text\n"))
+    #expect(output.contains("Text(text = stringResource(refract.generated.R.string.settings_enabled))"))
+    #expect(output.contains("Switch("))
 }
 
 @Test func composeDeterministicOutput() throws {

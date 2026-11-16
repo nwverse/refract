@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import RefractFrontend
 import RefractIR
@@ -8,18 +9,23 @@ import RefractMapping
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct TypedLayout: View {
         var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: .medium) {
                 List { Text("settings.profile") }
                 HStack { Text(verbatim: "Enabled"); Spacer(); Divider() }
+                HStack { Text(verbatim: "Default spacing") }
             }.padding(16)
         }
     }
     """))
     #expect(unit.diagnostics.isEmpty)
-    let output = try ComposeBackend().generate(module: unit.module)
+    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/compose-typed-layout/refract.json")
+    let mapping = try Mapping.load(contentsOf: fixture)
+    let output = try ComposeBackend().generate(module: unit.module, mapping: mapping)
     #expect(output.contains("horizontalAlignment = Alignment.Start"))
     #expect(output.contains("verticalArrangement = Arrangement.spacedBy(8.dp)"))
-    #expect(output.contains("LazyColumn(modifier = Modifier)"))
+    #expect(output.components(separatedBy: "Row(modifier = Modifier) {").count == 3)
     #expect(output.contains("item(key = \"row:settings.profile\", contentType = \"Text\")"))
     #expect(output.contains("Spacer(modifier = Modifier.weight(1f))"))
     #expect(output.contains("VerticalDivider(modifier = Modifier)"))
@@ -51,7 +57,7 @@ import RefractMapping
 
 @Test func composeRejectsLabelWithoutNativeIconContract() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
-    struct BadLabel: View { var body: some View { Label("Profile", systemImage: "person") } }
+    struct BadLabel: View { var body: some View { Label(verbatim: "Profile", systemImage: "person") } }
     """))
     #expect(unit.diagnostics.isEmpty)
     let diagnostic = #expect(throws: Diagnostic.self) {
@@ -68,7 +74,7 @@ import RefractMapping
     """))
     #expect(unit.diagnostics.isEmpty)
     let diagnostic = #expect(throws: Diagnostic.self) {
-        try ComposeBackend().generate(module: unit.module)
+        try ComposeBackend().generate(module: unit.module, mapping: try layoutMapping())
     }
     #expect(diagnostic?.code == "RF-C003")
 }
@@ -107,4 +113,11 @@ import RefractMapping
     #expect(output.contains("package example.generated"))
     #expect(output.contains("import example.app.R"))
     #expect(output.contains("painterResource(R.drawable.profile_photo)"))
+}
+
+private func layoutMapping() throws -> Mapping {
+    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/compose-typed-layout/refract.json")
+    return try Mapping.load(contentsOf: fixture)
 }

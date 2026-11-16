@@ -34,8 +34,31 @@ extension Builder {
                 return
             }
         }
+        guard validateUniqueMembers(properties: properties, actions: actions, at: node) else { return }
         models.append(ModelProtocol(name: node.name.text, properties: properties, actions: actions,
                                     location: location(of: node.name)))
+    }
+
+    private func validateUniqueMembers(properties: [ModelProperty], actions: [ModelAction],
+                                       at node: ProtocolDeclSyntax) -> Bool {
+        let propertyNames = Set(properties.map(\.name))
+        for action in actions where propertyNames.contains(action.name) {
+            error("model.duplicate_member", "Model member `\(action.name)` duplicates another property or action.",
+                      "Use uniquely named native properties and actions", at: node.name)
+            return false
+        }
+        var signatures = Set<String>()
+        for action in actions {
+            let signature = action.name + "(" + action.parameters.map(\.type.rawValue).joined(separator: ",") + ")"
+            guard signatures.insert(signature).inserted else {
+                diagnostics.append(Diagnostic(code: "model.duplicate_member",
+                    message: "Model action `\(signature)` collides with another requirement after Swift external labels are erased on Kotlin.",
+                    suggestion: "Use uniquely named native actions instead of overloading only by external argument label",
+                    location: action.location ?? location(of: node.name)))
+                return false
+            }
+        }
+        return true
     }
 
     private func modelProperty(_ declaration: VariableDeclSyntax) -> ModelProperty? {
@@ -43,8 +66,9 @@ extension Builder {
               declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.bindings.count == 1,
               let binding = declaration.bindings.first,
               let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
-              let type = scalarType(binding.typeAnnotation?.type.trimmedDescription ?? ""),
-              let accessors = binding.accessorBlock?.accessors else {
+              scalarType(binding.typeAnnotation?.type.trimmedDescription ?? "") != nil || binding.typeAnnotation?.type.is(ArrayTypeSyntax.self) == true,
+              let accessors = binding.accessorBlock?.accessors,
+              let collection = modelCollection(binding.typeAnnotation?.type) else {
             error("model.invalid_property", "Model properties must be get-only scalar instance requirements.",
                   "Use a form such as `var title: String { get }`", at: declaration)
             return nil
@@ -55,7 +79,19 @@ extension Builder {
                   "Declare `{ get }` and keep computation in the native implementation", at: accessors)
             return nil
         }
-        return ModelProperty(name: name, type: type, location: location(of: declaration))
+        return ModelProperty(name: name, type: scalarType(binding.typeAnnotation?.type.trimmedDescription ?? "") ?? .string,
+                             collection: collection, location: location(of: declaration))
+    }
+
+    private func modelCollection(_ annotation: TypeSyntax?) -> ModelCollection?? {
+        guard let array = annotation?.as(ArrayTypeSyntax.self) else { return .some(nil) }
+        let name = array.element.trimmedDescription
+        guard let item = itemTypes.first(where: { $0.name == name }) else {
+            error("model.invalid_property", "Model collection `\(name)` is not a declared Identifiable item type.",
+                  "Declare a stored scalar Identifiable item with a stable String or Int id", at: array)
+            return nil
+        }
+        return .some(ModelCollection(itemType: name, key: item.identity.name, keyType: item.identity.type))
     }
 
     private func modelAction(_ function: FunctionDeclSyntax) -> ModelAction? {
@@ -85,6 +121,11 @@ extension Builder {
     }
 
     func modelProperty(_ expression: ExprSyntax) -> Expression? {
+        if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self), let item = currentListItem,
+           base.baseName.text == item {
+            return Expression(.reference("\(item).\(member.declName.baseName.text)"), location: location(of: expression))
+        }
         guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),

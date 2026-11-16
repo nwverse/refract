@@ -62,6 +62,42 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "localization/formatted",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-android",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-harmony",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/plain",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/brand-a",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/brand-b",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-component",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-resource",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/missing-token",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "model-interface",
       "implementationStatus": "ready"
     },
@@ -110,7 +146,15 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "rejected-model-overload",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "rejected-model-property",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "rejected-view-declaration",
       "implementationStatus": "ready"
     },
     {
@@ -119,7 +163,7 @@
     },
     {
       "path": "v0-binding-state",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-button-action",
@@ -131,7 +175,7 @@
     },
     {
       "path": "v0-design-system",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-formatted-text",
@@ -155,7 +199,7 @@
     },
     {
       "path": "v0-local-state",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-model-screen",
@@ -206,6 +250,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "v0-reject-undefined-spacing",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "v0-reject-unsupported-modifier",
       "implementationStatus": "ready"
     },
@@ -223,7 +271,7 @@
     },
     {
       "path": "v0-stack-layout",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-static-list",
