@@ -11,7 +11,19 @@ extension Builder {
                   variable.bindingSpecifier.tokenKind == .keyword(.let),
                   let binding = variable.bindings.first,
                   let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier else { return false }
+            if let type = binding.typeAnnotation?.type.trimmedDescription,
+               models.contains(where: { $0.name == type }) {
+                return false
+            }
             return identifier.text != "body"
+        }
+    }
+
+    func hasDeclaredModelInputs(_ node: StructDeclSyntax) -> Bool {
+        node.memberBlock.members.contains { member in
+            guard let type = member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
+                .trimmedDescription else { return false }
+            return declaredModelNames.contains(type)
         }
     }
 
@@ -29,6 +41,10 @@ extension Builder {
             }
             if identifier.text == "body" {
                 body = variable
+                continue
+            }
+            if let type = binding.typeAnnotation?.type.trimmedDescription,
+               models.contains(where: { $0.name == type }) {
                 continue
             }
             guard variable.bindingSpecifier.tokenKind == .keyword(.let), binding.initializer == nil,

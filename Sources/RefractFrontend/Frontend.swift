@@ -23,6 +23,7 @@ final class Builder: SyntaxVisitor {
     var diagnostics: [Diagnostic] = []
     var interop: InteropFrontend
     var parameters: [ScreenParameter] = []
+    var declaredModelNames: Set<String> = []
     var currentStates: [StateDeclaration] = []
     var models: [ModelProtocol] = []
     var currentModels: [ModelReference] = []
@@ -32,6 +33,13 @@ final class Builder: SyntaxVisitor {
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
         super.init(viewMode: .sourceAccurate)
+        declaredModelNames = Set(tree.statements.compactMap { statement in
+            guard let declaration = statement.item.as(ProtocolDeclSyntax.self),
+                  declaration.inheritanceClause?.inheritedTypes.contains(where: {
+                      $0.type.trimmedDescription == "RefractModel"
+                  }) == true else { return nil }
+            return declaration.name.text
+        })
         collectModels(tree)
     }
 
@@ -46,7 +54,9 @@ final class Builder: SyntaxVisitor {
 
         parameters = []
         let members = node.memberBlock.members
-        if hasTypedInputs(members) {
+        if hasDeclaredModelInputs(node) {
+            guard localStateDeclarations(node) != nil else { return .skipChildren }
+        } else if hasTypedInputs(members) {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
             screens.append(body)
             return .skipChildren
@@ -188,6 +198,10 @@ final class Builder: SyntaxVisitor {
             return .stack(axis: name == "VStack" ? .vertical : .horizontal,
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
+            if let argument = call.arguments.first, argument.label == nil,
+               let value = modelProperty(argument.expression) {
+                return .text(value, modifiers: [], location: nodeLocation)
+            }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
                                               stateText: currentStates.isEmpty ? { _ in nil } : stateText)
             guard let value = parser.text(call, arguments: call.arguments) else {

@@ -16,6 +16,7 @@ import RefractIR
     }
     """))
     #expect(unit.diagnostics.isEmpty)
+    #expect(!unit.diagnostics.contains { $0.code == "unsupportedViewBody" || $0.code == "R.string.interpolation" })
     let children = try stackChildren(unit)
     #expect(children.count == 4)
     for (index, key) in ["settings.title", "settings.subtitle", "settings.footer"].enumerated() {
@@ -55,6 +56,14 @@ import RefractIR
     #expect(text.key == "profile.greeting")
     #expect(text.arguments.map(\.type) == [.string, .int, .double])
     #expect(text.arguments.map(\.value) == [.reference("name"), .reference("count"), .reference("ratio")])
+}
+
+@Test func unknownViewKeepsItsNativeDiagnosticWithoutBodyInterpolationErrors() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Bad: View { var body: some View { Gauge("photo") } }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
+    #expect(!unit.diagnostics.contains { $0.code == "unsupportedViewBody" || $0.code == "R.string.interpolation" })
 }
 
 @Test(arguments: [
