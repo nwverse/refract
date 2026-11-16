@@ -9,7 +9,6 @@
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
       "className": "refract.generated.R",
-      "catalog": "values/strings.xml",
       "strings": { "settings.enabled": "settings_enabled" }
     }
   },
@@ -23,7 +22,6 @@
     "resources": {
       "namespace": "app",
       "stringTable": "string",
-      "catalog": "resources/base/element/string.json",
       "strings": { "settings.enabled": "settings_enabled" }
     }
   }

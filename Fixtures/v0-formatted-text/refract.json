@@ -9,7 +9,6 @@
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
       "className": "refract.generated.R",
-      "catalog": "values/strings.xml",
       "strings": { "settings.item.count": "settings_item_count" }
     }
   },
@@ -23,7 +22,6 @@
     "resources": {
       "namespace": "app",
       "stringTable": "string",
-      "catalog": "resources/base/element/string.json",
       "strings": { "settings.item.count": "settings_item_count" }
     }
   }
