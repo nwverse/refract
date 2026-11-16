@@ -16,6 +16,7 @@ public struct ComposeBackend: Sendable {
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
         if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
+        try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)

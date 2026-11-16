@@ -11,8 +11,13 @@ extension ComposeBackend {
             try emitScroll(axis: axis, child: child, modifiers: modifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
         case let .list(children, modifiers, location):
-            try emitStaticList(children, modifiers: modifiers, isRoot: isRoot, location: location,
-                               into: &out, context: &context)
+            if children.count == 1, case let .forEach(items, _) = children[0] {
+                try emitDynamicList(items, modifiers: modifiers, isRoot: isRoot,
+                                    into: &out, context: &context)
+            } else {
+                try emitStaticList(children, modifiers: modifiers, isRoot: isRoot, location: location,
+                                   into: &out, context: &context)
+            }
         case let .section(_, _, location):
             throw Diagnostic(code: "RF-C001", message: "A section can only be lowered inside its parent LazyColumn.",
                              suggestion: "Use Section as a direct List child.", location: location)
@@ -109,6 +114,15 @@ extension ComposeBackend {
         let behavior = axis == .vertical ? "verticalScroll" : "horizontalScroll"
         out.open("\(containerName(axis, context: &context))(modifier = \(chain).\(behavior)(rememberScrollState()))")
         try emit(child, parentAxis: axis, into: &out, context: &context)
+        out.close()
+    }
+
+    private func emitDynamicList(_ items: ListItems, modifiers: [Modifier], isRoot: Bool,
+                                into out: inout KotlinWriter, context: inout Context) throws {
+        context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
+        context.imports.insert("androidx.compose.foundation.lazy.items")
+        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
+        try emitDynamicListItems(items, into: &out, context: &context)
         out.close()
     }
 
