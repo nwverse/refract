@@ -1,0 +1,1 @@
+Input.swift:6:22: error [missingTokenMapping]: The token `DesignSpacing.unknown` is not declared in exactly one category. Suggestion: Declare the token in spacing, radius, font or color on both platforms.
