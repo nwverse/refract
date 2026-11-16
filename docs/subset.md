@@ -37,7 +37,8 @@ there is no Refract runtime, base view, interpreter or lookup registry in a gene
 - A `Text("...")` string literal is a localization key, not user-visible literal text. Use `Text(verbatim: "...")`
   for intentional literal text. Formatted view text uses ordinary SwiftUI `LocalizedStringKey` interpolation; its
   static parts form the resource key and each supported scalar interpolation becomes one ordered argument. For
-  example, `Text("settings.item.count \(model.count) items")` maps to a `settings_item_count` resource with `%1$d`.
+  example, `Text("settings.item.count \(model.count)")` maps to a `settings_item_count` resource with `%1$d`.
+  Display punctuation, whitespace and prose such as ` items` belong in that resource value, not in the source key.
   Dynamic keys, unsupported interpolation and implicit string conversion are errors. Android and HarmonyOS resource
   files declare compatible one-based positional `%s`, `%d` or `%f` placeholders. `String(localized:)` follows the
   same resource-key rule for supported non-view arguments; no unverified platform overload is part of the subset.

@@ -139,22 +139,26 @@ leaf change. The ownership details and event synchronization contract live in `d
 
 ### A2: `LazyForEach` uses a typed `IDataSource` and stable keys
 
-A Swift `List`/`ForEach` with identity lowers to `List` + `ListItem` + `LazyForEach`. Its per-list generated data
-source implements `IDataSource` directly; it is compiled into that screen, not shipped as a runtime library.
-Keys are injective stable strings derived from declared identity. `JSON.stringify(item)` and the array index are
-not stable identity.
+A Swift `List`/`ForEach` with identity lowers to `List` + `ListItem` + `LazyForEach`. The application model supplies
+an ArkUI-compatible `IDataSource` (a `BasicDataSource<Item>` in the v0 fixture) with a concrete item type; generated
+code consumes it directly. Compose exposes the corresponding collection as `State<List<Item>>`. Neither backend
+generates an array mirror, observer registry or synchronization adapter. Keys are injective stable strings derived
+from declared identity. `JSON.stringify(item)` and the array index are not stable identity.
 
-Use replacement arrays in the v0 model. On replacement, update the data source and notify `onDataReloaded()`.
-Do not claim `@Monitor` observes arbitrary in-place Array API calls or item assignment. Incremental insert, move
-and delete events are not generated until the model contract describes them; stable keys preserve item identity
-across the defined replacement. Avoid rebuilding `IDataSource` on every `build()`.
+The app owns data delivery and native change notifications. `getData` has an explicit item type, and listener
+registration/removal follows the platform contract. Replacing model data must update the app-owned data source and
+notify ArkUI through that source (for example `onDataReloaded()` for a wholesale replacement). An ordinary `@Trace`
+array or a whole-array `@Monitor` does not prove that in-place Array API calls or item replacement are observed;
+v0 does not claim those mutations are supported. Incremental insert/move/delete delivery is generated only when the
+model contract can describe it. Stable keys preserve logical row identity across a defined replacement, and the
+source is not rebuilt in `build()`.
 
 ```ts
-LazyForEach(this.settingsData, (item: SettingItem) => {
+LazyForEach(this.model.items, (item: SettingItem) => {
   ListItem() {
     SettingRow({ item: item, onChange: this.onChange })
   }
-}, (item: SettingItem): string => item.id.toString())
+}, (item: SettingItem): string => String(item.id))
 ```
 
 **Fixture:** `Fixtures/performance/arkui-lazy-list/Expected.ets`.
