@@ -8,7 +8,6 @@ export interface SaveModel {
 @ComponentV2
 export struct ButtonAction {
   @Require @Param model: SaveModel;
-
   build() {
     Button() {
       Text($r('app.string.settings_save'))
