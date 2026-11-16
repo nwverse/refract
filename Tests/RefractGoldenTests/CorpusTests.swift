@@ -68,12 +68,17 @@ struct SubsetCorpusTests {
                   let androidResources = android["resources"] as? [String: Any],
                   let harmonyResources = harmony["resources"] as? [String: Any],
                   let androidKeys = androidResources["strings"] as? [String: String],
-                  let harmonyKeys = harmonyResources["strings"] as? [String: String] else { continue }
+                  let harmonyKeys = harmonyResources["strings"] as? [String: String],
+                  let androidPath = androidResources["catalog"] as? String,
+                  let harmonyPath = harmonyResources["catalog"] as? String else { continue }
             #expect(androidKeys == harmonyKeys, Comment(rawValue: "Resource registries must agree in \(fixture.name)"))
             let directory = GoldenTests.repository.appendingPathComponent("Fixtures/\(fixture.name)")
-            let androidCatalog = directory.appendingPathComponent("values/strings.xml")
-            let harmonyCatalog = directory.appendingPathComponent("resources/base/element/string.json")
-            guard FileManager.default.fileExists(atPath: androidCatalog.path) else { continue }
+            let androidCatalog = directory.appendingPathComponent(androidPath)
+            let harmonyCatalog = directory.appendingPathComponent(harmonyPath)
+            #expect(FileManager.default.fileExists(atPath: androidCatalog.path),
+                    Comment(rawValue: "Android catalog must exist in \(fixture.name)"))
+            #expect(FileManager.default.fileExists(atPath: harmonyCatalog.path),
+                    Comment(rawValue: "HarmonyOS catalog must exist in \(fixture.name)"))
             let entries = try StringResourceLoader.load(android: androidCatalog.path, harmony: harmonyCatalog.path)
             for (sourceKey, nativeName) in androidKeys {
                 #expect(entries[nativeName] != nil,
