@@ -20,6 +20,17 @@ struct GoldenTests {
 }
 
 struct CorpusTests {
+    @Test func malformedMappingUsesTheGoldenDiagnosticContract() throws {
+        let fixture = FixtureCase(name: "bad-mapping", status: .ready,
+                                  input: "struct Bad: View { var body: some View { Image(\"photo\") } }",
+                                  mapping: "not JSON", expectedKotlin: nil, expectedArkTS: nil,
+                                  expectedDiagnostics: "ignored")
+        let result = try GoldenRunner.generate(fixture)
+        #expect(result.kotlin == nil && result.arkTS == nil)
+        #expect(result.diagnostics.map(\.code) == ["RFNATIVE001", "mapping.invalid_json"])
+        #expect(result.diagnostics.allSatisfy { $0.location != nil })
+    }
+
     @Test func repositoryManifestIsExplicitAndDeterministic() throws {
         let root = GoldenTests.repository
         let cases = try CorpusLoader.load(repository: root)
