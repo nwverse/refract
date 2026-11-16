@@ -35,7 +35,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "examples/android/fixture-compile-manifest.txt"
 FIXTURES_ROOT = ROOT / "Fixtures"
-STAGING_JAVA = ROOT / "examples/android/fixtures/src/main/java/refract/generated"
+STAGING_JAVA = ROOT / "examples/android/fixtures/src/main/java"
 STAGING_RES = ROOT / "examples/android/fixtures/src/main/res/values"
 
 
@@ -95,7 +95,7 @@ def regenerate_and_stage(fixture: str) -> None:
     # Android library R classes are generated in the Gradle namespace, not each Kotlin subpackage.
     package = json.loads(mapping_json.read_text(encoding="utf-8"))["android"]["output"]["packageName"]
     namespace = "refract.generated"
-    package_directory = STAGING_JAVA.parent.joinpath(*package.split("."))
+    package_directory = STAGING_JAVA.joinpath(*package.split("."))
     package_directory.mkdir(parents=True, exist_ok=True)
     generated = expected_kt.read_text(encoding="utf-8").replace(
         f"{package}.R.", f"{namespace}.R."
