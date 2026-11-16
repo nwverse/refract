@@ -5,14 +5,12 @@ state remain hand-written. The example is not a Refract shell and has no Refract
 
 ## Current scope
 
-The current examples use the view body from `Fixtures/hello/Input.swift`, shared with iOS at
-`examples/shared/Hello.swift`. The CLI output is compiled in Android and copied unchanged to the HarmonyOS project.
-This verifies a small end-to-end generation path, not the whole settings-screen subset.
-
-`examples/shared/SettingsScreen.swift` is a prepared shared source, not yet accepted by the current CLI. Model and
-binding support has landed, but actual generation still stops at TextField/Section parsing and localized-resource
-lowering. Its native call site is therefore intentionally not enabled until #4/#8 integration lands. The canonical
-#2 fixture and `RefractModel` contract from #5 remain authoritative; the example mapping validates against #6.
+The examples use `examples/shared/Hello.swift` for a small generation path and
+`examples/shared/SettingsScreen.swift` for the complete model-backed adoption walkthrough. The settings source is
+byte-identical to `Fixtures/v0-settings-screen/Input.swift`: it uses a `RefractModel` protocol, a parent `@Binding`
+and local `@State`, with model text, TextField, Toggle and Section/action rows. The actual CLI generates
+`SettingsScreen.kt` and `SettingsScreen.ets`, both committed and covered by `scripts/check_examples.py`.
+Android's `SettingsApp` compiles that generated screen next to its native model and a hand-written rollback screen.
 HarmonyOS compilation is still unavailable; `examples/harmony/README.md` records exactly which tools must be acquired.
 
 ## 1. Start with the native app
@@ -37,17 +35,22 @@ The original implementation is `HandWrittenProfileScreen`. `SettingsApp` owns na
 `NativeProfile` and its route are also retained. Neither platform moves application start-up or navigation into a
 generated file.
 
-## 2. Express one screen in the supported SwiftUI subset
+## 2. Express the settings screen in the supported SwiftUI subset
 
-Use `examples/shared/Hello.swift`, whose view body is identical to the canonical fixture input, for this first step.
+Read `examples/shared/SettingsScreen.swift`, not a second native copy. It declares `SettingsModel: RefractModel`
+with a get-only `title` and `save()`, receives `let model: SettingsModel`, and uses
+`@Binding var notificationsEnabled: Bool` plus `@State private var displayName: String = ""`.
 
-The file is ordinary SwiftUI on iOS. Read it rather than duplicating it as a second source: its generator input is
-one shared source, not two native reimplementations. The current generator skeleton accepts this early `Hello`
-source; later canonical v0 fixtures explicitly distinguish localized keys from `Text(verbatim:)` and define spacing
-tokens. The example must follow the fixture revision rather than silently translating a different Swift spelling.
-For the later model-backed screen, a plain typed `let model: <Protocol>` refers to a protocol inheriting
-`RefractModel`; `@Binding` becomes a value and a callback. The app owns Compose `State<T>` and ArkUI
-`@ObservedV2`/`@Trace` implementations. The generated code never constructs or mirrors the application model.
+`Text(model.title)` reads observable state at the leaf, `TextField("settings.display.name", text: $displayName)`
+uses the local String state, `Toggle("settings.notifications", isOn: $notificationsEnabled)` uses the parent's
+value/callback, and the untitled Section invokes `model.save()`. The iOS target compiles the same file as ordinary
+SwiftUI with its own `AppSettingsModel` and `Localizable.strings`. The generated interface does not construct,
+subscribe to or mirror the application's model.
+
+Static row identities come from declarations: `title`, kebab-case `displayName`, `notifications` (without the
+terminal `Enabled` marker), and `save`. They are not array indices or runtime values. The mapping declares every
+localized key and the application R class on both generated platforms. Unsupported actions or ownership shapes
+fail at build time rather than being approximated.
 
 The focused `examples/shared/NativeComponentScreen.swift` is generated successfully. It declares
 `NativeProfileStatusBadge: RefractNativeView` in the same input, with an ordinary SwiftUI body for iOS, and the
@@ -63,14 +66,15 @@ From the repository root:
 swift build
 .build/debug/refract generate \
   --input examples/shared/Hello.swift \
+  --input examples/shared/SettingsScreen.swift \
   --mapping examples/refract.json \
   --android-out examples/android/app/src/main/java/refract/generated \
   --harmony-out examples/harmony/entry/src/main/ets/generated
 ```
 
-The CLI writes `Hello.kt` and `Hello.ets`. Their generated bodies match `Fixtures/hello/Expected.kt` and
-`Expected.ets`; the source header correctly says `Hello.swift` instead of the fixture's `Input.swift`. Compare output
-apart from that declared source-name difference, and compile without hand-editing the files.
+The CLI writes `Hello.kt`, `Hello.ets`, `SettingsScreen.kt` and `SettingsScreen.ets`. Their generated bodies match
+the corresponding canonical fixture expectations, with the declared source filenames changed appropriately. Review
+and compile them without hand-editing.
 
 The files carry `Generated by Refract; DO NOT EDIT.` and the source filename. Review and commit them like product
 code. Fix the Swift source or mapping rather than editing generated output. An unsupported construct fails generation
@@ -78,22 +82,36 @@ with a diagnostic; there is no approximate native fallback.
 
 ## 4. Switch one native call site
 
-Android's `SettingsApp.kt` calls the generated layout directly from its native navigation destination:
+Android's `SettingsApp.kt` calls the generated settings directly from its native navigation destination:
 
 ```kotlin
-import refract.generated.Hello
-
-// Inside the native composable destination:
-Hello()
+if (useGeneratedSettings) {
+    SettingsScreen(
+        model = model,
+        notificationsEnabled = notificationsEnabled,
+        onNotificationsEnabledChange = { notificationsEnabled = it },
+    )
+} else {
+    HandWrittenSettingsScreen(
+        model = model,
+        notificationsEnabled = notificationsEnabled,
+        onNotificationsEnabledChange = { notificationsEnabled = it },
+    )
+}
 ```
 
-The generated function is an ordinary `@Composable`: no activity, host container, initialization call, runtime
-registry or view-tree interpreter. For rollback, replace `Hello()` with `HandWrittenProfileScreen()` in that
-destination; no other screen changes.
+`AppSettingsModel` is a hand-written implementation of the generated `SettingsModel` interface. It exposes Compose
+`State<String>` through the same `title` property and keeps `save()` in native code. `SettingsApp` owns the model,
+binding and `useGeneratedSettings` flag. HomeScreen toggles that flag, so the app switches generated and native
+settings without a host container, navigation rewrite, initialization call, registry or view-tree interpreter.
 
-HarmonyOS's hand-written `GeneratedProfile` page similarly imports `Hello` and places the generated
-`@ComponentV2` in its `build()` method. The page owns routing; generated code has no `@Entry`. The original
-`NativeProfile` remains a native destination for rollback.
+For rollback, select `HandWrittenSettingsScreen` with the same three arguments. The model and binding are unchanged,
+and no generated file needs a hand edit. The original `HandWrittenProfileScreen` remains available as well.
+
+HarmonyOS's hand-written `GeneratedProfile` page similarly imports generated `SettingsScreen` and places the
+`@ComponentV2` in its `build()` method. The page owns routing, a V2 `AppSettingsModel` (`@ObservedV2`/`@Trace`),
+`@Local notificationsEnabled` and `useGeneratedSettings`. It calls `HandWrittenSettingsScreen` for rollback with
+the same model, value and event callback. Generated code has no `@Entry` or observation adapter.
 
 The reverse direction is now present in both apps. `NativeComponentScreen.kt` calls the native
 `NativeProfileStatusBadge(modifier:)`; `NativeComponentScreen.ets` imports and calls the ArkUI badge. Android's
@@ -102,15 +120,15 @@ The Android toolchain compiles this complete native → generated → native cha
 `--mapping examples/refract.json` so resource keys and typed native components are validated in the same generation
 configuration.
 
-The full model-backed settings screen remains pending; this focused interop success does not imply that all v0
-containers, leaf controls or localized strings already generate.
+The complete model-backed settings path is implemented and compiled on Android. This does not imply support for
+every v0 construct or native compilation on every platform; remaining tool limitations are stated below.
 
 ## 5. Verify generation and compilation
 
 Regenerate with the command above, then run the consistency check, compare against the fixture and build.
 
-`scripts/check_examples.py` regenerates the current Hello and native-component outputs and compares both committed
-files for each screen byte-for-byte,
+`scripts/check_examples.py` regenerates the current Hello, native-component and full-settings outputs and compares
+both committed files for each screen byte-for-byte,
 checks that every mapped settings key exists in both base catalogs, and verifies that the iOS Sources phase includes
 every shared source. It does not invoke a native compiler and does not excuse a missing generated file. The additional
 fixture-body diffs below compare against #2's canonical reference apart from the source-name header:
@@ -127,9 +145,8 @@ cd examples/android
 ./gradlew :app:assembleDebug
 ```
 
-This verifies the small screen's generator and Android native integration. It does not verify the full settings
-subset, and the zero-test XCTest placeholders emitted by `swift test` are not test coverage; the Swift Testing test
-run is the actual evidence.
+This verifies the small screen's generator and the full settings screen's Android native integration. The zero-test
+XCTest placeholders emitted by `swift test` are not test coverage; the Swift Testing test run is the actual evidence.
 
 For HarmonyOS, acquire the official Command Line Tools as described in its README and run `ohpm install --all`
 followed by `hvigorw assembleHap`. Until that compiler is available, report the ArkTS example as **not compiled**;
@@ -141,7 +158,7 @@ provided by this walkthrough.
 
 ## 6. Roll back without losing the app
 
-Restore the native destination (`HandWrittenProfileScreen` on Android or `NativeProfile` on HarmonyOS), remove the
+Restore the native destination (`HandWrittenSettingsScreen` on Android or `HandWrittenSettingsScreen` on HarmonyOS), remove the
 input from the app's generation configuration, and remove generated outputs only when no other native screen calls
 them. Rebuild and run the same checks. Navigation and every other screen are unchanged.
 
