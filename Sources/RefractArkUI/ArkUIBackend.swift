@@ -76,6 +76,11 @@ public struct ArkUIBackend: Sendable {
                              message: "Native component `\(component.name)` has no resolved ArkUI declaration.",
                              suggestion: "Declare its ArkUI symbol and typed parameters in refract.json.",
                              location: location)
+        case let .platformView(_, location):
+            throw Diagnostic(code: "arkui.unsupported_platform_view",
+                             message: "Platform-view lowering is not available in this backend yet.",
+                             suggestion: "Use the interop backend implementation that selects the HarmonyOS branch.",
+                             location: location)
         }
     }
 
