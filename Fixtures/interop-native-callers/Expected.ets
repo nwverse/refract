@@ -7,5 +7,6 @@ export struct NativeCallerScreen {
     Column({ space: 8 }) {
       Text('Generated inside native')
     }
+    .alignItems(HorizontalAlign.Center)
   }
 }

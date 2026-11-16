@@ -25,7 +25,8 @@ import RefractIR
     ])
     let output = try ComposeBackend().generate(module: module)
     #expect(output.contains("import androidx.compose.foundation.layout.Column"))
-    #expect(output.contains("Column(modifier = modifier)"))
+    #expect(output.contains("verticalArrangement = Arrangement.spacedBy(8.dp)"))
+    #expect(output.contains("horizontalAlignment = Alignment.CenterHorizontally"))
     #expect(output.contains("Text(text = \"Hello\")"))
     #expect(output.contains("Text(text = \"World\")"))
 }

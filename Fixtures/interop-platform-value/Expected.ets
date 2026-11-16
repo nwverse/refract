@@ -8,5 +8,6 @@ export struct PlatformValueScreen {
       Text('Spacing').padding(16)
       Text('HarmonyOS')
     }
+    .alignItems(HorizontalAlign.Center)
   }
 }
