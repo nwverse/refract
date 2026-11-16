@@ -1,6 +1,11 @@
 {
   "schemaVersion": 1,
   "cases": [
+    { "path": "compose-image", "implementationStatus": "ready" },
+    { "path": "compose-rejected-nested-scroll", "implementationStatus": "ready" },
+    { "path": "compose-rejected-system-image", "implementationStatus": "ready" },
+    { "path": "compose-scroll", "implementationStatus": "ready" },
+    { "path": "compose-typed-layout", "implementationStatus": "ready" },
     { "path": "hello", "implementationStatus": "ready" },
     { "path": "interop-native-callers", "implementationStatus": "ready" },
     { "path": "interop-native-component", "implementationStatus": "ready" },
@@ -31,8 +36,8 @@
     { "path": "v0-literal-text", "implementationStatus": "ready" },
     { "path": "v0-local-state", "implementationStatus": "pending" },
     { "path": "v0-model-screen", "implementationStatus": "pending" },
-    { "path": "v0-native-component", "implementationStatus": "pending" },
-    { "path": "v0-reject-binding-initializer", "implementationStatus": "pending" },
+    { "path": "v0-native-component", "implementationStatus": "ready" },
+    { "path": "v0-reject-binding-initializer", "implementationStatus": "ready" },
     { "path": "v0-reject-body-mutation", "implementationStatus": "pending" },
     { "path": "v0-reject-implicit-identity", "implementationStatus": "pending" },
     { "path": "v0-reject-list-identity", "implementationStatus": "pending" },

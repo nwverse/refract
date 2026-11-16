@@ -87,7 +87,6 @@ Generate the same screen for both native apps from the repository root:
 ```sh
 refract generate \
   --input examples/shared/Hello.swift \
-  --mapping examples/refract.json \
   --android-out examples/android/app/src/main/java/refract/generated \
   --harmony-out examples/harmony/entry/src/main/ets/generated
 ```

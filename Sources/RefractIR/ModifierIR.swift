@@ -1,0 +1,32 @@
+public extension ViewNode {
+    /// Adds a modifier without losing the type, payload or source location of an existing view.
+    /// Containers whose IR does not carry modifiers return nil so the frontend can diagnose them.
+    func appendingModifier(_ modifier: Modifier) -> ViewNode? {
+        switch self {
+        case let .stack(axis, children, modifiers, location):
+            return .stack(axis: axis, children: children, modifiers: modifiers + [modifier], location: location)
+        case let .text(value, modifiers, location):
+            return .text(value, modifiers: modifiers + [modifier], location: location)
+        case let .button(label, action, modifiers, location):
+            return .button(label: label, action: action, modifiers: modifiers + [modifier], location: location)
+        case let .layout(layout, children, modifiers, location):
+            return .layout(layout, children: children, modifiers: modifiers + [modifier], location: location)
+        case let .scroll(axis, child, modifiers, location):
+            return .scroll(axis: axis, child: child, modifiers: modifiers + [modifier], location: location)
+        case let .list(children, modifiers, location):
+            return .list(children: children, modifiers: modifiers + [modifier], location: location)
+        case let .image(source, modifiers, location):
+            return .image(source: source, modifiers: modifiers + [modifier], location: location)
+        case let .toggle(title, value, modifiers, location):
+            return .toggle(title: title, value: value, modifiers: modifiers + [modifier], location: location)
+        case let .textInput(placeholder, value, modifiers, location):
+            return .textInput(placeholder: placeholder, value: value, modifiers: modifiers + [modifier], location: location)
+        case let .label(title, image, modifiers, location):
+            return .label(title: title, image: image, modifiers: modifiers + [modifier], location: location)
+        case let .divider(modifiers, location):
+            return .divider(modifiers: modifiers + [modifier], location: location)
+        case .native, .platformView, .conditional, .section, .listItem, .forEach, .spacer:
+            return nil
+        }
+    }
+}
