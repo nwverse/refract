@@ -20,11 +20,19 @@ public struct GoldenResult: Sendable {
 public enum GoldenRunner {
     public static func generate(_ fixture: FixtureCase) throws -> GoldenResult {
         let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input))
-        let mapping: Mapping
-        if let contents = fixture.mapping {
-            mapping = try Mapping.load(data: Data(contents.utf8), file: "refract.json")
-        } else { mapping = .empty }
         var diagnostics = unit.diagnostics
+        let mapping: Mapping
+        do {
+            if let contents = fixture.mapping {
+                mapping = try Mapping.load(data: Data(contents.utf8), file: "refract.json")
+            } else { mapping = .empty }
+        } catch let error as MappingError {
+            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics + error.diagnostics)
+        } catch let diagnostic as Diagnostic {
+            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics + [diagnostic])
+        }
+        // A mapping diagnostic is evaluated even when Swift parsing also fails: source and project
+        // configuration are independent errors, and both must be reported before generation is skipped.
         guard !unit.hasErrors else { return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics) }
         do {
             let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
