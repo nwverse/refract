@@ -1,5 +1,10 @@
 import SwiftUI
 
+protocol SettingsModel: RefractModel {
+    var title: String { get }
+    func save()
+}
+
 struct SettingsScreen: View {
     let model: SettingsModel
     @Binding var notificationsEnabled: Bool
