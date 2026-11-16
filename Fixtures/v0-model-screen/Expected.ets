@@ -14,12 +14,11 @@ export struct ModelScreen {
   build() {
     Column({ space: 8 }) {
       Text(this.model.title)
-      Button() {
-        Text($r('app.string.settings_disable'))
-      }
-      .onClick(() => {
-        this.model.setEnabled(false);
-      })
+      Button($r('app.string.settings_disable'))
+        .onClick(() => {
+          this.model.setEnabled(false);
+        })
     }
+    .alignItems(HorizontalAlign.Center)
   }
 }
