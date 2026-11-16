@@ -31,6 +31,8 @@ enum ArkExpression {
                              location: expression.location)
         case let .platformValue(alternatives):
             return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
+        case let .valueProperty(.model(model, property)):
+            return "this.\(try referenceName(model, location: expression.location)).\(try referenceName(property, location: expression.location))"
         case .valueProperty, .interpolatedString:
             throw Diagnostic(code: "arkui.unsupported_state_expression",
                              message: "This state expression requires the local-state lowering.",

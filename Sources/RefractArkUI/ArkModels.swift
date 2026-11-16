@@ -1,5 +1,21 @@
 import RefractIR
 
+func emitArkItemTypes(_ items: [ItemType], into writer: inout ArkWriter) throws {
+    for item in items {
+        writer.line()
+        writer.line("@ObservedV2")
+        writer.open("export class \(item.name)")
+        for property in item.properties {
+            writer.line("@Trace \(property.name): \(try arkModelType(property.type));")
+        }
+        writer.line()
+        writer.open("constructor(\(try item.properties.map { "\($0.name): \(try arkModelType($0.type))" }.joined(separator: ", ")))")
+        for property in item.properties { writer.line("this.\(property.name) = \(property.name);") }
+        writer.close()
+        writer.close()
+    }
+}
+
 func emitArkModels(_ models: [ModelProtocol], into writer: inout ArkWriter) throws {
     for model in models {
         guard ArkText.isIdentifier(model.name) else {
@@ -11,7 +27,8 @@ func emitArkModels(_ models: [ModelProtocol], into writer: inout ArkWriter) thro
         writer.line()
         writer.open("export interface \(model.name)")
         for property in model.properties {
-            writer.line("\(property.name): \(try arkModelType(property.type));")
+            let type = try property.collection.map { "BasicDataSource<\($0.itemType)>" } ?? arkModelType(property.type)
+            writer.line("\(property.name): \(type);")
         }
         for action in model.actions {
             let parameters = try action.parameters.map {
