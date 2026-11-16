@@ -1,0 +1,2 @@
+Input.swift:6:5: error [model.duplicate_member]: Model action `update(bool)` collides with another requirement after Swift external labels are erased on Kotlin. Suggestion: Use uniquely named native actions instead of overloading only by external argument label
+Input.swift:10:5: error [state.invalid_declaration]: A model input must be a let property of a declared RefractModel protocol. Suggestion: Use `let model: YourModel` with `protocol YourModel: RefractModel`

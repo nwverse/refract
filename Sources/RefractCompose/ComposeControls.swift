@@ -8,6 +8,7 @@ extension ComposeBackend {
         context.imports.insert("androidx.compose.foundation.layout.Arrangement")
         context.imports.insert("androidx.compose.foundation.layout.Row")
         context.imports.insert("androidx.compose.material3.Switch")
+        context.imports.insert("androidx.compose.material3.Text")
         context.imports.insert("androidx.compose.ui.res.stringResource")
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
         out.line("Row(")
@@ -26,7 +27,7 @@ extension ComposeBackend {
             throw Diagnostic(code: "R.string.invalid_resource", message: "Android string resources need a generated R class name.",
                              suggestion: "Declare resources.className in refract.json.", location: title.location)
         }
-        out.line("Text(text = stringResource(\(className).string.\(resource.nativeName))")
+        out.line("Text(text = stringResource(\(className).string.\(resource.nativeName)))")
         let checked = try renderExpression(value, context: &context)
         let onChange: String
         switch value.value {

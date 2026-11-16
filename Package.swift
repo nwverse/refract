@@ -26,6 +26,7 @@ let package = Package(
             name: "RefractFrontend",
             dependencies: [
                 "RefractIR",
+                "RefractMapping",
                 .product(name: "SwiftParser", package: "swift-syntax"),
                 .product(name: "SwiftParserDiagnostics", package: "swift-syntax"),
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
@@ -44,7 +45,7 @@ let package = Package(
             dependencies: ["RefractIR", "RefractFrontend", "RefractMapping", "RefractCompose", "RefractArkUI"]
         ),
         .testTarget(name: "RefractIRTests", dependencies: ["RefractIR"]),
-        .testTarget(name: "RefractFrontendTests", dependencies: ["RefractFrontend"]),
+        .testTarget(name: "RefractFrontendTests", dependencies: ["RefractFrontend", "RefractCompose", "RefractArkUI"]),
         .testTarget(
             name: "RefractMappingTests",
             dependencies: ["RefractMapping"],

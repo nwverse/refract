@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "compose/src/main/kotlin/sample/ui", "packageName": "sample.ui" },
+    "imports": [
+      "sample.widgets.CompactBadge",
+      "sample.widgets.ContentCard",
+      "sample.widgets.CompactSpace",
+      "sample.widgets.SurfaceTint"
+    ],
+    "components": {
+      "CardRow": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "trailingClosure",
+        "modifiers": ["padding", "background"],
+        "target": "ContentCard",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "title", "target": "heading" }],
+        "modifierParameter": "modifier",
+        "attributes": {
+          "padding": {
+            "kind": "chain",
+            "target": "padding",
+            "arguments": [{ "source": "_" }]
+          },
+          "background": {
+            "kind": "chain",
+            "target": "background",
+            "arguments": [{ "source": "_" }]
+          }
+        }
+      },
+      "Badge": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "CompactBadge",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "title", "target": "caption" }],
+        "attributes": {}
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] },
+      "background": { "parameters": [{ "label": "_", "type": "color", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "CompactSpace.medium" },
+      "radius": {},
+      "font": {},
+      "color": { "DesignColors.surface": "SurfaceTint.default" }
+    },
+    "resources": {
+      "className": "sample.application.R",
+      "strings": {
+        "settings.title": "settings_title",
+        "settings.enabled": "settings_enabled"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "feature/src/main/ets/pages" },
+    "imports": [
+      { "module": "sample/widgets/ContentCard", "symbols": ["ContentCard"] },
+      { "module": "sample/widgets/CompactBadge", "symbols": ["CompactBadge"] },
+      { "module": "sample/widgets/Tokens", "symbols": ["CompactSpace", "SurfaceTint"] }
+    ],
+    "components": {
+      "CardRow": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "builder",
+        "modifiers": ["padding", "background"],
+        "target": "ContentCard",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "title", "target": "heading" }],
+        "attributes": {
+          "padding": {
+            "kind": "chain",
+            "target": "padding",
+            "arguments": [{ "source": "_" }]
+          },
+          "background": {
+            "kind": "chain",
+            "target": "backgroundColor",
+            "arguments": [{ "source": "_" }]
+          }
+        }
+      },
+      "Badge": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "CompactBadge",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "title", "target": "caption" }],
+        "attributes": {}
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] },
+      "background": { "parameters": [{ "label": "_", "type": "color", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "CompactSpace.medium" },
+      "radius": {},
+      "font": {},
+      "color": { "DesignColors.surface": "SurfaceTint.default" }
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "strings": {
+        "settings.title": "settings_title",
+        "settings.enabled": "settings_enabled"
+      }
+    }
+  }
+}
