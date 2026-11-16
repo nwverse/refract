@@ -22,6 +22,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "control-if-else",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-reject-if-let",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
       "implementationStatus": "ready"
     },

@@ -87,13 +87,8 @@ final class Builder: SyntaxVisitor {
                   "Return a supported view from `body`.", at: node.name)
             return .skipChildren
         }
-        guard let expression = expression(in: items) else {
-            if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
-                return .visitChildren
-            }
-            error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
-                  "Return a supported view from `body`.", at: binding.pattern)
-            return .skipChildren
+        if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
+            return .visitChildren
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
         currentStates = states
@@ -105,7 +100,7 @@ final class Builder: SyntaxVisitor {
             currentStates = []
             currentModels = []
         }
-        guard let root = view(expression) else { return .skipChildren }
+        guard let root = viewStatements(items, body: binding) else { return .skipChildren }
 
         screens.append(Screen(name: node.name.text, parameters: parameters, states: states,
                               body: root, location: location(of: node.name)))
@@ -355,15 +350,64 @@ final class Builder: SyntaxVisitor {
         guard let closure else { return [] }
         var result: [ViewNode] = []
         for item in closure.statements {
-            guard let expression = item.item.as(ExprSyntax.self) else {
-                error("unsupportedStatement", "Only view expressions are allowed in a view builder.",
-                      "Remove local statements or move them behind a model.", at: item)
-                return nil
-            }
-            guard let child = view(expression) else { return nil }
+            guard let child = viewStatement(item) else { return nil }
             result.append(child)
         }
         return result
+    }
+
+    func viewStatement(_ item: CodeBlockItemSyntax) -> ViewNode? {
+        if let statement = item.item.as(ExpressionStmtSyntax.self) {
+            if let conditional = statement.expression.as(IfExprSyntax.self) { return view(conditional) }
+            if statement.expression.is(SwitchExprSyntax.self) {
+                return rejectUnsupportedControlFlow(statement.expression)
+            }
+        }
+        guard let expression = item.item.as(ExprSyntax.self) else {
+            if item.item.is(SwitchExprSyntax.self) {
+                error("RFCTRL003", "This switch cannot be lowered yet.",
+                      "Use exhaustive switches over declared no-payload enums when that slice is implemented", at: item)
+            } else {
+                error("unsupportedStatement", "Only view expressions and typed conditionals are allowed in a view builder.",
+                      "Remove local statements or move them behind a model", at: item)
+            }
+            return nil
+        }
+        if expression.is(SwitchExprSyntax.self) {
+            return rejectUnsupportedControlFlow(expression)
+        }
+        return view(expression)
+    }
+
+    private func viewStatements(_ items: CodeBlockItemListSyntax, body: PatternBindingSyntax) -> ViewNode? {
+        if items.count != 1, let first = items.first {
+            diagnostics.append(Diagnostic(code: "unsupportedViewBody",
+                message: "The `body` getter must return exactly one view expression.",
+                suggestion: "Return a supported view from `body`.", location: location(of: body.pattern)))
+            return nil
+        }
+        guard let expression = expression(in: items) else {
+            guard items.count == 1, let first = items.first else {
+                error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
+                      "Return a supported view from `body`.", at: items)
+                return nil
+            }
+            if let conditional = first.item.as(ExpressionStmtSyntax.self)?.expression.as(IfExprSyntax.self) {
+                return view(conditional)
+            }
+            if let switchExpression = first.item.as(ExpressionStmtSyntax.self)?.expression.as(SwitchExprSyntax.self) {
+                return rejectUnsupportedControlFlow(ExprSyntax(switchExpression))
+            }
+            if first.item.is(SwitchExprSyntax.self) {
+                error("RFCTRL003", "This switch cannot be lowered yet.",
+                      "Use exhaustive switches over declared no-payload enums when that slice is implemented", at: first)
+                return nil
+            }
+            error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
+                  "Return a supported view from `body`.", at: body.pattern)
+            return nil
+        }
+        return viewStatement(items.first!)
     }
 
     func expression(in items: CodeBlockItemListSyntax) -> ExprSyntax? {
