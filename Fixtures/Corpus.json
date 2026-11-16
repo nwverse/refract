@@ -48,6 +48,10 @@
     {
       "path": "rejected-image",
       "implementationStatus": "ready"
+    },
+    {
+      "path": "state-counter",
+      "implementationStatus": "ready"
     }
   ]
 }

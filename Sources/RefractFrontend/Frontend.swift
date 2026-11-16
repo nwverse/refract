@@ -21,6 +21,7 @@ final class Builder: SyntaxVisitor {
     var screens: [Screen] = []
     var diagnostics: [Diagnostic] = []
     var interop: InteropFrontend
+    var currentStates: [StateDeclaration] = []
 
     init(file: String, tree: SourceFileSyntax) {
         self.file = file
@@ -38,8 +39,10 @@ final class Builder: SyntaxVisitor {
             $0.type.trimmedDescription == "View"
         }) == true else { return .skipChildren }
 
-        guard node.memberBlock.members.count == 1,
-            let body = node.memberBlock.members.first?.decl.as(VariableDeclSyntax.self),
+        guard let body = node.memberBlock.members.first(where: {
+            $0.decl.as(VariableDeclSyntax.self)?.bindings.first?.pattern
+                .as(IdentifierPatternSyntax.self)?.identifier.text == "body"
+        })?.decl.as(VariableDeclSyntax.self),
             body.bindings.count == 1,
             let binding = body.bindings.first,
             binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "body",
@@ -57,9 +60,12 @@ final class Builder: SyntaxVisitor {
                   "Return a supported view from `body`.", at: binding.pattern)
             return .skipChildren
         }
+        guard let states = localStateDeclarations(node) else { return .skipChildren }
+        currentStates = states
+        defer { currentStates = [] }
         guard let root = view(expression) else { return .skipChildren }
 
-        screens.append(Screen(name: node.name.text, body: root, location: location(of: node.name)))
+        screens.append(Screen(name: node.name.text, states: states, body: root, location: location(of: node.name)))
         return .skipChildren
     }
 
@@ -163,7 +169,8 @@ final class Builder: SyntaxVisitor {
         case "Text":
             guard call.arguments.count == 1,
                   let argument = call.arguments.first, call.trailingClosure == nil,
-                  let value = scalar(argument.expression), value.type == .string,
+                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? scalar(argument.expression),
+                  value.type == .string,
                   (argument.label == nil) || (argument.label?.text == "verbatim") else {
                 error("unsupportedText", "Text requires one string value, optionally labeled `verbatim`.",
                       "Use Text(\"key\") or Text(verbatim: \"literal\")", at: call)
@@ -179,13 +186,10 @@ final class Builder: SyntaxVisitor {
                       "Use Button(\"title\") { }.", at: call)
                 return nil
             }
-            if let action = call.trailingClosure, !action.statements.isEmpty {
-                error("unsupportedButtonAction", "Button actions are not supported by this version.",
-                      "Use an empty action until model actions are available.", at: action)
-                return nil
-            }
+            let action = localStateAction(call.trailingClosure)
+            guard action != nil || call.trailingClosure?.statements.isEmpty != false else { return nil }
             let label = ViewNode.text(Expression(.stringLiteral(labelText)), modifiers: [], location: nodeLocation)
-            return .button(label: label, action: nil, modifiers: [], location: nodeLocation)
+            return .button(label: label, action: action, modifiers: [], location: nodeLocation)
         case "refractView":
             return platformView(call)
         default:
