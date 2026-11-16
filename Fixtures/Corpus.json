@@ -36,7 +36,7 @@
     { "path": "v0-design-system", "implementationStatus": "pending" },
     { "path": "v0-formatted-text", "implementationStatus": "pending" },
     { "path": "v0-hello-text", "implementationStatus": "pending" },
-    { "path": "v0-identified-list", "implementationStatus": "pending" },
+    { "path": "v0-identified-list", "implementationStatus": "ready" },
     { "path": "v0-leaf-controls", "implementationStatus": "pending" },
     { "path": "v0-literal-text", "implementationStatus": "ready" },
     { "path": "v0-local-state", "implementationStatus": "ready" },
