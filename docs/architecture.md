@@ -149,7 +149,12 @@ introduce a second Swift parser.
 ## Open decisions
 
 1. **Resolved:** see "IR and generator boundaries" above.
-2. `refract.json` schema and where native component declarations live (Swift attributes vs JSON).
+2. **Resolved:** `refract.json` uses the versioned JSON Schema and typed records in `docs/mapping.md`. Native views
+   declare their cross-platform stored-property signature in Swift with `RefractNativeView`; the mapping owns the
+   per-platform native symbols and typed argument bindings. An explicitly versioned native-only draft is normalized
+   for compatibility, but the canonical full mapping keeps separate per-platform component and native-component
+   registries. No runtime lookup or target-code template is allowed.
+
 3. **Resolved:** Compose model properties expose `State<T>`; ArkUI uses V2 `@ObservedV2`/`@Trace` implementations
    with `@ComponentV2`/`@Param` inputs, at API 12 or later. No generated observation adapter; see
    `docs/state-and-models.md` for the contract and performance evidence requirements.
