@@ -20,22 +20,26 @@ public struct ScreenParameter: Codable, Equatable, Sendable {
     public let name: String
     public let type: ValueType
     public let enumName: String?
+    public let isOptional: Bool
     public let location: SourceLocation?
 
-    public init(name: String, type: ValueType, enumName: String? = nil, location: SourceLocation? = nil) {
+    public init(name: String, type: ValueType, enumName: String? = nil, isOptional: Bool = false,
+                location: SourceLocation? = nil) {
         self.name = name
         self.type = type
         self.enumName = enumName
+        self.isOptional = isOptional
         self.location = location
     }
 
-    private enum CodingKeys: String, CodingKey { case name, type, enumName, location }
+    private enum CodingKeys: String, CodingKey { case name, type, enumName, isOptional, location }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         name = try values.decode(String.self, forKey: .name)
         type = try values.decode(ValueType.self, forKey: .type)
         enumName = try values.decodeIfPresent(String.self, forKey: .enumName)
+        isOptional = try values.decodeIfPresent(Bool.self, forKey: .isOptional) ?? false
         location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }

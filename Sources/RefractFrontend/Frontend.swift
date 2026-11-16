@@ -39,6 +39,7 @@ final class Builder: SyntaxVisitor {
     var currentModels: [ModelReference] = []
     var currentListItem: String?
     var currentListItemType: ItemType?
+    var currentBindings: [String: ValueType] = [:]
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -222,6 +223,7 @@ final class Builder: SyntaxVisitor {
             return .stack(axis: name == "VStack" ? .vertical : .horizontal,
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
+            let beforeText = diagnostics.count
             if let argument = call.arguments.first, argument.label == nil,
                let value = modelTypedProperty(argument.expression) {
                 guard value.type == .string else {
@@ -230,6 +232,14 @@ final class Builder: SyntaxVisitor {
                     return nil
                 }
                 return .text(value.expression, modifiers: [], location: nodeLocation)
+            }
+            if let argument = call.arguments.first, argument.label == nil,
+               let reference = argument.expression.as(DeclReferenceExprSyntax.self),
+               parameters.contains(where: { $0.name == reference.baseName.text && $0.isOptional }) {
+                error("RFSEM002", "Optional input `\(reference.baseName.text)` requires an explicit if let binding before scalar use.",
+                      "Use `if let value = \(reference.baseName.text) { ... } else { ... }` in the view builder",
+                      at: argument.expression)
+                return nil
             }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
                                               typedScalar: modelTypedProperty,
@@ -240,6 +250,7 @@ final class Builder: SyntaxVisitor {
                 return nil
             }
             diagnostics.append(contentsOf: parser.diagnostics)
+            guard diagnostics.count == beforeText else { return nil }
             return .text(value, modifiers: [], location: nodeLocation)
         case "Button":
             if call.arguments.isEmpty, call.additionalTrailingClosures.count == 1,
@@ -352,14 +363,23 @@ final class Builder: SyntaxVisitor {
                                              location: location(of: expression)), nil)
         }
         if let reference = expression.as(DeclReferenceExprSyntax.self) {
+            let name = reference.baseName.text
+            if let binding = currentBindings[name] {
+                return TypedExpression(Expression(.reference(name), type: binding,
+                                                 location: location(of: expression)), binding)
+            }
             // An enum is a finite control-flow subject, not a scalar text or formatting value.
             guard !parameters.contains(where: { $0.name == reference.baseName.text && $0.enumName != nil }) else {
                 error("RFSEM002", "An enum input cannot be used as a scalar expression.",
                       "Switch explicitly over the enum, or expose a separate scalar model property", at: expression)
                 return nil
             }
+            if parameters.contains(where: { $0.name == name && $0.enumName == nil && $0.isOptional }) {
+                error("RFSEM002", "Optional input `\(name)` requires an explicit if let binding before scalar use.",
+                      "Use `if let value = \(name) { ... } else { ... }` in the view builder", at: expression)
+                return nil
+            }
             // A bare screen input carries its declared type; nested model members are refined by the state frontend.
-            let name = reference.baseName.text
             let type = parameters.first { $0.name == name }?.type
             return TypedExpression(Expression(.reference(name), type: type,
                                              location: location(of: expression)), type)

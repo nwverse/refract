@@ -104,6 +104,24 @@ Backend-unsupported IR produces a stable-coded error at the originating source l
 are reviewed as hand-written native code, and all golden outputs are inspected after regeneration. No expected output
 is generated from a failed or partial lowering.
 
+## Typed optional and payload branches
+
+Immutable optional scalar screen inputs use `T | null | undefined` and an explicit `if let ... else` source form.
+The ArkUI builder checks both null and undefined, then creates a local immutable scalar alias. Optional model, state
+and binding inputs remain unsupported until their observation semantics are defined separately.
+
+A payload enum is limited to one unlabeled scalar payload on every declared case. The generated representation is a
+union of final classes, each with a readonly typed payload field and explicit constructor; branches use `instanceof`
+and a local `const` value. Mixed/no-payload cases, object graphs, reference casts and ambiguous patterns are rejected.
+Official ArkTS `@Param` documentation supports null, undefined and union types, and the language introduction shows
+`instanceof` narrowing on class unions:
+
+- https://gitee.com/openharmony/docs/blob/master/zh-cn/application-dev/ui/state-management/arkts-new-param.md
+- https://gitee.com/openharmony/docs/blob/master/zh-cn/application-dev/quick-start/introduction-to-arkts.md
+- https://gitee.com/openharmony/docs/blob/master/zh-cn/application-dev/quick-start/typescript-to-arkts-migration-guide.md
+
+These references establish the documented syntax and decorator constraints only. They are not compiler evidence.
+
 ## Toolchain verification
 
 No HarmonyOS SDK or hvigor command-line toolchain is installed at the time of writing. Public documentation pages
