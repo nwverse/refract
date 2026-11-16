@@ -1,0 +1,1 @@
+Input.swift:5:24: error [R.string.missing_android]: The string key `settings.unknown` has no Android resource mapping. Suggestion: Declare `settings_unknown` in `android.resources.strings`.
