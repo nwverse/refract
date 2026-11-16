@@ -1,0 +1,16 @@
+# Fixtures whose generated Kotlin must compile on every PR.
+#
+# Each line is the name of a directory under Fixtures/. The script at
+# scripts/check_fixture_compilation.py reads this manifest, regenerates the
+# fixture's Kotlin through the actual refract CLI, diffs it against Expected.kt,
+# stages the Kotlin and the fixture's values/strings.xml into a temporary
+# directory, and the Gradle module at examples/android/fixtures/ compiles them.
+#
+# Add a new fixture by appending its directory name. Do not remove an entry
+# without an owning issue: removing a fixture from this manifest silently
+# reduces the corpus the compiler sees. A fixture whose Kotlin currently fails
+# to compile must be fixed in the same PR that removes the failure, not
+# deleted from this list.
+
+v0-local-state
+v0-binding-state

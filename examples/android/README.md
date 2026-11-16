@@ -67,6 +67,26 @@ job never edits the generated files and never accepts a Kotlin compiler failure.
 no emulator, no device and no performance measurement. See `../../docs/ci.md` for the toolchain pins and cache
 layout.
 
+The same job also compiles the canonical fixture corpus. `fixture-compile-manifest.txt` (next to this README)
+lists the fixtures to compile (one per line, names are directories under `Fixtures/`).
+`scripts/check_fixture_compilation.py` regenerates each listed fixture through the actual CLI, diffs the output
+against the committed `Expected.kt`, and stages the Kotlin plus the fixture's `values/strings.xml` under
+`fixtures/src/main/`. The Gradle module at `fixtures/` is an Android library whose
+`namespace = "refract.generated"` matches the package declared by every fixture's `Expected.kt`, so the generated
+`R` class is `refract.generated.R`. The job then runs `./gradlew --no-daemon :fixtures:compileDebugKotlin`.
+The staged files are `.gitignored` and produced on every CI run; they are never committed. To add a fixture to
+the compile set, append its directory name to `fixture-compile-manifest.txt`. There is no skip list: any new
+compile failure must be fixed in the same PR.
+
+To run the fixture gate locally, from the repository root:
+
+```sh
+swift build
+python3 scripts/check_fixture_compilation.py
+cd examples/android
+./gradlew :fixtures:compileDebugKotlin
+```
+
 ## Regenerate and check
 
 From the repository root, build the CLI, generate both native outputs and compare them with the reviewed canonical

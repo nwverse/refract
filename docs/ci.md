@@ -80,13 +80,24 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 5. Restore `~/.gradle/caches` and `~/.gradle/wrapper` via `actions/cache` keyed by the wrapper and Gradle build
    scripts. The cache is read-only on pull requests from forks. The job never runs `gradlew --write-locks` or
    accepts an untrusted lockfile change as part of the gate.
-6. Reject any untracked files left in the checkout after the compile.
+6. Run `python3 scripts/check_fixture_compilation.py` to regenerate every fixture listed in
+   `examples/android/fixture-compile-manifest.txt` through the CLI, diff the output against the committed
+   `Expected.kt`, and stage the Kotlin plus the fixture's `values/strings.xml` under
+   `examples/android/fixtures/src/main/`. The staged files are `.gitignored`; they are produced on every CI run
+   and never committed.
+7. Run `./gradlew --no-daemon :fixtures:compileDebugKotlin` from `examples/android/`. The `:fixtures` module
+   (`examples/android/fixtures/`) is an Android library whose `namespace = "refract.generated"` matches the
+   package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
+   exactly as the fixtures reference. Adding a fixture to the compile set is a manifest-only change; there is no
+   skip list, so a new compile failure must be fixed in the same PR.
+8. Reject any untracked files left in the checkout after the compile.
 
 The gate is compile-only. It produces no APK, no emulator or device run, and no performance measurement;
 `docs/GOALS.md` goal 2 is not exercised by this job and no such claim may be inferred from it. HarmonyOS remains
 unverified in CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not
 hidden by this job. To run the same check locally, follow `examples/android/README.md`: build the CLI, run
-`scripts/check_examples.py`, then `./gradlew :app:compileDebugKotlin` with `ANDROID_HOME` and a JDK 21 on `PATH`.
+`scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, then `./gradlew :app:compileDebugKotlin
+:fixtures:compileDebugKotlin` with `ANDROID_HOME` and a JDK 21 on `PATH`.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or
 changes the Android toolchain must update the generated files or the toolchain pins in the same change rather than
