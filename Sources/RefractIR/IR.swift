@@ -109,6 +109,8 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case component(ComponentReference, location: SourceLocation?)
     case platformView(PlatformAlternatives<[ViewNode]>, location: SourceLocation?)
     case conditional(conditions: [ConditionBranch], location: SourceLocation?)
+    case optionalBinding(subject: Expression, binding: String, children: [ViewNode],
+                         otherwise: [ViewNode], location: SourceLocation?)
     case switchExpression(subject: Expression, enumName: String, cases: [SwitchCase], location: SourceLocation?)
     case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)

@@ -28,7 +28,7 @@ public extension ViewNode {
         case let .component(component, location):
             return .component(ComponentReference(name: component.name, arguments: component.arguments,
                 children: component.children, modifiers: component.modifiers + [modifier]), location: location)
-        case .native, .platformView, .conditional, .switchExpression, .section, .listItem, .forEach, .spacer:
+        case .native, .platformView, .conditional, .optionalBinding, .switchExpression, .section, .listItem, .forEach, .spacer:
             return nil
         }
     }

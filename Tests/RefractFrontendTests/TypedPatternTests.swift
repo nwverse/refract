@@ -1,0 +1,114 @@
+import Foundation
+import RefractArkUI
+import RefractCompose
+import RefractFrontend
+import RefractIR
+import RefractMapping
+import Testing
+
+private let optionalSource = """
+struct OptionalGreeting: View {
+    let title: String?
+    var body: some View {
+        if let value = title {
+            Text(value)
+        } else {
+            Text(verbatim: "Empty")
+        }
+    }
+}
+"""
+
+private let payloadSource = """
+enum Content {
+    case text(String)
+    case count(Int)
+}
+
+struct ContentView: View {
+    let content: Content
+    var body: some View {
+        switch content {
+        case .text(let text):
+            Text(text)
+        case .count(let count):
+            Text("content.count\\(count)")
+        }
+    }
+}
+"""
+
+@Test func optionalBindingKeepsNonNullAliasInsideLazyBranch() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: optionalSource))
+    #expect(unit.diagnostics.isEmpty)
+    let input = try #require(unit.module.screens.first?.parameters.first)
+    #expect(input.type == .string && input.isOptional)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let arkTS = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("title: String?"))
+    #expect(kotlin.contains("if (title != null)"))
+    #expect(kotlin.contains("val value = title"))
+    #expect(kotlin.contains("Text(text = value)"))
+    #expect(kotlin.contains("} else {"))
+    #expect(arkTS.contains("title: string | null | undefined"))
+    #expect(arkTS.contains("if (this.title !== null && this.title !== undefined)"))
+    #expect(arkTS.contains("const value = this.title;"))
+    #expect(arkTS.contains("Text(value)"))
+    #expect(!arkTS.contains(" as "))
+}
+
+@Test func scalarPayloadSwitchUsesTypedLazyBranches() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: payloadSource))
+    #expect(unit.diagnostics.map(\.rendered) == [])
+    #expect(unit.module.enums.first?.payloadTypes == ["text": .string, "count": .int])
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/control-switch-payload/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    let arkTS = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("public sealed interface Content {"))
+    #expect(kotlin.contains("is Content.Text ->"))
+    #expect(kotlin.contains("val text: String = subject.value"))
+    #expect(kotlin.contains("is Content.Count ->"))
+    #expect(!kotlin.contains(" as "))
+    #expect(arkTS.contains("export type Content = ContentText | ContentCount;"))
+    #expect(arkTS.contains("if (this.content instanceof ContentText)"))
+    #expect(arkTS.contains("const text = this.content.value;"))
+    #expect(arkTS.contains("} else if (this.content instanceof ContentCount)"))
+    #expect(!arkTS.contains(" as "))
+}
+
+@Test func unsupportedPatternScopesRemainDiagnostics() {
+    let cases: [(String, String)] = [
+        ("struct Bad: View { let title: String?; var body: some View { if let title = title { Text(title) } else { Text(verbatim: \"Empty\") } } }", "RFCTRL002"),
+        ("struct Bad: View { let title: String?; var body: some View { if let value = title { Text(value) } } }", "RFCTRL002"),
+        ("struct Bad: View { let title: String; var body: some View { if let value = title { Text(value) } else { Text(verbatim: \"Empty\") } } }", "RFCTRL002"),
+        ("enum Content { case text(String); case empty }; struct Bad: View { let content: Content; var body: some View { switch content { case .text(let text): Text(text); case .empty: Text(verbatim: \"Empty\") } } }", "RFCTRL006"),
+        ("enum Content { case pair(String, Int) }; struct Bad: View { let content: Content; var body: some View { Text(verbatim: \"Bad\") } }", "RFCTRL006"),
+        ("enum Content { case text(String) }; struct Bad: View { let content: Content; var body: some View { switch content { case .text(let text): Text(text); default: Text(verbatim: \"Other\") } } }", "RFCTRL005"),
+        ("struct Bad: View { let title: String?; var body: some View { Text(title) } }", "RFSEM002"),
+    ]
+    for (source, expected) in cases {
+        let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: source))
+        #expect(unit.diagnostics.map(\.code) == [expected], Comment(rawValue: source))
+        #expect(unit.module.screens.isEmpty)
+    }
+}
+
+@Test func payloadBindingDoesNotEscapeItsCase() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum Content { case text(String); case count(Int) }
+    struct Bad: View {
+        let content: Content
+        var body: some View {
+            switch content {
+            case .text(let text): Text(text)
+            case .count(let count): Text(text)
+            }
+        }
+    }
+    """))
+    #expect(unit.module.screens.isEmpty)
+    #expect(!unit.diagnostics.isEmpty)
+    #expect(!unit.diagnostics.contains { $0.code == "RFSEM002" })
+}

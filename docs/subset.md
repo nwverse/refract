@@ -152,13 +152,27 @@ cache or runtime. A list cannot be represented by eagerly mapping all rows.
 The first implemented conditional slice accepts `if`/`else if`/`else` with declared Boolean model, `@State`
 or `@Binding` properties. Each condition is emitted directly into the native builder; inactive branches are not
 composed, and no `AnyView` or runtime view registry is introduced. A root Compose conditional uses a native `Box`
-to forward the caller's modifier without changing the branch children. Optional binding, optional chaining,
-availability clauses, arbitrary predicates, matching patterns and casts use `RFCTRL001`–`RFCTRL005` diagnostics.
+to forward the caller's modifier without changing the branch children.
+
+An immutable optional scalar screen input (`String?`, `Int?`, `Double?` or `Bool?`) accepts exactly
+`if let alias = input { ... } else { ... }`. The alias must be a new name that does not shadow another input or
+binding, and the else branch is mandatory. The non-null scalar alias is local to the then branch and cannot escape
+it. Nullable model/state/binding values, shorthand bindings, comma conditions, `else if` after a binding, arbitrary
+optional chaining and `Optional(...)` construction remain diagnostics. Compose checks `input != null` and introduces
+a smart-cast `val`; ArkUI checks both `!== null` and `!== undefined` before a local `const` read. `@Param` supports
+these nullable unions, but the unbound input is never used as a non-null scalar.
+
 A `switch` over an immutable `let value: LocalEnum` input accepts a locally declared enum with no inheritance,
-raw values, generic parameters or associated values. Every case must appear explicitly exactly once: `default`,
-duplicate/missing cases, bindings, casts and other patterns are rejected (`RFCTRL003`, `RFCTRL005`–`RFCTRL007`).
-Compose emits `when` without an `else` fallback; ArkUI emits native enum `===` comparisons in source order. Both
-backends validate the declaration and complete case set before emitting code.
+raw values or generic parameters. Existing no-payload enums remain native enums. A payload enum has exactly one
+unlabeled `String`, `Int`, `Double` or `Bool` payload on every case; mixed payload/no-payload enums are outside this
+slice. Each case must appear explicitly exactly once with a matching `case .value(let alias)` binding and a distinct
+alias. Default, duplicate/missing cases, wildcard/ignored bindings, casts, `where` clauses, grouped cases, multiple
+or labeled payloads, and object-graph/reference payloads are rejected (`RFCTRL003`, `RFCTRL005`–`RFCTRL007`).
+
+Compose represents payload enums as a sealed interface with immutable data cases and uses `when (val subject = input)`
+with smart-cast branch payloads. ArkTS uses final case classes with a typed readonly scalar field, a union alias and
+`instanceof` narrowing, never `as` or `Any`. Both backends emit native lazy branches in source order, validate the
+complete case set before emitting, and preserve local alias scope.
 
 The remaining planned conditional contract is below. It is not a claim that every listed form is implemented:
 

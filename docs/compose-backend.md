@@ -134,11 +134,13 @@ build-time diagnostic, never a silently dropped call (goal 3).
 
 - `if condition { A } else { B }` becomes `if (condition) { A() } else { B() }` inside the composable body.
   Compose handles conditional composition natively; no wrapper is needed.
-- Optional binding and associated-value patterns are rejected by the current typed subset (`RFCTRL002` and related
-  diagnostics). A separate contract and typed lowering are required before either backend accepts them; no source-string
-  substitution or runtime cast is used.
-- `switch` over a locally declared enum without associated values, raw values or inheritance becomes a Kotlin `when`
-  with exhaustive branches. A missing, duplicate or unsupported branch is a diagnostic, not a silent fallthrough.
+- Optional binding accepts only `if let alias = optionalScalarInput { ... } else { ... }` with a distinct local
+  alias. Compose emits a null check and smart-cast immutable `val`; nullable model/state/binding and optional chaining
+  remain diagnostics.
+- A no-payload switch over a locally declared enum becomes exhaustive Kotlin `when`. A supported payload enum has one
+  unlabeled scalar payload on every case and becomes a sealed interface of immutable data cases. `when` captures its
+  immutable subject, and each matching case exposes its typed payload only in that branch. Mixed, multiple, reference,
+  ambiguous or non-exhaustive patterns are diagnostics; no runtime cast or registry is used.
 
 ### Lists
 

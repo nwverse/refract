@@ -26,6 +26,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "control-optional-binding",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "control-reject-associated-value",
       "implementationStatus": "ready"
     },
@@ -39,6 +43,10 @@
     },
     {
       "path": "control-switch-enum",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-switch-payload",
       "implementationStatus": "ready"
     },
     {

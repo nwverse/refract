@@ -13,9 +13,10 @@ Compose examples, and add to it when something surprises you.
   skip. When the body is anything more, wrap in `remember(keys) { { … } }`.
 - **`font` and `foregroundColor` are `Text` parameters, not modifiers.** Emitting them as `Modifier.*` calls does
   not compile. The split is part of the IR lowering, not a formatting choice.
-- **Do not lower optional binding from syntax alone.** `if let` and associated-value patterns require a separate
-  typed contract before either backend can accept them. Preserve `RFCTRL` rejection rather than relying on Kotlin
-  smart casts or ArkTS casts to approximate an unvalidated Swift scope.
+- **Typed pattern lowering needs an explicit native scope.** Optional scalar aliases and single-payload enum cases
+  are branch-local immutable values. Compose uses smart casts on a captured `when` subject; ArkTS uses documented
+  null/undefined checks or class-union `instanceof` narrowing. Do not accept optional chaining, object payloads,
+  arbitrary casts or shadowed bindings as an unvalidated shortcut.
 - **`LazyColumn` keys are non-negotiable.** Without a stable `key` Compose cannot preserve row state or scroll
   position across updates, which is a silent performance regression. Refuse to emit a keyless list; `RF-C003`
   points the author at `Identifiable` or `id:`.

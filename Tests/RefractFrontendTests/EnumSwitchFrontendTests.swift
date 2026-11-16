@@ -66,9 +66,9 @@ func invalidSwitchCasesAreRejected(_ statement: String, _ code: String) {
 }
 
 @Test(arguments: [
-    "enum Content { case text(String) }",
+    "enum Content { case text(String, Int) }",
     "enum Content: String { case text = \"text\" }",
-    "enum Content { case one, two }",
+    "enum Content { case text(String); case empty }",
 ])
 func unsupportedEnumDeclarationsAreRejected(_ declaration: String) {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: declaration))
