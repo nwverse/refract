@@ -45,6 +45,7 @@ their owning workstreams:
 | Prerequisite | Owner |
 | --- | --- |
 | `docs/subset.md` | #2 |
+| `docs/mapping.md` | #6 |
 | `docs/performance.md` | #9 |
 | `docs/adoption.md` | #10 |
 

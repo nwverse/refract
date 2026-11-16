@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           # Temporary bootstrap gate tracked by issue #11. The checker itself never ignores a missing path.
-          required=(Package.swift docs/subset.md docs/performance.md docs/adoption.md)
+          required=(Package.swift docs/subset.md docs/mapping.md docs/performance.md docs/adoption.md)
           missing=()
           for path in "${required[@]}"; do
             if [[ ! -e "$path" ]]; then
