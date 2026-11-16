@@ -36,10 +36,9 @@ export struct MeasurementRow {
                 .onChange((enabled: boolean) => {
                   this.model.setEnabled(row.id, enabled);
                 })
-              .id('settings_toggle')
+                .id('settings_toggle').accessibilityText(row.title)
             }
             .justifyContent(FlexAlign.SpaceBetween)
-            .accessibilityText(row.title)
           }
         }, (row: SettingRow): string => String(row.id))
       }
