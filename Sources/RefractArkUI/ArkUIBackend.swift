@@ -28,10 +28,7 @@ public struct ArkUIBackend: Sendable {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for state in screen.states {
-                throw Diagnostic(code: "arkui.unsupported_state_declaration",
-                                 message: "State, binding and model declarations require the shared observation lowering.",
-                                 suggestion: "Use the state and model contract for this component.",
-                                 location: state.location)
+                try emitLocalState(state, into: &writer)
             }
             writer.open("build()")
             try emit(screen.body, into: &writer, mapping: mapping)
@@ -41,24 +38,25 @@ public struct ArkUIBackend: Sendable {
         return writer.text
     }
 
-    private func emit(_ node: ViewNode, into writer: inout ArkWriter, mapping: Mapping) throws {
+    func emit(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
+              lazyOwner: Bool = false, mapping: Mapping = .empty) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
             writer.open("\(containerName(axis))()")
-            for child in children { try emit(child, into: &writer, mapping: mapping) }
-            writer.close(suffix: try ArkModifiers.emit(modifiers))
+            for child in children { try emit(child, into: &writer, item: item, mapping: mapping) }
+            writer.close(suffix: try ArkModifiers.emit(modifiers, item: item))
         case let .text(value, modifiers, _):
-            writer.line("Text(\(try ArkExpression.emit(value)))\(try ArkModifiers.emit(modifiers))")
+            writer.line("Text(\(try emitLocalExpression(value, item: item)))\(try ArkModifiers.emit(modifiers, item: item))")
         case let .button(label, action, modifiers, _):
             writer.open("Button()")
-            try emit(label, into: &writer, mapping: mapping)
+            try emit(label, into: &writer, item: item, mapping: mapping)
             writer.close()
             if let action {
                 writer.open(".onClick(() =>")
-                writer.line("this.\(try ArkExpression.referenceName(action))();")
+                writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
-            writer.line(try ArkModifiers.emit(modifiers), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
         case let .conditional(branches, location):
             guard !branches.isEmpty, branches[0].condition != nil,
                   branches.dropFirst().allSatisfy({ $0.condition != nil }) || branches.last?.condition == nil else {
@@ -71,7 +69,7 @@ public struct ArkUIBackend: Sendable {
                 let condition = try branch.condition.map { try ArkExpression.emit($0) }
                 let prefix = index == 0 ? "if" : condition == nil ? "} else" : "} else if"
                 writer.open(prefix + (condition.map { " (\($0))" } ?? ""))
-                for child in branch.children { try emit(child, into: &writer, mapping: mapping) }
+                for child in branch.children { try emit(child, into: &writer, item: item, mapping: mapping) }
             }
             writer.close()
         case let .native(component, location):
@@ -86,6 +84,8 @@ public struct ArkUIBackend: Sendable {
                              message: "Platform-view lowering is not available in this backend yet.",
                              suggestion: "Use the interop backend implementation that selects the HarmonyOS branch.",
                              location: location)
+        default:
+            try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner)
         }
     }
 

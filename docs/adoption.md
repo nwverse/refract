@@ -6,12 +6,14 @@ state remain hand-written. The example is not a Refract shell and has no Refract
 ## Current scope
 
 The current examples use the view body from `Fixtures/hello/Input.swift`, shared with iOS at
-`examples/shared/Hello.swift`. The CLI output is compiled in Android and copied unchanged to the HarmonyOS project. This verifies a small
-end-to-end generation path, not the whole settings-screen subset.
-end-to-end generation path, not the whole settings-screen subset.
+`examples/shared/Hello.swift`. The CLI output is compiled in Android and copied unchanged to the HarmonyOS project.
+This verifies a small end-to-end generation path, not the whole settings-screen subset.
 
-The complete model-backed settings screen will use the canonical #2 fixture, the `RefractModel` contract from #5,
-mapping from #6 and typed native interop from #7. Do not invent a competing screen fixture or mapping in the app.
+`examples/shared/SettingsScreen.swift` and `NativeComponentScreen.swift` are prepared shared sources, not yet
+accepted by the current CLI. Actual generation currently stops at the missing model/state frontend path; localized
+text also remains a literal rather than a native resource call. Their native call sites are therefore intentionally
+not enabled until the corresponding #1/#5/#7/#8 integration lands. The canonical #2 fixture and `RefractModel`
+contract from #5 remain authoritative; the example mapping validates against the published #6 schema.
 HarmonyOS compilation is still unavailable; `examples/harmony/README.md` records exactly which tools must be acquired.
 
 ## 1. Start with the native app
@@ -60,6 +62,7 @@ From the repository root:
 swift build
 .build/debug/refract generate \
   --input examples/shared/Hello.swift \
+  --mapping examples/refract.json \
   --android-out examples/android/app/src/main/java/refract/generated \
   --harmony-out examples/harmony/entry/src/main/ets/generated
 ```
@@ -96,10 +99,16 @@ The reverse direction — generated UI invoking an application-owned native comp
 
 ## 5. Verify generation and compilation
 
-Regenerate with the command above, then compare outputs apart from their declared source header and build:
+Regenerate with the command above, then run the consistency check, compare against the fixture and build.
+
+`scripts/check_examples.py` regenerates the current Hello output and compares both committed files byte-for-byte,
+checks that every mapped settings key exists in both base catalogs, and verifies that the iOS Sources phase includes
+every shared source. It does not invoke a native compiler and does not excuse a missing generated file. The additional
+fixture-body diffs below compare against #2's canonical reference apart from the source-name header:
 
 ```sh
 swift build
+python3 scripts/check_examples.py
 swift test
 diff <(tail -n +3 Fixtures/hello/Expected.kt) <(tail -n +3 examples/android/app/src/main/java/refract/generated/Hello.kt)
 diff <(tail -n +3 Fixtures/hello/Expected.ets) <(tail -n +3 examples/harmony/entry/src/main/ets/generated/Hello.ets)

@@ -1,0 +1,1 @@
+Input.swift:6:22: error [RFNATIVE003]: `refractValue` requires exactly `ios`, `android`, and `harmonyOS` arguments with compatible types. Suggestion: Supply all three typed platform values

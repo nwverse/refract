@@ -1,7 +1,9 @@
 # iOS shared-source example
 
-`RefractExampleApp.swift` contains hand-written navigation and a native profile. The destination `Hello()` is the
-same view as `../../shared/Hello.swift`, compiled directly as SwiftUI. No Refract package, runtime or generated Swift
+`RefractExampleApp.swift` contains hand-written navigation, native settings and rollback screens. Shared
+`Hello.swift`, `SettingsScreen.swift` and `NativeComponentScreen.swift` compile directly as SwiftUI. The app-local
+`RefractModel` / `RefractNativeView` declarations and `AppSettingsModel` implement the same typed model boundary;
+`en.lproj/Localizable.strings` supplies the shared localized keys. No Refract package, runtime or generated Swift
 is part of this target. The Xcode project references that shared file explicitly; do not replace it with a copied
 platform-specific screen.
 

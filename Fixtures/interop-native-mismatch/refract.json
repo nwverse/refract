@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "nativeComponents": [
+    {
+      "swift": "RoutePreview",
+      "android": {
+        "kind": "composable",
+        "symbol": "RoutePreview",
+        "module": "example.maps",
+        "parameters": [
+          { "swift": "zoom", "name": "cameraZoom", "type": "Int" }
+        ]
+      },
+      "harmonyOS": {
+        "kind": "component",
+        "symbol": "RoutePreview",
+        "module": "example.maps",
+        "parameters": [
+          { "swift": "zoom", "name": "cameraZoom", "type": "number" }
+        ]
+      }
+    }
+  ]
+}

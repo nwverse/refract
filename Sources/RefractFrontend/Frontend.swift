@@ -23,6 +23,7 @@ final class Builder: SyntaxVisitor {
     var diagnostics: [Diagnostic] = []
     var interop: InteropFrontend
     var designSystem: DesignSystemFrontend?
+    var currentStates: [StateDeclaration] = []
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -42,8 +43,10 @@ final class Builder: SyntaxVisitor {
             $0.type.trimmedDescription == "View"
         }) == true else { return .skipChildren }
 
-        guard node.memberBlock.members.count == 1,
-            let body = node.memberBlock.members.first?.decl.as(VariableDeclSyntax.self),
+        guard let body = node.memberBlock.members.first(where: {
+            $0.decl.as(VariableDeclSyntax.self)?.bindings.first?.pattern
+                .as(IdentifierPatternSyntax.self)?.identifier.text == "body"
+        })?.decl.as(VariableDeclSyntax.self),
             body.bindings.count == 1,
             let binding = body.bindings.first,
             binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "body",
@@ -61,9 +64,12 @@ final class Builder: SyntaxVisitor {
                   "Return a supported view from `body`.", at: binding.pattern)
             return .skipChildren
         }
+        guard let states = localStateDeclarations(node) else { return .skipChildren }
+        currentStates = states
+        defer { currentStates = [] }
         guard let root = view(expression) else { return .skipChildren }
 
-        screens.append(Screen(name: node.name.text, body: root, location: location(of: node.name)))
+        screens.append(Screen(name: node.name.text, states: states, body: root, location: location(of: node.name)))
         return .skipChildren
     }
 
@@ -80,21 +86,24 @@ final class Builder: SyntaxVisitor {
                call.calledExpression.id == member.id {
                 return modifier(call, name: member.declName.baseName.text, on: node)
             }
-            return modifier(ExprSyntax(member), name: member.declName.baseName.text, on: node)
+            return modifier(member, on: node)
         }
         if let call = expression.as(FunctionCallExprSyntax.self) {
-            if call.calledExpression.is(DeclReferenceExprSyntax.self) {
-                return view(call)
+            // Preserve an outer trailing closure when SwiftSyntax nests it on a modified call.
+            if let base = call.calledExpression.as(FunctionCallExprSyntax.self) {
+                var inner = base
+                inner.trailingClosure = call.trailingClosure
+                inner.additionalTrailingClosures = call.additionalTrailingClosures
+                return view(inner)
             }
             if let member = call.calledExpression.as(MemberAccessExprSyntax.self), let base = member.base {
                 guard let node = view(base) else { return nil }
                 return modifier(call, name: member.declName.baseName.text, on: node)
             }
+            if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
+                return extendedView(call)
+            }
             return view(call)
-        }
-        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {
-            guard let node = view(base) else { return nil }
-            return modifier(member, on: node)
         }
         error("unsupportedExpression", "The expression `\(expression.trimmedDescription)` is not a supported view.",
               "Use VStack, HStack, Text, or Button.", at: expression)
@@ -164,6 +173,9 @@ final class Builder: SyntaxVisitor {
         case .native, .conditional, .platformView:
             error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
             return nil
+        default:
+            error("unsupportedModifierTarget", "This extended view modifier target is not supported yet.", at: syntax)
+            return nil
         }
     }
 
@@ -191,7 +203,8 @@ final class Builder: SyntaxVisitor {
         case "Text":
             guard call.arguments.count == 1,
                   let argument = call.arguments.first, call.trailingClosure == nil,
-                  let value = scalar(argument.expression), value.type == .string,
+                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? scalar(argument.expression),
+                  value.type == .string,
                   (argument.label == nil) || (argument.label?.text == "verbatim") else {
                 error("unsupportedText", "Text requires one string value, optionally labeled `verbatim`.",
                       "Use Text(\"key\") or Text(verbatim: \"literal\")", at: call)
@@ -207,13 +220,10 @@ final class Builder: SyntaxVisitor {
                       "Use Button(\"title\") { }.", at: call)
                 return nil
             }
-            if let action = call.trailingClosure, !action.statements.isEmpty {
-                error("unsupportedButtonAction", "Button actions are not supported by this version.",
-                      "Use an empty action until model actions are available.", at: action)
-                return nil
-            }
+            let action = localStateAction(call.trailingClosure)
+            guard action != nil || call.trailingClosure?.statements.isEmpty != false else { return nil }
             let label = ViewNode.text(Expression(.stringLiteral(labelText)), modifiers: [], location: nodeLocation)
-            return .button(label: label, action: nil, modifiers: [], location: nodeLocation)
+            return .button(label: label, action: action, modifiers: [], location: nodeLocation)
         case "refractView":
             return platformView(call)
         default:

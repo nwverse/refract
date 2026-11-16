@@ -1,0 +1,124 @@
+import RefractIR
+
+extension ArkUIBackend {
+    func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
+                      lazyOwner: Bool = false) throws {
+        switch node {
+        case let .layout(layout, children, modifiers, _):
+            var arguments: [String] = []
+            if let spacing = layout.spacing { arguments.append("space: \(try ArkExpression.emit(spacing, item: item))") }
+            if layout.axis == .depth { arguments.append("alignContent: \(alignment(layout))") }
+            let name = containerName(layout.axis)
+            writer.open("\(name)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
+            for child in children { try emit(child, into: &writer, item: item) }
+            writer.close()
+            if layout.axis != .depth { writer.line(".alignItems(\(alignment(layout)))") }
+            writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
+        case let .scroll(axis, child, modifiers, _):
+            writer.open("Scroll()")
+            try emit(child, into: &writer, item: item)
+            writer.close()
+            writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
+            writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
+        case let .list(children, modifiers, _):
+            writer.open("List()")
+            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true) }
+            writer.close()
+            writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
+        case let .section(header, children, _):
+            writer.open("ListItemGroup(\(try header.map { "{ header: Text(\(try ArkExpression.emit($0))) }" } ?? ""))")
+            for child in children { try emitListItem(child, into: &writer, item: item) }
+            writer.close()
+        case let .listItem(child, _):
+            try emitListItem(child, into: &writer, item: item)
+        case let .forEach(items, location):
+            guard lazyOwner else {
+                throw Diagnostic(code: "arkui.lazy_list_owner",
+                                 message: "LazyForEach must be a direct child of List.",
+                                 suggestion: "Move the dynamic rows into a List, not a stack or ScrollView.",
+                                 location: location)
+            }
+            writer.open("LazyForEach(\(try ArkExpression.emit(items.collection)), (item: \(items.itemType)) =>")
+            writer.open("ListItem()")
+            try emit(items.content, into: &writer, item: items.itemName)
+            writer.close()
+            let key = "item.\(items.key)"
+            writer.close(suffix: ", (item: \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
+        case let .image(source, modifiers, _):
+            writer.line("Image(\(try image(source)))\(try ArkModifiers.emit(modifiers, item: item))")
+        case let .toggle(title, value, modifiers, _):
+            // The corpus' model/action control contract supplies the value and write path; title is accessibility metadata.
+            _ = title
+            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try ArkExpression.emit(value)) })")
+            writer.open(".onChange((value: boolean) =>")
+            writer.line("\(try ArkExpression.assignment(value, to: "value"));")
+            writer.close(suffix: ")")
+            writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
+        case let .textInput(placeholder, value, modifiers, _):
+            var arguments = ["text: \(try ArkExpression.emit(value))"]
+            if let placeholder { arguments.insert("placeholder: \(try ArkExpression.emit(placeholder))", at: 0) }
+            writer.line("TextInput({ \(arguments.joined(separator: ", ")) })")
+            writer.open(".onChange((value: string) =>")
+            writer.line("\(try ArkExpression.assignment(value, to: "value"));")
+            writer.close(suffix: ")")
+            writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
+        case let .label(title, source, modifiers, _):
+            writer.open("Row({ space: 8 })")
+            writer.line("Image(\(try image(source)))")
+            writer.line("Text(\(try ArkExpression.emit(title)))")
+            writer.close()
+            writer.line(".alignItems(VerticalAlign.Center)")
+            writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
+        case let .divider(modifiers, _):
+            writer.line("Divider()\(try ArkModifiers.emit(modifiers, item: item))")
+        case .spacer:
+            writer.line("Blank()")
+        default:
+            throw Diagnostic(code: "arkui.internal_node_dispatch", message: "Internal ArkUI view dispatch is incomplete.",
+                             suggestion: "Report this generator defect.")
+        }
+    }
+
+    private func emitListItem(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil) throws {
+        writer.open("ListItem()")
+        if case let .layout(layout, children, modifiers, location) = node {
+            // A static List row is a single item; its content stays one native subtree.
+            try emitExtended(.layout(layout, children: children, modifiers: modifiers, location: location), into: &writer, item: item)
+        } else {
+            try emit(node, into: &writer, item: item)
+        }
+        writer.close()
+    }
+
+    private func image(_ source: ImageSource) throws -> String {
+        guard ArkText.isResourceName(source.name) else {
+            throw Diagnostic(code: "arkui.invalid_image_resource", message: "`\(source.name)` is not a valid image resource name.",
+                             suggestion: "Use a declared ASCII resource identifier.", location: source.location)
+        }
+        return "$r('\(source.kind == .system ? "sys.media" : "app.media").\(source.name)')"
+    }
+
+    private func containerName(_ axis: ViewNode.StackAxis) -> String {
+        switch axis { case .vertical: "Column"; case .horizontal: "Row"; case .depth: "Stack" }
+    }
+
+    private func alignment(_ layout: LayoutContainer) -> String {
+        switch (layout.axis, layout.alignment) {
+        case (.vertical, .leading): "HorizontalAlign.Start"
+        case (.vertical, .trailing): "HorizontalAlign.End"
+        case (.vertical, _): "HorizontalAlign.Center"
+        case (.horizontal, .top): "VerticalAlign.Top"
+        case (.horizontal, .bottom): "VerticalAlign.Bottom"
+        case (.horizontal, _): "VerticalAlign.Center"
+        case (.depth, .topLeading): "Alignment.TopStart"
+        case (.depth, .bottomTrailing): "Alignment.BottomEnd"
+        case (.depth, _): "Alignment.Center"
+        }
+    }
+}
+
+enum ArkValueType {
+    static func emit(_ type: ValueType) -> String {
+        switch type { case .string: "string"; case .bool: "boolean"; case .double, .int: "number" }
+    }
+}
