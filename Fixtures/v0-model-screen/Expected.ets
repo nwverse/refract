@@ -9,16 +9,16 @@ export interface ProfileModel {
 
 @ComponentV2
 export struct ModelScreen {
-  @Require @Param model: ProfileModel;
-
+  @Require @Param model: ProfileModel
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text(this.model.title)
-      Button($r('app.string.settings_disable'))
-        .onClick(() => {
-          this.model.setEnabled(false);
-        })
+      Button() {
+        Text($r('app.string.settings_disable'))
+      }
+      .onClick(() => {
+        this.model.setEnabled(false);
+      })
     }
-    .alignItems(HorizontalAlign.Center)
   }
 }

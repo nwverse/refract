@@ -7,12 +7,13 @@ export interface SaveModel {
 
 @ComponentV2
 export struct ButtonAction {
-  @Require @Param model: SaveModel;
-
+  @Require @Param model: SaveModel
   build() {
-    Button($r('app.string.settings_save'))
-      .onClick(() => {
-        this.model.save();
-      })
+    Button() {
+      Text($r('app.string.settings_save'))
+    }
+    .onClick(() => {
+      this.model.save();
+    })
   }
 }
