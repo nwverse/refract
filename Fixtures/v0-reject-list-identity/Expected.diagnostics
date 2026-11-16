@@ -1,0 +1,1 @@
+Input.swift:7:9: error [RFLIST001]: List collection String has no stable typed identity and cannot preserve row identity Suggestion: Use Identifiable with a stored String or Int id

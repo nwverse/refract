@@ -10,14 +10,30 @@ extension Builder {
             else { continue }
             guard declaration.attributes.count == 1,
                   let attribute = declaration.attributes.first?.as(AttributeSyntax.self),
-                  attribute.attributeName.trimmedDescription == "State",
+                  ["State", "Binding"].contains(attribute.attributeName.trimmedDescription),
                   attribute.arguments == nil,
-                  declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }),
                   declaration.bindingSpecifier.tokenKind == .keyword(.var),
                   declaration.bindings.count == 1, let binding = declaration.bindings.first,
                   let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
                   let typeName = binding.typeAnnotation?.type.trimmedDescription,
-                  let type = scalarType(typeName), let initial = binding.initializer,
+                  let type = scalarType(typeName) else {
+                error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
+                      "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
+                return nil
+            }
+            let ownership = attribute.attributeName.trimmedDescription
+            if ownership == "Binding" {
+                guard binding.initializer == nil else {
+                    error("state.binding_initializer", "@Binding property `\(name)` cannot have an independent initializer.",
+                          "Pass the parent value and change callback instead", at: declaration)
+                    return nil
+                }
+                states.append(.binding(name: name, type: type, location: location(of: declaration)))
+                continue
+            }
+            guard ownership == "State",
+                  declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }),
+                  let initial = binding.initializer,
                   let value = literal(initial.value, expected: type) else {
                 error("state.invalid_declaration", "Stored View properties require one private @State scalar with a literal initializer.",
                       "Use `@State private var count: Int = 0`; bindings and models are implemented separately", at: member)
@@ -40,12 +56,12 @@ extension Builder {
             case let .expressionSegment(interpolation):
                 guard interpolation.expressions.count == 1, let argument = interpolation.expressions.first,
                       argument.label == nil, let reference = argument.expression.as(DeclReferenceExprSyntax.self),
-                      state(named: reference.baseName.text) != nil else {
-                    error("state.invalid_projection", "Text interpolation requires a declared local state value.",
-                          "Use `\\(property)` with a scalar @State property", at: interpolation)
+                      let property = valueProperty(named: reference.baseName.text) else {
+                    error("state.invalid_projection", "Text interpolation requires a declared local state or binding value.",
+                          "Use `\\(property)` with a scalar @State or @Binding property", at: interpolation)
                     return nil
                 }
-                segments.append(.expression(Expression(.valueProperty(.state(reference.baseName.text)),
+                segments.append(.expression(Expression(.valueProperty(property),
                                                        location: location(of: reference))))
             }
         }
@@ -63,16 +79,16 @@ extension Builder {
         }
         let elements = Array(sequence.elements)
         guard let reference = elements[0].as(DeclReferenceExprSyntax.self),
-              let declaration = state(named: reference.baseName.text),
-              case let .state(name, type, _, _) = declaration,
+              let property = writableProperty(named: reference.baseName.text),
+              let type = valueType(named: reference.baseName.text),
               let value = literal(elements[2], expected: type) else {
             error("state.invalid_projection", "A Button action must assign a declared scalar @State property.",
                   "Use a literal with the declared property type", at: expression)
             return nil
         }
         switch elements[1].trimmedDescription {
-        case "=": return .assign(.state(name), value)
-        case "+=" where type == .int || type == .double: return .increment(.state(name), value)
+        case "=": return .assign(property, value)
+        case "+=" where type == .int || type == .double: return .increment(property, value)
         default:
             error("state.invalid_declaration", "Only assignment and numeric += are supported for local state.",
                   "Use `property = value` or `property += value`", at: elements[1])
@@ -80,11 +96,34 @@ extension Builder {
         }
     }
 
-    private func state(named name: String) -> StateDeclaration? {
-        currentStates.first {
-            if case let .state(declared, _, _, _) = $0 { return declared == name }
-            return false
+    private func valueProperty(named name: String) -> ValueProperty? {
+        for declaration in currentStates {
+            switch declaration {
+            case let .state(declared, _, _, _) where declared == name: return .state(name)
+            case let .binding(declared, _, _) where declared == name: return .binding(name)
+            default: continue
+            }
         }
+        return nil
+    }
+
+    private func writableProperty(named name: String) -> WritableProperty? {
+        switch valueProperty(named: name) {
+        case let .state(name): .state(name)
+        case let .binding(name): .binding(name)
+        default: nil
+        }
+    }
+
+    private func valueType(named name: String) -> ValueType? {
+        for declaration in currentStates {
+            switch declaration {
+            case let .state(declared, type, _, _) where declared == name: return type
+            case let .binding(declared, type, _) where declared == name: return type
+            default: continue
+            }
+        }
+        return nil
     }
 
     private func literal(_ expression: ExprSyntax, expected: ValueType) -> Expression? {

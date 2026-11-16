@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": ["example.maps.RoutePreview"],
+    "components": {},
+    "nativeComponents": {
+      "RoutePreview": {
+        "parameters": [
+          { "label": "zoom", "type": "string", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "RoutePreview",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "zoom", "target": "cameraZoom" }],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "refract.generated.R", "strings": {} }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.maps", "symbols": ["RoutePreview"] }],
+    "components": {},
+    "nativeComponents": {
+      "RoutePreview": {
+        "parameters": [
+          { "label": "zoom", "type": "string", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "RoutePreview",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "zoom", "target": "cameraZoom" }],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "strings": {} }
+  }
+}

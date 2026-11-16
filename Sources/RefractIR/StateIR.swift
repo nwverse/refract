@@ -1,10 +1,12 @@
 /// Ownership is explicit so backends never infer state by identifier spelling.
 public enum ValueProperty: Codable, Equatable, Sendable {
     case state(String)
+    case binding(String)
 }
 
 public enum WritableProperty: Codable, Equatable, Sendable {
     case state(String)
+    case binding(String)
 }
 
 public enum StateAction: Codable, Equatable, Sendable {
