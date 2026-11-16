@@ -133,6 +133,30 @@ private func builtCLIExecutable() -> URL {
     #endif
 }
 
+@Test func cliRejectsUndefinedStackSpacingWithoutOutput() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input",
+        root.appendingPathComponent("Fixtures/v0-reject-undefined-spacing/Input.swift").path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status != 0)
+    #expect(result.stderr.contains("[RFVIEW003]"))
+    #expect(!result.stderr.contains("undefinedValue.dp"))
+    #expect(!FileManager.default.fileExists(atPath: android.path))
+    #expect(!FileManager.default.fileExists(atPath: harmony.path))
+    #endif
+}
+
 @Test func cliRejectsMalformedSwiftWithoutPartialOutput() throws {
     #if os(Linux) || os(macOS)
     let executable = builtCLIExecutable()
