@@ -1,7 +1,7 @@
 # Repository checks and CI
 
-This page describes the checks owned by `ci.yml`, how to run them locally, and the remaining bootstrap dependencies.
-The checks add no application dependency, generated-code runtime or host-application setup.
+This page describes the checks owned by `ci.yml` and how to run them locally. The checks add no application
+dependency, generated-code runtime or host-application setup.
 
 ## Local checks
 
@@ -39,19 +39,10 @@ and never interpolates pull-request text into a shell command. Swift, Android co
 changed-workflow linting are independent jobs. The required Swift, Android compile and repository jobs run on every
 pull request; workflow linting runs on the changed workflow set.
 
-During the initial repository bootstrap, the full documentation check waits for the following paths promised by
-their owning workstreams:
-
-| Prerequisite | Owner |
-| --- | --- |
-| `docs/subset.md` | #2 |
-| `docs/performance.md` | #9 |
-
-The workflow prints an annotation while either prerequisite is absent. This is not a permanent allowlist: the checker
-itself has no missing-path exceptions, and the full command must run in CI before #11 closes. Once both paths exist,
-every maintained document must pass, including indexed examples and fixture references. The temporary gate is not
-removed just because these filenames exist. If a promised path is renamed, update its original documentation
-references in the owning change rather than deleting a broken reference.
+The documentation check runs unconditionally on every pull request and push. It has no missing-path exceptions:
+every maintained document must be indexed, every relative Markdown link and image must resolve inside the repository,
+and every literal repository path in inline code must exist. If a promised path is renamed, update its original
+documentation references in the owning change rather than deleting a broken reference.
 
 Both Swift jobs run `swift build`, the complete `swift test`, and the documented `swift test --filter GoldenTests`
 regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. CLI
