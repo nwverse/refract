@@ -35,7 +35,7 @@ import RefractIR
         .forEach(items, location: nil),
     ], modifiers: [], location: nil)
     let output = try ArkUIBackend().generate(module: Module(sourceFile: "Input.swift", screens: [Screen(name: "SettingsList", body: body)]))
-    #expect(output.contains("ListItemGroup({ header: Text(\"General\") }) {"))
+    #expect(output.contains("ListItemGroup({ header: Text('General') }) {"))
     #expect(output.contains("ListItem() {"))
     #expect(output.contains("LazyForEach(this.model.items, (item: SettingItem) => {"))
     #expect(output.contains("Text(item.title)"))

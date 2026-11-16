@@ -24,7 +24,7 @@ import RefractIR
     #expect(unit.diagnostics.isEmpty)
     let output = try ArkUIBackend().generate(module: unit.module)
     #expect(output.contains("Scroll() {"))
-    #expect(output.contains("ListItemGroup({ header: Text(\"settings.general\") })"))
+    #expect(output.contains("ListItemGroup({ header: Text('settings.general') })"))
     #expect(output.contains("Image($r('sys.media.gear'))"))
     #expect(output.contains("Image($r('sys.media.person'))"))
     #expect(output.contains("Divider()"))
