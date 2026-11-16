@@ -25,6 +25,9 @@ public extension ViewNode {
             return .label(title: title, image: image, modifiers: modifiers + [modifier], location: location)
         case let .divider(modifiers, location):
             return .divider(modifiers: modifiers + [modifier], location: location)
+        case let .component(component, location):
+            return .component(ComponentReference(name: component.name, arguments: component.arguments,
+                children: component.children, modifiers: component.modifiers + [modifier]), location: location)
         case .native, .platformView, .conditional, .section, .listItem, .forEach, .spacer:
             return nil
         }

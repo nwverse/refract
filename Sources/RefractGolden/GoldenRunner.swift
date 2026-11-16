@@ -19,8 +19,7 @@ public struct GoldenResult: Sendable {
 
 public enum GoldenRunner {
     public static func generate(_ fixture: FixtureCase) throws -> GoldenResult {
-        let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input))
-        var diagnostics = unit.diagnostics
+        var diagnostics = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input)).diagnostics
         let mapping: Mapping
         do {
             if let contents = fixture.mapping {
@@ -34,6 +33,11 @@ public enum GoldenRunner {
         }
         // A mapping diagnostic is evaluated even when Swift parsing also fails: source and project
         // configuration are independent errors, and both must be reported before generation is skipped.
+        guard diagnostics.isEmpty || mapping != .empty else {
+            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
+        }
+        let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input), mapping: mapping)
+        diagnostics = unit.diagnostics
         guard !unit.hasErrors else { return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics) }
         do {
             // Resolve every localized value before either backend emits. This catches a missing second-platform
@@ -54,7 +58,9 @@ public enum GoldenRunner {
         catch let group as DiagnosticGroup { diagnostics.append(contentsOf: group.diagnostics) }
         catch let error as InteropMappingError { diagnostics.append(contentsOf: error.diagnostics) }
         guard diagnostics.isEmpty else {
-            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
+            var seen: Set<Diagnostic> = []
+            return GoldenResult(kotlin: nil, arkTS: nil,
+                                diagnostics: diagnostics.filter { seen.insert($0).inserted })
         }
         return GoldenResult(kotlin: kotlin, arkTS: ark, diagnostics: diagnostics)
     }

@@ -148,10 +148,21 @@ row shapes, `.reuse({ reuseId: () => "setting" })`. API 12–17 keep V2 observat
 there is no V1 fallback. Fine-grained `@ObservedV2`/`@Trace` item properties are native optimizations, not a Refract
 cache or runtime. A list cannot be represented by eagerly mapping all rows.
 
-`if`/`else if`/`else` emits native conditional branches. `switch` over a declared enum emits Kotlin `when` and
-ArkTS `if`/`else` comparisons in v0, with exhaustive source cases. Conditions support model/state booleans, `!`,
-`&&`, `||`, and equality/ordering of typed scalar values. Optional unwrapping, implicit casts and arbitrary
-predicates are rejected. `if` content is a view branch, never a statement that mutates state during composition.
+The first implemented conditional slice accepts `if`/`else if`/`else` with declared Boolean model, `@State`
+or `@Binding` properties. Each condition is emitted directly into the native builder; inactive branches are not
+composed, and no `AnyView` or runtime view registry is introduced. A root Compose conditional uses a native `Box`
+to forward the caller's modifier without changing the branch children. Optional binding, optional chaining,
+availability clauses, arbitrary predicates, matching patterns and casts use `RFCTRL001`–`RFCTRL005` diagnostics.
+General `switch` is rejected with `RFCTRL003` until the declared-enum slice is implemented; its frontend will
+check exhaustive source cases before emitting native control flow.
+
+The remaining planned conditional contract is below. It is not a claim that every listed form is implemented:
+
+`switch` over a declared enum will emit Kotlin `when` and
+ArkTS `if`/`else` comparisons in v0, with exhaustive source cases. Conditions beyond the initial Boolean-property
+slice are planned to support `!`, `&&`, `||`, and equality/ordering of typed scalar values. Optional unwrapping,
+implicit casts and arbitrary predicates are rejected. `if` content is a view branch, never a statement that
+mutates state during composition.
 
 ## 5. State and model boundary
 
@@ -239,6 +250,11 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFSYN004` | Unsupported declaration, method or computed property | Move logic into the model protocol or a native component |
 | `RFSEM001` | Expression is outside the typed subset | Use a declared scalar property or a model action |
 | `RFSEM002` | Type is not supported or cannot be inferred | Declare an explicit supported type |
+| `RFCTRL001` | View condition is not a supported typed Boolean | Use a declared Boolean model, state or binding property |
+| `RFCTRL002` | Optional binding or availability condition is unsupported | Expose a typed nonoptional Boolean from the model |
+| `RFCTRL003` | Switch is not yet in the implemented control-flow slice | Use the supported enum-switch contract once available |
+| `RFCTRL004` | Optional chaining, type checks or casts are unsupported | Use a nonoptional declared Boolean property |
+| `RFCTRL005` | Matching-pattern condition is unsupported | Use a declared Boolean property |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |

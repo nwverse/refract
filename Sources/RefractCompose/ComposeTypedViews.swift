@@ -57,7 +57,7 @@ extension ComposeBackend {
                              message: "This control needs an explicit typed value and update path.",
                              suggestion: "Use the state/binding contract before lowering this control.",
                              location: node.sourceLocation)
-        case .stack, .text, .button, .native, .platformView, .conditional:
+        case .stack, .text, .button, .native, .component, .platformView, .conditional:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)
         }

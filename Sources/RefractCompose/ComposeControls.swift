@@ -8,6 +8,7 @@ extension ComposeBackend {
         context.imports.insert("androidx.compose.foundation.layout.Arrangement")
         context.imports.insert("androidx.compose.foundation.layout.Row")
         context.imports.insert("androidx.compose.material3.Switch")
+        context.imports.insert("androidx.compose.material3.Text")
         context.imports.insert("androidx.compose.ui.res.stringResource")
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
         out.line("Row(")

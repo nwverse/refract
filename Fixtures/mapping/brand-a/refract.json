@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "app/src/main/kotlin/example/generated", "packageName": "example.generated" },
+    "imports": [
+      "example.designsystem.Badge",
+      "example.designsystem.CardRow",
+      "example.designsystem.DesignSpacing",
+      "example.designsystem.DesignColors"
+    ],
+    "components": {
+      "CardRow": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "trailingClosure",
+        "modifiers": ["padding", "background"],
+        "target": "CardRow",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "title", "target": "title" }],
+        "modifierParameter": "modifier",
+        "attributes": {
+          "padding": {
+            "kind": "chain",
+            "target": "padding",
+            "arguments": [{ "source": "_" }]
+          },
+          "background": {
+            "kind": "chain",
+            "target": "background",
+            "arguments": [{ "source": "_" }]
+          }
+        }
+      },
+      "Badge": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "Badge",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "title", "target": "text" }],
+        "attributes": {}
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] },
+      "background": { "parameters": [{ "label": "_", "type": "color", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "DesignSpacing.medium" },
+      "radius": {},
+      "font": {},
+      "color": { "DesignColors.surface": "DesignColors.surface" }
+    },
+    "resources": {
+      "className": "example.app.R",
+      "strings": {
+        "settings.title": "settings_title",
+        "settings.enabled": "settings_enabled"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "entry/src/main/ets/generated" },
+    "imports": [
+      { "module": "example/designsystem/CardRow", "symbols": ["CardRow"] },
+      { "module": "example/designsystem/Badge", "symbols": ["Badge"] },
+      { "module": "example/designsystem/Tokens", "symbols": ["DesignSpacing", "DesignColors"] }
+    ],
+    "components": {
+      "CardRow": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "builder",
+        "modifiers": ["padding", "background"],
+        "target": "CardRow",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "title", "target": "title" }],
+        "attributes": {
+          "padding": {
+            "kind": "chain",
+            "target": "padding",
+            "arguments": [{ "source": "_" }]
+          },
+          "background": {
+            "kind": "chain",
+            "target": "backgroundColor",
+            "arguments": [{ "source": "_" }]
+          }
+        }
+      },
+      "Badge": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "Badge",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "title", "target": "text" }],
+        "attributes": {}
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] },
+      "background": { "parameters": [{ "label": "_", "type": "color", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "DesignSpacing.medium" },
+      "radius": {},
+      "font": {},
+      "color": { "DesignColors.surface": "DesignColors.surface" }
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "strings": {
+        "settings.title": "settings_title",
+        "settings.enabled": "settings_enabled"
+      }
+    }
+  }
+}

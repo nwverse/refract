@@ -90,12 +90,20 @@ public struct ItemType: Codable, Equatable, Sendable {
 }
 
 public extension ViewNode {
+    func children(for platform: TargetPlatform) -> [ViewNode] {
+        if case let .platformView(alternatives, _) = self {
+            return platform == .android ? alternatives.android : alternatives.harmonyOS
+        }
+        return children
+    }
+
     var children: [ViewNode] {
         switch self {
         case let .stack(_, children, _, _), let .layout(_, children, _, _), let .list(children, _, _): children
         case let .scroll(_, child, _, _), let .listItem(child, _): [child]
         case let .button(label, _, _, _): [label]
         case let .section(_, children, _): children
+        case let .component(component, _): component.children
         case let .forEach(items, _): [items.content]
         case let .conditional(branches, _): branches.flatMap(\.children)
         case let .platformView(alternatives, _): alternatives.ios + alternatives.android + alternatives.harmonyOS
@@ -106,7 +114,7 @@ public extension ViewNode {
     var sourceLocation: SourceLocation? {
         switch self {
         case let .stack(_, _, _, location), let .text(_, _, location), let .button(_, _, _, location),
-             let .native(_, location), let .platformView(_, location), let .conditional(_, location),
+             let .native(_, location), let .component(_, location), let .platformView(_, location), let .conditional(_, location),
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
              let .image(_, _, location), let .toggle(_, _, _, location), let .textInput(_, _, _, location),
