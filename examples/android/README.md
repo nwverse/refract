@@ -60,6 +60,8 @@ python3 scripts/check_examples.py
   --mapping examples/refract.json \
   --android-out examples/android/app/src/main/java/refract/generated \
   --harmony-out examples/harmony/entry/src/main/ets/generated
+diff <(tail -n +3 Fixtures/hello/Expected.kt) <(tail -n +3 examples/android/app/src/main/java/refract/generated/Hello.kt)
+diff <(tail -n +3 Fixtures/hello/Expected.ets) <(tail -n +3 examples/harmony/entry/src/main/ets/generated/Hello.ets)
 ```
 
 Changing the shared Swift input regenerates both platforms in place; do not edit either output independently.
