@@ -130,6 +130,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "rejected-view-declaration",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "state-counter",
       "implementationStatus": "ready"
     },
@@ -222,6 +226,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "v0-reject-undefined-spacing",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "v0-reject-unsupported-modifier",
       "implementationStatus": "ready"
     },
@@ -239,7 +247,7 @@
     },
     {
       "path": "v0-stack-layout",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-static-list",

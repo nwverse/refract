@@ -4,9 +4,9 @@ extension ComposeBackend {
     func emitTyped(_ node: ViewNode, isRoot: Bool, parentAxis: ViewNode.StackAxis?,
                    into out: inout KotlinWriter, context: inout Context) throws {
         switch node {
-        case let .layout(layout, children, modifiers, location):
+        case let .layout(layout, children, modifiers, _):
             try emitLayout(layout, children: children, modifiers: modifiers, isRoot: isRoot,
-                           location: location, into: &out, context: &context)
+                           into: &out, context: &context)
         case let .scroll(axis, child, modifiers, location):
             try emitScroll(axis: axis, child: child, modifiers: modifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
@@ -58,36 +58,6 @@ extension ComposeBackend {
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)
         }
-    }
-
-    private func emitLayout(_ layout: LayoutContainer, children: [ViewNode], modifiers: [Modifier],
-                            isRoot: Bool, location: SourceLocation?, into out: inout KotlinWriter,
-                            context: inout Context) throws {
-        let name = containerName(layout.axis, context: &context)
-        let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
-        var arguments = ["modifier = \(chain)"]
-        if layout.axis != .depth {
-            context.imports.insert("androidx.compose.ui.Alignment")
-            arguments.append(layout.axis == .vertical ? "horizontalAlignment = \(alignment(layout))"
-                                                       : "verticalAlignment = \(alignment(layout))")
-        } else {
-            context.imports.insert("androidx.compose.ui.Alignment")
-            arguments.append("contentAlignment = \(alignment(layout))")
-        }
-        if let spacing = layout.spacing {
-            let value = try renderExpression(spacing, context: &context)
-            if value != "0" {
-                context.imports.insert("androidx.compose.foundation.layout.Arrangement")
-                context.imports.insert("androidx.compose.ui.unit.dp")
-                let dimension = layout.axis == .vertical ? "verticalArrangement" : "horizontalArrangement"
-                arguments.append("\(dimension) = Arrangement.spacedBy(\(value).dp)")
-            }
-        }
-        out.open("\(name)(\(arguments.joined(separator: ", ")))")
-        for child in children {
-            try emit(child, parentAxis: layout.axis, into: &out, context: &context)
-        }
-        out.close()
     }
 
     private func emitScroll(axis: ViewNode.StackAxis, child: ViewNode, modifiers: [Modifier],
@@ -270,20 +240,6 @@ extension ComposeBackend {
         let name = axis == .vertical ? "Column" : axis == .horizontal ? "Row" : "Box"
         context.imports.insert("androidx.compose.foundation.layout.\(name)")
         return name
-    }
-
-    private func alignment(_ layout: LayoutContainer) -> String {
-        switch (layout.axis, layout.alignment) {
-        case (.vertical, .leading): return "Alignment.Start"
-        case (.vertical, .trailing): return "Alignment.End"
-        case (.vertical, _): return "Alignment.CenterHorizontally"
-        case (.horizontal, .top): return "Alignment.Top"
-        case (.horizontal, .bottom): return "Alignment.Bottom"
-        case (.horizontal, _): return "Alignment.CenterVertically"
-        case (.depth, .topLeading): return "Alignment.TopStart"
-        case (.depth, .bottomTrailing): return "Alignment.BottomEnd"
-        case (.depth, _): return "Alignment.Center"
-        }
     }
 
     private func isDrawableName(_ name: String) -> Bool {
