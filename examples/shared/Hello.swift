@@ -1,8 +1,8 @@
 struct Hello: View {
     var body: some View {
         VStack {
-            Text("Hello")
-            Button("Go") { }
+            Text("example.hello")
+            Button("example.go") { }
         }
     }
 }
