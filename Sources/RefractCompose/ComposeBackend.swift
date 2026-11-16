@@ -37,7 +37,7 @@ public struct ComposeBackend: Sendable {
             out.open("Button(onClick = { })")
             try emit(label, into: &out)
             out.close()
-        case .native, .conditional:
+        case .native, .conditional, .platformView:
             throw Diagnostic(code: "unsupportedBackendNode",
                              message: "This IR node is not supported by the Compose backend yet.",
                              suggestion: "Use the currently supported views or extend the backend.")

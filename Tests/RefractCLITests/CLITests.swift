@@ -37,7 +37,7 @@ import Foundation
                                 "--android-out", temporary.appendingPathComponent("android").path,
                                 "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(rejection.status != 0)
-    #expect(rejection.stderr.contains("[unsupportedView]"))
+    #expect(rejection.stderr.contains("[RFNATIVE001]"))
     #endif
 }
 
