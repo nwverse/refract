@@ -42,6 +42,16 @@ performance result for this example.
 
 To compile only the Kotlin and its resources, run `./gradlew :app:compileDebugKotlin`.
 
+## CI compile gate
+
+`.github/workflows/ci.yml` runs an `android-compile` job on every pull request and on every push to `main`. The job
+builds the `refract` CLI, runs `scripts/check_examples.py` to regenerate this example and reject stale committed
+output, then invokes `./gradlew --no-daemon :app:compileDebugKotlin` against a pinned JDK 21 + Android SDK
+(platform `android-37.2`, build tools `37.0.0`). The compile is byte-equivalent to the local command above; the
+job never edits the generated files and never accepts a Kotlin compiler failure. It is a compile-only gate with
+no emulator, no device and no performance measurement. See `../../docs/ci.md` for the toolchain pins and cache
+layout.
+
 ## Regenerate and check
 
 From the repository root, build the CLI, generate both native outputs and compare them with the reviewed canonical
