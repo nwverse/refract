@@ -95,11 +95,15 @@ public struct ComposeBackend: Sendable {
 
     private func emitStates(_ states: [StateDeclaration], into out: inout KotlinWriter, context: inout Context) throws {
         for state in states {
+            if case .state = state {
+                context.imports.insert("androidx.compose.runtime.getValue")
+                context.imports.insert("androidx.compose.runtime.setValue")
+            }
             if case let .state(name, type, initial, _) = state {
                 context.imports.insert("androidx.compose.runtime.remember")
                 context.imports.insert("androidx.compose.runtime.mutableStateOf")
                 let initialText = try renderExpression(initial ?? defaultInitial(type), context: &context)
-                out.line("val \(name) = remember { mutableStateOf(\(initialText)) }")
+                out.line("var \(name) by remember { mutableStateOf(\(initialText)) }")
             }
         }
     }
@@ -120,9 +124,12 @@ public struct ComposeBackend: Sendable {
         case let .stack(axis, children, modifiers, location):
             try emitStack(axis: axis, children: children, modifiers: modifiers, isRoot: isRoot,
                           location: location, into: &out, context: &context)
-        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .toggle, .textInput,
+        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput,
              .label, .divider, .spacer:
             try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
+        case let .toggle(title, value, modifiers, location):
+            try emitToggle(title: title, value: value, modifiers: modifiers, isRoot: isRoot,
+                           location: location, into: &out, context: &context)
         case let .text(expression, modifiers, location):
             try emitText(expression, modifiers: modifiers, isRoot: isRoot, location: location,
                          into: &out, context: &context)
@@ -315,7 +322,7 @@ public struct ComposeBackend: Sendable {
         case let .binding(name):
             return name
         case let .valueProperty(.state(name)):
-            return "\(name).value"
+            return name
         case let .valueProperty(.binding(name)):
             return name
         case let .valueProperty(.model(model, property)):
@@ -337,9 +344,9 @@ public struct ComposeBackend: Sendable {
     private func renderAction(_ action: StateAction, context: inout Context) throws -> String {
         switch action {
         case let .assign(.state(name), value):
-            return "\(name).value = \(try renderExpression(value, context: &context))"
+            return "\(name) = \(try renderExpression(value, context: &context))"
         case let .increment(.state(name), value):
-            return "\(name).value += \(try renderExpression(value, context: &context))"
+            return "\(name) += \(try renderExpression(value, context: &context))"
         case let .assign(.binding(name), value):
             return "on\(name.uppercasingFirst())Change(\(try renderExpression(value, context: &context)))"
         case let .increment(.binding(name), value):
@@ -421,7 +428,7 @@ struct KotlinWriter {
 
 // MARK: - Helpers
 
-private extension String {
+extension String {
     func uppercasingFirst() -> String {
         guard let first else { return self }
         return first.uppercased() + dropFirst()

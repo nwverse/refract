@@ -48,12 +48,25 @@ extension Generation {
         case let .image(source, modifiers, _):
             writer.line("Image(\(try image(source)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .toggle(title, value, modifiers, _):
-            // The corpus' model/action control contract supplies the value and write path; title is accessibility metadata.
-            _ = title
-            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try ArkExpression.emit(value, item: item, mapping: mapping)) })")
+            writer.open("Row()")
+            writer.line("Text(\(try ArkExpression.emit(title, mapping: mapping)))")
+            writer.line("Blank()")
+            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value)) })")
+            writer.depth += 1
             writer.open(".onChange((value: boolean) =>")
-            writer.line("\(try ArkExpression.assignment(value, to: "value"));")
+            switch value.value {
+            case let .valueProperty(.state(name)):
+                writer.line("this.\(name) = value;")
+            case let .valueProperty(.binding(name)):
+                writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            default:
+                throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state or parent binding.",
+                                 suggestion: "Use a projected Bool @State or @Binding property.", location: value.location)
+            }
             writer.close(suffix: ")")
+            writer.depth -= 1
+            writer.close()
+            writer.line(".justifyContent(FlexAlign.SpaceBetween)")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .textInput(placeholder, value, modifiers, _):
             var arguments = ["text: \(try ArkExpression.emit(value, item: item, mapping: mapping))"]

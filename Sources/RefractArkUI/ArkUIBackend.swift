@@ -147,7 +147,7 @@ private extension StateDeclaration {
 
 struct ArkWriter {
     private(set) var text = ""
-    private var depth = 0
+    var depth = 0
 
     mutating func line(_ value: String = "", unlessEmpty: Bool = false) {
         if value.isEmpty {
