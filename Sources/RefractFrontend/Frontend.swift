@@ -36,6 +36,7 @@ final class Builder: SyntaxVisitor {
     var itemTypes: [ItemType] = []
     var currentModels: [ModelReference] = []
     var currentListItem: String?
+    var currentListItemType: ItemType?
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -201,8 +202,13 @@ final class Builder: SyntaxVisitor {
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
             if let argument = call.arguments.first, argument.label == nil,
-               let value = modelProperty(argument.expression) {
-                return .text(value, modifiers: [], location: nodeLocation)
+               let value = modelTypedProperty(argument.expression) {
+                guard value.type == .string else {
+                    error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
+                          "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
+                    return nil
+                }
+                return .text(value.expression, modifiers: [], location: nodeLocation)
             }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
                                               stateText: currentStates.isEmpty ? { _ in nil } : stateText)
