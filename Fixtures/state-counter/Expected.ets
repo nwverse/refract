@@ -7,7 +7,7 @@ export struct Counter {
 
 
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text(`Count: ${this.count}`)
       Button() {
         Text('Increment')
