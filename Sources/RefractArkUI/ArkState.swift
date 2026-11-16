@@ -1,4 +1,5 @@
 import RefractIR
+import RefractMapping
 
 func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWriter) throws {
     if case let .model(reference, _) = declaration {
@@ -33,7 +34,8 @@ private func stateType(_ type: ValueType) throws -> String {
     }
 }
 
-func emitLocalExpression(_ expression: Expression, item: String? = nil) throws -> String {
+func emitLocalExpression(_ expression: Expression, item: String? = nil,
+                         mapping: Mapping = .empty) throws -> String {
     switch expression.value {
     case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
         guard ArkText.isIdentifier(name) else {
@@ -55,7 +57,7 @@ func emitLocalExpression(_ expression: Expression, item: String? = nil) throws -
         }
         return result + "`"
     default:
-        return try ArkExpression.emit(expression, item: item)
+        return try ArkExpression.emit(expression, item: item, mapping: mapping)
     }
 }
 

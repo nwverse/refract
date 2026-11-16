@@ -12,7 +12,7 @@ This page specifies resource-file validation and formatting. `docs/subset.md` is
 ```swift
 Text("settings.title")
 Text(LocalizedStringKey("settings.title"))
-Text("profile.greeting \(name), you have \(count) items")
+Text("profile.greeting\(name)\(count)")
 Text(verbatim: "Debug build")
 
 let accessibilityText = String(localized: "settings.title")
@@ -28,6 +28,8 @@ let accessibilityText = String(localized: "settings.title")
   not embedded into the key or generated with string concatenation. Each argument must have a statically known
   `String`, `Int` or `Double` type. Arbitrary interpolation, locale-sensitive formatting calls and `Bool` are
   rejected rather than approximated. Explicit screen inputs retain their scalar type in the IR and native signature.
+  The literal portions around interpolation must form a valid canonical key, so punctuation and whitespace needed
+  for display belong in the resource, not beside the interpolation in the source key.
 - `String(localized:)` supplies a resolved string for another supported argument. An explicitly constructed
   `LocalizedStringKey` requires a literal key, not a runtime-selected key. These forms preserve the same source on
   iOS; there is no Refract dependency in that source.

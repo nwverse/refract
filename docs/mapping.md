@@ -120,11 +120,15 @@ names, while Android and HarmonyOS supply definitions of their respective native
 ## Resources
 
 Android resources declare `className` (the application's fully qualified `R` class). HarmonyOS resources declare
-`namespace` and `stringTable`. Both have a `strings` dictionary from the localized source key to its native resource
+`namespace` and `stringTable`. Each may declare `catalog`, the path to its base native string-resource file, resolved
+relative to `refract.json`. Localized generation requires this path; registry-only configurations remain useful for
+loader and component tests but cannot silently generate a resource lookup without the actual catalog.
+Both have a `strings` dictionary from the localized source key to its native resource
 name; names are lower-case ASCII identifiers with underscores; in v1 it must equal the key with dots replaced by underscores on both
-platforms. Keys are lowercase ASCII letters and digits in nonempty dot-separated segments. The key sets and
+platforms. Keys use lowercase ASCII letter-led alphanumeric dot-separated segments. The key sets and
 normalized names must agree. Resource APIs are emitted directly (`stringResource` plus `R.string`, or `$r` with the declared table),
-so a missing key is a compile-time diagnostic rather than a runtime lookup failure.
+so a missing key is a compile-time diagnostic rather than a runtime lookup failure. `docs/localization.md` defines
+catalog parsing and typed formatting.
 
 ## Native components
 
