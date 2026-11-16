@@ -11,6 +11,7 @@ export struct SettingsScreen {
   @Require @Param model: SettingsModel;
   @Require @Param notificationsEnabled: boolean;
   @Event onNotificationsEnabledChange: (value: boolean) => void = (value: boolean): void => {};
+
   @Local private displayName: string = '';
 
   build() {
@@ -41,10 +42,12 @@ export struct SettingsScreen {
       }
       ListItemGroup() {
         ListItem() {
-          Button($r('app.string.settings_save'))
-            .onClick(() => {
-              this.model.save();
-            })
+          Button() {
+            Text($r('app.string.settings_save'))
+          }
+          .onClick(() => {
+            this.model.save();
+          })
         }
       }
     }

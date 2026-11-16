@@ -57,7 +57,7 @@ extension ComposeBackend {
                              message: "This control needs an explicit typed value and update path.",
                              suggestion: "Use the state/binding contract before lowering this control.",
                              location: node.sourceLocation)
-        case .stack, .text, .button, .native, .component, .platformView, .conditional:
+        case .stack, .text, .button, .native, .component, .platformView, .conditional, .switchExpression:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)
         }
@@ -167,6 +167,19 @@ extension ComposeBackend {
         let key: String
         if case let .text(value, _, _) = child, value.isLocalizedText {
             key = try staticKey(value, prefix: "row", context: &context)
+        } else if case let .text(value, _, _) = child, case let .valueProperty(.model(_, property)) = value.value {
+            key = "\"row:\(property)\""
+        } else if case let .textInput(_, value, _, _) = child, case let .valueProperty(.state(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .textInput(_, value, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .toggle(_, value, _, _) = child, case let .valueProperty(.state(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .toggle(_, value, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .button(_, action, _, _) = child,
+                  case let .modelMethod(_, methodName, arguments)? = action, arguments.isEmpty {
+            key = "\"row:\(methodName)\""
         } else {
             throw Diagnostic(code: "RF-C003",
                              message: "This static row has no explicit stable item identity.",
@@ -174,6 +187,18 @@ extension ComposeBackend {
                              location: child.sourceLocation)
         }
         return (key, contentType(child), child)
+    }
+
+    private func staticControlIdentity(_ name: String) -> String {
+        // Source state/binding names carry identity across values and recomposition. A terminal
+        // `Enabled` suffix is a property-shape marker, not part of the setting's semantic name.
+        let semanticName = name.hasSuffix("Enabled") ? String(name.dropLast("Enabled".count)) : name
+        var result = ""
+        for character in semanticName {
+            if character.isUppercase, !result.isEmpty { result.append("-") }
+            result.append(character.lowercased())
+        }
+        return result
     }
 
     private func staticKey(_ expression: Expression, prefix: String, context: inout Context) throws -> String {
