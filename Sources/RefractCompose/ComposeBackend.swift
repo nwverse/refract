@@ -114,13 +114,13 @@ public struct ComposeBackend: Sendable {
                            location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, into: &out, context: &context)
+        case let .platformView(alternatives, _):
+            // The Android branch is selected at build time; no runtime dispatch is emitted.
+            for child in alternatives.android {
+                try emit(child, isRoot: isRoot, into: &out, context: &context)
+            }
         case let .conditional(branches, location):
             try emitConditional(branches, location: location, into: &out, context: &context)
-        case let .platformView(_, location):
-            throw Diagnostic(code: "compose.unsupported_platform_view",
-                             message: "Platform-view lowering is not available in this backend yet.",
-                             suggestion: "Use the interop backend implementation that selects the Android branch.",
-                             location: location)
         }
     }
 
@@ -292,11 +292,8 @@ public struct ComposeBackend: Sendable {
             return name
         case let .binding(name):
             return name
-        case .platformValue:
-            throw Diagnostic(code: "compose.unsupported_platform_value",
-                             message: "Platform-value lowering is not available in this backend yet.",
-                             suggestion: "Use the interop backend implementation that selects the Android value.",
-                             location: expression.location)
+        case let .platformValue(alternatives):
+            return try renderExpression(alternatives.android, context: &context)
         }
     }
 

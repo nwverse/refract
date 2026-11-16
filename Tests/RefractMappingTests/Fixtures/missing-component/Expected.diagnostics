@@ -1,0 +1,1 @@
+refract.json:1:1: error [missingComponentMapping]: The component `UnmappedCard` has no Android mapping. Suggestion: `android.components.UnmappedCard` to declare its typed target
