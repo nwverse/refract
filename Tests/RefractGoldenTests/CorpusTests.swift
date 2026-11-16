@@ -58,6 +58,33 @@ struct SubsetCorpusTests {
     }
 
     @Test
+    func nativeStringCatalogsMatchTheirMappings() throws {
+        for fixture in try CorpusLoader.load(repository: GoldenTests.repository) where fixture.name.hasPrefix("v0-") {
+            guard let mapping = fixture.mapping,
+                  let data = mapping.data(using: .utf8),
+                  let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let android = object["android"] as? [String: Any],
+                  let harmony = object["harmonyOS"] as? [String: Any],
+                  let androidResources = android["resources"] as? [String: Any],
+                  let harmonyResources = harmony["resources"] as? [String: Any],
+                  let androidKeys = androidResources["strings"] as? [String: String],
+                  let harmonyKeys = harmonyResources["strings"] as? [String: String] else { continue }
+            #expect(androidKeys == harmonyKeys, Comment(rawValue: "Resource registries must agree in \(fixture.name)"))
+            let directory = GoldenTests.repository.appendingPathComponent("Fixtures/\(fixture.name)")
+            let androidCatalog = directory.appendingPathComponent("values/strings.xml")
+            let harmonyCatalog = directory.appendingPathComponent("resources/base/element/string.json")
+            guard FileManager.default.fileExists(atPath: androidCatalog.path) else { continue }
+            let entries = try StringResourceLoader.load(android: androidCatalog.path, harmony: harmonyCatalog.path)
+            for (sourceKey, nativeName) in androidKeys {
+                #expect(entries[nativeName] != nil,
+                        Comment(rawValue: "\(fixture.name) must declare \(sourceKey) in both base catalogs"))
+            }
+            #expect(entries.count == androidKeys.count || fixture.name == "v0-reject-missing-resource",
+                    Comment(rawValue: "Catalogs must not silently add unregistered resources in \(fixture.name)"))
+        }
+    }
+
+    @Test
     func literalTextRemainsAnExecutableContractCase() throws {
         let fixture = try #require(CorpusLoader.load(repository: GoldenTests.repository).first {
             $0.name == "v0-literal-text"
