@@ -97,6 +97,19 @@ import RefractIR
     #expect(values.harmonyOS.value == .verbatimText("HarmonyOS"))
 }
 
+@Test func accidentalLiteralSuggestsVerbatimText() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct LiteralResource: View {
+        var body: some View { Text(String("Hello")) }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.diagnostics.contains {
+        $0.code == "R.string.unsupported_expression" && $0.suggestion?.contains("Text(verbatim:)") == true
+    })
+    #expect(unit.module.screens.isEmpty)
+}
+
 @Test func unknownViewKeepsItsNativeDiagnosticWithoutBodyInterpolationErrors() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Bad: View { var body: some View { Gauge("photo") } }
