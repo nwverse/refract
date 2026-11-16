@@ -45,7 +45,7 @@ let package = Package(
             dependencies: ["RefractIR", "RefractFrontend", "RefractMapping", "RefractCompose", "RefractArkUI"]
         ),
         .testTarget(name: "RefractIRTests", dependencies: ["RefractIR"]),
-        .testTarget(name: "RefractFrontendTests", dependencies: ["RefractFrontend", "RefractCompose", "RefractArkUI"]),
+        .testTarget(name: "RefractFrontendTests", dependencies: ["RefractFrontend", "RefractCompose", "RefractArkUI", "RefractGolden"]),
         .testTarget(
             name: "RefractMappingTests",
             dependencies: ["RefractMapping"],

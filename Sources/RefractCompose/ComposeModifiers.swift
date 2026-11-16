@@ -87,6 +87,7 @@ extension ComposeBackend {
                     }
                 }
             case "background":
+                context.imports.insert("androidx.compose.foundation.background")
                 let color = try composeToken(try ModifierArguments(modifier: modifier).one(),
                                              category: .color, context: &context)
                 if index + 1 < modifiers.count, modifiers[index + 1].name == "cornerRadius" {

@@ -19,6 +19,10 @@
 - **Do not invent default spacing.** An omitted SwiftUI stack `spacing` is not a universal 8 dp/fp value. Leave
   native default behavior intact unless the source supplies a typed spacing token. Explicit values still need a
   common typed representation accepted by both backends.
+- **Compile a styled golden before changing its imports.** A shaped Compose `background(color, RoundedCornerShape(...))`
+  still requires `androidx.compose.foundation.background`; only the separate `clip` import is unnecessary. Do not
+  remove imports merely because the shape is fused in the call. Review token provenance on both targets and verify
+  that an ArkUI modifier-token import collector follows the same mapping, not a source-name heuristic.
 - **Target-specific collection boundaries need explicit semantics.** ArkUI `LazyForEach` consumes `IDataSource`;
   an array-to-data-source mirror can miss changes or add work. The source contract must say who owns updates instead
   of hiding synchronization in `build()` or an undocumented lifecycle callback.
