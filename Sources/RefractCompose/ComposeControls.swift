@@ -24,7 +24,8 @@ extension ComposeBackend {
                 throw Diagnostic(code: "R.string.invalid_resource", message: "Android string resources need a generated R class name.",
                                  suggestion: "Declare resources.className in refract.json.", location: title.location)
             }
-            out.line("Text(text = stringResource(\(className).string.\(resource.nativeName)))")
+            let reference = className == "\(context.packageName).R" ? "R" : className
+            out.line("Text(text = stringResource(\(reference).string.\(resource.nativeName)))")
         } else {
             guard title.type == .string else {
                 throw Diagnostic(code: "state.invalid_projection", message: "A toggle title must be a localized key or typed item interpolation.",
@@ -63,7 +64,8 @@ extension ComposeBackend {
                              message: "A text field needs a localized placeholder.",
                              suggestion: "Use a canonical settings.* key.", location: location)
         }
-        let label = try LocalizedTextEmitter.compose(placeholder, mapping: context.mapping) {
+        let label = try LocalizedTextEmitter.compose(placeholder, mapping: context.mapping,
+                                                      packageName: context.packageName) {
             try renderExpression($0, context: &context)
         }
         let checked = try renderExpression(value, context: &context)

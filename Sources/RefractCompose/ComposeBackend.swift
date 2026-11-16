@@ -293,7 +293,8 @@ public struct ComposeBackend: Sendable {
                              location: expression.location)
         case .localizedText:
             context.imports.insert("androidx.compose.ui.res.stringResource")
-            return try LocalizedTextEmitter.compose(expression, mapping: context.mapping) {
+            return try LocalizedTextEmitter.compose(expression, mapping: context.mapping,
+                                                     packageName: context.packageName) {
                 try renderExpression($0, context: &context)
             }
         case let .boolLiteral(value):

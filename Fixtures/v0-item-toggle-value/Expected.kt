@@ -43,7 +43,7 @@ public fun ValueItemToggle(
                 modifier = Modifier,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(text = stringResource(refract.generated.itemtogglevalue.R.string.settings_item, value.id))
+                Text(text = stringResource(R.string.settings_item, value.id))
                 Switch(
                     checked = value.enabled,
                     onCheckedChange = { enabled -> model.setEnabled(value.id, enabled) },

@@ -53,7 +53,7 @@ public fun SettingsScreen(
                         modifier = Modifier,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(text = stringResource(refract.generated.benchmarksettings.R.string.settings_item, row.id))
+                        Text(text = stringResource(R.string.settings_item, row.id))
                         Switch(
                             checked = row.enabled,
                             onCheckedChange = { enabled -> model.setEnabled(row.id, enabled) },

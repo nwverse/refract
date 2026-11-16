@@ -100,6 +100,10 @@ def regenerate_and_stage(fixture: str) -> None:
     generated = expected_kt.read_text(encoding="utf-8").replace(
         f"{package}.R.", f"{namespace}.R."
     )
+    if package != namespace and f"stringResource(R.string." in generated:
+        generated = generated.replace(
+            f"package {package}\n", f"package {package}\n\nimport {namespace}.R\n", 1
+        )
     target = package_directory / f"{fixture}.kt"
     target.write_text(generated, encoding="utf-8")
     STAGING_RES.mkdir(parents=True, exist_ok=True)

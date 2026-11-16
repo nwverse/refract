@@ -20,7 +20,7 @@ public fun TextInputState(modifier: Modifier = Modifier) {
     TextField(
         value = displayName,
         onValueChange = { value -> displayName = value },
-        label = { Text(text = stringResource(refract.generated.R.string.settings_display_name)) },
+        label = { Text(text = stringResource(R.string.settings_display_name)) },
         modifier = modifier,
     )
 }

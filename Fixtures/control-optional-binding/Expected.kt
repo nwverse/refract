@@ -20,7 +20,7 @@ public fun OptionalGreeting(
             val value = title
             Text(text = value)
         } else {
-            Text(text = stringResource(refract.generated.R.string.content_empty))
+            Text(text = stringResource(R.string.content_empty))
         }
     }
 }

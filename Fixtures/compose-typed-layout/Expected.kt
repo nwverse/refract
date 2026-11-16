@@ -21,10 +21,10 @@ import androidx.compose.ui.unit.dp
 public fun TypedLayout(modifier: Modifier = Modifier) {
     Column(modifier = modifier.padding(all = 16.dp), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LazyColumn(modifier = Modifier) {
-            item(key = "header:settings.general", contentType = "Header") { Text(text = stringResource(refract.generated.R.string.settings_general)) }
+            item(key = "header:settings.general", contentType = "Header") { Text(text = stringResource(R.string.settings_general)) }
             item(key = "row:settings.profile", contentType = "Text") {
                 Text(
-                    text = stringResource(refract.generated.R.string.settings_profile),
+                    text = stringResource(R.string.settings_profile),
                     modifier = Modifier.padding(all = 4.dp),
                 )
             }

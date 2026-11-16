@@ -12,7 +12,7 @@ import androidx.compose.ui.res.stringResource
 @Composable
 public fun HelloText(modifier: Modifier = Modifier) {
     Text(
-        text = stringResource(refract.generated.R.string.settings_title),
+        text = stringResource(R.string.settings_title),
         modifier = modifier,
     )
 }

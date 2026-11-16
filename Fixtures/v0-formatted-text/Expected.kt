@@ -20,7 +20,7 @@ public fun FormattedText(
     modifier: Modifier = Modifier,
 ) {
     Text(
-        text = stringResource(refract.generated.R.string.settings_item_count, model.count.value),
+        text = stringResource(R.string.settings_item_count, model.count.value),
         modifier = modifier,
     )
 }

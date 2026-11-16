@@ -32,7 +32,7 @@ public fun ContentView(
             }
             is Content.Count -> {
                 val count: Int = subject.value
-                Text(text = stringResource(refract.generated.R.string.content_count, count))
+                Text(text = stringResource(R.string.content_count, count))
             }
         }
     }
