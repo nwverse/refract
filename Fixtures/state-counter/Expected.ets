@@ -5,6 +5,7 @@
 export struct Counter {
   @Local private count: number = 0;
 
+
   build() {
     Column({ space: 8 }) {
       Text(`Count: ${this.count}`)
