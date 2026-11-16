@@ -134,13 +134,11 @@ build-time diagnostic, never a silently dropped call (goal 3).
 
 - `if condition { A } else { B }` becomes `if (condition) { A() } else { B() }` inside the composable body.
   Compose handles conditional composition natively; no wrapper is needed.
-- `if let value = optional { … }` becomes `value?.let { … }` when the body is a single expression, otherwise
-  `if (value != null) { … }`. The non-null smart cast is preserved.
-- `switch` over an enum becomes a Kotlin `when` with exhaustive branches. A missing branch is a diagnostic, not a
-  silent fallthrough.
-- `ForEach` outside a list is unrolled into repeated calls when the data is a compile-time constant range, and
-  lowered to a `for` loop inside the composable otherwise. `ForEach` over a non-`Identifiable` collection without
-  an explicit `id:` key path is a diagnostic.
+- Optional binding and associated-value patterns are rejected by the current typed subset (`RFCTRL002` and related
+  diagnostics). A separate contract and typed lowering are required before either backend accepts them; no source-string
+  substitution or runtime cast is used.
+- `switch` over a locally declared enum without associated values, raw values or inheritance becomes a Kotlin `when`
+  with exhaustive branches. A missing, duplicate or unsupported branch is a diagnostic, not a silent fallthrough.
 
 ### Lists
 
