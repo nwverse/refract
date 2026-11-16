@@ -1,0 +1,1 @@
+Input.swift:5:16: error [RFVIEW003]: Stack spacing must be a scalar value, `.small`, or `.medium`. Suggestion: Use a numeric spacing value or a documented spacing token.
