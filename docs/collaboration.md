@@ -106,8 +106,9 @@ gh pr create --title "<type>(<area>): <English title>" --body-file <file>   # fi
   `gh pr merge` directly. The hook scans the PR's changes, commit messages, title and body with this machine's private
   values, then squash-merges exactly the head it scanned and deletes the branch. Any exception needs an explicit
   maintainer decision recorded on the PR.
-- After merging, check the `main` CI run too and fix any failure promptly. Remove your worktree by its literal path
-  (`git worktree remove .worktrees/<branch>`) and make sure the issue is closed.
+- After merging, check the `main` CI run too and fix any failure promptly. Every contributor must remove their own
+  completed worktree by its literal path (`git worktree remove .worktrees/<branch>`); never delete uncommitted or
+  unpushed work, or another Agent's worktree. Make sure the issue is closed.
 
 ## Checking PRs with no linked issue
 
