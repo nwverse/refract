@@ -1,7 +1,65 @@
-/// Ownership is explicit so backends never infer state by identifier spelling.
+/// A get-only scalar property and a synchronous Void action form the native data boundary.
+public struct ModelProperty: Codable, Equatable, Sendable {
+    public let name: String
+    public let type: ValueType
+    public let location: SourceLocation?
+    public init(name: String, type: ValueType, location: SourceLocation? = nil) {
+        self.name = name
+        self.type = type
+        self.location = location
+    }
+}
+
+public struct ModelParameter: Codable, Equatable, Sendable {
+    public let externalName: String?
+    public let localName: String
+    public let type: ValueType
+    public init(externalName: String?, localName: String, type: ValueType) {
+        self.externalName = externalName
+        self.localName = localName
+        self.type = type
+    }
+}
+
+public struct ModelAction: Codable, Equatable, Sendable {
+    public let name: String
+    public let parameters: [ModelParameter]
+    public let location: SourceLocation?
+    public init(name: String, parameters: [ModelParameter] = [], location: SourceLocation? = nil) {
+        self.name = name
+        self.parameters = parameters
+        self.location = location
+    }
+}
+
+public struct ModelProtocol: Codable, Equatable, Sendable {
+    public let name: String
+    public let properties: [ModelProperty]
+    public let actions: [ModelAction]
+    public let location: SourceLocation?
+    public init(name: String, properties: [ModelProperty] = [], actions: [ModelAction] = [],
+                location: SourceLocation? = nil) {
+        self.name = name
+        self.properties = properties
+        self.actions = actions
+        self.location = location
+    }
+}
+
+public struct ActionArgument: Codable, Equatable, Sendable {
+    public let label: String?
+    public let value: Expression
+    public init(label: String?, value: Expression) {
+        self.label = label
+        self.value = value
+    }
+}
+
+
 public enum ValueProperty: Codable, Equatable, Sendable {
     case state(String)
     case binding(String)
+    case model(model: String, property: String)
 }
 
 public enum WritableProperty: Codable, Equatable, Sendable {
@@ -12,6 +70,7 @@ public enum WritableProperty: Codable, Equatable, Sendable {
 public enum StateAction: Codable, Equatable, Sendable {
     case assign(WritableProperty, Expression)
     case increment(WritableProperty, Expression)
+    case modelMethod(model: String, name: String, arguments: [ActionArgument])
 }
 
 public enum StringInterpolationSegment: Codable, Equatable, Sendable {
