@@ -71,6 +71,15 @@ private final class Builder: SyntaxVisitor {
 
     private func view(_ expression: ExprSyntax) -> ViewNode? {
         if let call = expression.as(FunctionCallExprSyntax.self) {
+            // SwiftSyntax represents `Text("x").padding() { ... }` as a call whose called expression
+            // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure
+            // when classifying the inner call as a view or a modifier.
+            if let base = call.calledExpression.as(FunctionCallExprSyntax.self) {
+                var inner = base
+                inner.trailingClosure = call.trailingClosure
+                inner.additionalTrailingClosures = call.additionalTrailingClosures
+                return view(inner)
+            }
             if let member = call.calledExpression.as(MemberAccessExprSyntax.self), let base = member.base {
                 guard let node = view(base) else { return nil }
                 return modifier(call, name: member.declName.baseName.text, on: node)
