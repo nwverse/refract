@@ -1,1 +1,2 @@
-Input.swift:4:9: error [RFNATIVE002]: Native component RoutePreview maps Double as String instead of the declared numeric target type Suggestion: Match every parameter label and supported type across the declarations
+Input.swift:13:9: error [RFMAP003]: Native component `RoutePreview` expects Swift `zoom: double`, required; Android mapping declares `zoom: string`, required: true. Suggestion: Match the stored-property signature in declaration order.
+Input.swift:13:9: error [RFMAP003]: Native component `RoutePreview` expects Swift `zoom: double`, required; HarmonyOS mapping declares `zoom: string`, required: true. Suggestion: Match the stored-property signature in declaration order.

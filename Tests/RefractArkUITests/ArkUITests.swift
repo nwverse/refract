@@ -14,7 +14,7 @@ import RefractIR
     @ComponentV2
     export struct Hello {
       build() {
-        Text("Hello")
+        Text('Hello')
       }
     }
 
@@ -44,10 +44,10 @@ import RefractIR
     @ComponentV2
     export struct Hello {
       build() {
-        Column() {
-          Text("Hello").fontSize(18).fontColor(this.theme.titleColor).borderRadius(8)
+        Column({ space: 8 }) {
+          Text('Hello').fontSize(18).fontColor(this.theme.titleColor).borderRadius(8)
           Button() {
-            Text("Go")
+            Text('Go')
           }
         }.padding(0)
       }
@@ -86,18 +86,18 @@ import RefractIR
         ], modifiers: [], location: nil)),
     ])
     let output = try ArkUIBackend().generate(module: module)
-    #expect(output.contains("Row() {"))
+    #expect(output.contains("Row({ space: 8 }) {"))
     #expect(output.contains("if (true) {"))
     #expect(output.contains("} else if (this.model.loaded) {"))
     #expect(output.contains("} else {"))
-    #expect(output.contains("Text(\"Off\").opacity(0.5)"))
+    #expect(output.contains("Text('Off').opacity(0.5)"))
 }
 
 @Test func arkUIEscapesTextAndRejectsInvalidInput() throws {
     let escaped = try ArkUIBackend().generate(module: Module(sourceFile: "Input.swift", screens: [
         Screen(name: "Escaped", body: .text(Expression(.stringLiteral("a\"b\\c\n$home")), modifiers: [], location: nil)),
     ]))
-    #expect(escaped.contains("Text(\"a\\\"b\\\\c\\n\\$home\")"))
+    #expect(escaped.contains("Text('a\"b\\\\c\\n\\$home')"))
 
     let location = SourceLocation(file: "Input.swift", line: 7, column: 3)
     let unsupported = Module(sourceFile: "Input.swift", screens: [

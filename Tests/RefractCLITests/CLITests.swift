@@ -28,7 +28,7 @@ import Foundation
     #expect(try String(contentsOf: temporary.appendingPathComponent("android/Input.kt"), encoding: .utf8)
         .contains("text = \"Hello\""))
     #expect(try String(contentsOf: temporary.appendingPathComponent("harmony/Input.ets"), encoding: .utf8)
-        .contains("Text(\"Hello\")"))
+        .contains("Text('Hello')"))
     #expect(try runCLI(["check", "--input", input.path], executable: executable).status == 0)
 
     let rejection = try runCLI(["generate", "--input",
@@ -36,7 +36,7 @@ import Foundation
                                 "--android-out", temporary.appendingPathComponent("android").path,
                                 "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(rejection.status != 0)
-    #expect(rejection.stderr.contains("[RF-C001]"))
+    #expect(rejection.stderr.contains("[RF-C002]"))
     #endif
 }
 
@@ -83,7 +83,7 @@ private func builtCLIExecutable() -> URL {
                                "--android-out", rejectedAndroid.path, "--harmony-out", rejectedHarmony.path],
                               executable: executable)
     #expect(rejected.status != 0)
-    #expect(rejected.stderr.contains("[RF-C001]"))
+    #expect(rejected.stderr.contains("[RF-C002]"))
     #expect(!FileManager.default.fileExists(atPath: rejectedAndroid.path))
     #expect(!FileManager.default.fileExists(atPath: rejectedHarmony.path))
     #endif
