@@ -1,0 +1,1 @@
+Input.swift:4:13: error [RF-C004]: A vertical ScrollView cannot contain a nested LazyColumn. Suggestion: Use one lazy list, or put fixed-size non-scrolling content inside the ScrollView.
