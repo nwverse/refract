@@ -4,22 +4,15 @@
 
 package refract.generated
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 
 @Composable
 public fun LocalizedPlain(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    Column(modifier = modifier) {
         Text(text = stringResource(example.resources.R.string.settings_title))
         Text(text = stringResource(example.resources.R.string.settings_subtitle))
         Text(text = stringResource(example.resources.R.string.settings_footer))

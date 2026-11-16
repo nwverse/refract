@@ -9,6 +9,5 @@ export struct RouteScreen {
       Text('Route')
       RoutePreview({ cameraZoom: 12.0, showsTraffic: true })
     }
-    .alignItems(HorizontalAlign.Center)
   }
 }

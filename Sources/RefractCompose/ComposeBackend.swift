@@ -180,21 +180,7 @@ public struct ComposeBackend: Sendable {
             call = "Box"
         }
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
-        if axis == .vertical {
-            context.imports.insert("androidx.compose.foundation.layout.Arrangement")
-            context.imports.insert("androidx.compose.ui.Alignment")
-            context.imports.insert("androidx.compose.ui.unit.dp")
-            out.line("\(call)(")
-            out.depth += 1
-            out.line("modifier = \(modifierChain),")
-            out.line("verticalArrangement = Arrangement.spacedBy(8.dp),")
-            out.line("horizontalAlignment = Alignment.CenterHorizontally,")
-            out.depth -= 1
-            out.line(") {")
-            out.depth += 1
-        } else {
-            out.open("\(call)(modifier = \(modifierChain))")
-        }
+        out.open("\(call)(modifier = \(modifierChain))")
         for child in children {
             try emit(child, parentAxis: axis, into: &out, context: &context)
         }

@@ -17,10 +17,9 @@ export struct ExtensionSettings {
       Button() {
         Text('Disable')
       }
-        .onClick(() => {
+      .onClick(() => {
         this.model.setEnabled(false);
       })
     }
-    .alignItems(HorizontalAlign.Center)
   }
 }

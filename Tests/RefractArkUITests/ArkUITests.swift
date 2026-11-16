@@ -50,7 +50,6 @@ import RefractIR
             Text('Go')
           }
         }.padding(0)
-        .alignItems(HorizontalAlign.Center)
       }
     }
 
