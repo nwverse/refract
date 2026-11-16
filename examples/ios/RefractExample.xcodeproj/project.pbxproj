@@ -30,6 +30,8 @@
 			children = (
 				AA0000000000000000000006 /* RefractExample */,
 				AA0000000000000000000007 /* Hello.swift */,
+				AA0000000000000000000012 /* SettingsScreen.swift */,
+				AA0000000000000000000013 /* NativeComponentScreen.swift */,
 				AA0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -68,6 +70,18 @@
 			path = ../shared/Hello.swift;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000012 /* SettingsScreen.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/SettingsScreen.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000013 /* NativeComponentScreen.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/NativeComponentScreen.swift;
+			sourceTree = "<group>";
+		};
 		AA0000000000000000000008 /* RefractExample.app */ = {
 			isa = PBXFileReference;
 			explicitFileType = wrapper.application;
@@ -78,7 +92,11 @@
 		AA000000000000000000000A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (AA0000000000000000000011 /* Hello.swift in Sources */);
+			files = (
+				AA0000000000000000000011 /* Hello.swift in Sources */,
+				AA0000000000000000000014 /* SettingsScreen.swift in Sources */,
+				AA0000000000000000000015 /* NativeComponentScreen.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AA000000000000000000000B /* Frameworks */ = {
@@ -96,6 +114,14 @@
 		AA0000000000000000000011 /* Hello.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = AA0000000000000000000007 /* Hello.swift */;
+		};
+		AA0000000000000000000014 /* SettingsScreen.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000012 /* SettingsScreen.swift */;
+		};
+		AA0000000000000000000015 /* NativeComponentScreen.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000013 /* NativeComponentScreen.swift */;
 		};
 		AA000000000000000000000D /* Debug */ = {
 			isa = XCBuildConfiguration;
