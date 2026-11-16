@@ -13,8 +13,9 @@ there is no Refract runtime, base view, interpreter or lookup registry in a gene
 
 - One `Input.swift` contains one `struct <Name>: View` with a `body`, plus any `Identifiable` item type, model
   protocol or `RefractNativeView` declaration that it needs. The native marker and interop helpers are ordinary
-  SwiftUI source declarations specified by `docs/interop.md`, not a linked library. `import SwiftUI` is the only import in v0. A screen name and its item/protocol names are
-  valid ASCII Swift identifiers beginning with an uppercase letter. File order determines declaration output order.
+  SwiftUI source declarations specified by `docs/interop.md`, not a linked library. `import SwiftUI` is the only
+  import in v0. A screen name and its item/protocol names are valid ASCII Swift identifiers beginning with an
+  uppercase letter. File order determines declaration output order.
 - Stored properties are restricted to `let` item fields, the state and model forms in section 5, and computed `body`.
   Initializers, methods, nested functions, property observers and arbitrary computed properties are outside v0.
 - Source expressions are references, literals, list element access, typed construction, comparisons and boolean
@@ -58,7 +59,7 @@ same parameters as the Swift view. Full examples are in the linked fixtures.
 | `Text("settings.title")` | `Text(text = stringResource(R.string.settings_title))` | `Text($r('app.string.settings_title'))` | Resources are resolved at build time. Text styles and colors use declared tokens. |
 | `Text(verbatim: "Debug")` | `Text(text = "Debug")` | `Text("Debug")` | Explicit non-localized text; escaping is defined by the target language. No hidden resource lookup. |
 | `Text(model.title)` | `Text(text = model.title.value)` | `Text(this.model.title)` | Read observable state at the leaf. No eager screen-level snapshot or derived full-view copy. |
-| `Image(systemName: "gear")` | `Icon(imageVector = Icons.Default.Settings, contentDescription = null)` | `Image($r('sys.media.gear'))` | A system-symbol mapping is required on each platform. `Image("asset_name")` maps to an application-declared drawable/media resource. Decorative images have a null/empty accessibility description unless an explicit localized label is declared. |
+| `Image(systemName: "gear")` | `Icon(imageVector = Icons.Default.Settings, contentDescription = null)` | `Image($r('app.media.settings'))` | A typed per-platform symbol mapping is required. `Image("asset_name")` maps to an application-declared drawable/media resource. Decorative images have a null/empty accessibility description unless an explicit localized label is declared. |
 | `Button("settings.save") { model.save() }` | `Button(onClick = { model.save() }) { Text(text = stringResource(R.string.settings_save)) }` | `Button($r('app.string.settings_save')) { ... }.onClick(() => { this.model.save() })` | The body is exactly one zero-argument action from the model/state section. ArkUI uses a `Button` with a text resource; a custom single-view label uses `Button() { label }`. |
 | `Button { model.save() } label: { Label(...) }` | `Button(onClick = { model.save() }) { Label(...) }` | `Button() { Label(...) }.onClick(() => { this.model.save() })` | Supported label forms are `Text`, `Image` and `Label`. An action cannot capture arbitrary values or run general Swift code. |
 | `Toggle("settings.enabled", isOn: $enabled)` | `Row { Text(text = stringResource(R.string.settings_enabled)); Spacer(...); Switch(checked = enabled, onCheckedChange = { enabled = it }) }` | `Row() { Text($r('app.string.settings_enabled')); Blank(); Toggle({ type: ToggleType.Switch, isOn: this.enabled }).onChange((value: boolean) => { this.enabled = value }) }` | The localized title remains visible beside the native boolean control. A binding is native value + change callback; there is no two-way-binding runtime. ArkUI V2 does not support `$$`; use `onChange`. |
@@ -85,15 +86,19 @@ contract does not depend on a toolkit version's default.
 
 ## 3. Modifiers
 
-Modifiers are applied in Swift source order. Native calls retain that order where the platform is order-sensitive.
-No backend silently sorts or drops a modifier. Repetition that the platform cannot represent is diagnosed.
+Modifiers retain their visual meaning. On Compose, source modifiers are appended to the caller's root modifier in
+source order, except where lowering two source modifiers into one native operation is necessary for equivalent
+semantics. In particular, `.background(color).cornerRadius(radius)` becomes `background(color, RoundedCornerShape(radius))`
+so the background itself has the requested rounded shape. On ArkUI `.backgroundColor(color).borderRadius(radius)`
+sets the background's corner radius directly; these attributes are not Compose-style ordered modifier operations.
+A modifier combination that cannot preserve the source semantics is diagnosed.
 
 | SwiftUI form | Compose form | ArkUI form | Semantics and performance |
 | --- | --- | --- | --- |
 | `.padding(.medium)` | `Modifier.padding(8.dp)` | `.padding(8)` | Uniform padding. The first modifier starts from `Modifier`; later calls chain onto it. |
 | `.padding(.horizontal, .large)` | `Modifier.padding(horizontal = 16.dp)` | `.padding({ left: 16, right: 16 })` | Horizontal/vertical insets; start/end semantics must be retained for horizontal text layouts. |
 | `.frame(width: 120, height: 44)` | `Modifier.size(width = 120.dp, height = 44.dp)` | `.width(120).height(44)` | Dimensions are scalar dp/vp values. Numeric literals are layout values, not design-token colors or fonts. |
-| `.fillMaxWidth()` is not SwiftUI; use `.frame(maxWidth: .infinity)` | `Modifier.fillMaxWidth()` | `.width('100%')` | Only the SwiftUI spelling is accepted. It must not be confused with a fixed width. |
+| `.fillMaxWidth()` is not SwiftUI; use `.frame(maxWidth: .infinity)` | `Modifier.fillMaxWidth()` | `.width("100%")` | Only the SwiftUI spelling is accepted. It must not be confused with a fixed width. |
 | `.background(.surface)` | `Modifier.background(AppTheme.colors.surface)` | `.backgroundColor(AppTheme.colors.surface)` | A semantic color token resolved by the mapping; never an RGB fallback. |
 | `.foregroundStyle(.secondary)` | `Modifier` does not change the text call; use `color = AppTheme.colors.secondary` at `Text` | `.fontColor(AppTheme.colors.secondary)` | Text color is passed directly to the leaf instead of adding a draw/layout wrapper. |
 | `.font(.title)` | `style = AppTheme.typography.title` at `Text` | `.font(AppTheme.typography.title)` | A declared typography token. Compose text parameters are direct; no new typography object in composition. |
@@ -137,9 +142,10 @@ item.id)`. Its model property is a platform `BasicDataSource<SettingItem>`: an a
 items and native change notifications, without a Refract adapter or a generated mirror of array state. Compose
 exposes the same source collection as `State<List<SettingItem>>`. In-place Swift collection mutation is outside the
 v0 contract; replacement/delivery semantics belong to the application model. `LazyForEach` is direct in `List`, and
-each row has a `ListItem`. `@Reusable` on a reusable child component and fine-grained `@ObservedV2`/`@Trace` item
-properties are native optimizations, not a Refract cache or runtime. A list cannot be represented by eagerly mapping
-all rows.
+each row has a `ListItem`. For API 18 and newer, a repeated child may use `@ReusableV2` and, for a finite family of
+row shapes, `.reuse({ reuseId: () => "setting" })`. API 12–17 keep V2 observation without this reuse capability;
+there is no V1 fallback. Fine-grained `@ObservedV2`/`@Trace` item properties are native optimizations, not a Refract
+cache or runtime. A list cannot be represented by eagerly mapping all rows.
 
 `if`/`else if`/`else` emits native conditional branches. `switch` over a declared enum emits Kotlin `when` and
 ArkTS `if`/`else` comparisons in v0, with exhaustive source cases. Conditions support model/state booleans, `!`,
@@ -316,3 +322,5 @@ includes `values/strings.xml` and `resources/base/element/string.json`, so key e
 checked against application-owned native catalogs. The mapping schema must expose those catalog paths before the
 runner can perform the file check; this is tracked with #6/#8. Image system names similarly require a typed
 per-platform `symbols` registry, never a guessed `sys.media` resource; schema integration is tracked with #6.
+`v0-leaf-controls/symbols.json` records that proposed companion input only: it is not read by the runner and is not
+an alternate accepted `refract.json` schema. Every checked-in `refract.json` passes the real mapping loader.
