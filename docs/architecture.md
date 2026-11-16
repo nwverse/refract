@@ -114,9 +114,33 @@ is a performance rule (goal 2) and is specified in `docs/performance.md`.
 | `docs/` | Goals, rules, architecture, subset, performance, adoption, lessons |
 | `scripts/` | Hooks, privacy scan, repository checks |
 
+## IR and generator boundaries (resolved)
+
+Open decision 1 is resolved by the following initial contract. The IR is a typed, platform-neutral, `Sendable`
+value tree: `Module` contains ordered `Screen` values; each screen owns state declarations and a root `ViewNode`.
+`ViewNode` has typed cases for stacks, text, buttons, native components, and conditional branches rather than raw
+Swift syntax or backend strings. Expressions distinguish literals, localized string keys, references, and bindings.
+State declarations preserve local, parent-owned, and model-owned data. Source locations use one-based UTF-8 line and
+column coordinates and do not depend on SwiftSyntax.
+
+The frontend exposes `Frontend.parse(SourceFile) -> TranslationUnit`; it returns the IR and ordered diagnostics
+without writing files. Each backend exposes `generate(module:mapping:) throws -> String` and consumes the resolved
+`Mapping`. An unsupported IR node throws `Diagnostic` instead of emitting a placeholder. Backend-specific lowering
+and validation belong in separate backend files; feature-specific IR declarations can likewise be added in separate
+files without changing module dependencies.
+
+Diagnostics have stable string codes, a severity, an explanation, an optional concrete alternative, and a source
+location. Their golden text is `file:line:column: error [code]: message Suggestion: alternative`. An absent
+suggestion omits that suffix. Codes are API: changing one is an intentional fixture and compatibility change.
+
+The initial parser deliberately supports only `VStack`, `HStack`, `Text`, and string-title `Button` with an empty
+action. Other IR cases define the next typed boundaries and are not a claim that those features already parse or
+generate. New views and expressions extend these types with explicit ownership and source locations; no backend may
+introduce a second Swift parser.
+
 ## Open decisions
 
-1. The exact IR shape (first PR of the generator skeleton).
+1. **Resolved:** see "IR and generator boundaries" above.
 2. `refract.json` schema and where native component declarations live (Swift attributes vs JSON).
 3. How models expose fine-grained observation on each platform (Compose `State`/`StateFlow` vs generated holders;
    ArkUI V1 vs V2 decorators) under goal 2.
