@@ -60,7 +60,7 @@ extension Generation {
             case let .valueProperty(.binding(name)):
                 writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
             default:
-                throw Diagnostic(code: "RFSTATE003", message: "An editable toggle needs a local state or parent binding.",
+                throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state or parent binding.",
                                  suggestion: "Use a projected Bool @State or @Binding property.", location: value.location)
             }
             writer.close(suffix: ")")

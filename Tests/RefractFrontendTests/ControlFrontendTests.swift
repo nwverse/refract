@@ -29,6 +29,6 @@ func frontendParsesOnlyDeclaredBoolToggleProjection(_ declaration: String, _ exp
         var body: some View { Toggle("settings.enabled", isOn: $other) }
     }
     """))
-    #expect(unit.diagnostics.contains { $0.code == "RFSTATE003" })
+    #expect(unit.diagnostics.contains { $0.code == "state.invalid_projection" })
     #expect(unit.module.screens.isEmpty)
 }

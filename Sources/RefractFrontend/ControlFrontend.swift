@@ -11,7 +11,7 @@ extension Builder {
               let projection = call.arguments.last?.expression.as(DeclReferenceExprSyntax.self),
               projection.baseName.text.hasPrefix("$"),
               let property = controlBinding(named: String(projection.baseName.text.dropFirst())) else {
-            error("RFSTATE003", "Toggle requires a title and `$property` for a declared scalar state or binding.",
+            error("state.invalid_projection", "Toggle requires a title and `$property` for a declared scalar state or binding.",
                   "Use `Toggle(\"settings.enabled\", isOn: $isEnabled)` with Bool ownership", at: call)
             return nil
         }

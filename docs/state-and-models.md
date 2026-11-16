@@ -223,7 +223,7 @@ ownership reason is explained, and a supported alternative is suggested.
 
 | Code | Rejected construct | Alternative |
 | --- | --- | --- |
-| `RFSTATE001` | `@ObservedObject`, `@StateObject`, `@EnvironmentObject`, `@Environment`, `@AppStorage`, `@SceneStorage`, `@FocusState`, `@GestureState` | local `@State`, parent `@Binding`, or a declared model interface |
+| `state.invalid_declaration` | `@ObservedObject`, `@StateObject`, `@EnvironmentObject`, `@Environment`, `@AppStorage`, `@SceneStorage`, `@FocusState`, `@GestureState` | local `@State`, parent `@Binding`, or a declared model interface |
 | `state.invalid_declaration` | multiple bindings in one wrapped declaration, missing explicit type, unsupported wrapper arguments | one typed stored property with the supported wrapper |
 | `state.missing_initializer` | `@State` without a local initializer | initialize the local value |
 | `state.binding_initializer` | `@Binding` with an initial value | pass the parent's value and callback instead |

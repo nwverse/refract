@@ -18,7 +18,7 @@ extension ComposeBackend {
         out.line(") {")
         out.depth += 1
         guard case let .stringKey(key) = title.value else {
-            throw Diagnostic(code: "RFSTATE003", message: "A toggle title must be a localization key.",
+            throw Diagnostic(code: "state.invalid_projection", message: "A toggle title must be a localization key.",
                              suggestion: "Use a canonical settings.* key.", location: location)
         }
         let resource = try context.mapping.stringResource(key, platform: .android, location: title.location)
@@ -35,7 +35,7 @@ extension ComposeBackend {
         case let .valueProperty(.binding(name)):
             onChange = "on\(name.uppercasingFirst())Change"
         default:
-            throw Diagnostic(code: "RFSTATE003", message: "A switch needs a local state or parent binding.",
+            throw Diagnostic(code: "state.invalid_projection", message: "A switch needs a local state or parent binding.",
                              suggestion: "Use a projected Bool state or binding.", location: value.location)
         }
         out.line("Switch(")

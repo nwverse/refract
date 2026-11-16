@@ -32,8 +32,8 @@ extension Builder {
                   let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
                   let typeName = binding.typeAnnotation?.type.trimmedDescription,
                   let type = scalarType(typeName) else {
-                error("RFSTATE001", "Property wrapper `\(declaration.attributes.first?.trimmedDescription ?? "unknown")` has unsupported ownership.",
-                      "Use @State, @Binding or a plain let model input whose protocol inherits RefractModel", at: member)
+                error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
+                      "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
                 return nil
             }
             let ownership = attribute.attributeName.trimmedDescription
@@ -50,7 +50,7 @@ extension Builder {
                   declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }),
                   let initial = binding.initializer,
                   let value = literal(initial.value, expected: type) else {
-                error("RFSTATE002", "Local state `\(declaration.bindings.first?.pattern.trimmedDescription ?? "property")` requires a supported literal initializer.",
+                error("state.invalid_declaration", "Stored View properties require one private @State scalar with a literal initializer.",
                       "Use `@State private var count: Int = 0`; bindings and models are implemented separately", at: member)
                 return nil
             }
