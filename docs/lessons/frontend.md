@@ -8,6 +8,9 @@
 - Parse body shape separately from its expression. Otherwise a known rejection such as `Image` produces a redundant
   `unsupportedViewBody` after the useful `unsupportedView` diagnostic. A rejected subtree returns no IR, so the
   outer structural check must not report it again.
+- SwiftSyntax 600.0.1 represents `$property` as a `DeclReferenceExprSyntax` whose base name includes `$`, not as a
+  `PrefixOperatorExprSyntax`. Accept a projection only at a supported binding argument, validate the declaration's
+  ownership and type, and never accept an arbitrary projected string as a writable value.
 - Avoid shadowing a `location(of:)` helper with a local `location`; it makes later source-coordinate lookups attempt
   to call the local value.
 - Generated backend output is not an error channel. A backend with an unsupported IR node throws the shared typed

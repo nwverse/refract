@@ -1,0 +1,1 @@
+Input.swift:3:9: error [R.string.missing_android]: String key `settings.androidonly` is declared in the mapping but absent as `settings_androidonly` in the Android catalog. Suggestion: Add the resource to the platform's base string catalog

@@ -5,12 +5,12 @@ func emitComposeModels(_ models: [ModelProtocol], into out: inout KotlinWriter) 
         out.line()
         out.open("public interface \(model.name)")
         for property in model.properties {
-            if property.collection != nil {
-                throw Diagnostic(code: "compose.unsupported_collection_model",
-                                 message: "This model collection needs the shared typed-list lowering.",
-                                 suggestion: "Use the identified-list backend implementation.", location: property.location)
+            let type = if let collection = property.collection {
+                "State<List<\(collection.itemType)>>"
+            } else {
+                "State<\(try composeModelType(property.type))>"
             }
-            out.line("public val \(property.name): State<\(try composeModelType(property.type))>")
+            out.line("public val \(property.name): \(type)")
         }
         for action in model.actions {
             let parameters = try action.parameters.map {
@@ -19,6 +19,21 @@ func emitComposeModels(_ models: [ModelProtocol], into out: inout KotlinWriter) 
             out.line("public fun \(action.name)(\(parameters))")
         }
         out.close()
+    }
+}
+
+func emitComposeItemTypes(_ items: [ItemType], into out: inout KotlinWriter,
+                          context: inout ComposeBackend.Context) throws {
+    for item in items where !item.properties.isEmpty {
+        context.imports.insert("androidx.compose.runtime.Immutable")
+        out.line()
+        out.line("@Immutable")
+        out.open("public data class \(item.name)(")
+        for property in item.properties {
+            out.line("public val \(property.name): \(try composeModelType(property.type)),")
+        }
+        out.depth -= 1
+        out.line(")")
     }
 }
 

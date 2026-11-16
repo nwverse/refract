@@ -12,7 +12,7 @@ struct ExtensionSettings: View {
     var body: some View {
         VStack {
             Text(model.title)
-            Button("Disable") { model.setEnabled(false) }
+            Button(verbatim: "Disable") { model.setEnabled(false) }
         }
     }
 }

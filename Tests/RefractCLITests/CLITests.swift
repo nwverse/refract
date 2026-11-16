@@ -19,17 +19,30 @@ import Foundation
     defer { try? FileManager.default.removeItem(at: temporary) }
     try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
     let input = temporary.appendingPathComponent("Input.swift")
-    try Data("struct Hello: View { var body: some View { Text(\"Hello\") } }".utf8).write(to: input)
+    try Data("struct Hello: View { var body: some View { Text(\"hello.title\") } }".utf8).write(to: input)
 
-    let generation = try runCLI(["generate", "--input", input.path,
+    let mapping = temporary.appendingPathComponent("refract.json")
+    let resources = """
+    "imports":[],"components":{},"nativeComponents":{},"modifiers":{},"tokens":{"spacing":{},"radius":{},"font":{},"color":{}}
+    """
+    let android = "\"output\":{\"directory\":\"generated\",\"packageName\":\"refract.generated\"}," + resources
+    try Data("""
+    {"schemaVersion":1,"android":{\(android),"resources":{"className":"example.resources.R","catalog":"strings.xml","strings":{"hello.title":"hello_title"}}},"harmonyOS":{"output":{"directory":"generated"},\(resources),"resources":{"namespace":"app","stringTable":"string","catalog":"string.json","strings":{"hello.title":"hello_title"}}}}
+    """.utf8).write(to: mapping)
+    try Data("<resources><string name=\"hello_title\">Hello</string></resources>".utf8)
+        .write(to: temporary.appendingPathComponent("strings.xml"))
+    try Data("{\"string\":[{\"name\":\"hello_title\",\"value\":\"Hello\"}]}".utf8)
+        .write(to: temporary.appendingPathComponent("string.json"))
+
+    let generation = try runCLI(["generate", "--input", input.path, "--mapping", mapping.path,
                                  "--android-out", temporary.appendingPathComponent("android").path,
                                  "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(generation.status == 0, Comment(rawValue: generation.stderr))
     #expect(try String(contentsOf: temporary.appendingPathComponent("android/Input.kt"), encoding: .utf8)
-        .contains("text = \"Hello\""))
+        .contains("stringResource(example.resources.R.string.hello_title)"))
     #expect(try String(contentsOf: temporary.appendingPathComponent("harmony/Input.ets"), encoding: .utf8)
-        .contains("Text('Hello')"))
-    #expect(try runCLI(["check", "--input", input.path], executable: executable).status == 0)
+        .contains("$r('app.string.hello_title')"))
+    #expect(try runCLI(["check", "--input", input.path, "--mapping", mapping.path], executable: executable).status == 0)
 
     let rejection = try runCLI(["generate", "--input",
                                 root.appendingPathComponent("Fixtures/rejected-image/Input.swift").path,
@@ -65,8 +78,8 @@ private func builtCLIExecutable() -> URL {
     let second = temporary.appendingPathComponent("Second.swift")
     let android = temporary.appendingPathComponent("android")
     let harmony = temporary.appendingPathComponent("harmony")
-    try Data("struct First: View { var body: some View { Text(\"First\") } }".utf8).write(to: first)
-    try Data("struct Second: View { var body: some View { Text(\"Second\") } }".utf8).write(to: second)
+    try Data("struct First: View { var body: some View { Text(verbatim: \"First\") } }".utf8).write(to: first)
+    try Data("struct Second: View { var body: some View { Text(verbatim: \"Second\") } }".utf8).write(to: second)
     let arguments = ["--input", first.path, "--input", second.path,
                      "--android-out", android.path, "--harmony-out", harmony.path]
     let generated = try runCLI(["generate"] + arguments, executable: executable)
@@ -102,7 +115,7 @@ private func builtCLIExecutable() -> URL {
     defer { try? FileManager.default.removeItem(at: temporary) }
     try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
     let valid = temporary.appendingPathComponent("Valid.swift")
-    try Data("struct Valid: View { var body: some View { Text(\"Valid\") } }".utf8).write(to: valid)
+    try Data("struct Valid: View { var body: some View { Text(verbatim: \"Valid\") } }".utf8).write(to: valid)
     let missing = root.appendingPathComponent("Fixtures/interop-native-missing")
     let android = temporary.appendingPathComponent("android")
     let harmony = temporary.appendingPathComponent("harmony")

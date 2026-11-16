@@ -85,7 +85,7 @@ import RefractIR
     let output = try ComposeBackend().generate(module: module)
     #expect(output.contains("import androidx.compose.runtime.remember"))
     #expect(output.contains("import androidx.compose.runtime.mutableStateOf"))
-    #expect(output.contains("val count = remember { mutableStateOf(0) }"))
+    #expect(output.contains("var count by remember { mutableStateOf(0) }"))
 }
 
 @Test func composeEmitsBindingParameters() throws {

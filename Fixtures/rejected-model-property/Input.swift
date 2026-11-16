@@ -8,6 +8,6 @@ struct UnsupportedWritableModel: View {
     let model: WritableSettingsModel
 
     var body: some View {
-        Text("Unsupported")
+        Text(verbatim: "Unsupported")
     }
 }
