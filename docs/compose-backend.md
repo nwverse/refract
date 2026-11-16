@@ -75,6 +75,8 @@ Rules:
 | `List` / `LazyVStack` over `ForEach` | `LazyColumn` | See "Lists". |
 
 Nested containers compose structurally; the emitter never wraps a child in an extra `Box` "just in case".
+A vertical `ScrollView` whose direct child is a `List` is rejected with `RF-C004`: nesting a lazy vertical list in a
+vertical scroll container has no faithful finite-height Compose equivalent. Use the lazy list itself for that content.
 
 ### Leaf views
 
@@ -82,7 +84,7 @@ Nested containers compose structurally; the emitter never wraps a child in an ex
 | --- | --- |
 | `Text("Hello")` | `Text(text = "Hello")` (literal) or `Text(text = stringResource(R.string.hello))` when the Swift side is a localisation key (#8). |
 | `Text(model.title)` | `Text(text = model.title)` |
-| `Image(systemName:)` | Rejected: SF Symbols have no Android equivalent. Use a declared native component or `Image("name", bundle:)` → `Image(painter = painterResource(R.drawable.name), contentDescription = …)`. |
+| `Image(systemName:)` | `RF-C002` unless a future typed symbol contract explicitly declares the Android icon. Use `Image("drawable_name")` → `Image(painter = painterResource(R.drawable.name), contentDescription = null)` with `android.resources.className`, or a declared native component. |
 | `Button("Title") { … }` | `Button(onClick = { … }) { Text(text = "Title") }`. The action lambda is the IR's action body; the label becomes the slot. |
 | `Toggle("Title", isOn: $flag)` | `Row { Text(text = "Title"); Spacer(Modifier.weight(1f)); Switch(checked = flag, onCheckedChange = { flag = it }) }`. The exact shape comes from #5's binding lowering; the backend composes it. |
 | `TextField("Placeholder", text: $text)` | `TextField(value = text, onValueChange = { text = it }, placeholder = { Text(text = "Placeholder") })` |
@@ -91,6 +93,15 @@ Nested containers compose structurally; the emitter never wraps a child in an ex
 
 Design-system components declared in `refract.json` map to the declared Kotlin call (#6). The emitter substitutes
 argument labels per the mapping and fails with a diagnostic when a required parameter has no value.
+
+### Static lists
+
+A static `List` lowers to one `LazyColumn.item` per source row. Resource-keyed text rows and section headers have
+unique source-derived keys and a `contentType`. Duplicate or non-portable derived text keys are rejected rather than
+silently aliasing two rows; other row shapes need an explicit identity in the IR before they are accepted. These are
+source-stable identities, not index fallbacks for a dynamic model. `compose-typed-layout` demonstrates static sections
+and rows; `compose-scroll` demonstrates remembered vertical scroll state; `compose-image` demonstrates a mapped
+application drawable. `Divider` and `Spacer` are emitted directly in ordinary layouts.
 
 ### Modifiers
 

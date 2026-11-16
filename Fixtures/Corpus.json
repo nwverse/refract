@@ -1,6 +1,11 @@
 {
   "schemaVersion": 1,
   "cases": [
+    { "path": "compose-image", "implementationStatus": "ready" },
+    { "path": "compose-rejected-nested-scroll", "implementationStatus": "ready" },
+    { "path": "compose-rejected-system-image", "implementationStatus": "ready" },
+    { "path": "compose-scroll", "implementationStatus": "ready" },
+    { "path": "compose-typed-layout", "implementationStatus": "ready" },
     { "path": "hello", "implementationStatus": "ready" },
     { "path": "interop-native-callers", "implementationStatus": "pending" },
     { "path": "interop-native-component", "implementationStatus": "pending" },

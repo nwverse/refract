@@ -27,6 +27,9 @@ public struct ComposeBackend: Sendable {
         out.line()
         out.line("package \(context.packageName)")
         out.line()
+        for item in mapping.android.imports.map(\.module) {
+            context.imports.insert(item)
+        }
         for item in context.imports.sorted() {
             out.line("import \(item)")
         }
@@ -102,12 +105,15 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Views
 
-    private func emit(_ node: ViewNode, isRoot: Bool = false, into out: inout KotlinWriter,
-                      context: inout Context) throws {
+    func emit(_ node: ViewNode, isRoot: Bool = false, parentAxis: ViewNode.StackAxis? = nil,
+              into out: inout KotlinWriter, context: inout Context) throws {
         switch node {
         case let .stack(axis, children, modifiers, location):
             try emitStack(axis: axis, children: children, modifiers: modifiers, isRoot: isRoot,
                           location: location, into: &out, context: &context)
+        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .toggle, .textInput,
+             .label, .divider, .spacer:
+            try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
         case let .text(expression, modifiers, location):
             try emitText(expression, modifiers: modifiers, isRoot: isRoot, location: location,
                          into: &out, context: &context)
@@ -123,11 +129,6 @@ public struct ComposeBackend: Sendable {
             }
         case let .conditional(branches, location):
             try emitConditional(branches, location: location, into: &out, context: &context)
-        default:
-            throw Diagnostic(code: "RF-C001",
-                             message: "This extended view IR is awaiting its Compose lowering.",
-                             suggestion: "Use a supported view while the shared backend contract is implemented.",
-                             location: node.sourceLocation)
         }
     }
 
@@ -149,7 +150,7 @@ public struct ComposeBackend: Sendable {
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
         out.open("\(call)(modifier = \(modifierChain))")
         for child in children {
-            try emit(child, into: &out, context: &context)
+            try emit(child, parentAxis: axis, into: &out, context: &context)
         }
         out.close()
     }
@@ -213,7 +214,7 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Modifiers
 
-    private func modifierChain(_ modifiers: [Modifier], isRoot: Bool, context: inout Context) throws -> String {
+    func modifierChain(_ modifiers: [Modifier], isRoot: Bool, context: inout Context) throws -> String {
         var parts: [String] = []
         for modifier in modifiers {
             // Text-only modifiers (font, foregroundColor) are emitted as Text parameters, not as Modifier entries.
@@ -282,7 +283,7 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Expressions
 
-    private func renderExpression(_ expression: Expression, context: inout Context) throws -> String {
+    func renderExpression(_ expression: Expression, context: inout Context) throws -> String {
         switch expression.value {
         case let .stringLiteral(value):
             return "\"\(value.escapedForKotlin())\""
@@ -349,16 +350,21 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Context
 
-    private struct Context {
+    struct Context {
         var packageName: String = "refract.generated"
         var imports: Set<String> = [
             "androidx.compose.runtime.Composable",
             "androidx.compose.ui.Modifier",
         ]
         let mapping: Mapping
+        var androidResourceClass: String?
 
         init(mapping: Mapping) {
             self.mapping = mapping
+            self.androidResourceClass = mapping.android.resources.className
+            if let packageName = mapping.android.output.packageName {
+                self.packageName = packageName
+            }
         }
     }
 }
