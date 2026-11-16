@@ -173,6 +173,34 @@ private func builtCLIExecutable() -> URL {
     #endif
 }
 
+@Test func cliRejectsUnsupportedViewDeclarationWithoutPartialOutput() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    let valid = temporary.appendingPathComponent("Valid.swift")
+    try Data("struct Valid: View { var body: some View { Text(verbatim: \"Valid\") } }".utf8).write(to: valid)
+    let rejected = root.appendingPathComponent("Fixtures/rejected-view-declaration/Input.swift")
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input", valid.path, "--input", rejected.path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status != 0)
+    #expect(result.stderr.contains("[RFSYN004]"))
+    #expect(result.stderr.contains("unsupportedHelper"))
+    #expect(result.stderr.contains("model protocol"))
+    #expect(!FileManager.default.fileExists(atPath: android.path))
+    #expect(!FileManager.default.fileExists(atPath: harmony.path))
+    #endif
+}
+
 private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {    let process = Process()
     process.executableURL = executable
     process.arguments = arguments
