@@ -237,11 +237,13 @@ public struct Component: Codable, Equatable, Sendable {
     /// The native interop compatibility form's imported module; canonical mappings use `imports`.
     public var module: String?
     public var kind: String?
+    public var targetTypes: [String: String]?
 
     public init(parameters: [Parameter] = [], content: ContentKind = .none, contentParameter: String? = nil,
                 modifiers: [String] = [], target: String, argumentStyle: ArgumentStyle = .named,
                 arguments: [ArgumentBinding] = [], modifierParameter: String? = nil,
-                attributes: [String: Attribute] = [:], module: String? = nil, kind: String? = nil) {
+                attributes: [String: Attribute] = [:], module: String? = nil, kind: String? = nil,
+                targetTypes: [String: String]? = nil) {
         self.parameters = parameters
         self.content = content
         self.contentParameter = contentParameter
@@ -253,6 +255,7 @@ public struct Component: Codable, Equatable, Sendable {
         self.attributes = attributes
         self.module = module
         self.kind = kind
+        self.targetTypes = targetTypes
     }
 
     public var hasContent: Bool { content != .none }
@@ -393,30 +396,39 @@ private struct LegacyMapping: Decodable {
         var android = PlatformMapping.empty
         var harmony = PlatformMapping.empty
         for entry in nativeComponents {
-            let common = commonParameters(entry.android.parameters, entry.harmonyOS.parameters)
-            android.nativeComponents[entry.swift] = convert(entry.android, parameters: common, style: .named)
-            harmony.nativeComponents[entry.swift] = convert(entry.harmonyOS, parameters: common, style: .object)
+            // Keep each target's scalar spelling. Int and Double both map to ArkTS number, so normalizing from
+            // Android alone would invent a HarmonyOS type mismatch.
+            android.nativeComponents[entry.swift] = convert(entry.android,
+                parameters: entry.android.parameters.map { Parameter(label: $0.swift, type: androidType($0.type)) }, style: .named)
+            harmony.nativeComponents[entry.swift] = convert(entry.harmonyOS,
+                parameters: entry.harmonyOS.parameters.map { Parameter(label: $0.swift, type: harmonyType($0.type)) }, style: .object)
         }
         return Mapping(android: android, harmonyOS: harmony)
     }
 
-    private func commonParameters(_ android: [Entry.Target.Argument], _ harmony: [Entry.Target.Argument]) -> [Parameter] {
-        zip(android, harmony).map { a, h in Parameter(label: a.swift, type: sourceType(a.type, h.type)) }
+    private func androidType(_ type: String) -> ParameterType {
+        switch type {
+        case "String": .string
+        case "Boolean": .bool
+        case "Int": .int
+        case "Double": .double
+        default: .string // The legacy validator rejects this input before decoding.
+        }
     }
 
-    private func sourceType(_ android: String, _ harmony: String) -> ParameterType {
-        switch (android, harmony) {
-        case ("String", "string"): .string
-        case ("Boolean", "boolean"): .bool
-        case ("Int", "number"): .int
-        case ("Double", "number"): .double
-        default: .string // The legacy validator rejects this input before decoding.
+    private func harmonyType(_ type: String) -> ParameterType {
+        switch type {
+        case "string": .string
+        case "boolean": .bool
+        case "number": .int // InteropResolver checks the explicit target type against the Swift Int/Double declaration.
+        default: .string
         }
     }
 
     private func convert(_ target: Entry.Target, parameters: [Parameter], style: ArgumentStyle) -> Component {
         Component(parameters: parameters, target: target.symbol, argumentStyle: style,
                   arguments: target.parameters.map { ArgumentBinding(source: $0.swift, target: $0.name) },
-                  module: target.module, kind: target.kind)
+                  module: target.module, kind: target.kind,
+                  targetTypes: Dictionary(uniqueKeysWithValues: target.parameters.map { ($0.swift, $0.type) }))
     }
 }
