@@ -43,7 +43,7 @@ fun GeneratedSettingsScreen(model: SettingsModel) {
 }
 
 @Composable
-private fun GeneratedSettingRow(model: SettingsModel, row: SettingRow) {
+fun GeneratedSettingRow(model: SettingsModel, row: SettingRow) {
     val onCheckedChange = remember(model, row.id) {
         { enabled: Boolean -> model.setEnabled(row.id, enabled) }
     }

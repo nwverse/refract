@@ -45,7 +45,7 @@ fun ReferenceSettingsScreen(model: SettingsModel) {
 }
 
 @Composable
-private fun ReferenceSettingRow(
+fun ReferenceSettingRow(
     title: String,
     subtitle: String,
     checked: Boolean,

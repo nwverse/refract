@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "RefractBenchmark"
 include(":app")
+include(":benchmark")

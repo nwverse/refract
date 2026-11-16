@@ -15,12 +15,31 @@ plugins indiscriminately.
 Pin the compile SDK required by the actual dependency graph: `checkReleaseAarMetadata` reports if AndroidX
 libraries need a newer compile SDK. That is distinct from the API level of the emulator used to execute the tests.
 
+`createComposeRule()` needs a `ComponentActivity` in the instrumentation's target package. In a
+self-instrumented test module, use `createAndroidComposeRule<MicrobenchmarkActivity>()` with that activity declared
+in the test manifest. `createEmptyComposeRule()` provides no `setContent` member; it is for existing composition
+content, not for setting new test UI. The activity hosts only test-owned UI and is not either measured variant.
+
+The self-instrumenting key is `android.experimental.self-instrumenting` (hyphen), not `selfInstrumenting`; the
+latter silently leaves `targetPackage` pointing at the app and causes macro permission/process failures. Use
+`AndroidBenchmarkRunner` for benchmarks. Compose test rules need a host activity in the test package.
+
+A test module cannot import another module's Kotlin classes just because it has `targetProjectPath`. Share the exact
+source directory via `sourceSets.main.kotlin.srcDir`, rather than copying generated and reference implementations,
+and include the activity/Compose dependencies of that shared source.
+
 ## A running emulator is not a valid benchmark by itself
 
-Without hardware acceleration, a first boot can take a long time optimizing system packages. Wait for
-`sys.boot_completed=1` and for initial dex optimization/system load to settle before measuring. Keep raw AndroidX
-JSON; instrumentation failure and absence of JSON are errors, not empty passing reports. A headless emulator is
-always labelled as an emulator, never as a physical-device result.
+Wait for `sys.boot_completed=1`, a readable `ro.build.version.sdk` (a transient 1 is not a real API level), and
+initial dex optimization/system load to settle before measuring. Check that external storage is writable before
+AndroidX starts shell scripts. Keep raw AndroidX JSON in a per-run output directory immediately after each test;
+later tests can clean the shared additional-output directory. Instrumentation failure and absence of JSON are
+errors, not empty passing reports. A headless emulator is always labelled as an emulator, never as a device.
+
+Macrobenchmark startup needs an actual first frame within the platform deadline. Software rendering can exceed it
+(`lastFrameNs=null`) even if the activity is resumable and later draws successfully. A `reportFullyDrawn()` marker
+helps application readiness but does not override the platform's frame timeout. Do not delete that timeout, call
+the run a pass, or present emulator timing as device evidence.
 
 Do not assume two nearly identical top-level composables remain distinct after ART compilation. Inspect both
 compiled variants and include macro frame traces; do not claim that inlining them into an identical implementation

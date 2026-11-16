@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.view.doOnPreDraw
 
 class BenchmarkActivity : ComponentActivity() {
     val benchmarkModel = BenchmarkSettingsModel()
@@ -22,6 +23,13 @@ class BenchmarkActivity : ComponentActivity() {
                     ScreenVariant.Reference -> ReferenceSettingsScreen(benchmarkModel)
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        findViewById<android.view.View>(android.R.id.content).doOnPreDraw {
+            reportFullyDrawn()
         }
     }
 

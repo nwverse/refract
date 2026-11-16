@@ -1,0 +1,217 @@
+{
+    "context": {
+        "build": {
+            "brand": "Android",
+            "device": "emu64x",
+            "fingerprint": "Android/sdk_phone64_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys",
+            "id": "AE3A.240806.019",
+            "model": "Android SDK built for x86_64",
+            "type": "userdebug",
+            "version": {
+                "codename": "REL",
+                "sdk": 35
+            }
+        },
+        "cpuCoreCount": 2,
+        "cpuLocked": false,
+        "cpuMaxFreqHz": 2000,
+        "memTotalBytes": 3122163712,
+        "sustainedPerformanceModeEnabled": false,
+        "artMainlineVersion": 352090000,
+        "osCodenameAbbreviated": "REL",
+        "compilationMode": "verify",
+        "payload": {}
+    },
+    "benchmarks": [
+        {
+            "name": "EMULATOR_referenceRowRecomposition",
+            "params": {},
+            "className": "dev.refract.bench.test.SettingsMicrobenchmark",
+            "totalRunTimeNs": 68914397561,
+            "metrics": {
+                "timeNs": {
+                    "minimum": 5.7907846E7,
+                    "maximum": 6.15353802E8,
+                    "median": 1.50889965E8,
+                    "coefficientOfVariation": 0.6499629567855278,
+                    "runs": [
+                        1.732948E8,
+                        1.26329285E8,
+                        2.4480203E8,
+                        3.2009224E8,
+                        1.61581854E8,
+                        1.75100181E8,
+                        1.77544874E8,
+                        8.5187248E7,
+                        1.75979119E8,
+                        1.96679407E8,
+                        1.53660363E8,
+                        1.14381131E8,
+                        2.9951561E8,
+                        1.83288374E8,
+                        6.15353802E8,
+                        4.03160625E8,
+                        1.68777839E8,
+                        3.15167051E8,
+                        4.39092935E8,
+                        2.30423249E8,
+                        3.35679047E8,
+                        4.8601863E8,
+                        3.83697059E8,
+                        1.70985887E8,
+                        2.71042392E8,
+                        1.91944143E8,
+                        1.16664309E8,
+                        6.4390319E7,
+                        1.24680075E8,
+                        1.05283349E8,
+                        1.33994208E8,
+                        1.52773681E8,
+                        9.0302005E7,
+                        9.9988313E7,
+                        1.85689027E8,
+                        1.23895854E8,
+                        9.3288645E7,
+                        1.13392724E8,
+                        7.624594E7,
+                        7.8013346E7,
+                        1.47777872E8,
+                        8.4686056E7,
+                        1.18294332E8,
+                        7.7803818E7,
+                        8.9911761E7,
+                        8.44872E7,
+                        1.49006249E8,
+                        5.7907846E7,
+                        1.04174908E8,
+                        1.10296107E8
+                    ]
+                },
+                "allocationCount": {
+                    "minimum": 745.0,
+                    "maximum": 978.0,
+                    "median": 783.0,
+                    "coefficientOfVariation": 0.11727060055983879,
+                    "runs": [
+                        745.0,
+                        783.0,
+                        978.0,
+                        792.0,
+                        758.0
+                    ]
+                }
+            },
+            "sampledMetrics": {},
+            "warmupIterations": 30,
+            "repeatIterations": 1,
+            "thermalThrottleSleepSeconds": 0,
+            "profilerOutputs": [
+                {
+                    "type": "PerfettoTrace",
+                    "label": "Trace",
+                    "filename": "SettingsMicrobenchmark_referenceRowRecomposition_2026-11-16-17-59-31.perfetto-trace"
+                },
+                {
+                    "type": "MethodTrace",
+                    "label": "Method Trace",
+                    "filename": "SettingsMicrobenchmark_referenceRowRecomposition-methodTracing-2026-11-16-17-59-19.trace"
+                }
+            ]
+        },
+        {
+            "name": "EMULATOR_generatedRowRecomposition",
+            "params": {},
+            "className": "dev.refract.bench.test.SettingsMicrobenchmark",
+            "totalRunTimeNs": 60973964027,
+            "metrics": {
+                "timeNs": {
+                    "minimum": 5.7688092E7,
+                    "maximum": 1.70043841E8,
+                    "median": 1.019350495E8,
+                    "coefficientOfVariation": 0.2561179259823994,
+                    "runs": [
+                        1.40431754E8,
+                        1.03329369E8,
+                        7.8297012E7,
+                        1.11559095E8,
+                        1.61774546E8,
+                        6.2008734E7,
+                        1.06721885E8,
+                        1.10334883E8,
+                        1.29578835E8,
+                        6.2198009E7,
+                        7.6746208E7,
+                        5.9416155E7,
+                        1.22853709E8,
+                        1.07846481E8,
+                        9.6176448E7,
+                        5.7688092E7,
+                        1.37775725E8,
+                        1.23031684E8,
+                        7.6578602E7,
+                        1.0932418E8,
+                        8.3337008E7,
+                        7.0140216E7,
+                        7.1754527E7,
+                        1.11432569E8,
+                        1.20741625E8,
+                        8.7395488E7,
+                        8.7081587E7,
+                        8.104239E7,
+                        9.7910296E7,
+                        1.06285796E8,
+                        8.8420101E7,
+                        1.07099291E8,
+                        1.34175858E8,
+                        1.27443996E8,
+                        9.1944149E7,
+                        1.04633683E8,
+                        7.6553109E7,
+                        1.0054073E8,
+                        1.28876475E8,
+                        9.9175708E7,
+                        7.7595996E7,
+                        7.7073171E7,
+                        1.14063213E8,
+                        1.70043841E8,
+                        1.03951988E8,
+                        8.282407E7,
+                        8.2990622E7,
+                        1.43412468E8,
+                        1.22189834E8,
+                        8.9194467E7
+                    ]
+                },
+                "allocationCount": {
+                    "minimum": 683.0,
+                    "maximum": 1044.0,
+                    "median": 798.0,
+                    "coefficientOfVariation": 0.17007157215842786,
+                    "runs": [
+                        798.0,
+                        1044.0,
+                        733.0,
+                        818.0,
+                        683.0
+                    ]
+                }
+            },
+            "sampledMetrics": {},
+            "warmupIterations": 42,
+            "repeatIterations": 1,
+            "thermalThrottleSleepSeconds": 0,
+            "profilerOutputs": [
+                {
+                    "type": "PerfettoTrace",
+                    "label": "Trace",
+                    "filename": "SettingsMicrobenchmark_generatedRowRecomposition_2026-11-16-18-00-57.perfetto-trace"
+                },
+                {
+                    "type": "MethodTrace",
+                    "label": "Method Trace",
+                    "filename": "SettingsMicrobenchmark_generatedRowRecomposition-methodTracing-2026-11-16-18-00-48.trace"
+                }
+            ]
+        }
+    ]
+}

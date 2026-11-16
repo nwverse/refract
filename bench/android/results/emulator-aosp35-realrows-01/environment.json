@@ -1,0 +1,6 @@
+{
+  "emulator": true,
+  "source": "adb ro.kernel.qemu",
+  "model": "sdk_gphone64_x86_64",
+  "sdk": 35
+}
