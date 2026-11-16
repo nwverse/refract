@@ -12,3 +12,6 @@
   to call the local value.
 - Generated backend output is not an error channel. A backend with an unsupported IR node throws the shared typed
   `Diagnostic`; it never emits a comment that looks like successful output.
+- In SwiftSyntax 600, a view expression can be an `ExprSyntax` directly, while a root `if` or `switch` can be
+  wrapped in `ExpressionStmtSyntax`. Dispatch builder statements through both shapes and keep `#if` on its existing
+  `IfConfigDeclSyntax` path; a single `as(ExprSyntax.self)` assumption rejects valid view-builder control flow.

@@ -6,6 +6,8 @@
     { "path": "compose-rejected-system-image", "implementationStatus": "ready" },
     { "path": "compose-scroll", "implementationStatus": "ready" },
     { "path": "compose-typed-layout", "implementationStatus": "ready" },
+    { "path": "control-if-else", "implementationStatus": "ready" },
+    { "path": "control-reject-if-let", "implementationStatus": "ready" },
     { "path": "hello", "implementationStatus": "ready" },
     { "path": "interop-native-callers", "implementationStatus": "ready" },
     { "path": "interop-native-component", "implementationStatus": "ready" },
