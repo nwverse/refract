@@ -286,8 +286,9 @@ its source; regeneration replaces it as a whole. Native code imports the public 
 - Swift stored input properties become ordered Kotlin parameters. Their types and defaults are explicit; callers use
   named Kotlin arguments.
 - Every generated Compose entry point has a trailing `modifier: Modifier = Modifier` root-extension parameter, even
-  when the Swift input has no stored inputs. It is applied after the source-owned root modifiers. This is a
-  platform-specific native call-site extension point, not a runtime adapter or an added view container.
+  when the Swift input has no stored inputs. It is applied before the source-owned root modifiers, matching the
+  native call-site convention. This is a platform-specific native call-site extension point, not a runtime adapter
+  or an added view container.
 - ArkUI inputs use the observation rules in `docs/performance.md` and the model contract. Required inputs are marked
   with the appropriate V2 parameter decorator and passed in the component's object literal.
 - `@Binding` and model properties become the typed state/interface parameters defined by the state workstream, never
