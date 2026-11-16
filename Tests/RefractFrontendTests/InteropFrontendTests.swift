@@ -101,7 +101,7 @@ import RefractIR
         var body: some View { Text(refractValue(ios: "iOS", android: true, harmonyOS: "HarmonyOS")) }
     }
     """))
-    #expect(mismatched.diagnostics.map(\.code) == ["RFNATIVE003", "R.string.invalid_key"])
+    #expect(mismatched.diagnostics.map(\.code) == ["RFNATIVE003"])
     #expect(mismatched.diagnostics[0].location?.line == 2)
 }
 

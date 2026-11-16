@@ -58,6 +58,22 @@ import RefractIR
     #expect(text.arguments.map(\.value) == [.reference("name"), .reference("count"), .reference("ratio")])
 }
 
+@Test func platformTextIsVerbatimAndKeepsTargetBranches() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct PlatformText: View {
+        var body: some View { Text(refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS")) }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .text(expression, _, _) = unit.module.screens.first?.body,
+          case let .platformValue(values) = expression.value else {
+        Issue.record("Expected typed platform text")
+        return
+    }
+    #expect(values.android.value == .verbatimText("Android"))
+    #expect(values.harmonyOS.value == .verbatimText("HarmonyOS"))
+}
+
 @Test func unknownViewKeepsItsNativeDiagnosticWithoutBodyInterpolationErrors() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Bad: View { var body: some View { Gauge("photo") } }

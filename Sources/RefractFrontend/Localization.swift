@@ -186,11 +186,19 @@ struct LocalizationFrontend {
     }
 
     private mutating func platformText(_ call: FunctionCallExprSyntax) -> Expression? {
-        guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else { return nil }
+        guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
+            error("RFNATIVE003", "`refractValue` requires exactly `ios`, `android`, and `harmonyOS` arguments with compatible types.",
+                  "Supply all three typed platform values", at: call)
+            return nil
+        }
         var values: [Expression] = []
         for argument in call.arguments {
             guard let literal = argument.expression.as(StringLiteralExprSyntax.self),
-                  let text = literal.representedLiteralValue else { return nil }
+                  let text = literal.representedLiteralValue else {
+                error("RFNATIVE003", "Platform text alternatives must all be string literals without interpolation.",
+                      "Use a nonlocalized literal string in every platform branch", at: argument)
+                return nil
+            }
             values.append(Expression(.verbatimText(text), type: .string, location: location(of: argument.expression)))
         }
         return Expression(.platformValue(PlatformAlternatives(
