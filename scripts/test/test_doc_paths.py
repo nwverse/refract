@@ -15,7 +15,7 @@ FENCE = re.compile(r"^[ \t]*(```|~~~)")
 LINK = re.compile(r"\[[^]\n]*\]\(\s*([^) \t]+)(?:[ \t]+[^)]*)?\)")
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
 REPOSITORY_PATH = re.compile(
-    r"(?<![/\w.-])((?:\.github|docs|scripts|Sources|Tests|Fixtures|examples|bench)/"
+    r"(?<![/\w.<-])((?:\.github|docs|scripts|Sources|Tests|Fixtures|examples|bench)/"
     r"(?:[\w.+@-]+/)*[\w.+@-]+/?|(?:Package\.swift|Package\.resolved|CLAUDE\.md|AGENTS\.md))"
 )
 PLACEHOLDERS = re.compile(r"<[^{}<>]+>|\$\{[^{}]+\}")
