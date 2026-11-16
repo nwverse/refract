@@ -1,1 +1,1 @@
-Input.swift:3:9: error [RF-C001]: This extended view IR is awaiting its Compose lowering. Suggestion: Use a supported view while the shared backend contract is implemented.
+Input.swift:3:9: error [RF-C002]: Application images require the Android R class in refract.json. Suggestion: Set android.resources.className to the application's fully qualified R class.
