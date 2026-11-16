@@ -62,6 +62,22 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "localization/formatted",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-android",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-harmony",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/plain",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "mapping/brand-a",
       "implementationStatus": "ready"
     },
@@ -119,7 +135,7 @@
     },
     {
       "path": "v0-binding-state",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-button-action",
@@ -155,7 +171,7 @@
     },
     {
       "path": "v0-local-state",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-model-screen",

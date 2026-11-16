@@ -13,3 +13,13 @@
   and test argument-free strings, not only formatted ones.
 - **Linux XML APIs live in FoundationXML.** Import that module conditionally. Do not import `RefractMapping` from
   its own source file; Swift warns about a module self-import.
+- **Keep frontend dependencies one-way.** Key syntax belongs in IR; `RefractFrontend` cannot call a helper in
+  `RefractMapping` just because both modules need it. Mapping and backend code may depend on IR, not the reverse.
+- **Do not compare repackaged SwiftSyntax members by identity.** Filtering a member list creates new syntax values;
+  compare the declaration's semantics (for example the `body` binding name) rather than relying on a wrapper's `id`
+  or trivia-sensitive position.
+- **Separate registry and catalog failures.** The mapping must declare a key on both platforms, but the native base
+  resource file must also contain it. A missing-key fixture should omit the key from only the layer being tested.
+- **Escape fixture interpolation twice.** A Swift test string containing an input such as `Text("key \\(value)")`
+  needs `\\(value)` in the host literal. Otherwise the test compiler evaluates the interpolation instead of the
+  parser under test.

@@ -8,6 +8,6 @@ struct UnsupportedGenericModel: View {
     let model: GenericSettingsModel
 
     var body: some View {
-        Text("Unsupported")
+        Text(verbatim: "Unsupported")
     }
 }
