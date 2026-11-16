@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [
+      "example.design.AppColors",
+      "example.design.AppRadius",
+      "example.design.AppSpacing",
+      "example.design.AppTypography"
+    ],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {
+      "font": { "parameters": [{ "label": "_", "type": "font", "required": true }] },
+      "foregroundStyle": { "parameters": [{ "label": "_", "type": "color", "required": true }] },
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] },
+      "background": { "parameters": [{ "label": "_", "type": "color", "required": true }] },
+      "cornerRadius": { "parameters": [{ "label": "_", "type": "length", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "AppSpacing.medium" },
+      "radius": { "DesignRadius.small": "AppRadius.small" },
+      "font": { "DesignTypography.title": "AppTypography.title" },
+      "color": {
+        "DesignColors.secondary": "AppColors.secondary",
+        "DesignColors.surface": "AppColors.surface"
+      }
+    },
+    "resources": { "className": "refract.generated.R", "strings": {} }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [
+      { "module": "example.design", "symbols": ["AppColors", "AppRadius", "AppSpacing", "AppTypography"] }
+    ],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {
+      "font": { "parameters": [{ "label": "_", "type": "font", "required": true }] },
+      "foregroundStyle": { "parameters": [{ "label": "_", "type": "color", "required": true }] },
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] },
+      "background": { "parameters": [{ "label": "_", "type": "color", "required": true }] },
+      "cornerRadius": { "parameters": [{ "label": "_", "type": "length", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "AppSpacing.medium" },
+      "radius": { "DesignRadius.small": "AppRadius.small" },
+      "font": { "DesignTypography.title": "AppTypography.title" },
+      "color": {
+        "DesignColors.secondary": "AppColors.secondary",
+        "DesignColors.surface": "AppColors.surface"
+      }
+    },
+    "resources": { "namespace": "app", "stringTable": "string", "strings": {} }
+  }
+}
