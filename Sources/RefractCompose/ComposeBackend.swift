@@ -312,6 +312,8 @@ public struct ComposeBackend: Sendable {
             return name
         case let .valueProperty(.model(model, property)):
             return "\(model).\(property).value"
+        case let .valueProperty(.itemBinding(binding)):
+            return "\(binding.item).\(binding.property)"
         case let .interpolatedString(segments):
             var result = "\""
             for segment in segments {
