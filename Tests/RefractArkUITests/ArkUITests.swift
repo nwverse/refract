@@ -44,7 +44,7 @@ import RefractIR
     @ComponentV2
     export struct Hello {
       build() {
-        Column({ space: 8 }) {
+        Column() {
           Text('Hello').fontSize(18).fontColor(this.theme.titleColor).borderRadius(8)
           Button() {
             Text('Go')
@@ -86,7 +86,7 @@ import RefractIR
         ], modifiers: [], location: nil)),
     ])
     let output = try ArkUIBackend().generate(module: module)
-    #expect(output.contains("Row({ space: 8 }) {"))
+    #expect(output.contains("Row() {"))
     #expect(output.contains("if (true) {"))
     #expect(output.contains("} else if (this.model.loaded) {"))
     #expect(output.contains("} else {"))

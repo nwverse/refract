@@ -167,7 +167,7 @@
     },
     {
       "path": "v0-button-action",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-conditional-content",
@@ -183,7 +183,7 @@
     },
     {
       "path": "v0-hello-text",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-identified-list",
@@ -231,7 +231,7 @@
     },
     {
       "path": "v0-reject-missing-resource",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-native-missing",
@@ -275,7 +275,7 @@
     },
     {
       "path": "v0-static-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-styled-text",
