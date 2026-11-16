@@ -6,6 +6,13 @@ import RefractIR
 import RefractMapping
 import Testing
 
+private let repository = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+
+private func payloadMapping() throws -> Mapping {
+    try Mapping.load(contentsOf: repository.appendingPathComponent("Fixtures/control-switch-payload/refract.json"))
+}
+
 private let optionalSource = """
 struct OptionalGreeting: View {
     let title: String?
@@ -61,9 +68,7 @@ struct ContentView: View {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: payloadSource))
     #expect(unit.diagnostics.map(\.rendered) == [])
     #expect(unit.module.enums.first?.payloadTypes == ["text": .string, "count": .int])
-    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Fixtures/control-switch-payload/refract.json"))
+    let mapping = try payloadMapping()
     let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
     let arkTS = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
     #expect(kotlin.contains("public sealed interface Content {"))
@@ -74,6 +79,8 @@ struct ContentView: View {
     #expect(arkTS.contains("export type Content = ContentText | ContentCount;"))
     #expect(arkTS.contains("if (this.content instanceof ContentText)"))
     #expect(arkTS.contains("const text = this.content.value;"))
+    #expect(arkTS.contains("Text(text)"))
+    #expect(arkTS.contains("Text($r('app.string.content_count', count))"))
     #expect(arkTS.contains("} else if (this.content instanceof ContentCount)"))
     #expect(!arkTS.contains(" as "))
 }

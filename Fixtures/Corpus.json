@@ -30,6 +30,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "control-optional-modifier",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "control-reject-associated-value",
       "implementationStatus": "ready"
     },
@@ -43,6 +47,10 @@
     },
     {
       "path": "control-switch-enum",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-switch-modifier",
       "implementationStatus": "ready"
     },
     {

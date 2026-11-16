@@ -34,6 +34,13 @@ Do not add an ordinary `: void` return annotation to a trailing UI-builder closu
 style rule. Component `build()` methods are annotated, while builder syntax and its permitted annotations must be
 checked against actual ArkUI SDK examples and the compiler. A syntactic TypeScript parse alone is not verification.
 
+## Local scalar aliases do not disable canonical modifiers
+
+A list item or optional/payload binding alias is an expression-scope input, not a reason to bypass canonical modifier
+lowering. `Text(alias).frame(width: 44)` must produce `.width(44)` with the local alias, just as an ordinary scalar
+Text does. Keep expression-name resolution separate from the decision about which modifier forms are supported, and
+test aliases in optional and payload branches through the actual CLI on both backends.
+
 ## Emit errors, not commented placeholders
 
 An unsupported node, unknown modifier or untyped list is a build-time diagnostic with a stable code and source

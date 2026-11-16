@@ -2,7 +2,8 @@ import RefractIR
 import RefractMapping
 
 extension ArkModifiers {
-    static func emitCanonical(_ modifiers: [Modifier], mapping: Mapping, isText: Bool = false) throws -> String {
+    static func emitCanonical(_ modifiers: [Modifier], mapping: Mapping, item: String? = nil,
+                              isText: Bool = false) throws -> String {
         var parts: [String] = []
         var index = 0
         while index < modifiers.count {
@@ -83,7 +84,7 @@ extension ArkModifiers {
                 parts.append(".opacity(\(value))")
             case "fontSize", "fontWeight", "width", "height":
                 guard modifier.arguments.count == 1 else { throw arguments.invalid("Use one scalar attribute value.") }
-                parts.append(".\(modifier.name)(\(try ArkExpression.emit(try arguments.one(), mapping: mapping)))")
+                parts.append(".\(modifier.name)(\(try ArkExpression.emit(try arguments.one(), item: item, mapping: mapping)))")
             case "font":
                 guard isText else {
                     throw Diagnostic(code: "RFVIEW003",
@@ -98,7 +99,7 @@ extension ArkModifiers {
                         suggestion: "Apply `\(modifier.name)` directly to the Text view.",
                         location: modifier.location)
                 }
-                parts.append(".fontColor(\(try color(try arguments.one(), mapping: mapping)))")
+                parts.append(".fontColor(\(try color(try arguments.one(), item: item, mapping: mapping)))")
             default:
                 throw Diagnostic(code: "RFVIEW003", message: "Modifier `\(modifier.name)` has no ArkUI mapping.",
                                  suggestion: "Use a supported modifier or a typed native component.", location: modifier.location)
@@ -113,12 +114,12 @@ extension ArkModifiers {
             .length(category, platform: .harmonyOS).value
     }
 
-    private static func color(_ expression: Expression, mapping: Mapping) throws -> String {
+    private static func color(_ expression: Expression, item: String? = nil, mapping: Mapping) throws -> String {
         if case let .reference(name) = expression.value,
            mapping.harmonyOS.tokens.color[name] != nil {
             return try mapping.token(name, category: .color, platform: .harmonyOS, location: expression.location)
         }
-        return try ArkExpression.emit(expression, mapping: mapping)
+        return try ArkExpression.emit(expression, item: item, mapping: mapping)
     }
 
     private static func token(_ expression: Expression, category: TokenCategory, mapping: Mapping) throws -> String {

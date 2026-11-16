@@ -119,7 +119,7 @@ correctly), otherwise `Modifier`.
 | `.padding()` | `Modifier.padding(all = Dp)` |
 | `.padding(.horizontal, 16)` | `Modifier.padding(horizontal = 16.dp)` |
 | `.padding(16)` | `Modifier.padding(all = 16.dp)` |
-| `.frame(width:height:)` | `Modifier.size(width = …, height = …)`; `.frame(maxWidth: .infinity)` → `Modifier.fillMaxWidth()` |
+| `.frame(width:height:)` | `Modifier.width(...)` or `Modifier.height(...)` for one fixed dimension; `Modifier.size(width = …, height = …)` for both; `.frame(maxWidth: .infinity)` → `Modifier.fillMaxWidth()` |
 | `.background(Color.red)` | `Modifier.background(Color.Red)` (colour tokens from the mapping when present) |
 | `.foregroundColor(.red)` | `Text`'s `color = Color.Red` parameter, not a `Modifier` |
 | `.font(.title)` | `Text`'s `style = MaterialTheme.typography.titleLarge` (token from the mapping) |
