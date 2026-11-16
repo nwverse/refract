@@ -85,5 +85,5 @@ This is a public open-source repository, and its history is public too.
 | --- | --- |
 | Rules and goals | `docs/SUPER_RULES.md` highest-priority rules · `docs/GOALS.md` the five goals and their evidence |
 | Design | `docs/architecture.md` pipeline, modules, models, mixing, testing, open decisions · `docs/arkui-backend.md` ArkTS lowering, list identity and toolchain verification · `docs/compose-backend.md` Kotlin lowering, list identity, performance rules · `docs/state-and-models.md` state, bindings and observation · `docs/interop.md` native components, platform variation and generated entry points |
-| Process | `docs/collaboration.md` claims, comment templates, PRs, merging · `docs/roadmap.md` phases and workstreams |
-| Lessons | `docs/lessons/` pitfalls by topic (index `docs/lessons/README.md`) |
+| Process | `docs/collaboration.md` claims, comment templates, PRs, merging · `docs/roadmap.md` phases and workstreams · `docs/ci.md` repository checks, CI prerequisites and local verification |
+| Lessons | `docs/lessons/` pitfalls by topic; every file under this directory is listed in its README |
