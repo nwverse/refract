@@ -22,7 +22,23 @@ brief. Check whether command-line tools already exist before creating download d
 finish the installation while your script is being prepared. The examples accept `ANDROID_HOME` rather than
 committing `local.properties` or a machine-specific path.
 
-Pin the Gradle wrapper, Android Gradle Plugin, Kotlin plugin and Compose BOM to compatible versions. In particular,
-Kotlin 2.x needs the Compose compiler Gradle plugin instead of the removed `composeOptions.kotlinCompilerExtensionVersion`
-configuration. Use the same JDK target for Java and Kotlin compilation. Run an actual Gradle build rather than
-treating successful Kotlin formatting or a copied golden file as compilation evidence.
+## AGP 9 and current Compose compatibility
+
+AGP 9 includes Kotlin Android support. Applying `org.jetbrains.kotlin.android` now fails at configuration time;
+retain only the Compose compiler plugin and configure JVM bytecode through `KotlinAndroidProjectExtension.compilerOptions`.
+The Android Gradle Plugin and Compose BOM also impose their own compileSdk minimums, independently of the app's
+`targetSdk`. For the current example, Compose BOM 2026.09.00 requires SDK 37 while `compileSdkMinor = 2` selects the
+installed 37.2 platform. Keep those versions documented together and do not downgrade a fixture's language feature
+just to use an older cached compiler.
+
+Scope-sensitive Kotlin modifiers are another app-compile issue: importing `androidx.compose.foundation.layout.weight`
+can expose an internal member rather than the intended `RowScope.weight`. The correct call resolves in the `Row`
+content receiver. Only real Android compilation catches this; inspecting an expected Kotlin file does not.
+
+## Test what the example actually compiles
+
+A shared source may be ready for iOS while the generator still rejects it for other platforms. Do not commit native
+host imports of the missing generated interface merely to show future wiring: that breaks the otherwise working app.
+Keep the current generated path compiling and land the host change together with actual generated output. Run
+`python3 scripts/check_examples.py` after `swift build` to regenerate and compare committed output, validate mapped
+base resources and check the iOS shared-source references. It is a consistency check, not a native compiler.

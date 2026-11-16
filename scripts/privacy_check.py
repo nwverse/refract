@@ -33,7 +33,7 @@ IGNORE = {"darwin", "linux", "local", "ssh", "true", "false", "server", "localho
 # Internal or vendor names that never appear here, in any spelling. Matched case-insensitively.
 BANNED_NAMES = re.compile(r"aster[-_ ]?gate|open[-_ ]?lark|open[-_ ]?wechat|extensions[-_ ]?internal|corp[-_ ]?link",
                           re.IGNORECASE)
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})")
+EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z0-9-]{2,})")
 PUBLIC_EMAIL_DOMAINS = ("example.com", "example.net", "example.org", "example", "users.noreply.github.com",
                         "noreply.github.com")
 PUBLIC_EMAIL_TLDS = (".test", ".invalid", ".localhost", ".example")
@@ -110,13 +110,30 @@ def scan_text(label, text, words, report):
             report.append("%s:%d: %s (%s)" % (label, i, kind, source))
 
 
+def redacted(text, words):
+    """Keep a useful path in a diagnostic without reproducing any matched private value."""
+    for word in sorted(words, key=len, reverse=True):
+        text = re.sub(re.escape(word), "<redacted>", text, flags=re.IGNORECASE)
+    text = BANNED_NAMES.sub("<redacted>", text)
+    text = EMAIL.sub(lambda m: m.group(0) if public_email(m.group(1)) else "<redacted>", text)
+
+    def redact_private_ip(match):
+        try:
+            address = ipaddress.ip_address(match.group(1))
+        except ValueError:
+            return match.group(0)
+        return "<redacted>" if any(address in network for network in PRIVATE_NETS) else match.group(0)
+
+    return IPV4.sub(redact_private_ip, text)
+
+
 def scan_blob(path, data, words, report):
     if path in SKIP_FILES:
         return
-    scan_text("path " + path, path, words, report)
+    scan_text("path " + redacted(path, words), path, words, report)
     if b"\0" in data[:8192]:
         return  # binary
-    scan_text(path, data.decode("utf-8", "replace"), words, report)
+    scan_text(redacted(path, words), data.decode("utf-8", "replace"), words, report)
 
 
 def message_lines(path):
@@ -135,10 +152,16 @@ def main(argv):
     report = []
     args = list(argv)
     msg = None
-    if "--commit-msg" in args:
-        i = args.index("--commit-msg"); msg = message_lines(args[i + 1]); del args[i:i + 2]
-    if "--message" in args:
-        i = args.index("--message"); msg = open(args[i + 1], encoding="utf-8", errors="replace").read(); del args[i:i + 2]
+    usage = False
+    for option in ("--commit-msg", "--message"):
+        if option in args:
+            i = args.index(option)
+            if i + 1 >= len(args):
+                usage = True
+                break
+            msg = message_lines(args[i + 1]) if option == "--commit-msg" else \
+                open(args[i + 1], encoding="utf-8", errors="replace").read()
+            del args[i:i + 2]
     if args[:1] == ["--staged"]:
         names = git("diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRT").split(b"\0")
         for name in filter(None, names):
@@ -146,6 +169,10 @@ def main(argv):
             scan_blob(path, git("show", ":" + path), words, report)
     elif args[:1] == ["--range"] and len(args) == 2 and ".." in args[1]:
         base, head = args[1].split("..", 1)
+        if not base or not head:
+            print("usage:", file=sys.stderr)
+            print(__doc__, file=sys.stderr)
+            return 2
         shared = subprocess.run(["git", "-C", ROOT, "merge-base", base, head], capture_output=True).returncode == 0
         if shared:
             names = git("diff", "--name-only", "-z", "--diff-filter=ACMRT", base, head).split(b"\0")
@@ -165,6 +192,7 @@ def main(argv):
                 else git("show", ":" + path, check=False)
             scan_blob(path, data, words, report)
     else:
+        print("usage:", file=sys.stderr)
         print(__doc__, file=sys.stderr)
         return 2
     if msg is not None:

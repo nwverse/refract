@@ -177,14 +177,14 @@ public struct ComposeBackend: Sendable {
         }
     }
 
-    private func emitButton(label: ViewNode, action: Expression?, modifiers: [Modifier], isRoot: Bool,
+    private func emitButton(label: ViewNode, action: StateAction?, modifiers: [Modifier], isRoot: Bool,
                             location: SourceLocation?, into out: inout KotlinWriter,
                             context: inout Context) throws {
         context.imports.insert("androidx.compose.material3.Button")
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
         let onClick: String
         if let action {
-            onClick = "{ \(try renderExpression(action, context: &context)) }"
+            onClick = "{ \(try renderAction(action, context: &context)) }"
         } else {
             onClick = "{ }"
         }
@@ -297,8 +297,28 @@ public struct ComposeBackend: Sendable {
             return name
         case let .binding(name):
             return name
+        case let .valueProperty(.state(name)):
+            return "\(name).value"
+        case let .interpolatedString(segments):
+            var result = "\""
+            for segment in segments {
+                switch segment {
+                case let .literal(text): result += text.escapedForKotlin()
+                case let .expression(value): result += "${\(try renderExpression(value, context: &context))}"
+                }
+            }
+            return result + "\""
         case let .platformValue(alternatives):
             return try renderExpression(alternatives.android, context: &context)
+        }
+    }
+
+    private func renderAction(_ action: StateAction, context: inout Context) throws -> String {
+        switch action {
+        case let .assign(.state(name), value):
+            return "\(name).value = \(try renderExpression(value, context: &context))"
+        case let .increment(.state(name), value):
+            return "\(name).value += \(try renderExpression(value, context: &context))"
         }
     }
 

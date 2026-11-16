@@ -49,6 +49,7 @@ fixture:
 
 ```sh
 swift build
+python3 scripts/check_examples.py
 .build/debug/refract generate \
   --input examples/shared/Hello.swift \
   --mapping examples/refract.json \
