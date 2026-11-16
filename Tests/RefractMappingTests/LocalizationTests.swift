@@ -3,6 +3,19 @@ import Testing
 import RefractIR
 @testable import RefractMapping
 
+@Test func typedLayoutMappingKeepsHarmonyResourceConfiguration() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/compose-typed-layout/refract.json")
+    let mapping = try Mapping.load(contentsOf: url)
+    #expect(mapping.harmonyOS.resources.namespace == "app")
+    #expect(mapping.harmonyOS.resources.stringTable == "string")
+    #expect(mapping.harmonyOS.resources.catalog == "resources/base/element/string.json")
+    #expect(mapping.resourceBaseURL != nil)
+    let resource = try mapping.stringResource("settings.general", platform: .harmonyOS)
+    #expect(resource.nativeName == "settings_general")
+}
+
 @Test func canonicalNamesAreSharedAndCannotAlias() throws {
     #expect(try StringResourceName.make(key: "settings.title") == "settings_title")
     #expect(try StringResourceName.make(key: "profile.message2") == "profile_message2")

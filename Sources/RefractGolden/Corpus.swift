@@ -1,5 +1,16 @@
 import Foundation
 
+extension FixtureCase {
+    /// Directory containing a fixture's optional refract.json and native catalogs.
+    public var resourceBaseURL: URL? {
+        guard mapping != nil else { return nil }
+        return URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+    }
+}
+
 /// An explicit conformance case. Pending cases are structural contracts, not passing generation tests.
 public struct FixtureCorpus: Codable, Sendable {
     public enum ImplementationStatus: String, Codable, Sendable { case ready, pending }

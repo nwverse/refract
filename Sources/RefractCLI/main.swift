@@ -87,6 +87,9 @@ struct RefractCommand {
             mapping = .empty
         }
         guard !hasErrors else { throw CLIError.message("validation stopped because the input has errors") }
+        for unit in units {
+            try LocalizationResourceValidator.validate(module: unit.module, mapping: mapping)
+        }
 
         var outputs: [(directory: String, filename: String, contents: String)] = []
         for unit in units {

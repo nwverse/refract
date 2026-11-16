@@ -44,7 +44,9 @@ public enum ValueType: String, Codable, Sendable {
 public struct Expression: Codable, Equatable, Sendable {
     public indirect enum Value: Codable, Equatable, Sendable {
         case stringLiteral(String)
+        case verbatimText(String)
         case stringKey(String)
+        case localizedText(LocalizedText)
         case boolLiteral(Bool)
         case numberLiteral(String)
         case layoutSpacing(LayoutSpacing)
@@ -56,11 +58,20 @@ public struct Expression: Codable, Equatable, Sendable {
     }
 
     public let value: Value
+    public let type: ValueType?
     public let location: SourceLocation?
 
-    public init(_ value: Value, location: SourceLocation? = nil) {
+    public init(_ value: Value, type: ValueType? = nil, location: SourceLocation? = nil) {
         self.value = value
+        self.type = type
         self.location = location
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        value = try container.decode(Value.self, forKey: .value)
+        type = try container.decodeIfPresent(ValueType.self, forKey: .type)
+        location = try container.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 
@@ -134,15 +145,27 @@ public struct NativeComponent: Codable, Equatable, Sendable {
 
 public struct Screen: Codable, Equatable, Sendable {
     public let name: String
+    public let parameters: [ScreenParameter]
     public let states: [StateDeclaration]
     public let body: ViewNode
     public let location: SourceLocation?
 
-    public init(name: String, states: [StateDeclaration] = [], body: ViewNode, location: SourceLocation? = nil) {
+    public init(name: String, parameters: [ScreenParameter] = [], states: [StateDeclaration] = [],
+                body: ViewNode, location: SourceLocation? = nil) {
         self.name = name
+        self.parameters = parameters
         self.states = states
         self.body = body
         self.location = location
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        parameters = try container.decodeIfPresent([ScreenParameter].self, forKey: .parameters) ?? []
+        states = try container.decode([StateDeclaration].self, forKey: .states)
+        body = try container.decode(ViewNode.self, forKey: .body)
+        location = try container.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 
@@ -151,12 +174,24 @@ public struct Module: Codable, Equatable, Sendable {
     public let screens: [Screen]
     public let nativeDeclarations: [NativeDeclaration]
     public let models: [ModelProtocol]
+    public let itemTypes: [ItemType]
     public init(sourceFile: String, screens: [Screen], nativeDeclarations: [NativeDeclaration] = [],
-                models: [ModelProtocol] = []) {
+                models: [ModelProtocol] = [], itemTypes: [ItemType] = []) {
         self.sourceFile = sourceFile
         self.screens = screens
         self.nativeDeclarations = nativeDeclarations
         self.models = models
+        self.itemTypes = itemTypes
+    }
+
+    private enum CodingKeys: String, CodingKey { case sourceFile, screens, nativeDeclarations, models, itemTypes }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        sourceFile = try values.decode(String.self, forKey: .sourceFile)
+        screens = try values.decode([Screen].self, forKey: .screens)
+        nativeDeclarations = try values.decodeIfPresent([NativeDeclaration].self, forKey: .nativeDeclarations) ?? []
+        models = try values.decodeIfPresent([ModelProtocol].self, forKey: .models) ?? []
+        itemTypes = try values.decodeIfPresent([ItemType].self, forKey: .itemTypes) ?? []
     }
 }
 

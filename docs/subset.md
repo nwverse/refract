@@ -51,7 +51,7 @@ same parameters as the Swift view. Full examples are in the linked fixtures.
 
 | SwiftUI form | Compose form | ArkUI form | Semantics and performance |
 | --- | --- | --- | --- |
-| `VStack(alignment: .leading, spacing: .medium) { a; b }` | `Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.Start) { A(); B() }` | `Column({ space: 8 }) { A(); B() }.alignItems(HorizontalAlign.Start)` | Vertical, source-order children. Default alignment is `.center`, default spacing is `.medium` (8 dp/fp); `.leading` is start, never an absolute physical left in a right-to-left layout. |
+| `VStack(alignment: .leading, spacing: .medium) { a; b }` | `Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.Start) { A(); B() }` | `Column({ space: 8 }) { A(); B() }.alignItems(HorizontalAlign.Start)` | Vertical, source-order children. Default alignment is `.center`; omitted spacing uses the toolkit default, not an invented 8 dp/fp gap. Explicit `.medium` is 8 dp/fp. `.leading` is start, never an absolute physical left in a right-to-left layout. |
 | `HStack(alignment: .center, spacing: .small) { a; b }` | `Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) { A(); B() }` | `Row({ space: 4 }) { A(); B() }.alignItems(VerticalAlign.Center)` | Horizontal source order follows the native layout direction. Children are emitted directly; no adapter, layout pass or wrapper view. |
 | `ZStack(alignment: .center) { a; b }` | `Box(contentAlignment = Alignment.Center) { A(); B() }` | `Stack({ alignContent: Alignment.Center }) { A(); B() }` | Source order is back-to-front. V0 supports `.center`, `.topLeading` and `.bottomTrailing`; see the alignment table. |
 | `ScrollView { content }` | `Column(modifier = Modifier.verticalScroll(rememberScrollState())) { Content() }` | `Scroll() { Column() { Content() } }` | V0 is vertical and contains a single direct child. The Compose scroll state is remembered, not recreated. For repeated collections use `List`, not a `ScrollView` containing `ForEach`. |
@@ -81,8 +81,9 @@ and its child items, using the same identity and resource rules. It does not int
 | `.top` / `.center` / `.bottom` for horizontal stacks | `Alignment.Top` / `Alignment.CenterVertically` / `Alignment.Bottom` | `VerticalAlign.Top` / `VerticalAlign.Center` / `VerticalAlign.Bottom` |
 | `.topLeading` / `.bottomTrailing` for `ZStack` | `Alignment.TopStart` / `Alignment.BottomEnd` | `Alignment.TopStart` / `Alignment.BottomEnd` |
 
-Omitted stack arguments use the native forms in the table above. An explicit default is retained in output so the
-contract does not depend on a toolkit version's default.
+Omitted stack spacing preserves the toolkit default rather than inserting a numeric value. Explicit alignment and
+spacing arguments are retained in output so the contract does not depend on a toolkit version's interpretation of
+those source arguments.
 
 ## 3. Modifiers
 

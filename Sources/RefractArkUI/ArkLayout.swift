@@ -3,7 +3,7 @@ import RefractMapping
 
 extension Generation {
     func emitLayout(_ layout: LayoutContainer, children: [ViewNode], modifiers: [Modifier],
-                    into writer: inout ArkWriter, item: String?, resolver: InteropResolver?) throws {
+                    into writer: inout ArkWriter, item: String?, mapping: Mapping, resolver: InteropResolver?) throws {
         var arguments: [String] = []
         if let spacing = layout.spacing {
             arguments.append("space: \(try ArkExpression.emit(spacing, item: item, mapping: mapping))")
@@ -18,7 +18,7 @@ extension Generation {
         }
         writer.open("\(container)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
         for child in children {
-            try emit(child, into: &writer, item: item, resolver: resolver)
+            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
         }
         writer.close()
         if layout.axis != .depth, let alignment = layout.alignment {

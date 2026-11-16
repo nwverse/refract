@@ -35,13 +35,15 @@ struct CorpusTests {
         let root = GoldenTests.repository
         let cases = try CorpusLoader.load(repository: root)
         #expect(cases.map(\.name) == cases.map(\.name).sorted())
-        for required in ["hello", "pending-contract", "rejected-image"] {
+        for required in ["hello", "pending-contract", "rejected-image", "localization/plain",
+                         "localization/formatted", "localization/missing-android", "localization/missing-harmony"] {
             #expect(cases.map(\.name).contains(required))
         }
         #expect(cases.map(\.name).count == Set(cases.map(\.name)).count)
         #expect(cases.contains { $0.status == .ready })
         #expect(cases.contains { $0.name == "hello" && $0.status == .ready })
         #expect(cases.contains { $0.name == "rejected-image" && $0.status == .ready })
+        #expect(cases.filter { $0.name.hasPrefix("localization/") }.allSatisfy { $0.status == .ready })
         #expect(cases.filter { $0.name.hasPrefix("interop-") && $0.status == .ready }.map(\.name) == [
             "interop-native-callers", "interop-native-component", "interop-native-mismatch",
             "interop-native-missing", "interop-native-undeclared", "interop-platform-value",

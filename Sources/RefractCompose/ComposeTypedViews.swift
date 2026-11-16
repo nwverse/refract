@@ -11,8 +11,13 @@ extension ComposeBackend {
             try emitScroll(axis: axis, child: child, modifiers: modifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
         case let .list(children, modifiers, location):
-            try emitStaticList(children, modifiers: modifiers, isRoot: isRoot, location: location,
-                               into: &out, context: &context)
+            if children.count == 1, case let .forEach(items, _) = children[0] {
+                try emitDynamicList(items, modifiers: modifiers, isRoot: isRoot,
+                                    into: &out, context: &context)
+            } else {
+                try emitStaticList(children, modifiers: modifiers, isRoot: isRoot, location: location,
+                                   into: &out, context: &context)
+            }
         case let .section(_, _, location):
             throw Diagnostic(code: "RF-C001", message: "A section can only be lowered inside its parent LazyColumn.",
                              suggestion: "Use Section as a direct List child.", location: location)
@@ -82,6 +87,15 @@ extension ComposeBackend {
         out.close()
     }
 
+    private func emitDynamicList(_ items: ListItems, modifiers: [Modifier], isRoot: Bool,
+                                into out: inout KotlinWriter, context: inout Context) throws {
+        context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
+        context.imports.insert("androidx.compose.foundation.lazy.items")
+        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
+        try emitDynamicListItems(items, into: &out, context: &context)
+        out.close()
+    }
+
     private func emitStaticList(_ children: [ViewNode], modifiers: [Modifier], isRoot: Bool,
                                 location: SourceLocation?, into out: inout KotlinWriter,
                                 context: inout Context) throws {
@@ -148,7 +162,7 @@ extension ComposeBackend {
         }
         defer { index += 1 }
         let key: String
-        if case let .text(value, _, _) = child, case let .stringLiteral(literal) = value.value {
+        if case let .text(value, _, _) = child, value.isLocalizedText {
             key = try staticKey(value, prefix: "row", context: &context)
         } else {
             throw Diagnostic(code: "RF-C003",
@@ -167,6 +181,12 @@ extension ComposeBackend {
                                  suggestion: "Use a canonical resource key for static list text.", location: expression.location)
             }
             return "\"\(prefix):\(value)\""
+        case let .localizedText(text):
+            guard LocalizationKey.isCanonical(text.key) else {
+                throw Diagnostic(code: "RF-C003", message: "This localized row key is not a canonical stable item identity.",
+                                 suggestion: "Use a canonical resource key for static list text.", location: expression.location)
+            }
+            return "\"\(prefix):\(text.key)\""
         case .stringKey:
             throw Diagnostic(code: "RF-C001", message: "Localized static list keys require frontend localization integration.",
                              suggestion: "Keep the canonical resource key in the typed expression.", location: expression.location)

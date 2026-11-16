@@ -15,7 +15,9 @@ extension Builder {
         switch name {
         case "VStack", "HStack", "ZStack": return stack(call)
         case "ScrollView": return scroll(call)
-        case "List": return staticList(call)
+        case "List":
+            if call.arguments.isEmpty { return staticList(call) }
+            return dynamicList(call)
         case "Section": return section(call)
         case "Image": return image(call)
         case "Label": return label(call)
@@ -121,11 +123,26 @@ extension Builder {
         }
         var title: Expression?
         if let argument = call.arguments.first {
-            guard argument.label == nil, let text = stringLiteral(argument.expression) else {
-                error("RFVIEW004", "Section title must be a string resource key or literal.", at: argument)
-                return nil
+            if argument.label?.text == "verbatim" {
+                guard let text = argument.expression.as(StringLiteralExprSyntax.self)?.representedLiteralValue else {
+                    error("RFVIEW004", "A verbatim Section title must be a literal without interpolation.", at: argument)
+                    return nil
+                }
+                title = Expression(.verbatimText(text), type: .string, location: location(of: argument.expression))
+            } else {
+                guard argument.label == nil else {
+                    error("RFVIEW004", "Section title must be a static localization key or explicit verbatim text.", at: argument)
+                    return nil
+                }
+                var parser = LocalizationFrontend(file: file, converter: converter, scalar: {
+                    TypedExpression(self.viewScalar($0), nil)
+                }, stateText: stateText)
+                guard let text = parser.localized(argument.expression) else {
+                    diagnostics.append(contentsOf: parser.diagnostics)
+                    return nil
+                }
+                title = text
             }
-            title = Expression(.stringLiteral(text), location: location(of: argument.expression))
         }
         return .section(header: title, children: children, location: location(of: call))
     }
@@ -146,10 +163,25 @@ extension Builder {
     }
 
     private func label(_ call: FunctionCallExprSyntax) -> ViewNode? {
-        guard call.arguments.map(\.label?.text) == [nil, "systemImage"],
-              let title = stringLiteral(call.arguments.first!.expression),
+        guard call.arguments.map(\.label?.text) == [nil, "systemImage"] ||
+                call.arguments.map(\.label?.text) == ["verbatim", "systemImage"],
+              let titleArgument = call.arguments.first?.expression,
               let icon = stringLiteral(call.arguments.last!.expression) else { return nil }
-        return .label(title: Expression(.stringLiteral(title)), image: ImageSource(kind: .system, name: icon), modifiers: [], location: location(of: call))
+        if call.arguments.first?.label?.text == "verbatim" {
+            guard let titleArgument = titleArgument.as(StringLiteralExprSyntax.self),
+                  let text = titleArgument.representedLiteralValue else { return nil }
+            return .label(title: Expression(.verbatimText(text), type: .string, location: location(of: call)),
+                          image: ImageSource(kind: .system, name: icon), modifiers: [], location: location(of: call))
+        }
+        var parser = LocalizationFrontend(file: file, converter: converter, scalar: {
+            TypedExpression(self.viewScalar($0), nil)
+        }, stateText: stateText)
+        guard let title = parser.localized(titleArgument) else {
+            diagnostics.append(contentsOf: parser.diagnostics)
+            return nil
+        }
+        diagnostics.append(contentsOf: parser.diagnostics)
+        return .label(title: title, image: ImageSource(kind: .system, name: icon), modifiers: [], location: location(of: call))
     }
 
     private func leaf(_ call: FunctionCallExprSyntax, _ node: ViewNode) -> ViewNode? {

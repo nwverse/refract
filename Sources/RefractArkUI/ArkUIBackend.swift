@@ -41,6 +41,7 @@ struct Generation {
             }
         }
         for line in importLines { writer.line(line) }
+        try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
             guard ArkText.isIdentifier(screen.name) else {
@@ -52,11 +53,15 @@ struct Generation {
             writer.line()
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
+            for input in screen.parameters {
+                writer.line("@Param @Require public var \(input.name): \(try arkType(input.type))")
+            }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
+            if !screen.parameters.isEmpty || !screen.states.isEmpty { writer.line() }
             writer.open("build()")
-            try emit(screen.body, into: &writer, resolver: resolver)
+            try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver)
             writer.close()
             writer.close()
         }
@@ -64,17 +69,18 @@ struct Generation {
     }
 
     func emit(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
-              lazyOwner: Bool = false, resolver: InteropResolver? = nil) throws {
+              lazyOwner: Bool = false, mapping: Mapping = .empty,
+              resolver: InteropResolver? = nil) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
             writer.open("\(containerName(axis))(\(axis == .depth ? "" : "{ space: 8 }"))")
-            for child in children { try emit(child, into: &writer, item: item, resolver: resolver) }
+            for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .text(value, modifiers, _):
-            writer.line("Text(\(try emitLocalExpression(value, item: item)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
+            writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .button(label, action, modifiers, _):
             writer.open("Button()")
-            try emit(label, into: &writer, item: item, resolver: resolver)
+            try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver)
             writer.close()
             if let action {
                 writer.open(".onClick(() =>")
@@ -95,7 +101,7 @@ struct Generation {
                 if index > 0 { writer.closeBranch(condition.map { "else if (\($0))" } ?? "else") }
                 let prefix = index == 0 ? "if" : ""
                 writer.open(prefix + (index == 0 ? (condition.map { " (\($0))" } ?? "") : ""))
-                for child in branch.children { try emit(child, into: &writer, item: item, resolver: resolver) }
+                for child in branch.children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             }
             writer.close()
         case let .native(component, location):
@@ -112,10 +118,18 @@ struct Generation {
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
-                try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, resolver: resolver)
+                try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
             }
         default:
-            try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner, resolver: resolver)
+            try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+        }
+    }
+
+    private func arkType(_ type: ValueType) throws -> String {
+        switch type {
+        case .string: "string"
+        case .int, .double: "number"
+        case .bool: "boolean"
         }
     }
 
@@ -145,7 +159,7 @@ private extension StateDeclaration {
 
 struct ArkWriter {
     private(set) var text = ""
-    private var depth = 0
+    var depth = 0
 
     mutating func line(_ value: String = "", unlessEmpty: Bool = false) {
         if value.isEmpty {

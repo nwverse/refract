@@ -3,28 +3,29 @@ import RefractMapping
 
 extension Generation {
     func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
-                      lazyOwner: Bool = false, resolver: InteropResolver? = nil) throws {
+                      lazyOwner: Bool = false, mapping: Mapping = .empty,
+                      resolver: InteropResolver? = nil) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
             try emitLayout(layout, children: children, modifiers: modifiers,
-                           into: &writer, item: item, resolver: resolver)
+                           into: &writer, item: item, mapping: mapping, resolver: resolver)
         case let .scroll(axis, child, modifiers, _):
             writer.open("Scroll()")
-            try emit(child, into: &writer, item: item, resolver: resolver)
+            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
             writer.close()
             writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .list(children, modifiers, _):
             writer.open("List()")
-            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true, resolver: resolver) }
+            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver) }
             writer.close()
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .section(header, children, _):
             writer.open("ListItemGroup(\(try header.map { "{ header: Text(\(try ArkExpression.emit($0, mapping: mapping))) }" } ?? ""))")
-            for child in children { try emitListItem(child, into: &writer, item: item, resolver: resolver) }
+            for child in children { try emitListItem(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close()
         case let .listItem(child, _):
-            try emitListItem(child, into: &writer, item: item, resolver: resolver)
+            try emitListItem(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
         case let .forEach(items, location):
             guard lazyOwner else {
                 throw Diagnostic(code: "arkui.lazy_list_owner",
@@ -34,19 +35,32 @@ extension Generation {
             }
             writer.open("LazyForEach(\(try ArkExpression.emit(items.collection, mapping: mapping)), (item: \(items.itemType)) =>")
             writer.open("ListItem()")
-            try emit(items.content, into: &writer, item: items.itemName, resolver: resolver)
+            try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver)
             writer.close()
             let key = "item.\(items.key)"
             writer.close(suffix: ", (item: \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
         case let .image(source, modifiers, _):
             writer.line("Image(\(try image(source)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .toggle(title, value, modifiers, _):
-            // The corpus' model/action control contract supplies the value and write path; title is accessibility metadata.
-            _ = title
-            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try ArkExpression.emit(value, item: item, mapping: mapping)) })")
+            writer.open("Row()")
+            writer.line("Text(\(try ArkExpression.emit(title, mapping: mapping)))")
+            writer.line("Blank()")
+            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value)) })")
+            writer.depth += 1
             writer.open(".onChange((value: boolean) =>")
-            writer.line("\(try ArkExpression.assignment(value, to: "value"));")
+            switch value.value {
+            case let .valueProperty(.state(name)):
+                writer.line("this.\(name) = value;")
+            case let .valueProperty(.binding(name)):
+                writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            default:
+                throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state or parent binding.",
+                                 suggestion: "Use a projected Bool @State or @Binding property.", location: value.location)
+            }
             writer.close(suffix: ")")
+            writer.depth -= 1
+            writer.close()
+            writer.line(".justifyContent(FlexAlign.SpaceBetween)")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .textInput(placeholder, value, modifiers, _):
             var arguments = ["text: \(try ArkExpression.emit(value, item: item, mapping: mapping))"]
@@ -74,14 +88,14 @@ extension Generation {
     }
 
     private func emitListItem(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
-                              resolver: InteropResolver? = nil) throws {
+                              mapping: Mapping = .empty, resolver: InteropResolver? = nil) throws {
         writer.open("ListItem()")
         if case let .layout(layout, children, modifiers, location) = node {
             // A static List row is a single item; its content stays one native subtree.
             try emitExtended(.layout(layout, children: children, modifiers: modifiers, location: location),
-                             into: &writer, item: item, resolver: resolver)
+                             into: &writer, item: item, mapping: mapping, resolver: resolver)
         } else {
-            try emit(node, into: &writer, item: item, resolver: resolver)
+            try emit(node, into: &writer, item: item, mapping: mapping, resolver: resolver)
         }
         writer.close()
     }

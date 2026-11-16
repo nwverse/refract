@@ -7,7 +7,7 @@ import RefractIR
     struct RoutePreview: RefractNativeView {
         let zoom: Double
         let showsTraffic: Bool
-        var body: some View { Text("iOS") }
+        var body: some View { Text(verbatim: "iOS") }
     }
     struct RouteScreen: View {
         var body: some View { RoutePreview(zoom: 12.0, showsTraffic: true) }
@@ -28,7 +28,7 @@ import RefractIR
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct RoutePreview: RefractNativeView {
         let zoom: Double
-        var body: some View { Text("iOS") }
+        var body: some View { Text(verbatim: "iOS") }
     }
     struct RouteScreen: View {
         var body: some View { RoutePreview(zoom: true) }
@@ -50,7 +50,7 @@ import RefractIR
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Badge: RefractNativeView {
         let count: Int
-        var body: some View { Text("iOS") }
+        var body: some View { Text(verbatim: "iOS") }
     }
     struct Bad: View {
         var body: some View { Badge(count: count) }
@@ -64,9 +64,9 @@ import RefractIR
     struct PlatformScreen: View {
         var body: some View {
             refractView(
-                ios: { Text("iOS").padding(refractValue(ios: 4, android: 4, harmonyOS: 4)) },
-                android: { Text("Android").padding(refractValue(ios: 4, android: 12, harmonyOS: 12)) },
-                harmonyOS: { Text("HarmonyOS").padding(refractValue(ios: 4, android: 12, harmonyOS: 16)) }
+                ios: { Text(verbatim: "iOS").padding(refractValue(ios: 4, android: 4, harmonyOS: 4)) },
+                android: { Text(verbatim: "Android").padding(refractValue(ios: 4, android: 12, harmonyOS: 12)) },
+                harmonyOS: { Text(verbatim: "HarmonyOS").padding(refractValue(ios: 4, android: 12, harmonyOS: 16)) }
             )
         }
     }
@@ -83,8 +83,8 @@ import RefractIR
         Issue.record("Expected selected scalar alternatives to stay typed")
         return
     }
-    #expect(androidText.value == .stringLiteral("Android"))
-    #expect(harmonyText.value == .stringLiteral("HarmonyOS"))
+    #expect(androidText.value == .verbatimText("Android"))
+    #expect(harmonyText.value == .verbatimText("HarmonyOS"))
     #expect(androidPadding.value(for: .android).value == .numberLiteral("12"))
     #expect(harmonyPadding.value(for: .harmonyOS).value == .numberLiteral("16"))
 }
@@ -101,7 +101,7 @@ import RefractIR
         var body: some View { Text(refractValue(ios: "iOS", android: true, harmonyOS: "HarmonyOS")) }
     }
     """))
-    #expect(mismatched.diagnostics.map(\.code) == ["RFNATIVE003", "unsupportedText"])
+    #expect(mismatched.diagnostics.map(\.code) == ["RFNATIVE003"])
     #expect(mismatched.diagnostics[0].location?.line == 2)
 }
 
@@ -110,7 +110,7 @@ import RefractIR
     struct Bad: View {
         var body: some View {
             #if os(iOS)
-            Text("iOS")
+            Text(verbatim: "iOS")
             #else
             Text("Other")
             #endif
@@ -125,7 +125,7 @@ import RefractIR
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Badge: RefractNativeView {
         var count: Int = 0
-        var body: some View { Text("iOS") }
+        var body: some View { Text(verbatim: "iOS") }
     }
     struct Screen: View { var body: some View { Badge(count: 1) } }
     """))

@@ -6,6 +6,12 @@ enum ArkExpression {
         switch expression.value {
         case let .stringLiteral(value):
             return try ArkText.string(value)
+        case let .verbatimText(value):
+            return try ArkText.string(value)
+        case .localizedText:
+            return try LocalizedTextEmitter.arkUI(expression, mapping: mapping) {
+                try ArkExpression.emit($0, mapping: mapping)
+            }
         case let .stringKey(key):
             let resource = try mapping.stringResource(key, platform: .harmonyOS, location: expression.location)
             return "$r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)')"
@@ -33,6 +39,8 @@ enum ArkExpression {
                              location: expression.location)
         case let .platformValue(alternatives):
             return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
+        case let .valueProperty(.model(model, property)):
+            return "this.\(try referenceName(model, location: expression.location)).\(try referenceName(property, location: expression.location))"
         case .valueProperty, .interpolatedString:
             throw Diagnostic(code: "arkui.unsupported_state_expression",
                              message: "This state expression requires the local-state lowering.",
