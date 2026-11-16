@@ -33,29 +33,39 @@ extension Generation {
                                  suggestion: "Move the dynamic rows into a List, not a stack or ScrollView.",
                                  location: location)
             }
-            writer.open("LazyForEach(\(try ArkExpression.emit(items.collection, mapping: mapping)), (item: \(items.itemType)) =>")
+            writer.open("LazyForEach(\(try ArkExpression.emit(items.collection, mapping: mapping)), (\(items.itemName): \(items.itemType)) =>")
             writer.open("ListItem()")
             try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver)
             writer.close()
-            let key = "item.\(items.key)"
-            writer.close(suffix: ", (item: \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
+            let key = "\(items.itemName).\(items.key)"
+            writer.close(suffix: ", (\(items.itemName): \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
         case let .image(source, modifiers, _):
             writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .toggle(title, value, modifiers, _):
             writer.open("Row()")
-            writer.line("Text(\(try ArkExpression.emit(title, mapping: mapping)))")
+            writer.line("Text(\(try ArkExpression.emit(title, item: item, mapping: mapping)))")
             writer.line("Blank()")
-            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value)) })")
+            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value, item: item, mapping: mapping)) })")
             writer.depth += 1
-            writer.open(".onChange((value: boolean) =>")
+            if case .valueProperty(.itemBinding) = value.value {
+                writer.open(".onChange((enabled: boolean) =>")
+            } else {
+                writer.open(".onChange((value: boolean) =>")
+            }
             switch value.value {
             case let .valueProperty(.state(name)):
                 writer.line("this.\(name) = value;")
             case let .valueProperty(.binding(name)):
                 writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            case let .valueProperty(.itemBinding(binding)):
+                guard binding.item == item else {
+                    throw Diagnostic(code: "state.invalid_projection", message: "An item toggle cannot write through a different list item.",
+                                     suggestion: "Use the current LazyForEach item.", location: value.location)
+                }
+                writer.line("this.\(binding.model).\(binding.action)(\(binding.item).\(binding.key), enabled);")
             default:
-                throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state or parent binding.",
-                                 suggestion: "Use a projected Bool @State or @Binding property.", location: value.location)
+                throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state, parent binding or typed item binding.",
+                                 suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)
             }
             writer.close(suffix: ")")
             writer.depth -= 1

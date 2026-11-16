@@ -10,7 +10,7 @@ enum ArkExpression {
             return try ArkText.string(value)
         case .localizedText:
             return try LocalizedTextEmitter.arkUI(expression, mapping: mapping) {
-                try ArkExpression.emit($0, mapping: mapping)
+                try ArkExpression.emit($0, item: item, mapping: mapping)
             }
         case let .stringKey(key):
             let resource = try mapping.stringResource(key, platform: .harmonyOS, location: expression.location)

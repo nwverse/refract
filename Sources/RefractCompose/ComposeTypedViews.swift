@@ -50,12 +50,7 @@ extension ComposeBackend {
         case let .textInput(placeholder, value, modifiers, location):
             try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
                               location: location, into: &out, context: &context)
-        case .toggle:
-            throw Diagnostic(code: "RF-C001",
-                             message: "This control needs an explicit typed value and update path.",
-                             suggestion: "Use the state/binding contract before lowering this control.",
-                             location: node.sourceLocation)
-        case .stack, .text, .button, .native, .nativeModifier, .component, .platformView, .conditional, .switchExpression:
+        case .stack, .text, .button, .toggle, .native, .nativeModifier, .component, .platformView, .conditional, .optionalBinding, .switchExpression:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)
         }
@@ -171,9 +166,9 @@ extension ComposeBackend {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .textInput(_, value, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
-        } else if case let .toggle(_, value, _, _) = child, case let .valueProperty(.state(name)) = value.value {
+        } else if case let .toggle(_, value, _, _, _) = child, case let .valueProperty(.state(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
-        } else if case let .toggle(_, value, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
+        } else if case let .toggle(_, value, _, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .button(_, action, _, _) = child,
                   case let .modelMethod(_, methodName, arguments)? = action, arguments.isEmpty {

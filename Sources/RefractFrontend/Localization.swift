@@ -49,18 +49,29 @@ extension Builder {
             }
             guard variable.bindingSpecifier.tokenKind == .keyword(.let), binding.initializer == nil,
                   binding.accessorBlock == nil, let type = binding.typeAnnotation?.type else {
-                error("R.string.interpolation", "Formatted text inputs must be immutable typed properties.",
-                      "Declare a supported scalar or local no-payload enum input", at: member)
+                error("RFSEM001", "View inputs must be immutable properties with an explicit supported type.",
+                      "Use a scalar, optional scalar or supported local enum input", at: member)
                 return nil
+            }
+            if let optional = type.as(OptionalTypeSyntax.self) {
+                guard let valueType = ValueType(frontendName: optional.wrappedType.trimmedDescription) else {
+                    error("RFCTRL002", "Only optional scalar screen inputs can be bound in view conditionals.",
+                          "Use `let name: String?`, `Int?`, `Double?` or `Bool?` with if let", at: type)
+                    return nil
+                }
+                parameters.append(ScreenParameter(name: identifier.text, type: valueType, isOptional: true,
+                                                  location: location(of: identifier)))
+                continue
             }
             if let declaration = enums.first(where: { $0.name == type.trimmedDescription }) {
                 parameters.append(ScreenParameter(name: identifier.text, type: .string, enumName: declaration.name,
                                                   location: location(of: identifier)))
                 continue
             }
+            if diagnostics.contains(where: { $0.code == "RFCTRL006" }) { return nil }
             guard let valueType = ValueType(frontendName: type.trimmedDescription) else {
-                error("R.string.interpolation", "Formatted text inputs must be immutable String, Int or Double properties.",
-                      "Declare inputs as `let name: String`, `let count: Int` or `let ratio: Double`", at: member)
+                error("RFSEM001", "View inputs must use a supported scalar, optional scalar or declared enum type.",
+                      "Declare a supported immutable input type explicitly", at: member)
                 return nil
             }
             parameters.append(ScreenParameter(name: identifier.text, type: valueType,
@@ -203,8 +214,11 @@ struct LocalizationFrontend {
                               type: .string, location: location(of: expression))
         }
         guard let value = scalar(expression), value.type == .string else {
-            error("R.string.invalid_key", "This expression does not provide a static localization key.",
-                  "Use a static key or Text(verbatim:) for intentional literal text", at: expression)
+            if diagnostics.last?.code == "RFSEM002" { return nil }
+            if diagnostics.isEmpty {
+                error("R.string.invalid_key", "This expression does not provide a static localization key.",
+                      "Use a static key or Text(verbatim:) for intentional literal text", at: expression)
+            }
             return nil
         }
         return value.expression
@@ -270,8 +284,6 @@ struct LocalizationFrontend {
                     continue
                 }
                 guard let value = scalar(expression) else {
-                    error("R.string.interpolation", "Localized interpolation requires a supported scalar expression.",
-                          "Use a declared String, Int or Double input without custom formatting", at: segment)
                     return nil
                 }
                 guard let type = value.type, type != .bool else {

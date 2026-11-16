@@ -93,7 +93,7 @@ public struct ComposeBackend: Sendable {
         var parameters: [String] = []
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
-            parameters.append("\(input.name): \(input.enumName ?? kotlinType(input.type))")
+            parameters.append("\(input.name): \(input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
         }
         for state in screen.states {
             switch state {
@@ -176,6 +176,9 @@ public struct ComposeBackend: Sendable {
                                location: location, into: &out, context: &context)
         case let .conditional(branches, location):
             try emitControlFlow(branches, isRoot: isRoot, location: location, into: &out, context: &context)
+        case let .optionalBinding(subject, binding, children, otherwise, location):
+            try emitOptionalBinding(subject: subject, binding: binding, children: children, otherwise: otherwise,
+                                    isRoot: isRoot, location: location, into: &out, context: &context)
         }
     }
 
@@ -314,6 +317,8 @@ public struct ComposeBackend: Sendable {
             return name
         case let .valueProperty(.model(model, property)):
             return "\(model).\(property).value"
+        case let .valueProperty(.itemBinding(binding)):
+            return "\(binding.item).\(binding.property)"
         case let .interpolatedString(segments):
             var result = "\""
             for segment in segments {
@@ -347,7 +352,7 @@ public struct ComposeBackend: Sendable {
         }
     }
 
-    private func kotlinType(_ type: ValueType) -> String {
+    func kotlinType(_ type: ValueType) -> String {
         switch type {
         case .string: return "String"
         case .bool: return "Boolean"

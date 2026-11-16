@@ -22,6 +22,97 @@ func frontendParsesOnlyDeclaredBoolToggleProjection(_ declaration: String, _ exp
     #expect(value.value == .valueProperty(expected))
 }
 
+@Test func frontendParsesTypedItemToggleBinding() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SettingsModel: RefractModel {
+        var rows: [SettingRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct SettingRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct ItemToggle: View {
+        let model: SettingsModel
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("settings.item\\(row.id)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                ))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .list(children, _, _) = unit.module.screens.first?.body,
+          case let .forEach(items, _) = children.first,
+          case let .toggle(title, value, _, _) = items.content,
+          case let .valueProperty(.itemBinding(binding)) = value.value else {
+        Issue.record("Expected a typed item toggle")
+        return
+    }
+    guard case let .localizedText(localized) = title.value else {
+        Issue.record("Expected a localized item title")
+        return
+    }
+    #expect(localized.key == "settings.item")
+    #expect(localized.arguments.map(\.value) == [.reference("row.id")])
+    #expect(localized.arguments.map(\.type) == [.int])
+    #expect(binding == ItemBinding(model: "model", item: "row", property: "enabled", key: "id", action: "setEnabled"))
+}
+
+@Test(arguments: [
+    ("get: { row.title }", "{ model.setEnabled(row.id, value: $0) }"),
+    ("get: { other.enabled }", "{ model.setEnabled(row.id, value: $0) }"),
+    ("get: { row.enabled }", "{ model.setEnabled(row.title, value: $0) }"),
+])
+func frontendRejectsInvalidItemToggleBinding(_ getter: String, _ setter: String) throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SettingsModel: RefractModel {
+        var rows: [SettingRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct SettingRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct ItemToggle: View {
+        let model: SettingsModel
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("settings.item\\(row.id)", isOn: Binding(\(getter), set: \(setter)))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.contains { $0.code == "state.invalid_projection" })
+    #expect(unit.module.screens.isEmpty)
+}
+
+@Test(arguments: [
+    ("settings.item", true),
+    ("settings.item\\(model.title)", true),
+    ("settings.item\\(other.id)", false),
+])
+func frontendRejectsItemToggleTitleOutsideCurrentRow(_ title: String, _ modelTitle: Bool) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SettingsModel: RefractModel {
+        \(modelTitle ? "var title: String { get }" : "")
+        var rows: [SettingRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct SettingRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct ItemToggle: View {
+        let model: SettingsModel
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("\(title)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                ))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.contains { $0.code == "state.invalid_projection" })
+    #expect(unit.module.screens.isEmpty)
+}
+
 @Test func frontendRejectsUnknownToggleProjection() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct ToggleRow: View {

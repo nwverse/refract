@@ -106,6 +106,7 @@ public extension ViewNode {
         case let .component(component, _): component.children
         case let .forEach(items, _): [items.content]
         case let .conditional(branches, _): branches.flatMap(\.children)
+        case let .optionalBinding(_, _, children, otherwise, _): children + otherwise
         case let .switchExpression(_, _, cases, _): cases.flatMap(\.children)
         case let .platformView(alternatives, _): alternatives.ios + alternatives.android + alternatives.harmonyOS
         default: []
@@ -121,7 +122,7 @@ public extension ViewNode {
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
              let .image(_, _, location), let .toggle(_, _, _, location), let .textInput(_, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
-             let .switchExpression(_, _, _, location): location
+             let .switchExpression(_, _, _, location), let .optionalBinding(_, _, _, _, location): location
         }
     }
 }

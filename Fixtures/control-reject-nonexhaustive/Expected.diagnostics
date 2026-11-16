@@ -1,1 +1,1 @@
-Input.swift:15:9: error [RFCTRL005]: Switch supports one no-payload case per branch, with no default, binding or cast. Suggestion: List each declared enum case explicitly
+Input.swift:15:9: error [RFCTRL005]: Use exactly one declared enum case per switch branch without default or where clauses. Suggestion: List every declared case explicitly

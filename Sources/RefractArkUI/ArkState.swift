@@ -45,6 +45,12 @@ func emitLocalExpression(_ expression: Expression, item: String? = nil,
         return "this.\(name)"
     case let .valueProperty(.model(model, property)):
         return "this.\(model).\(property)"
+    case let .valueProperty(.itemBinding(binding)):
+        guard binding.item == item else {
+            throw Diagnostic(code: "arkui.invalid_control_binding", message: "An item binding must read the current typed list item.",
+                             suggestion: "Use the current LazyForEach item.", location: expression.location)
+        }
+        return "\(binding.item).\(binding.property)"
     case let .interpolatedString(segments):
         var result = "`"
         for segment in segments {

@@ -14,5 +14,12 @@
 
 v0-local-state
 v0-binding-state
+control-optional-binding
+control-optional-modifier
+control-switch-payload
+control-switch-modifier
 list-foreach
 list-foreach-explicit-id
+v0-item-toggle
+v0-item-toggle-value
+benchmark-settings

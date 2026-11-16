@@ -56,7 +56,7 @@ struct Generation {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for input in screen.parameters {
-                writer.line("@Param @Require public var \(input.name): \(try input.enumName ?? arkType(input.type))")
+                writer.line("@Param @Require public var \(input.name): \(try input.enumName ?? arkType(input.type))\(input.isOptional ? " | null | undefined" : "")")
             }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
@@ -127,11 +127,9 @@ struct Generation {
                 case let .testTag(value):
                     modifiers.append(Modifier(name: "nativeTestTag", arguments: [value], argumentLabels: [nil],
                                               location: operation.location))
-                case .contentDescription:
-                    throw Diagnostic(code: "RFNATIVE004",
-                        message: "HarmonyOS contentDescription semantics have no verified equivalent in this closed interop slice.",
-                        suggestion: "Keep the real accessibility behavior in the iOS branch and use an explicit accessibility modifier on HarmonyOS.",
-                        location: operation.location)
+                case let .contentDescription(value):
+                    modifiers.append(Modifier(name: "accessibilityLabel", arguments: [value], argumentLabels: [nil],
+                                              location: operation.location))
                 case .retainCallback:
                     throw Diagnostic(code: "RFNATIVE004",
                         message: "HarmonyOS callback retention requires a typed callback-identity representation.",
@@ -144,6 +142,9 @@ struct Generation {
                                  suggestion: "Apply testTag to a concrete view or container.", location: location)
             }
             try emit(modified, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+        case let .optionalBinding(subject, binding, children, otherwise, location):
+            try emitOptionalBinding(subject: subject, binding: binding, children: children, otherwise: otherwise,
+                                    location: location, into: &writer, mapping: mapping, resolver: resolver)
         case let .native(component, location):
             guard let resolver else {
                 throw Diagnostic(code: "arkui.unresolved_native_component",
@@ -213,7 +214,7 @@ struct Generation {
         switch node {
         case let .stack(_, _, values, _), let .layout(_, _, values, _), let .scroll(_, _, values, _),
              let .list(_, values, _), let .text(_, values, _), let .button(_, _, values, _),
-             let .image(_, values, _), let .toggle(_, _, values, _), let .textInput(_, _, values, _),
+             let .image(_, values, _), let .toggle(_, _, values, _, _), let .textInput(_, _, values, _),
              let .label(_, _, values, _), let .divider(values, _):
             modifiers = values
         default:

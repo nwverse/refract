@@ -84,8 +84,27 @@ runtime library. A `var` model property or a model property wrapper is not accep
 `$property` is accepted only for a binding passed to a supported control or child component. Arbitrary projected
 values, key-path expressions, `wrappedValue` and `projectedValue` are rejected. A button action may call a supported
 model method or assign a supported state/binding value, including `+=` for numeric local state. Broader Swift
-statement translation and direct model-backed controls are outside this issue until the subset defines their exact
-iOS form; ordinary SwiftUI `Toggle` takes a `Binding<Bool>`, not a model property plus a separate change callback.
+statement translation and arbitrary custom bindings are rejected. The sole custom-binding exception is a Bool `Toggle`
+inside a typed `Identifiable` list row. Its getter must read a stored Bool property of that exact row, and its setter
+must invoke one declared model action with that row's stored `String`/`Int` id and the new Bool value:
+
+```swift
+Toggle("settings.item\(row.id)", isOn: Binding(
+    get: { row.enabled },
+    set: { value in model.setEnabled(row.id, value: value) }
+))
+```
+
+The model declares `func setEnabled(_ id: Int, value: Bool)` (with the matching identity type). Compose emits a
+`Switch` reading `row.enabled` and calling `model.setEnabled(row.id, enabled)`. ArkUI emits the same direct model call
+from its `Toggle.onChange` with the scope-safe `enabled` parameter, even when the row itself is named `value`. The app
+supplies `@ObservedV2`/`@Trace` row values and its `BasicDataSource` as specified below. The title must have at least
+one typed interpolation argument, and every argument must be a declared scalar property of that same row; static or
+model-only titles do not establish this item association. An interpolated item title uses native string formatting,
+not string substitution. Different rows, non-Bool values,
+mismatched labels/types/identities, side effects and general getter/setter computation are build-time errors. No
+observer registry, per-row binding adapter or synthetic model mutation is generated. See
+`Fixtures/v0-item-toggle/` for the exact native shape.
 
 ## Compose output
 

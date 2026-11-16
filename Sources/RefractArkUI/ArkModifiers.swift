@@ -13,15 +13,18 @@ enum ArkModifiers {
             return try modifiers.map { modifier in
                 switch modifier.name {
                 case "nativeTestTag":
-                    return ".id(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), mapping: mapping)))"
+                    return ".id(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
                 case "accessibilityLabel":
-                    return ".accessibilityText(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), mapping: mapping)))"
+                    return ".accessibilityText(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
                 default:
-                    return try emit([modifier], item: item, mapping: mapping, isText: isText)
+                    throw Diagnostic(code: "arkui.unsupported_modifier",
+                        message: "Modifier `\(modifier.name)` is not supported on an ArkUI toggle.",
+                        suggestion: "Keep native measurement operations on the selected toggle control.",
+                        location: modifier.location)
                 }
             }.joined()
         }
-        guard item == nil, usesCanonicalValues(modifiers, mapping: mapping) else {
+        guard usesCanonicalValues(modifiers, mapping: mapping) else {
             return try modifiers.map { modifier in
                 let arguments = modifier.arguments
                 switch (modifier.name, arguments.count) {
@@ -46,7 +49,7 @@ enum ArkModifiers {
                 }
             }.joined()
         }
-        let canonical = try emitCanonical(modifiers, mapping: mapping, isText: isText)
+        let canonical = try emitCanonical(modifiers, mapping: mapping, item: item, isText: isText)
         if canonical.contains("\n") {
             let continuation = canonical.split(separator: "\n", omittingEmptySubsequences: false)
                 .map { "\u{1}" + $0 }.joined(separator: "\n")

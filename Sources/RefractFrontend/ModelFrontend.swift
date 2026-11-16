@@ -144,7 +144,7 @@ extension Builder {
                 return nil
             }
             return TypedExpression(Expression(.reference("\(item).\(property.name)"),
-                                             location: location(of: expression)), property.type)
+                                             type: property.type, location: location(of: expression)), property.type)
         }
         guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),

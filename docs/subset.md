@@ -154,13 +154,27 @@ cache or runtime. A list cannot be represented by eagerly mapping all rows.
 The first implemented conditional slice accepts `if`/`else if`/`else` with declared Boolean model, `@State`
 or `@Binding` properties. Each condition is emitted directly into the native builder; inactive branches are not
 composed, and no `AnyView` or runtime view registry is introduced. A root Compose conditional uses a native `Box`
-to forward the caller's modifier without changing the branch children. Optional binding, optional chaining,
-availability clauses, arbitrary predicates, matching patterns and casts use `RFCTRL001`–`RFCTRL005` diagnostics.
+to forward the caller's modifier without changing the branch children.
+
+An immutable optional scalar screen input (`String?`, `Int?`, `Double?` or `Bool?`) accepts exactly
+`if let alias = input { ... } else { ... }`. The alias must be a new name that does not shadow another input or
+binding, and the else branch is mandatory. The non-null scalar alias is local to the then branch and cannot escape
+it. Nullable model/state/binding values, shorthand bindings, comma conditions, `else if` after a binding, arbitrary
+optional chaining and `Optional(...)` construction remain diagnostics. Compose checks `input != null` and introduces
+a smart-cast `val`; ArkUI checks both `!== null` and `!== undefined` before a local `const` read. `@Param` supports
+these nullable unions, but the unbound input is never used as a non-null scalar.
+
 A `switch` over an immutable `let value: LocalEnum` input accepts a locally declared enum with no inheritance,
-raw values, generic parameters or associated values. Every case must appear explicitly exactly once: `default`,
-duplicate/missing cases, bindings, casts and other patterns are rejected (`RFCTRL003`, `RFCTRL005`–`RFCTRL007`).
-Compose emits `when` without an `else` fallback; ArkUI emits native enum `===` comparisons in source order. Both
-backends validate the declaration and complete case set before emitting code.
+raw values or generic parameters. Existing no-payload enums remain native enums. A payload enum has exactly one
+unlabeled `String`, `Int`, `Double` or `Bool` payload on every case; mixed payload/no-payload enums are outside this
+slice. Each case must appear explicitly exactly once with a matching `case .value(let alias)` binding and a distinct
+alias. Default, duplicate/missing cases, wildcard/ignored bindings, casts, `where` clauses, grouped cases, multiple
+or labeled payloads, and object-graph/reference payloads are rejected (`RFCTRL003`, `RFCTRL005`–`RFCTRL007`).
+
+Compose represents payload enums as a sealed interface with immutable data cases and uses `when (val subject = input)`
+with smart-cast branch payloads. ArkTS uses final case classes with a typed readonly scalar field, a union alias and
+`instanceof` narrowing, never `as` or `Any`. Both backends emit native lazy branches in source order, validate the
+complete case set before emitting, and preserve local alias scope.
 
 The remaining planned conditional contract is below. It is not a claim that every listed form is implemented:
 
@@ -256,11 +270,11 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFSEM001` | Expression is outside the typed subset | Use a declared scalar property or a model action |
 | `RFSEM002` | Type is not supported or cannot be inferred | Declare an explicit supported type |
 | `RFCTRL001` | View condition is not a supported typed Boolean | Use a declared Boolean model, state or binding property |
-| `RFCTRL002` | Optional binding or availability condition is unsupported | Expose a typed nonoptional Boolean from the model |
-| `RFCTRL003` | Switch subject is not a declared enum-typed input | Use an immutable local no-payload enum input |
-| `RFCTRL004` | Optional chaining, type checks or casts are unsupported | Use a nonoptional declared Boolean property |
-| `RFCTRL005` | Matching-pattern condition or switch branch is unsupported | Use a declared Boolean property or explicit no-payload cases |
-| `RFCTRL006` | Enum has a raw value, payload, inheritance or unsupported declaration | Declare a finite no-payload local enum without inheritance |
+| `RFCTRL002` | Optional binding is outside the supported scalar-input form, or availability is unsupported | Use a distinct alias, a declared optional scalar input and an explicit else branch |
+| `RFCTRL003` | Switch subject is not a declared enum-typed input | Use an immutable local enum input |
+| `RFCTRL004` | Optional chaining, type checks or casts are unsupported | Use a supported explicit binding or declared Boolean property |
+| `RFCTRL005` | Matching-pattern condition or switch branch is unsupported | Use a declared Boolean property or explicit matching enum cases with distinct scalar bindings |
+| `RFCTRL006` | Enum has a raw value, unsupported payload shape, inheritance or unsupported declaration | Declare a finite local enum with no payload or exactly one scalar payload per case |
 | `RFCTRL007` | Enum switch has a missing or duplicate case | List every declared case exactly once |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
