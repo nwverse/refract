@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import refract.generated.R
 
 @Composable
 public fun OptionalModifier(
@@ -25,7 +26,7 @@ public fun OptionalModifier(
                 modifier = Modifier.width(44.dp),
             )
         } else {
-            Text(text = stringResource(refract.generated.R.string.content_empty))
+            Text(text = stringResource(R.string.content_empty))
         }
     }
 }

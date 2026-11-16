@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import refract.generated.R
 
 public sealed interface Content {
     public data class Text(
@@ -32,7 +33,7 @@ public fun ContentView(
             }
             is Content.Count -> {
                 val count: Int = subject.value
-                Text(text = stringResource(refract.generated.R.string.content_count, count))
+                Text(text = stringResource(R.string.content_count, count))
             }
         }
     }

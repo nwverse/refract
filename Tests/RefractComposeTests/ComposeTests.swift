@@ -141,8 +141,20 @@ import RefractMapping
     ])
     let output = try ComposeBackend().generate(module: module, mapping: mapping)
     #expect(output.contains("import androidx.compose.material3.Text\n"))
-    #expect(output.contains("Text(text = stringResource(refract.generated.R.string.settings_enabled))"))
+    #expect(output.contains("Text(text = stringResource(R.string.settings_enabled))"))
     #expect(output.contains("Switch("))
+}
+
+@Test func composeKeepsExternalResourceClassQualified() throws {
+    let android = PlatformMapping(output: Output(directory: "generated", packageName: "refract.generated"),
+                                 resources: Resources(className: "example.app.R",
+                                                      strings: ["settings.enabled": "settings_enabled"]))
+    let module = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "ToggleRow", body: .toggle(title: Expression(.stringKey("settings.enabled")),
+            value: Expression(.valueProperty(.binding("isEnabled"))), modifiers: [], location: nil)),
+    ])
+    let output = try ComposeBackend().generate(module: module, mapping: Mapping(android: android))
+    #expect(output.contains("Text(text = stringResource(example.app.R.string.settings_enabled))"))
 }
 
 @Test func composeDeterministicOutput() throws {

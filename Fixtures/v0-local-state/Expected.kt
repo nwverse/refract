@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import refract.generated.R
 
 @Composable
 public fun LocalState(modifier: Modifier = Modifier) {
@@ -23,7 +24,7 @@ public fun LocalState(modifier: Modifier = Modifier) {
         modifier = modifier,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = stringResource(refract.generated.R.string.settings_enabled))
+        Text(text = stringResource(R.string.settings_enabled))
         Switch(
             checked = isEnabled,
             onCheckedChange = { value -> isEnabled = value },

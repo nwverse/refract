@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import refract.generated.R
 
 public interface SettingsModel {
     public val title: State<String>
@@ -34,7 +35,7 @@ public fun SettingsScreen(
 ) {
     var displayName by remember { mutableStateOf("") }
     LazyColumn(modifier = modifier) {
-        item(key = "header:settings.profile", contentType = "Header") { Text(text = stringResource(refract.generated.R.string.settings_profile)) }
+        item(key = "header:settings.profile", contentType = "Header") { Text(text = stringResource(R.string.settings_profile)) }
         item(key = "row:title", contentType = "Text") {
             Text(text = model.title.value)
         }
@@ -42,17 +43,17 @@ public fun SettingsScreen(
             TextField(
                 value = displayName,
                 onValueChange = { value -> displayName = value },
-                label = { Text(text = stringResource(refract.generated.R.string.settings_display_name)) },
+                label = { Text(text = stringResource(R.string.settings_display_name)) },
                 modifier = Modifier,
             )
         }
-        item(key = "header:settings.preferences", contentType = "Header") { Text(text = stringResource(refract.generated.R.string.settings_preferences)) }
+        item(key = "header:settings.preferences", contentType = "Header") { Text(text = stringResource(R.string.settings_preferences)) }
         item(key = "row:notifications", contentType = "Toggle") {
             Row(
                 modifier = Modifier,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(text = stringResource(refract.generated.R.string.settings_notifications))
+                Text(text = stringResource(R.string.settings_notifications))
                 Switch(
                     checked = notificationsEnabled,
                     onCheckedChange = onNotificationsEnabledChange,
@@ -61,7 +62,7 @@ public fun SettingsScreen(
         }
         item(key = "row:save", contentType = "Button") {
             Button(onClick = { model.save() }, modifier = Modifier) {
-                Text(text = stringResource(refract.generated.R.string.settings_save))
+                Text(text = stringResource(R.string.settings_save))
             }
         }
     }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import refract.generated.benchmarksettings.R
 
 @Immutable
 public data class SettingRow(
@@ -53,7 +54,7 @@ public fun SettingsScreen(
                         modifier = Modifier,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(text = stringResource(refract.generated.benchmarksettings.R.string.settings_item, row.id))
+                        Text(text = stringResource(R.string.settings_item, row.id))
                         Switch(
                             checked = row.enabled,
                             onCheckedChange = { enabled -> model.setEnabled(row.id, enabled) },

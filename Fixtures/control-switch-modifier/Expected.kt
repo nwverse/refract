@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import refract.generated.R
 
 public sealed interface PayloadContent {
     public data class Text(
@@ -37,7 +38,7 @@ public fun PayloadModifier(
             }
             is PayloadContent.Count -> {
                 val count: Int = subject.value
-                Text(text = stringResource(refract.generated.R.string.content_count, count))
+                Text(text = stringResource(R.string.content_count, count))
             }
         }
     }

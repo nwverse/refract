@@ -30,7 +30,7 @@ import RefractIR
     let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
     #expect(kotlin.contains("Button(onClick = { model.save() }"))
     #expect(kotlin.contains("Icons.Default.Check"))
-    #expect(kotlin.contains("Text(text = stringResource(refract.generated.R.string.settings_save))"))
+    #expect(kotlin.contains("Text(text = stringResource(R.string.settings_save))"))
     let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
     #expect(ark.contains("Image($r('app.media.confirm'))"))
     #expect(ark.contains("this.model.save();"))
