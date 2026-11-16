@@ -16,6 +16,7 @@ public struct ComposeBackend: Sendable {
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
         if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
+        try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
@@ -76,6 +77,10 @@ public struct ComposeBackend: Sendable {
 
     private func parameterList(for screen: Screen, context: inout Context) -> [String] {
         var parameters: [String] = []
+        for input in screen.parameters {
+            context.imports.insert("androidx.compose.ui.Modifier")
+            parameters.append("\(input.name): \(kotlinType(input.type))")
+        }
         for state in screen.states {
             switch state {
             case let .binding(name, type, _):
@@ -308,11 +313,18 @@ public struct ComposeBackend: Sendable {
         switch expression.value {
         case let .stringLiteral(value):
             return "\"\(value.escapedForKotlin())\""
+        case let .verbatimText(value):
+            return "\"\(value.escapedForKotlin())\""
         case .stringKey:
-            throw Diagnostic(code: "RF-C001",
-                             message: "Localised string keys are not yet supported by the Compose backend.",
-                             suggestion: "Use a string literal until #8 lands.",
+            throw Diagnostic(code: "R.string.unsupported_expression",
+                             message: "A string key must be validated as localized text before emission.",
+                             suggestion: "Use a static localization key through the localization frontend",
                              location: expression.location)
+        case .localizedText:
+            context.imports.insert("androidx.compose.ui.res.stringResource")
+            return try LocalizedTextEmitter.compose(expression, mapping: context.mapping) {
+                try renderExpression($0, context: &context)
+            }
         case let .boolLiteral(value):
             return value ? "true" : "false"
         case let .numberLiteral(text):
