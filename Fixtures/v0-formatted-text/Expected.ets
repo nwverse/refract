@@ -8,7 +8,6 @@ export interface CountModel {
 @ComponentV2
 export struct FormattedText {
   @Require @Param model: CountModel;
-
   build() {
     Text($r('app.string.settings_item_count', this.model.count))
   }

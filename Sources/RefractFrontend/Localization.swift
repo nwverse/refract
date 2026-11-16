@@ -98,16 +98,19 @@ struct LocalizationFrontend {
     let file: String
     let converter: SourceLocationConverter
     let scalar: (ExprSyntax) -> TypedExpression?
+    let typedScalar: ((ExprSyntax) -> TypedExpression?)?
     let stateText: (ExprSyntax) -> Expression?
     let enumInputNames: Set<String>
 
     init(file: String, converter: SourceLocationConverter,
          scalar: @escaping (ExprSyntax) -> TypedExpression?,
+         typedScalar: ((ExprSyntax) -> TypedExpression?)? = nil,
          stateText: @escaping (ExprSyntax) -> Expression?,
          enumInputNames: Set<String> = []) {
         self.file = file
         self.converter = converter
         self.scalar = scalar
+        self.typedScalar = typedScalar
         self.stateText = stateText
         self.enumInputNames = enumInputNames
     }
@@ -154,19 +157,15 @@ struct LocalizationFrontend {
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
             return platformText(call)
         }
-        if expression.as(StringLiteralExprSyntax.self) != nil, let value = stateText(expression) {
-            if case .interpolatedString = value.value {
-                return value
-            }
-        }
         if let literal = expression.as(StringLiteralExprSyntax.self) {
-            if let key = literal.representedLiteralValue, !LocalizationKey.isCanonical(key) {
-                let diagnostic = Diagnostic(code: "R.string.invalid_key",
-                    message: "String key `\(key)` is not a lowercase dot-separated resource key.",
-                    suggestion: "Use lowercase ASCII letter-led segments with only lowercase ASCII letters and digits; dots become underscores in both native catalogs",
-                    location: location(of: literal))
-                diagnostics.append(diagnostic)
-                return nil
+            if let typedScalar, literal.segments.contains(where: {
+                guard case let .expressionSegment(segment) = $0 else { return false }
+                return segment.expressions.contains { typedScalar($0.expression) != nil }
+            }) {
+                return localizedLiteral(literal)
+            }
+            if let value = stateText(expression), case .interpolatedString = value.value {
+                return value
             }
             return localizedLiteral(literal)
         }
@@ -260,6 +259,16 @@ struct LocalizationFrontend {
                         location: location(of: expression)))
                     return nil
                 }
+                if let typedValue = typedScalar?(expression) {
+                    guard let type = typedValue.type, type != .bool else {
+                        error("R.string.interpolation", "Localized interpolation requires a statically known String, Int or Double.",
+                              "Declare the interpolated model property as String, Int or Double", at: expression)
+                        return nil
+                    }
+                    arguments.append(Expression(typedValue.expression.value, type: type,
+                                                location: typedValue.expression.location))
+                    continue
+                }
                 guard let value = scalar(expression) else {
                     error("R.string.interpolation", "Localized interpolation requires a supported scalar expression.",
                           "Use a declared String, Int or Double input without custom formatting", at: segment)
@@ -270,8 +279,14 @@ struct LocalizationFrontend {
                           "Declare the interpolated screen input with an explicit supported type", at: expression)
                     return nil
                 }
-                arguments.append(value.expression)
+                arguments.append(Expression(value.expression.value, type: type,
+                                            location: value.expression.location))
             }
+        }
+        guard LocalizationKey.isCanonical(key) else {
+            error("R.string.invalid_key", "String key `\(key)` is not a lowercase dot-separated resource key.",
+                  "Use lowercase ASCII letter-led segments with only lowercase ASCII letters and digits; display punctuation and whitespace belong in the resource value", at: literal)
+            return nil
         }
         let result = LocalizedText(key: key, arguments: arguments)
         return Expression(.localizedText(result), type: .string, location: location(of: literal))

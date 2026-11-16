@@ -58,6 +58,29 @@ import RefractIR
     #expect(text.arguments.map(\.value) == [.reference("name"), .reference("count"), .reference("ratio")])
 }
 
+@Test func modelPropertyInterpolationRetainsDeclaredTypeAndKey() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol CountModel: RefractModel {
+        var count: Int { get }
+    }
+    struct FormattedText: View {
+        let model: CountModel
+        var body: some View {
+            Text("settings.item.count\\(model.count)")
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let text = try #require(unit.module.screens.first?.body.textExpression)
+    guard case let .localizedText(localized) = text.value else {
+        Issue.record("Expected localized model interpolation")
+        return
+    }
+    #expect(localized.key == "settings.item.count")
+    #expect(localized.arguments.map(\.type) == [.int])
+    #expect(localized.arguments.map(\.value) == [.valueProperty(.model(model: "model", property: "count"))])
+}
+
 @Test func platformTextIsVerbatimAndKeepsTargetBranches() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct PlatformText: View {
@@ -99,6 +122,13 @@ func invalidLocalizedTextIsDiagnosed(source: String) {
     """))
     #expect(unit.hasErrors)
     #expect(unit.diagnostics.contains { $0.code.hasPrefix("R.string.") })
+}
+
+private extension ViewNode {
+    var textExpression: Expression? {
+        guard case let .text(expression, _, _) = self else { return nil }
+        return expression
+    }
 }
 
 private func stackChildren(_ unit: TranslationUnit) throws -> [ViewNode] {
