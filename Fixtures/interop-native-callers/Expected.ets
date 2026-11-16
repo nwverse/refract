@@ -4,7 +4,7 @@
 @ComponentV2
 export struct NativeCallerScreen {
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text('Generated inside native')
     }
   }

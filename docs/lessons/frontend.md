@@ -16,6 +16,10 @@
 - Generated backend output is not an error channel. A backend with an unsupported IR node throws the shared typed
   `Diagnostic`; it never emits a comment that looks like successful output.
 - SwiftParser always returns a recovery tree, including for malformed input. Before visiting it, check `tree.hasError`
+- In SwiftSyntax 600, a view expression can be an `ExprSyntax` directly, while a root `if` or `switch` can be
+  wrapped in `ExpressionStmtSyntax`. Dispatch builder statements through both shapes and keep `#if` on its existing
+  `IfConfigDeclSyntax` path; a single `as(ExprSyntax.self)` assumption rejects valid view-builder control flow.
+- SwiftParser always returns a recovery tree, including for malformed input. Before visiting it, check `tree.hasError`
   and convert `SwiftParserDiagnostics.ParseDiagnosticsGenerator.diagnostics(for:)` errors into `RFSYN001` with their
   source positions. On the pinned `600.0.1` release the implementation is `ParseDiagnosticsGenerator`, not an API named
   `ParserDiagnosticsEngine`. Importing `SwiftDiagnostics` introduces another `Diagnostic` type, so qualify the IR type.

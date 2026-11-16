@@ -22,6 +22,26 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "control-if-else",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-reject-associated-value",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-reject-if-let",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-reject-nonexhaustive",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-switch-enum",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
       "implementationStatus": "ready"
     },
@@ -110,6 +130,26 @@
       "implementationStatus": "pending"
     },
     {
+      "path": "performance/arkui-lazy-list",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/arkui-observation",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/arkui-reuse",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/compose-lazy-list",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/compose-state",
+      "implementationStatus": "pending"
+    },
+    {
       "path": "rejected-binding-initializer",
       "implementationStatus": "ready"
     },
@@ -147,7 +187,7 @@
     },
     {
       "path": "v0-button-action",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-conditional-content",
@@ -163,11 +203,11 @@
     },
     {
       "path": "v0-hello-text",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-identified-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-leaf-controls",
@@ -183,7 +223,7 @@
     },
     {
       "path": "v0-model-screen",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-native-component",
@@ -211,7 +251,7 @@
     },
     {
       "path": "v0-reject-missing-resource",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-native-missing",
@@ -255,7 +295,7 @@
     },
     {
       "path": "v0-static-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-styled-text",

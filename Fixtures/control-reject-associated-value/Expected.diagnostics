@@ -1,0 +1,2 @@
+Input.swift:5:5: error [RFCTRL006]: Enum payloads, grouped cases and raw values are outside the supported switch slice. Suggestion: Use one no-payload case per declaration and no raw-value type
+Input.swift:9:5: error [R.string.interpolation]: Formatted text inputs must be immutable String, Int or Double properties. Suggestion: Declare inputs as `let name: String`, `let count: Int` or `let ratio: Double`
