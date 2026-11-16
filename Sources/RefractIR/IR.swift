@@ -49,6 +49,8 @@ public struct Expression: Codable, Equatable, Sendable {
         case numberLiteral(String)
         case reference(String)
         case binding(String)
+        case valueProperty(ValueProperty)
+        case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
     }
 
@@ -76,7 +78,7 @@ public struct Modifier: Codable, Equatable, Sendable {
 public indirect enum ViewNode: Codable, Equatable, Sendable {
     case stack(axis: StackAxis, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case text(Expression, modifiers: [Modifier], location: SourceLocation?)
-    case button(label: ViewNode, action: Expression?, modifiers: [Modifier], location: SourceLocation?)
+    case button(label: ViewNode, action: StateAction?, modifiers: [Modifier], location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
     case platformView(PlatformAlternatives<[ViewNode]>, location: SourceLocation?)
     case conditional(conditions: [ConditionBranch], location: SourceLocation?)

@@ -25,10 +25,7 @@ public struct ArkUIBackend: Sendable {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for state in screen.states {
-                throw Diagnostic(code: "arkui.unsupported_state_declaration",
-                                 message: "State, binding and model declarations require the shared observation lowering.",
-                                 suggestion: "Use the state and model contract for this component.",
-                                 location: state.location)
+                try emitLocalState(state, into: &writer)
             }
             writer.open("build()")
             try emit(screen.body, into: &writer)
@@ -45,14 +42,14 @@ public struct ArkUIBackend: Sendable {
             for child in children { try emit(child, into: &writer) }
             writer.close(suffix: try ArkModifiers.emit(modifiers))
         case let .text(value, modifiers, _):
-            writer.line("Text(\(try ArkExpression.emit(value)))\(try ArkModifiers.emit(modifiers))")
+            writer.line("Text(\(try emitLocalExpression(value)))\(try ArkModifiers.emit(modifiers))")
         case let .button(label, action, modifiers, _):
             writer.open("Button()")
             try emit(label, into: &writer)
             writer.close()
             if let action {
                 writer.open(".onClick(() =>")
-                writer.line("this.\(try ArkExpression.referenceName(action))();")
+                writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
             writer.line(try ArkModifiers.emit(modifiers), unlessEmpty: true)

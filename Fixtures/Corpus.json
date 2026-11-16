@@ -2,6 +2,10 @@
   "schemaVersion": 1,
   "cases": [
     {
+      "path": "state-counter",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
       "implementationStatus": "ready"
     },
