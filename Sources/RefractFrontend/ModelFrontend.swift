@@ -124,7 +124,13 @@ extension Builder {
     }
 
     func modelProperty(_ expression: ExprSyntax) -> Expression? {
-        modelTypedProperty(expression)?.expression
+        // Preserve the scalar-only API used by actions and modifiers. A typed collection is not a string.
+        scalarModelProperty(expression)?.expression
+    }
+
+    private func scalarModelProperty(_ expression: ExprSyntax) -> TypedExpression? {
+        guard let value = modelTypedProperty(expression), value.type != nil else { return nil }
+        return value
     }
 
     func modelTypedProperty(_ expression: ExprSyntax) -> TypedExpression? {
@@ -144,11 +150,10 @@ extension Builder {
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let contract = models.first(where: { $0.name == reference.protocolName }),
-              let property = contract.properties.first(where: { $0.name == member.declName.baseName.text }),
-              property.collection == nil else { return nil }
+              let property = contract.properties.first(where: { $0.name == member.declName.baseName.text }) else { return nil }
         return TypedExpression(Expression(.valueProperty(.model(model: reference.propertyName,
                                                                property: member.declName.baseName.text)),
-                                         location: location(of: expression)), property.type)
+                                         location: location(of: expression)), property.collection == nil ? property.type : nil)
     }
 
     func modelAction(_ expression: ExprSyntax) -> StateAction? {
