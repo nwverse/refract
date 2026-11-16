@@ -263,7 +263,7 @@
     },
     {
       "path": "v0-static-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-styled-text",
