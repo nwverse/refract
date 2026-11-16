@@ -158,5 +158,14 @@ introduce a second Swift parser.
 3. **Resolved:** Compose model properties expose `State<T>`; ArkUI uses V2 `@ObservedV2`/`@Trace` implementations
    with `@ComponentV2`/`@Param` inputs, at API 12 or later. No generated observation adapter; see
    `docs/state-and-models.md` for the contract and performance evidence requirements.
-4. Which HarmonyOS toolchain can compile generated ArkTS in CI on Linux.
-5. Minimum platform versions: Swift / Xcode, Kotlin / Compose BOM, HarmonyOS API level.
+4. **Resolved:** use Huawei's official Command Line Tools with `hvigorw` for HarmonyOS application builds on Linux
+   and macOS; the matching SDK is required. `examples/harmony/README.md` documents the OS/architecture-specific
+   interactive download, JDK requirements, SHA-256 verification, build command and unsigned-HAP signing boundary.
+   The download requires user-reviewed terms and may require login; no anonymous installable distribution was
+   established. The example configuration targets 26.0.0 with state V2 (API 12 or later). The current development
+   environment has not installed this toolchain, so actual ArkTS compilation remains explicitly unverified rather
+   than inferred from source generation.
+5. **Resolved for the current examples:** iOS uses Xcode 16.3+ with Swift 6 and an iOS 18 deployment target;
+   Android builds with JDK 21 and JVM 17 bytecode, Android Gradle Plugin 9.5.0, Kotlin/Compose plugin 2.4.21,
+   Compose BOM 2026.09.00 and SDK 37.2; HarmonyOS uses the SDK selected in item 4. These pinned example versions
+   are not a claim of compatibility with every earlier platform release.
