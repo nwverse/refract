@@ -17,10 +17,9 @@ export struct ModelScreen {
       Button() {
         Text($r('app.string.settings_disable'))
       }
-        .onClick(() => {
+      .onClick(() => {
         this.model.setEnabled(false);
       })
     }
-    .alignItems(HorizontalAlign.Center)
   }
 }
