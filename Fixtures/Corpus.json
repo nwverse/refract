@@ -11,15 +11,15 @@
     },
     {
       "path": "interop-native-component",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-native-mismatch",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-native-missing",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-native-undeclared",
