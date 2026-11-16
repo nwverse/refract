@@ -1,0 +1,1 @@
+Input.swift:5:9: error [RFNATIVE001]: RoutePreview is not a declared native component or a supported built-in view Suggestion: Declare a RefractNativeView and both typed platform implementations

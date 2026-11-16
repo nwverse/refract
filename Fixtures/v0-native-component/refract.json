@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": ["example.maps.RoutePreview"],
+    "components": {},
+    "nativeComponents": {
+      "RoutePreview": {
+        "parameters": [
+          { "label": "zoom", "type": "double", "required": true },
+          { "label": "showsTraffic", "type": "bool", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "RoutePreview",
+        "argumentStyle": "named",
+        "modifierParameter": "modifier",
+        "arguments": [
+          { "source": "zoom", "target": "cameraZoom" },
+          { "source": "showsTraffic", "target": "showsTraffic" }
+        ],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "refract.generated.R", "strings": {} }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.maps", "symbols": ["RoutePreview"] }],
+    "components": {},
+    "nativeComponents": {
+      "RoutePreview": {
+        "parameters": [
+          { "label": "zoom", "type": "double", "required": true },
+          { "label": "showsTraffic", "type": "bool", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "RoutePreview",
+        "argumentStyle": "object",
+        "arguments": [
+          { "source": "zoom", "target": "cameraZoom" },
+          { "source": "showsTraffic", "target": "showsTraffic" }
+        ],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "strings": {} }
+  }
+}
