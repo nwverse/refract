@@ -7,7 +7,10 @@
     "nativeComponents": {},
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
-    "resources": { "className": "refract.generated.R", "strings": { "settings.present": "settings_present" } }
+    "resources": {
+      "className": "refract.generated.R",
+      "strings": { "settings.present": "settings_present" }
+    }
   },
   "harmonyOS": {
     "output": { "directory": "generated" },
