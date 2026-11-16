@@ -12,7 +12,7 @@ public struct Frontend {
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
                                               nativeDeclarations: builder.interop.declarations,
-                                              models: builder.models),
+                                              models: builder.models, itemTypes: builder.itemTypes),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -26,7 +26,9 @@ final class Builder: SyntaxVisitor {
     var designSystem: DesignSystemFrontend?
     var currentStates: [StateDeclaration] = []
     var models: [ModelProtocol] = []
+    var itemTypes: [ItemType] = []
     var currentModels: [ModelReference] = []
+    var currentListItem: String?
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -35,6 +37,7 @@ final class Builder: SyntaxVisitor {
         self.designSystem = nil
         super.init(viewMode: .sourceAccurate)
         if let mapping { self.designSystem = DesignSystemFrontend(builder: self, mapping: mapping) }
+        collectItemTypes(tree)
         collectModels(tree)
     }
 
@@ -142,7 +145,7 @@ final class Builder: SyntaxVisitor {
         return modifier(name, arguments: [], on: node, at: member)
     }
 
-    private func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
+    func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
                           at syntax: some SyntaxProtocol) -> ViewNode? {
         if case let .component(component, _) = node {
             return designSystem?.modifiers([Modifier(name: name, arguments: arguments, location: location(of: syntax))], on: component)
@@ -177,7 +180,7 @@ final class Builder: SyntaxVisitor {
         case "Text":
             guard call.arguments.count == 1,
                   let argument = call.arguments.first, call.trailingClosure == nil,
-                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? scalar(argument.expression),
+                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? modelProperty(argument.expression).map({ TypedExpression($0, .string) }) ?? scalar(argument.expression),
                   value.type == .string,
                   (argument.label == nil) || (argument.label?.text == "verbatim") else {
                 error("unsupportedText", "Text requires one string value, optionally labeled `verbatim`.",

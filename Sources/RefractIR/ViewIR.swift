@@ -1,3 +1,16 @@
+/// A typed model collection; its native observation/data-source behavior is supplied by the app.
+public struct ModelCollection: Codable, Equatable, Sendable {
+    public let itemType: String
+    public let key: String
+    public let keyType: ValueType
+
+    public init(itemType: String, key: String = "id", keyType: ValueType) {
+        self.itemType = itemType
+        self.key = key
+        self.keyType = keyType
+    }
+}
+
 /// Typed view additions shared by frontends and native backends.
 public struct LayoutContainer: Codable, Equatable, Sendable {
     public let axis: ViewNode.StackAxis
