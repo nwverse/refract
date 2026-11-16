@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Refract example</string>
+    <string name="example_hello">Hello</string>
+    <string name="example_go">Go</string>
     <string name="settings_profile">Profile</string>
     <string name="settings_display_name">Display name</string>
     <string name="settings_preferences">Preferences</string>

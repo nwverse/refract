@@ -32,31 +32,71 @@ extension Builder {
         guard let children = children(of: call.trailingClosure) else { return nil }
         let axis: ViewNode.StackAxis = name == "VStack" ? .vertical : name == "HStack" ? .horizontal : .depth
         if call.arguments.isEmpty && axis != .depth {
-            return .stack(axis: axis, children: children, modifiers: [], location: location(of: call))
+            return typedStack(axis: axis, alignment: nil, spacing: nil, children: children, location: location(of: call))
         }
-        var alignment: LayoutAlignment = .center
+        var alignment: LayoutAlignment?
         var spacing: Expression?
+        var labels: Set<String> = []
         for argument in call.arguments {
-            switch argument.label?.text {
+            guard let label = argument.label?.text, labels.insert(label).inserted else {
+                error("RFVIEW003", "Stack arguments must be unique, labeled alignment and spacing values.",
+                      "Use the SwiftUI alignment and spacing labels.", at: argument)
+                return nil
+            }
+            switch label {
             case "alignment":
-                guard let member = argument.expression.as(MemberAccessExprSyntax.self),
-                      let value = LayoutAlignment(rawValue: member.declName.baseName.text) else {
-                    error("RFVIEW003", "Stack alignment is outside the supported subset.", at: argument)
+                guard let member = argument.expression.as(MemberAccessExprSyntax.self), member.base == nil,
+                      let value = LayoutAlignment(rawValue: member.declName.baseName.text),
+                      Self.supportedAlignments(axis).contains(value) else {
+                    error("RFVIEW003", "Stack alignment is unsupported for this container axis.",
+                          "Use an alignment from the stack's documented alignment table.", at: argument)
                     return nil
                 }
                 alignment = value
             case "spacing":
                 guard axis != .depth else {
-                    error("RFVIEW003", "ZStack does not accept spacing.", at: argument)
+                    error("RFVIEW003", "ZStack does not accept spacing.",
+                          "Use spacing on VStack or HStack.", at: argument)
                     return nil
                 }
-                spacing = viewScalar(argument.expression)
+                if let member = argument.expression.as(MemberAccessExprSyntax.self), member.base == nil,
+                   let value = LayoutSpacing(rawValue: member.declName.baseName.text) {
+                    spacing = Expression(.layoutSpacing(value), location: location(of: argument.expression))
+                } else if argument.expression.as(IntegerLiteralExprSyntax.self) != nil ||
+                            argument.expression.as(FloatLiteralExprSyntax.self) != nil {
+                    // Existing SwiftUI numeric spacing stays scalar; the named form carries its own typed token.
+                    spacing = viewScalar(argument.expression)
+                } else {
+                    error("RFVIEW003", "Stack spacing must be a scalar value, `.small`, or `.medium`.",
+                          "Use a numeric spacing value or a documented spacing token.", at: argument)
+                    return nil
+                }
             default:
-                error("RFVIEW003", "Stack arguments must be alignment and spacing.", at: argument)
+                error("RFVIEW003", "Stack arguments must be alignment and spacing.",
+                      "Remove the unsupported stack argument.", at: argument)
                 return nil
             }
         }
-        return .layout(LayoutContainer(axis: axis, alignment: alignment, spacing: spacing), children: children, modifiers: [], location: location(of: call))
+        return typedStack(axis: axis, alignment: alignment, spacing: spacing, children: children,
+                          location: location(of: call))
+    }
+
+    private func typedStack(axis: ViewNode.StackAxis, alignment: LayoutAlignment?, spacing: Expression?,
+                            children: [ViewNode], location: RefractIR.SourceLocation) -> ViewNode {
+        if alignment == nil && spacing == nil {
+            // Preserve the legacy native-default stack IR; no explicit 8 dp/fp gap is introduced.
+            return .stack(axis: axis, children: children, modifiers: [], location: location)
+        }
+        return .layout(LayoutContainer(axis: axis, alignment: alignment, spacing: spacing),
+                       children: children, modifiers: [], location: location)
+    }
+
+    private static func supportedAlignments(_ axis: ViewNode.StackAxis) -> Set<LayoutAlignment> {
+        switch axis {
+        case .vertical: [.center, .leading, .trailing]
+        case .horizontal: [.center, .top, .bottom]
+        case .depth: [.center, .topLeading, .bottomTrailing]
+        }
     }
 
     private func scroll(_ call: FunctionCallExprSyntax) -> ViewNode? {
