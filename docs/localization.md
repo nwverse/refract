@@ -68,6 +68,11 @@ also produces that diagnostic rather than aliasing `settings.title`.
 
 ## Native catalogs
 
+When the mapping's Android resource class is exactly `<generated-package>.R`, generated string calls use the
+package-local `R.string.<name>` form. An external application resource class, such as `com.example.refract.R`,
+remains fully qualified. This lets identical generated Kotlin compile in an app and a self-instrumented test module
+whose resource namespaces differ, without a runtime lookup or a second generated resource alias.
+
 The mapping declares each platform's base string-resource file, alongside the `resources.strings` registry owned by
 the mapping workstream. A generation input resolves relative paths against the mapping file's directory. Absolute
 paths are generator inputs only and never occur in generated code.

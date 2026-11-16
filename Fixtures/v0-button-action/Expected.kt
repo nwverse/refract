@@ -20,6 +20,6 @@ public fun ButtonAction(
     modifier: Modifier = Modifier,
 ) {
     Button(onClick = { model.save() }, modifier = modifier) {
-        Text(text = stringResource(refract.generated.R.string.settings_save))
+        Text(text = stringResource(R.string.settings_save))
     }
 }

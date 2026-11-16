@@ -26,7 +26,7 @@ public fun ModelScreen(
     Column(modifier = modifier) {
         Text(text = model.title.value)
         Button(onClick = { model.setEnabled(false) }, modifier = Modifier) {
-            Text(text = stringResource(refract.generated.R.string.settings_disable))
+            Text(text = stringResource(R.string.settings_disable))
         }
     }
 }

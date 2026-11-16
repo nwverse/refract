@@ -14,9 +14,9 @@ import androidx.compose.ui.res.stringResource
 @Composable
 public fun Hello(modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        Text(text = stringResource(refract.generated.R.string.hello_title))
+        Text(text = stringResource(R.string.hello_title))
         Button(onClick = { }, modifier = Modifier) {
-            Text(text = stringResource(refract.generated.R.string.hello_go))
+            Text(text = stringResource(R.string.hello_go))
         }
     }
 }

@@ -13,15 +13,15 @@ import androidx.compose.ui.res.stringResource
 @Composable
 public fun StaticList(modifier: Modifier = Modifier) {
     LazyColumn(modifier = modifier) {
-        item(key = "header:settings.general", contentType = "Header") { Text(text = stringResource(refract.generated.R.string.settings_general)) }
+        item(key = "header:settings.general", contentType = "Header") { Text(text = stringResource(R.string.settings_general)) }
         item(key = "row:settings.profile", contentType = "Text") {
-            Text(text = stringResource(refract.generated.R.string.settings_profile))
+            Text(text = stringResource(R.string.settings_profile))
         }
         item(key = "row:settings.notifications", contentType = "Text") {
-            Text(text = stringResource(refract.generated.R.string.settings_notifications))
+            Text(text = stringResource(R.string.settings_notifications))
         }
         item(key = "row:settings.about", contentType = "Text") {
-            Text(text = stringResource(refract.generated.R.string.settings_about))
+            Text(text = stringResource(R.string.settings_about))
         }
     }
 }

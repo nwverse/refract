@@ -25,7 +25,7 @@ public fun OptionalModifier(
                 modifier = Modifier.width(44.dp),
             )
         } else {
-            Text(text = stringResource(refract.generated.R.string.content_empty))
+            Text(text = stringResource(R.string.content_empty))
         }
     }
 }

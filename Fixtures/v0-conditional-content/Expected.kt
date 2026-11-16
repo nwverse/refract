@@ -22,9 +22,9 @@ public fun ConditionalContent(
 ) {
     Box(modifier = modifier) {
         if (model.isEnabled.value) {
-            Text(text = stringResource(refract.generated.R.string.settings_enabled))
+            Text(text = stringResource(R.string.settings_enabled))
         } else {
-            Text(text = stringResource(refract.generated.R.string.settings_disabled))
+            Text(text = stringResource(R.string.settings_disabled))
         }
     }
 }
