@@ -3,3 +3,4 @@
 "settings.preferences" = "Preferences";
 "settings.notifications" = "Notifications";
 "settings.save" = "Save";
+"settings.native.component" = "Generated screen with a native component";
