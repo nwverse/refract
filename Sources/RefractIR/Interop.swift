@@ -38,6 +38,23 @@ public struct NativeArgument: Codable, Equatable, Sendable {
     }
 }
 
+/// A closed, typed native operation. There is deliberately no target-source payload.
+public struct NativeModifier: Codable, Equatable, Sendable {
+    public enum Operation: Codable, Equatable, Sendable {
+        case testTag(Expression)
+        case contentDescription(Expression)
+        case retainCallback(identity: String)
+    }
+
+    public let operation: Operation
+    public let location: SourceLocation?
+
+    public init(operation: Operation, location: SourceLocation? = nil) {
+        self.operation = operation
+        self.location = location
+    }
+}
+
 /// Build-time selection only. No branch discriminator is emitted to a target application.
 public struct PlatformAlternatives<Value: Codable & Equatable & Sendable>: Codable, Equatable, Sendable {
     public let ios: Value

@@ -16,6 +16,17 @@ extension ArkModifiers {
                     parts.append(".padding(\(try length(try arguments.one(), category: .spacing, mapping: mapping)))")
                 } else {
                     let values = try arguments.labeled()
+                    if modifier.argumentLabels.allSatisfy({ $0 != nil }),
+                       Set(values.keys).isSubset(of: ["horizontal", "vertical", "value"]),
+                       values.count == 2 || values.count == 4 {
+                        var edges: [String] = []
+                        for (key, sides) in [("horizontal", ["left", "right"]), ("vertical", ["top", "bottom"])]
+                        where values[key] != nil {
+                            let value = try length(values[key]!, category: .spacing, mapping: mapping)
+                            edges.append(contentsOf: sides.map { "\($0): \(value)" })
+                        }
+                        parts.append(".padding({ \(edges.joined(separator: ", ")) })")
+                    } else {
                     guard values.count == 2, let amount = values["value"],
                           let axis = values["horizontal"] ?? values["vertical"] else {
                         throw arguments.invalid("Use horizontal or vertical edge insets with one spacing value.")
@@ -26,9 +37,10 @@ extension ArkModifiers {
                         throw arguments.invalid("Use the matching horizontal or vertical edge set.")
                     }
                     let value = try length(amount, category: .spacing, mapping: mapping)
-                    parts.append(horizontal
-                        ? ".padding({ left: \(value), right: \(value) })"
-                        : ".padding({ top: \(value), bottom: \(value) })")
+                        parts.append(horizontal
+                            ? ".padding({ left: \(value), right: \(value) })"
+                            : ".padding({ top: \(value), bottom: \(value) })")
+                    }
                 }
             case "frame":
                 let values = try arguments.labeled()

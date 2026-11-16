@@ -1,4 +1,13 @@
 public extension ViewNode {
+    func appendingModifier(contentsOf additions: [Modifier]) -> ViewNode? {
+        var result = self
+        for modifier in additions {
+            guard let updated = result.appendingModifier(modifier) else { return nil }
+            result = updated
+        }
+        return result
+    }
+
     /// Adds a modifier without losing the type, payload or source location of an existing view.
     /// Containers whose IR does not carry modifiers return nil so the frontend can diagnose them.
     func appendingModifier(_ modifier: Modifier) -> ViewNode? {
@@ -28,7 +37,7 @@ public extension ViewNode {
         case let .component(component, location):
             return .component(ComponentReference(name: component.name, arguments: component.arguments,
                 children: component.children, modifiers: component.modifiers + [modifier]), location: location)
-        case .native, .platformView, .conditional, .switchExpression, .section, .listItem, .forEach, .spacer:
+        case .native, .nativeModifier, .platformView, .conditional, .switchExpression, .section, .listItem, .forEach, .spacer:
             return nil
         }
     }

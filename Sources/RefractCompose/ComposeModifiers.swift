@@ -18,8 +18,17 @@ extension ComposeBackend {
                 index += 1
                 continue
             case "padding":
-                context.imports.insert("androidx.compose.foundation.layout.padding")
-                if modifier.arguments.isEmpty {
+                let arguments = try ModifierArguments(modifier: modifier).labeled()
+                if modifier.argumentLabels.allSatisfy({ $0 == "horizontal" || $0 == "vertical" || $0 == "value" }),
+                   Set(arguments.keys).isSubset(of: ["horizontal", "vertical", "value"]),
+                   arguments.count == 2 || arguments.count == 4 {
+                    context.imports.insert("androidx.compose.foundation.layout.padding")
+                    var directional: [String] = []
+                    for key in ["horizontal", "vertical"] where arguments[key] != nil {
+                        directional.append("\(key) = \(try composeLength(arguments[key]!, category: .spacing, context: &context))")
+                    }
+                    parts.append(".padding(\(directional.joined(separator: ", ")))")
+                } else if modifier.arguments.isEmpty {
                     context.imports.insert("androidx.compose.ui.unit.dp")
                     parts.append(".padding(all = 16.dp)")
                 } else if modifier.arguments.count == 1 {
@@ -114,6 +123,21 @@ extension ComposeBackend {
                 }
                 context.imports.insert("androidx.compose.ui.draw.alpha")
                 parts.append(".alpha(\(value)f)")
+            case "nativeTestTag":
+                context.imports.insert("androidx.compose.ui.platform.testTag")
+                parts.append(".testTag(\(try renderExpression(try ModifierArguments(modifier: modifier).one(), context: &context)))")
+            case "nativeContentDescription":
+                context.imports.insert("androidx.compose.ui.semantics.contentDescription")
+                context.imports.insert("androidx.compose.ui.semantics.semantics")
+                parts.append(".semantics { contentDescription = \(try renderExpression(try ModifierArguments(modifier: modifier).one(), context: &context)) }")
+            case "retainCallback":
+                index += 1
+                continue
+            case "accessibilityLabel":
+                throw Diagnostic(code: "RFNATIVE004",
+                    message: "An iOS SwiftUI accessibility modifier cannot be emitted as an Android measurement hook.",
+                    suggestion: "Use `.contentDescription` in the Android branch of the explicit platform alternative.",
+                    location: modifier.location)
             default:
                 throw Diagnostic(code: "RFVIEW003", message: "Modifier `\(modifier.name)` has no Compose mapping.",
                                  suggestion: "Use a supported modifier or a typed native component.", location: modifier.location)

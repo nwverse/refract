@@ -120,6 +120,30 @@ struct Generation {
         case let .switchExpression(subject, enumName, cases, _):
             try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
                                into: &writer, mapping: mapping, resolver: resolver)
+        case let .nativeModifier(child, operations, location):
+            var modifiers: [Modifier] = []
+            for operation in operations {
+                switch operation.operation {
+                case let .testTag(value):
+                    modifiers.append(Modifier(name: "nativeTestTag", arguments: [value], argumentLabels: [nil],
+                                              location: operation.location))
+                case .contentDescription:
+                    throw Diagnostic(code: "RFNATIVE004",
+                        message: "HarmonyOS contentDescription semantics have no verified equivalent in this closed interop slice.",
+                        suggestion: "Keep the real accessibility behavior in the iOS branch and use an explicit accessibility modifier on HarmonyOS.",
+                        location: operation.location)
+                case .retainCallback:
+                    throw Diagnostic(code: "RFNATIVE004",
+                        message: "HarmonyOS callback retention requires a typed callback-identity representation.",
+                        suggestion: "Use a direct typed callback; do not discard the retention operation or add a runtime cache.",
+                        location: operation.location ?? location)
+                }
+            }
+            guard let modified = child.appendingModifier(contentsOf: modifiers) else {
+                throw Diagnostic(code: "RFNATIVE004", message: "The native test id cannot be attached to this ArkUI receiver.",
+                                 suggestion: "Apply testTag to a concrete view or container.", location: location)
+            }
+            try emit(modified, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
         case let .native(component, location):
             guard let resolver else {
                 throw Diagnostic(code: "arkui.unresolved_native_component",

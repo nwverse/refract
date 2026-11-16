@@ -152,6 +152,8 @@ final class Builder: SyntaxVisitor {
     }
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
+        if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
             if diagnostics.count > before { return nil }
