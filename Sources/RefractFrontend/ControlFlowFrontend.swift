@@ -4,6 +4,10 @@ import SwiftSyntax
 /// View-builder control flow is parsed from syntax, not from the spelling of an expression.
 extension Builder {
     func view(_ statement: IfExprSyntax) -> ViewNode? {
+        if statement.conditions.count == 1, let clause = statement.conditions.first,
+           case let .optionalBinding(binding) = clause.condition {
+            return optionalBinding(statement, binding: binding)
+        }
         var branches: [ViewNode.ConditionBranch] = []
         var current: IfExprSyntax? = statement
         while let node = current {
@@ -18,9 +22,13 @@ extension Builder {
                 guard !containsUnsupportedOptionalOrCast(expression),
                       let value = typedBoolean(expression) else { return nil }
                 condition = value
-            case .availability, .optionalBinding:
-                error("RFCTRL002", "Optional binding and availability conditions are not supported in view conditionals.",
-                      "Expose a typed Boolean from the model instead", at: clause.condition)
+            case .availability:
+                error("RFCTRL002", "Availability conditions are not supported in generated view conditionals.",
+                      "Expose a supported typed Boolean or scalar input instead", at: clause.condition)
+                return nil
+            case .optionalBinding:
+                error("RFCTRL002", "Optional binding accepts one immutable optional scalar input with a distinct local name and explicit else.",
+                      "Use `if let value = optionalInput { ... } else { ... }` without comma conditions", at: clause.condition)
                 return nil
             case .matchingPattern:
                 error("RFCTRL005", "Pattern matching is not supported in view conditionals.",
@@ -41,6 +49,31 @@ extension Builder {
             }
         }
         return .conditional(conditions: branches, location: location(of: statement))
+    }
+
+    private func optionalBinding(_ statement: IfExprSyntax, binding: OptionalBindingConditionSyntax) -> ViewNode? {
+        guard let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
+              let initializer = binding.initializer,
+              let subject = initializer.value.as(DeclReferenceExprSyntax.self),
+              let input = parameters.first(where: { $0.name == subject.baseName.text && $0.isOptional && $0.enumName == nil }),
+              !parameters.contains(where: { $0.name == name }), currentBindings[name] == nil else {
+            error("RFCTRL002", "Optional binding requires `if let value = optionalScalarInput` with a new, unshadowed name.",
+                  "Use a declared optional scalar screen input and a distinct local binding", at: binding)
+            return nil
+        }
+        guard case let .codeBlock(otherwise)? = statement.elseBody else {
+            error("RFCTRL002", "Optional binding requires an explicit final else branch for the empty value.",
+                  "Provide an else view instead of an implicit empty branch", at: statement)
+            return nil
+        }
+        currentBindings[name] = input.type
+        defer { currentBindings.removeValue(forKey: name) }
+        guard let children = builderChildren(statement.body.statements),
+              let fallback = builderChildren(otherwise.statements) else { return nil }
+        return .optionalBinding(subject: Expression(.reference(subject.baseName.text),
+                                                    location: location(of: subject)),
+                                binding: name, children: children, otherwise: fallback,
+                                location: location(of: statement))
     }
 
     private func typedBoolean(_ expression: ExprSyntax) -> Expression? {

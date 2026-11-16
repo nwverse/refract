@@ -11,9 +11,32 @@ extension Generation {
                                  location: declaration.location)
             }
             writer.line()
-            writer.open("export enum \(declaration.name)")
-            for name in declaration.cases { writer.line("\(name),") }
-            writer.close()
+            if declaration.payloadTypes.isEmpty {
+                writer.open("export enum \(declaration.name)")
+                for name in declaration.cases { writer.line("\(name),") }
+                writer.close()
+                continue
+            }
+            guard declaration.payloadTypes.count == declaration.cases.count,
+                  Set(declaration.payloadTypes.keys) == Set(declaration.cases) else {
+                throw Diagnostic(code: "arkui.invalid_enum_declaration",
+                                 message: "A payload enum needs a declared scalar payload on every case.",
+                                 location: declaration.location)
+            }
+            for name in declaration.cases {
+                guard let type = declaration.payloadTypes[name] else {
+                    throw Diagnostic(code: "arkui.invalid_enum_declaration", message: "Missing enum payload type.")
+                }
+                let className = enumCaseClass(enum: declaration.name, case: name)
+                writer.open("export final class \(className)")
+                writer.line("readonly value: \(arkScalar(type));")
+                writer.line()
+                writer.open("constructor(value: \(arkScalar(type)))")
+                writer.line("this.value = value;")
+                writer.close()
+                writer.close()
+            }
+            writer.line("export type \(declaration.name) = \(declaration.cases.map { enumCaseClass(enum: declaration.name, case: $0) }.joined(separator: " | "));")
         }
     }
 
@@ -30,15 +53,73 @@ extension Generation {
             guard ArkText.isIdentifier(branch.name), declaration.cases.contains(branch.name) else {
                 throw Diagnostic(code: "arkui.invalid_enum_case", message: "Unknown enum case `\(branch.name)`.")
             }
-            if index == 0 {
-                writer.open("if (\(value) === \(enumName).\(branch.name))")
+            let className = enumCaseClass(enum: enumName, case: branch.name)
+            if declaration.payloadTypes[branch.name] != nil {
+                guard let binding = branch.binding, ArkText.isIdentifier(binding),
+                      !module.screens.flatMap(\.parameters).contains(where: { $0.name == binding }) else {
+                    throw Diagnostic(code: "arkui.invalid_enum_binding", message: "A payload switch needs a typed local binding.")
+                }
+                let test = "\(value) instanceof \(className)"
+                if index == 0 {
+                    writer.open("if (\(test))")
+                } else {
+                    writer.closeBranch("else if (\(test))")
+                }
+                writer.line("const \(binding) = \(value).value;")
+                for child in branch.children {
+                    try emit(child, into: &writer, item: binding, mapping: mapping, resolver: resolver)
+                }
+                continue
             } else {
-                writer.closeBranch("else if (\(value) === \(enumName).\(branch.name))")
+                guard branch.binding == nil else {
+                    throw Diagnostic(code: "arkui.invalid_enum_binding", message: "A no-payload case cannot bind a value.")
+                }
+                if index == 0 {
+                    writer.open("if (\(value) === \(enumName).\(branch.name))")
+                } else {
+                    writer.closeBranch("else if (\(value) === \(enumName).\(branch.name))")
+                }
             }
             for child in branch.children {
                 try emit(child, into: &writer, mapping: mapping, resolver: resolver)
             }
         }
         writer.close()
+    }
+
+    func emitOptionalBinding(subject: Expression, binding: String, children: [ViewNode], otherwise: [ViewNode],
+                             location: SourceLocation?, into writer: inout ArkWriter,
+                             mapping: Mapping, resolver: InteropResolver?) throws {
+        guard ArkText.isIdentifier(binding), let name = referenceName(subject),
+              module.screens.flatMap(\.parameters)
+                .contains(where: { $0.name == name && $0.isOptional && $0.enumName == nil }),
+              !module.screens.flatMap(\.parameters).contains(where: { $0.name == binding }) else {
+            throw Diagnostic(code: "arkui.invalid_optional_binding",
+                             message: "Optional binding requires a direct optional scalar screen input.",
+                             location: location)
+        }
+        writer.open("if (this.\(name) !== null && this.\(name) !== undefined)")
+        writer.line("const \(binding) = this.\(name);")
+        for child in children { try emit(child, into: &writer, item: binding, mapping: mapping, resolver: resolver) }
+        writer.closeBranch("else")
+        for child in otherwise { try emit(child, into: &writer, mapping: mapping, resolver: resolver) }
+        writer.close()
+    }
+
+    private func enumCaseClass(enum name: String, case caseName: String) -> String {
+        name + caseName.prefix(1).uppercased() + caseName.dropFirst()
+    }
+
+    private func arkScalar(_ type: ValueType) -> String {
+        switch type {
+        case .string: "string"
+        case .bool: "boolean"
+        case .int, .double: "number"
+        }
+    }
+
+    private func referenceName(_ expression: Expression) -> String? {
+        guard case let .reference(name) = expression.value, ArkText.isIdentifier(name) else { return nil }
+        return name
     }
 }

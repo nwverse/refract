@@ -74,8 +74,16 @@ extension ComposeBackend {
                         guard let value = arguments[key] else { continue }
                         dimensions.append("\(key) = \(try composeLength(value, category: .spacing, context: &context))")
                     }
-                    context.imports.insert("androidx.compose.foundation.layout.size")
-                    parts.append(".size(\(dimensions.joined(separator: ", ")))")
+                    if dimensions.count == 1, let width = arguments["width"] {
+                        context.imports.insert("androidx.compose.foundation.layout.width")
+                        parts.append(".width(\(try composeLength(width, category: .spacing, context: &context)))")
+                    } else if dimensions.count == 1, let height = arguments["height"] {
+                        context.imports.insert("androidx.compose.foundation.layout.height")
+                        parts.append(".height(\(try composeLength(height, category: .spacing, context: &context)))")
+                    } else {
+                        context.imports.insert("androidx.compose.foundation.layout.size")
+                        parts.append(".size(\(dimensions.joined(separator: ", ")))")
+                    }
                 } else {
                     if arguments["maxWidth"] != nil {
                         context.imports.insert("androidx.compose.foundation.layout.fillMaxWidth")

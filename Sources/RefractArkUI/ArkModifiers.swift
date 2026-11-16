@@ -4,7 +4,7 @@ import RefractMapping
 enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty,
                      isText: Bool = false) throws -> String {
-        guard item == nil, usesCanonicalValues(modifiers, mapping: mapping) else {
+        guard usesCanonicalValues(modifiers, mapping: mapping) else {
             return try modifiers.map { modifier in
                 let arguments = modifier.arguments
                 switch (modifier.name, arguments.count) {
@@ -29,7 +29,7 @@ enum ArkModifiers {
                 }
             }.joined()
         }
-        let canonical = try emitCanonical(modifiers, mapping: mapping, isText: isText)
+        let canonical = try emitCanonical(modifiers, mapping: mapping, item: item, isText: isText)
         if canonical.contains("\n") {
             let continuation = canonical.split(separator: "\n", omittingEmptySubsequences: false)
                 .map { "\u{1}" + $0 }.joined(separator: "\n")

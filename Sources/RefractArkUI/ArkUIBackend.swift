@@ -56,7 +56,7 @@ struct Generation {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for input in screen.parameters {
-                writer.line("@Param @Require public var \(input.name): \(try input.enumName ?? arkType(input.type))")
+                writer.line("@Param @Require public var \(input.name): \(try input.enumName ?? arkType(input.type))\(input.isOptional ? " | null | undefined" : "")")
             }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
@@ -120,6 +120,9 @@ struct Generation {
         case let .switchExpression(subject, enumName, cases, _):
             try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
                                into: &writer, mapping: mapping, resolver: resolver)
+        case let .optionalBinding(subject, binding, children, otherwise, location):
+            try emitOptionalBinding(subject: subject, binding: binding, children: children, otherwise: otherwise,
+                                    location: location, into: &writer, mapping: mapping, resolver: resolver)
         case let .native(component, location):
             guard let resolver else {
                 throw Diagnostic(code: "arkui.unresolved_native_component",
