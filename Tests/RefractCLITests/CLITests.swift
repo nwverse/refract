@@ -12,7 +12,9 @@ import Foundation
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let executable = builtCLIExecutable()
     guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-        Issue.record("Build the refract executable with `swift build` before running `swift test`.")
+        let runner = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
+        let siblings = (try? FileManager.default.contentsOfDirectory(atPath: executable.deletingLastPathComponent().path)) ?? []
+        Issue.record("Build the refract executable with `swift build` before running `swift test`. Runner: \(runner.path); candidate: \(executable.path); files: \(siblings)")
         return
     }
     let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

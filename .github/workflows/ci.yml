@@ -39,6 +39,9 @@ jobs:
         run: swift --version
       - name: Build with locked dependencies
         run: swift build --disable-automatic-resolution
+      - name: Diagnose the macOS CLI test executable location
+        if: runner.os == 'macOS'
+        run: swift test --disable-automatic-resolution --skip-build --filter cliGeneratesBothPlatformsAndRejectsUnsupportedInput
       - name: Run the complete test suite
         run: swift test --disable-automatic-resolution
       - name: Regenerate and compare every golden fixture
