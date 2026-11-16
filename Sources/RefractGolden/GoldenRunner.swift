@@ -26,6 +26,8 @@ public enum GoldenRunner {
             if let contents = fixture.mapping {
                 mapping = try Mapping.load(data: Data(contents.utf8), file: "refract.json")
             } else { mapping = .empty }
+        } catch let error as MappingError {
+            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics + error.diagnostics)
         } catch let diagnostic as Diagnostic {
             return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics + [diagnostic])
         }

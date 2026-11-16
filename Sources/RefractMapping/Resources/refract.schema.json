@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/nwverse/refract/main/Sources/RefractMapping/Resources/refract.schema.json",
+  "title": "Refract design-system mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "android", "harmonyOS"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "android": { "$ref": "#/$defs/platform" },
+    "harmonyOS": { "$ref": "#/$defs/harmonyPlatform" }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "sourceName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9_]*$"
+    },
+    "label": {
+      "type": "string",
+      "pattern": "^(_|[A-Za-z_][A-Za-z0-9_]*)$"
+    },
+    "qualifiedReference": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+    },
+    "tokenKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+    },
+    "resourceKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:\\.[a-z0-9]+)*$"
+    },
+    "resourceName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "valueType": {
+      "enum": ["string", "bool", "int", "double", "length", "color", "font", "image", "stringKey", "action", "actionString", "actionBool", "actionInt", "actionDouble"]
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "type", "required"],
+      "properties": {
+        "label": { "$ref": "#/$defs/label" },
+        "type": { "$ref": "#/$defs/valueType" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/parameter" },
+      "maxItems": 64
+    },
+    "argument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": { "$ref": "#/$defs/label" },
+        "target": { "$ref": "#/$defs/identifier" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["target"] },
+          "then": { "properties": { "target": { "minLength": 1 } } }
+        }
+      ]
+    },
+    "arguments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/argument" },
+      "maxItems": 64
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target"],
+      "properties": {
+        "kind": { "enum": ["parameter", "chain"] },
+        "target": { "$ref": "#/$defs/identifier" },
+        "arguments": { "$ref": "#/$defs/arguments" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "chain" } }, "required": ["kind"] },
+          "then": { "required": ["arguments"] },
+          "else": { "not": { "required": ["arguments"] } }
+        }
+      ]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameters", "content", "modifiers", "target", "argumentStyle", "arguments", "attributes"],
+      "properties": {
+        "parameters": { "$ref": "#/$defs/parameters" },
+        "content": { "enum": ["none", "trailingClosure", "parameter", "builder"] },
+        "contentParameter": { "$ref": "#/$defs/identifier" },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" },
+          "uniqueItems": true,
+          "maxItems": 64
+        },
+        "target": { "$ref": "#/$defs/identifier" },
+        "argumentStyle": { "enum": ["named", "object", "positional"] },
+        "arguments": { "$ref": "#/$defs/arguments" },
+        "modifierParameter": { "$ref": "#/$defs/identifier" },
+        "attributes": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/identifier" },
+          "additionalProperties": { "$ref": "#/$defs/attribute" },
+          "maxProperties": 64
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "content": { "const": "parameter" } }, "required": ["content"] },
+          "then": { "required": ["contentParameter"] },
+          "else": { "not": { "required": ["contentParameter"] } }
+        }
+      ]
+    },
+    "components": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/sourceName" },
+      "additionalProperties": { "$ref": "#/$defs/component" },
+      "maxProperties": 512
+    },
+    "modifiers": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["parameters"],
+        "properties": { "parameters": { "$ref": "#/$defs/parameters" } }
+      },
+      "maxProperties": 256
+    },
+    "tokenValues": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/tokenKey" },
+      "additionalProperties": { "$ref": "#/$defs/qualifiedReference" },
+      "maxProperties": 1024
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spacing", "radius", "font", "color"],
+      "properties": {
+        "spacing": { "$ref": "#/$defs/tokenValues" },
+        "radius": { "$ref": "#/$defs/tokenValues" },
+        "font": { "$ref": "#/$defs/tokenValues" },
+        "color": { "$ref": "#/$defs/tokenValues" }
+      }
+    },
+    "strings": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/resourceKey" },
+      "additionalProperties": { "$ref": "#/$defs/resourceName" },
+      "maxProperties": 4096
+    },
+    "androidResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["className", "strings"],
+      "properties": {
+        "className": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+\\.R$"
+        },
+        "strings": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "harmonyResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "stringTable", "strings"],
+      "properties": {
+        "namespace": { "$ref": "#/$defs/identifier" },
+        "stringTable": { "$ref": "#/$defs/identifier" },
+        "strings": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory"],
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*\\\\\\\\)(?!.*/$).+$"
+        },
+        "packageName": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*$"
+        }
+      }
+    },
+    "harmonyImport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "symbols"],
+      "properties": {
+        "module": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\\\\\s'\"]+$"
+        },
+        "symbols": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" },
+          "minItems": 1,
+          "uniqueItems": true,
+          "maxItems": 128
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output", "imports", "components", "nativeComponents", "modifiers", "tokens", "resources"],
+      "properties": {
+        "output": { "$ref": "#/$defs/output" },
+        "imports": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/qualifiedReference" },
+          "uniqueItems": true,
+          "maxItems": 256
+        },
+        "components": { "$ref": "#/$defs/components" },
+        "nativeComponents": { "$ref": "#/$defs/components" },
+        "modifiers": { "$ref": "#/$defs/modifiers" },
+        "tokens": { "$ref": "#/$defs/tokens" },
+        "resources": { "$ref": "#/$defs/androidResources" }
+      }
+    },
+    "harmonyPlatform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output", "imports", "components", "nativeComponents", "modifiers", "tokens", "resources"],
+      "properties": {
+        "output": {
+          "allOf": [
+            { "$ref": "#/$defs/output" },
+            { "not": { "required": ["packageName"] } }
+          ]
+        },
+        "imports": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/harmonyImport" },
+          "maxItems": 256
+        },
+        "components": { "$ref": "#/$defs/components" },
+        "nativeComponents": { "$ref": "#/$defs/components" },
+        "modifiers": { "$ref": "#/$defs/modifiers" },
+        "tokens": { "$ref": "#/$defs/tokens" },
+        "resources": { "$ref": "#/$defs/harmonyResources" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["android"] },
+      "then": {
+        "properties": {
+          "android": {
+            "properties": {
+              "output": { "required": ["packageName"] }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
