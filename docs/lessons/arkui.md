@@ -15,10 +15,12 @@ A Swift `ForEach` over identified data must not lower to the ordinary ArkUI `For
 of the subset contract. `List` + `LazyForEach` needs an `IDataSource`, a `ListItem` per datum and a stable string
 key. Using the array index as a key can preserve state on the wrong row after insertion or deletion.
 
-The data source is generated into the same `.ets` file; it is not a Refract runtime. Give `getData` an explicit item
-type, store listeners in a typed array, and guard listener registration and removal. Synchronize replacement input
-arrays during component appearance and through the observation contract. Do not claim to observe in-place mutations
-of an ordinary app-owned array.
+The application owns the data source; it is not generated as an array mirror or synchronization adapter. Give
+`getData` an explicit item type, store listeners in a typed array, and guard listener registration and removal.
+Replacement model data must update that app-owned data source and use its native change notifications. An ordinary
+`@Trace` array or `@Monitor` watcher does not by itself prove that `LazyForEach` receives replacement notifications;
+do not claim to observe in-place mutations of an ordinary app-owned array. The native compiler and an integration
+example are still required to verify the concrete implementation.
 
 ## A Scroll has one child, and a component is not an entry page
 

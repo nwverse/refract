@@ -42,6 +42,7 @@ struct Generation {
             }
         }
         for line in importLines { writer.line(line) }
+        try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
@@ -55,7 +56,7 @@ struct Generation {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for input in screen.parameters {
-                writer.line("@Param @Require public var \(input.name): \(try arkType(input.type))")
+                writer.line("@Param @Require public var \(input.name): \(try input.enumName ?? arkType(input.type))")
             }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
@@ -74,15 +75,20 @@ struct Generation {
               resolver: InteropResolver? = nil) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
-            writer.open("\(containerName(axis))(\(axis == .depth ? "" : "{ space: 8 }"))")
+            writer.open("\(containerName(axis))()")
             for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .text(value, modifiers, _):
             writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .button(label, action, modifiers, _):
-            writer.open("Button()")
-            try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver)
-            writer.close()
+            if case let .text(title, _, _) = label, case let .stringKey(key) = title.value {
+                let resource = try mapping.stringResource(key, platform: .harmonyOS, location: title.location)
+                writer.line("Button($r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)'))")
+            } else {
+                writer.open("Button()")
+                try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver)
+                writer.close()
+            }
             if let action {
                 writer.open(".onClick(() =>")
                 writer.line(try emitLocalAction(action))
@@ -110,6 +116,9 @@ struct Generation {
                 for child in branch.children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             }
             writer.close()
+        case let .switchExpression(subject, enumName, cases, _):
+            try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
+                               into: &writer, mapping: mapping, resolver: resolver)
         case let .native(component, location):
             guard let resolver else {
                 throw Diagnostic(code: "arkui.unresolved_native_component",

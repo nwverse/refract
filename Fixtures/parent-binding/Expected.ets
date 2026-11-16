@@ -7,7 +7,7 @@ export struct EnabledRow {
   @Event onIsEnabledChange: (value: boolean) => void = (value: boolean): void => {};
 
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text(`Enabled: ${this.isEnabled}`)
       Button() {
         Text('Disable')

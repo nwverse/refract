@@ -27,3 +27,70 @@ import RefractIR
     """))
     #expect(unit.diagnostics.map(\.code).contains("model.invalid_property"))
 }
+
+private func identifiedListSource(itemFields: String = "let id: String\n  let title: String",
+                                  row: String = "Text(item.title)",
+                                  identityArgument: String = "",
+                                  conformance: String = "Identifiable") -> SourceFile {
+    SourceFile(path: "Input.swift", contents: """
+struct SettingItem: \(conformance) {
+  \(itemFields)
+}
+
+protocol SettingsListModel: RefractModel {
+  var items: [SettingItem] { get }
+}
+
+struct IdentifiedList: View {
+  let model: SettingsListModel
+  var body: some View {
+    List(model.items\(identityArgument)) { item in
+      \(row)
+    }
+  }
+}
+""")
+}
+
+@Test func frontendRejectsUnsupportedListIdentityAndDroppedRows() {
+    let booleanIdentity = Frontend.parse(identifiedListSource(itemFields: "let id: Bool\n  let title: String"))
+    #expect(booleanIdentity.diagnostics.map(\.code) == ["RFLIST001", "model.invalid_property", "state.invalid_declaration"])
+    #expect(booleanIdentity.diagnostics.first?.location?.line == 2)
+    #expect(booleanIdentity.diagnostics.first?.location?.column == 3)
+
+    let computedIdentity = Frontend.parse(identifiedListSource(itemFields: "var id: String { title }\n  let title: String"))
+    #expect(computedIdentity.diagnostics.map(\.code) == ["RFLIST001", "model.invalid_property", "state.invalid_declaration"])
+
+    let implicitIdentity = Frontend.parse(identifiedListSource(identityArgument: ", id: \\.self"))
+    #expect(implicitIdentity.diagnostics.map(\.code) == ["RFLIST002"])
+
+    let rows = Frontend.parse(identifiedListSource(row: "Text(item.title)\n        Text(item.id)"))
+    #expect(rows.diagnostics.map(\.code) == ["RFLIST003"])
+
+    let hashableItem = Frontend.parse(identifiedListSource(conformance: "Hashable, Identifiable"))
+    #expect(hashableItem.diagnostics.isEmpty)
+}
+
+@Test func frontendValidatesTypedItemScope() throws {
+    let unknown = Frontend.parse(identifiedListSource(row: "Text(item.missing)"))
+    #expect(unknown.diagnostics.map(\.code) == ["RFSEM001", "R.string.invalid_key"])
+
+    let wrongType = Frontend.parse(identifiedListSource(row: "Text(item.id)"))
+    #expect(wrongType.diagnostics.isEmpty)
+    #expect(try ArkUIBackend().generate(module: wrongType.module).contains("Text(item.id)"))
+
+    let integerText = Frontend.parse(identifiedListSource(itemFields: "let id: Int\n  let title: String",
+                                                        row: "Text(item.id)"))
+    #expect(integerText.diagnostics.map(\.code) == ["RFSEM001"])
+
+    let collectionText = Frontend.parse(identifiedListSource(row: "Text(model.items)"))
+    #expect(collectionText.diagnostics.map(\.code) == ["RFSEM001"])
+
+    let numeric = Frontend.parse(identifiedListSource(itemFields: "let id: Int\n    let title: String"))
+    #expect(numeric.diagnostics.isEmpty)
+    let output = try ArkUIBackend().generate(module: numeric.module)
+    #expect(output.contains("(item: SettingItem): string => String(item.id)"))
+    #expect(output.contains("items: BasicDataSource<SettingItem>;"))
+    #expect(!output.contains("@Monitor"))
+    #expect(!output.contains("Array<SettingItem>"))
+}

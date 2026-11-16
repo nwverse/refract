@@ -19,12 +19,24 @@ extension Expression {
 public struct ScreenParameter: Codable, Equatable, Sendable {
     public let name: String
     public let type: ValueType
+    public let enumName: String?
     public let location: SourceLocation?
 
-    public init(name: String, type: ValueType, location: SourceLocation? = nil) {
+    public init(name: String, type: ValueType, enumName: String? = nil, location: SourceLocation? = nil) {
         self.name = name
         self.type = type
+        self.enumName = enumName
         self.location = location
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, type, enumName, location }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        type = try values.decode(ValueType.self, forKey: .type)
+        enumName = try values.decodeIfPresent(String.self, forKey: .enumName)
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 

@@ -70,6 +70,92 @@ jobs:
             exit 1
           fi
 
+  android-compile:
+    name: Android generated-code compile gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the sources
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Select Swift 6.4.2 for the generator CLI
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3.0.0-beta.1
+        with:
+          swift-version: 6.4.2
+      - name: Keep the tool manager's version marker outside the checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f .swift-version ]]; then
+            mv .swift-version "$RUNNER_TEMP/refract.swift-version"
+          fi
+      - name: Build the generator CLI with locked dependencies
+        run: swift build --disable-automatic-resolution
+      - name: Regenerate examples and reject stale committed output
+        run: |
+          python3 scripts/check_examples.py
+          git diff --exit-code -- \
+            examples/android/app/src/main/java/refract/generated \
+            examples/harmony/entry/src/main/ets/generated
+      - name: Select JDK 21 for the Android toolchain
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install the pinned Android SDK packages
+        env:
+          ANDROID_COMPILE_SDK: '37.2'
+          ANDROID_BUILD_TOOLS: '37.0.0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$sdk_root/cmdline-tools"
+          cmdline_version=13114758
+          archive="commandlinetools-linux-${cmdline_version}_latest.zip"
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://dl.google.com/android/repository/${archive}" -o "$RUNNER_TEMP/${archive}"
+          printf '%s  %s\n' \
+            '7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee' \
+            "$RUNNER_TEMP/${archive}" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/${archive}" -d "$sdk_root/cmdline-tools"
+          mv "$sdk_root/cmdline-tools/cmdline-tools" "$sdk_root/cmdline-tools/latest"
+          {
+            echo "ANDROID_HOME=$sdk_root"
+            echo "ANDROID_SDK_ROOT=$sdk_root"
+          } >> "$GITHUB_ENV"
+          echo "$sdk_root/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$sdk_root/platform-tools" >> "$GITHUB_PATH"
+          yes | "$sdk_root/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk_root" --licenses >/dev/null || true
+          "$sdk_root/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk_root" \
+            "platform-tools" \
+            "platforms;android-${ANDROID_COMPILE_SDK}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}"
+      - name: Restore the Gradle caches
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: refract-android-${{ runner.os }}-${{ hashFiles('examples/android/gradle/wrapper/gradle-wrapper.properties', 'examples/android/build.gradle.kts', 'examples/android/app/build.gradle.kts', 'examples/android/settings.gradle.kts') }}
+          restore-keys: |
+            refract-android-${{ runner.os }}-
+      - name: Compile generated Kotlin with the checked-in wrapper
+        working-directory: examples/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ./gradlew --no-daemon :app:compileDebugKotlin
+      - name: Reject unexpected files left in the checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          unexpected=$(git status --short --untracked-files=all)
+          if [[ -n "$unexpected" ]]; then
+            printf 'Unexpected files after the Android compile gate:\n%s\n' "$unexpected"
+            exit 1
+          fi
+
   repository-checks:
     name: Repository checks
     runs-on: ubuntu-latest

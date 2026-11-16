@@ -43,17 +43,6 @@ extension Builder {
         return .conditional(conditions: branches, location: location(of: statement))
     }
 
-    func rejectUnsupportedControlFlow(_ expression: ExprSyntax) -> ViewNode? {
-        if expression.is(SwitchExprSyntax.self) {
-            error("RFCTRL003", "This switch cannot be lowered yet.",
-                  "Use exhaustive switches over declared no-payload enums when that slice is implemented", at: expression)
-        } else {
-            error("RFCTRL001", "This statement is not a supported view-builder conditional.",
-                  "Use if/else with a typed Boolean condition", at: expression)
-        }
-        return nil
-    }
-
     private func typedBoolean(_ expression: ExprSyntax) -> Expression? {
         if let value = expression.as(BooleanLiteralExprSyntax.self) {
             return Expression(.boolLiteral(value.literal.tokenKind == .keyword(.true)), location: location(of: value))
