@@ -15,10 +15,12 @@ public struct Frontend {
         }
         let builder = Builder(file: source.path, tree: tree, mapping: mapping)
         builder.walk(tree)
-        return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
-                                              nativeDeclarations: builder.interop.declarations,
-                                              models: builder.models, itemTypes: builder.itemTypes,
-                                              enums: builder.enums),
+        let module = Module(sourceFile: source.path, screens: builder.screens,
+                            nativeDeclarations: builder.interop.declarations,
+                            models: builder.models, itemTypes: builder.itemTypes,
+                            enums: builder.enums)
+        builder.validateChildViewGraph(module)
+        return TranslationUnit(module: module,
                                diagnostics: builder.diagnostics)
     }
 }
@@ -31,6 +33,7 @@ final class Builder: SyntaxVisitor {
     var interop: InteropFrontend
     var designSystem: DesignSystemFrontend?
     var parameters: [ScreenParameter] = []
+    var currentViewName: String?
     var declaredModelNames: Set<String> = []
     var currentStates: [StateDeclaration] = []
     var models: [ModelProtocol] = []
@@ -40,6 +43,7 @@ final class Builder: SyntaxVisitor {
     var currentListItem: String?
     var currentListItemType: ItemType?
     var currentBindings: [String: ValueType] = [:]
+    var viewDeclarations: [String: StructDeclSyntax] = [:]
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -58,6 +62,14 @@ final class Builder: SyntaxVisitor {
         collectEnums(tree)
         collectItemTypes(tree)
         collectModels(tree)
+        for statement in tree.statements {
+            if let declaration = statement.item.as(StructDeclSyntax.self),
+               declaration.inheritanceClause?.inheritedTypes.contains(where: {
+                   $0.type.trimmedDescription == "View"
+               }) == true {
+                viewDeclarations[declaration.name.text] = declaration
+            }
+        }
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -70,9 +82,41 @@ final class Builder: SyntaxVisitor {
         }) == true else { return .skipChildren }
         guard validateViewMembers(node) else { return .skipChildren }
 
+        let savedParameters = parameters
+        let savedStates = currentStates
+        let savedModels = currentModels
+        let savedItem = currentListItem
+        let savedItemType = currentListItemType
+        let savedBindings = currentBindings
+        let savedViewName = currentViewName
         parameters = []
+        currentStates = []
+        currentModels = []
+        currentListItem = nil
+        currentListItemType = nil
+        currentBindings = [:]
+        currentViewName = node.name.text
+        defer {
+            parameters = savedParameters
+            currentStates = savedStates
+            currentModels = savedModels
+            currentListItem = savedItem
+            currentListItemType = savedItemType
+            currentBindings = savedBindings
+            currentViewName = savedViewName
+        }
         let members = node.memberBlock.members
-        if hasDeclaredModelInputs(node) {
+        let hasItemInputs = members.contains { member in
+            guard let type = member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
+                .trimmedDescription else { return false }
+            return itemTypes.contains(where: { $0.name == type })
+        }
+        if hasItemInputs {
+            guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
+            screens.append(body)
+            return .skipChildren
+        }
+        if hasDeclaredModelInputs(node) && !hasTypedInputs(members) {
             guard localStateDeclarations(node) != nil else { return .skipChildren }
         } else if hasTypedInputs(members) {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
@@ -101,9 +145,14 @@ final class Builder: SyntaxVisitor {
             guard case let .model(reference, _) = $0 else { return nil }
             return reference
         }
+        parameters = []
+        currentListItem = nil
+        currentListItemType = nil
         defer {
             currentStates = []
             currentModels = []
+            currentListItem = nil
+            currentListItemType = nil
         }
         guard let root = viewStatements(items, body: binding) else { return .skipChildren }
 
@@ -292,6 +341,9 @@ final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
+            if let declaration = viewDeclarations[name] {
+                return childView(call, declaration: declaration)
+            }
             if interop.declarations.contains(where: { $0.name == name }) == false,
                designSystem?.isCandidate(name) == true {
                 return designSystem?.component(call, name: name)

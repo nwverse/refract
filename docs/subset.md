@@ -11,6 +11,9 @@ there is no Refract runtime, base view, interpreter or lookup registry in a gene
 
 ## 1. Source and generated-file conventions
 
+  input. If the file declares a generated child `View` with only declared model interfaces and one immutable
+  `Identifiable` item input, a parent list row can call it with explicit labels. The child retains its native
+  composable/component boundary and its own item-local scope. Recursive direct or indirect child calls are errors.
 - One `Input.swift` contains one `struct <Name>: View` with a `body`, plus any `Identifiable` item type, model
   protocol or `RefractNativeView` declaration that it needs. The native marker and interop helpers are ordinary
   SwiftUI source declarations specified by `docs/interop.md`, not a linked library. `import SwiftUI` is the only
@@ -100,6 +103,7 @@ A modifier combination that cannot preserve the source semantics is diagnosed.
 | `.padding(.medium)` | `Modifier.padding(8.dp)` | `.padding(8)` | Uniform padding. The first modifier starts from `Modifier`; later calls chain onto it. |
 | `.padding(.horizontal, .large)` | `Modifier.padding(horizontal = 16.dp)` | `.padding({ left: 16, right: 16 })` | Horizontal/vertical insets; start/end semantics must be retained for horizontal text layouts. |
 | `.frame(width: 120, height: 44)` | `Modifier.size(width = 120.dp, height = 44.dp)` | `.width(120).height(44)` | Dimensions are scalar dp/vp values. Numeric literals are layout values, not design-token colors or fonts. |
+| `.layoutPriority(1)` on a direct `HStack` child | `Modifier.weight(1f)` in the enclosing `RowScope` | `.layoutWeight(1)` | This bounded layout slice supports only a direct HStack child with the integer literal `1`. Nested children, other priorities, repeated priorities and non-HStack receivers are errors. |
 | `.fillMaxWidth()` is not SwiftUI; use `.frame(maxWidth: .infinity)` | `Modifier.fillMaxWidth()` | `.width("100%")` | Only the SwiftUI spelling is accepted. It must not be confused with a fixed width. |
 | `.background(.surface)` | `Modifier.background(AppTheme.colors.surface)` | `.backgroundColor(AppTheme.colors.surface)` | A semantic color token resolved by the mapping; never an RGB fallback. |
 | `.foregroundStyle(.secondary)` | `Modifier` does not change the text call; use `color = AppTheme.colors.secondary` at `Text` | `.fontColor(AppTheme.colors.secondary)` | Text color is passed directly to the leaf instead of adding a draw/layout wrapper. |

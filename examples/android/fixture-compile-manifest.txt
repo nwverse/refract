@@ -24,3 +24,4 @@ v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
 benchmark-settings
+child-view-layout-priority

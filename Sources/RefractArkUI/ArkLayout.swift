@@ -16,6 +16,7 @@ extension Generation {
         case .horizontal: "Row"
         case .depth: "Stack"
         }
+        let children = try stackChildren(children, parentAxis: layout.axis)
         writer.open("\(container)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
         for child in children {
             try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver)

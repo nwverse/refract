@@ -5,7 +5,7 @@ extension ComposeBackend {
                    into out: inout KotlinWriter, context: inout Context) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
-            try emitLayout(layout, children: children, modifiers: modifiers, isRoot: isRoot,
+            try emitLayout(layout, children: children, modifiers: modifiers, isRoot: isRoot, parentAxis: parentAxis,
                            into: &out, context: &context)
         case let .scroll(axis, child, modifiers, location):
             try emitScroll(axis: axis, child: child, modifiers: modifiers, isRoot: isRoot,
@@ -50,7 +50,7 @@ extension ComposeBackend {
         case let .textInput(placeholder, value, modifiers, location):
             try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
                               location: location, into: &out, context: &context)
-        case .stack, .text, .button, .toggle, .native, .nativeModifier, .component, .platformView, .conditional, .optionalBinding, .switchExpression:
+        case .stack, .text, .button, .toggle, .native, .nativeModifier, .child, .component, .platformView, .conditional, .optionalBinding, .switchExpression:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)
         }

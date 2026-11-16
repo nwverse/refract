@@ -2,14 +2,51 @@ import RefractIR
 import SwiftSyntax
 
 extension Builder {
+    func localInputStates(_ node: StructDeclSyntax) -> [StateDeclaration]? {
+        var states: [StateDeclaration] = []
+        let declaredModels = models
+        for member in node.memberBlock.members {
+            guard let declaration = member.decl.as(VariableDeclSyntax.self) else {
+                error("RFVIEW006", "Only stored inputs and body belong in this child View slice.",
+                      "Move other declarations into a model or a supported view body.", at: member)
+                return nil
+            }
+            guard declaration.bindingSpecifier.tokenKind == .keyword(.let),
+                  declaration.attributes.isEmpty,
+                  declaration.bindings.count == 1,
+                  let binding = declaration.bindings.first,
+                  let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
+                  name != "body",
+                  itemTypes.contains(where: { $0.name == binding.typeAnnotation?.type.trimmedDescription }) == false else { continue }
+            guard let typeName = binding.typeAnnotation?.type.trimmedDescription,
+                  declaredModels.contains(where: { $0.name == typeName }) || declaredModelNames.contains(typeName),
+                  binding.initializer == nil, binding.accessorBlock == nil else {
+                error("state.invalid_declaration", "A model input must be a let property of a declared RefractModel protocol.",
+                      "Use `let model: YourModel` with `protocol YourModel: RefractModel`", at: member)
+                return nil
+            }
+            states.append(.model(ModelReference(propertyName: name, protocolName: typeName),
+                                 location: location(of: declaration)))
+        }
+        return states
+    }
+
     func localStateDeclarations(_ node: StructDeclSyntax) -> [StateDeclaration]? {
         var states: [StateDeclaration] = []
         for member in node.memberBlock.members {
             guard let declaration = member.decl.as(VariableDeclSyntax.self),
                   declaration.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body"
             else { continue }
-            if declaration.bindingSpecifier.tokenKind == .keyword(.let), declaration.attributes.isEmpty {
-                guard declaration.bindings.count == 1,
+            if declaration.bindingSpecifier.tokenKind == .keyword(.let) {
+                let binding = declaration.bindings.first
+                if declaration.attributes.isEmpty,
+                   let typeName = binding?.typeAnnotation?.type.trimmedDescription,
+                   models.contains(where: { $0.name == typeName }) == false,
+                   itemTypes.contains(where: { $0.name == typeName }) == false,
+                   declaredModelNames.contains(typeName) == false {
+                    continue
+                }
+                guard declaration.attributes.isEmpty, declaration.bindings.count == 1,
                       let binding = declaration.bindings.first,
                       let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
                       let typeName = binding.typeAnnotation?.type.trimmedDescription,

@@ -2,13 +2,13 @@ import RefractIR
 
 extension ComposeBackend {
     func emitLayout(_ layout: LayoutContainer, children: [ViewNode], modifiers: [Modifier],
-                    isRoot: Bool, into out: inout KotlinWriter, context: inout Context) throws {
+                    isRoot: Bool, parentAxis: ViewNode.StackAxis?, into out: inout KotlinWriter, context: inout Context) throws {
         let container = switch layout.axis {
         case .vertical: ("Column", "horizontalAlignment", "verticalArrangement")
         case .horizontal: ("Row", "verticalAlignment", "horizontalArrangement")
         case .depth: ("Box", "contentAlignment", "")
         }
-        var arguments = ["modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context))"]
+        var arguments = ["modifier = \(try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, context: &context))"]
         if let alignment = layout.alignment {
             context.imports.insert("androidx.compose.ui.Alignment")
             arguments.append("\(container.1) = \(try composeAlignment(alignment, axis: layout.axis))")

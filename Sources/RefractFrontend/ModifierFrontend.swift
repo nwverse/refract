@@ -5,7 +5,7 @@ extension Builder {
     /// Builtin modifiers use shared typed values, not mapped component declarations.
     /// A nil result means this is not a builtin and the interop parser may handle it.
     func builtinModifier(_ call: FunctionCallExprSyntax, name: String) -> Modifier? {
-        let supported = ["padding", "frame", "background", "cornerRadius", "opacity", "font", "foregroundStyle"]
+        let supported = ["padding", "frame", "background", "cornerRadius", "opacity", "font", "foregroundStyle", "layoutPriority"]
         guard supported.contains(name) else { return nil }
         guard call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty else {
             error("unsupportedModifier", "The modifier `\(name)` does not accept a trailing closure.",
@@ -54,7 +54,7 @@ extension Builder {
                       "Use labeled dimensions and `.infinity` only for a maximum dimension.", at: call)
                 return nil
             }
-        case "background", "cornerRadius", "opacity", "font", "foregroundStyle":
+        case "background", "cornerRadius", "opacity", "font", "foregroundStyle", "layoutPriority":
             guard arguments.count == 1, labels == [nil] else {
                 error("RFVIEW003", "Modifier `\(name)` requires exactly one unlabeled value.",
                       "Use the documented scalar or design-token argument.", at: call)

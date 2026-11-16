@@ -4,7 +4,8 @@ import RefractMapping
 extension Generation {
     func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
                       lazyOwner: Bool = false, mapping: Mapping = .empty,
-                      resolver: InteropResolver? = nil) throws {
+                      resolver: InteropResolver? = nil, itemParameters: [String: String] = [:],
+                      itemTypeName: String? = nil) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
             try emitLayout(layout, children: children, modifiers: modifiers,
@@ -35,7 +36,8 @@ extension Generation {
             }
             writer.open("LazyForEach(\(try ArkExpression.emit(items.collection, mapping: mapping)), (\(items.itemName): \(items.itemType)) =>")
             writer.open("ListItem()")
-            try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver)
+            try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver,
+                     itemTypeName: items.itemType)
             writer.close()
             let key = "\(items.itemName).\(items.key)"
             writer.close(suffix: ", (\(items.itemName): \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
@@ -64,7 +66,7 @@ extension Generation {
             writer.open("Row()")
             writer.line("Text(\(try ArkExpression.emit(title, item: item, mapping: mapping)))")
             writer.line("Blank()")
-            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value, item: item, mapping: mapping)) })")
+            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value, item: item, mapping: mapping, itemParameters: Set(itemParameters.keys))) })")
             writer.depth += 1
             if case .valueProperty(.itemBinding) = value.value {
                 writer.open(".onChange((enabled: boolean) =>")
@@ -77,9 +79,11 @@ extension Generation {
             case let .valueProperty(.binding(name)):
                 writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
             case let .valueProperty(.itemBinding(binding)):
-                guard binding.item == item else {
-                    throw Diagnostic(code: "state.invalid_projection", message: "An item toggle cannot write through a different list item.",
-                                     suggestion: "Use the current LazyForEach item.", location: value.location)
+                guard (itemTypeName != nil && itemParameters[binding.item] == itemTypeName)
+                      || (item == binding.item && itemTypeName != nil)
+                      || (item == nil && itemParameters[binding.item] != nil) else {
+                    throw Diagnostic(code: "state.invalid_projection", message: "An item toggle must write through its declared item input or current list item.",
+                                     suggestion: "Use the declared item input or current LazyForEach item.", location: value.location)
                 }
                 writer.line("this.\(binding.model).\(binding.action)(\(binding.item).\(binding.key), enabled);")
             default:

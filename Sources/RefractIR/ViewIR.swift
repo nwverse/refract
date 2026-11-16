@@ -11,6 +11,41 @@ public struct ModelCollection: Codable, Equatable, Sendable {
     }
 }
 
+/// A statically resolved call to another generated View in the same source module.
+/// Only declared model owners and immutable Identifiable items cross this boundary.
+public struct ChildView: Codable, Equatable, Sendable {
+    public struct Argument: Codable, Equatable, Sendable {
+        public let label: String
+        public let expression: String
+        public init(label: String, expression: String) {
+            self.label = label
+            self.expression = expression
+        }
+    }
+
+    public let name: String
+    public let arguments: [Argument]
+    public let models: [Argument]
+    public let item: Argument?
+
+    public init(name: String, arguments: [Argument] = [], models: [Argument] = [], item: Argument? = nil) {
+        self.name = name
+        self.arguments = arguments
+        self.models = models
+        self.item = item
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, arguments, models, item }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        models = try values.decode([Argument].self, forKey: .models)
+        item = try values.decodeIfPresent(Argument.self, forKey: .item)
+        arguments = try values.decodeIfPresent([Argument].self, forKey: .arguments) ?? models + (item.map { [$0] } ?? [])
+    }
+}
+
 /// Typed view additions shared by frontends and native backends.
 public enum LayoutSpacing: String, Codable, Sendable {
     case small, medium
@@ -117,7 +152,7 @@ public extension ViewNode {
         switch self {
         case let .stack(_, _, _, location), let .text(_, _, location), let .button(_, _, _, location),
              let .native(_, location), let .nativeModifier(_, _, location), let .component(_, location),
-             let .platformView(_, location), let .conditional(_, location),
+             let .child(_, location), let .platformView(_, location), let .conditional(_, location),
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
              let .image(_, _, location), let .toggle(_, _, _, _, location), let .textInput(_, _, _, location),
