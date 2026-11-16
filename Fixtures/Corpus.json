@@ -191,7 +191,7 @@
     },
     {
       "path": "v0-model-screen",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-native-component",

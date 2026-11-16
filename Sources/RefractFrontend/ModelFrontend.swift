@@ -87,6 +87,9 @@ extension Builder {
         guard let array = annotation?.as(ArrayTypeSyntax.self) else { return .some(nil) }
         let name = array.element.trimmedDescription
         guard let item = itemTypes.first(where: { $0.name == name }) else {
+            // A type that failed Identifiable validation is not a scalar model property.
+            // Keep the specific list-identity error rather than manufacturing a scalar fallback.
+            if diagnostics.contains(where: { $0.code == "RFLIST001" }) { return nil }
             error("model.invalid_property", "Model collection `\(name)` is not a declared Identifiable item type.",
                   "Declare a stored scalar Identifiable item with a stable String or Int id", at: array)
             return nil
@@ -121,19 +124,36 @@ extension Builder {
     }
 
     func modelProperty(_ expression: ExprSyntax) -> Expression? {
+        // Preserve the scalar-only API used by actions and modifiers. A typed collection is not a string.
+        scalarModelProperty(expression)?.expression
+    }
+
+    private func scalarModelProperty(_ expression: ExprSyntax) -> TypedExpression? {
+        guard let value = modelTypedProperty(expression), value.type != nil else { return nil }
+        return value
+    }
+
+    func modelTypedProperty(_ expression: ExprSyntax) -> TypedExpression? {
         if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
            let base = member.base?.as(DeclReferenceExprSyntax.self), let item = currentListItem,
            base.baseName.text == item {
-            return Expression(.reference("\(item).\(member.declName.baseName.text)"), location: location(of: expression))
+            let name = member.declName.baseName.text
+            guard let property = currentListItemType?.properties.first(where: { $0.name == name }) else {
+                error("RFSEM001", "List item `\(item)` has no declared stored property `\(name)`.",
+                      "Use a scalar property declared by the Identifiable item type", at: member)
+                return nil
+            }
+            return TypedExpression(Expression(.reference("\(item).\(property.name)"),
+                                             location: location(of: expression)), property.type)
         }
         guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let contract = models.first(where: { $0.name == reference.protocolName }),
-              contract.properties.contains(where: { $0.name == member.declName.baseName.text }) else { return nil }
-        return Expression(.valueProperty(.model(model: reference.propertyName,
-                                                property: member.declName.baseName.text)),
-                          location: location(of: expression))
+              let property = contract.properties.first(where: { $0.name == member.declName.baseName.text }) else { return nil }
+        return TypedExpression(Expression(.valueProperty(.model(model: reference.propertyName,
+                                                               property: member.declName.baseName.text)),
+                                         location: location(of: expression)), property.collection == nil ? property.type : nil)
     }
 
     func modelAction(_ expression: ExprSyntax) -> StateAction? {
