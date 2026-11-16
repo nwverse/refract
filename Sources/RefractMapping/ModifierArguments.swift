@@ -1,26 +1,23 @@
 import RefractIR
 
 /// Shared source semantics for modifier arguments, independent of either target's spelling.
-struct ModifierArguments {
-    let modifier: Modifier
+public struct ModifierArguments {
+    public let modifier: Modifier
+    public init(modifier: Modifier) { self.modifier = modifier }
 
-    var labels: [String?] {
+    public var labels: [String?] {
         guard !modifier.argumentLabels.isEmpty else { return Array(repeating: nil, count: modifier.arguments.count) }
         return modifier.argumentLabels
     }
 
-    func one(label: String? = nil) throws -> Expression {
+    public func one(label: String? = nil) throws -> Expression {
         guard modifier.arguments.count == 1, labels.count == 1, labels[0] == label else {
             throw invalid("Use one documented unlabeled modifier value.")
         }
         return modifier.arguments[0]
     }
 
-    func zeroArguments() throws {
-        guard modifier.arguments.isEmpty else { throw invalid("Use the modifier without arguments.") }
-    }
-
-    func labeled() throws -> [String: Expression] {
+    public func labeled() throws -> [String: Expression] {
         guard modifier.arguments.count == labels.count else { throw invalid("Use labeled frame dimensions.") }
         var result: [String: Expression] = [:]
         for (label, argument) in zip(labels, modifier.arguments) {
@@ -30,19 +27,25 @@ struct ModifierArguments {
         return result
     }
 
-    func invalid(_ suggestion: String) -> Diagnostic {
+    public func invalid(_ suggestion: String) -> Diagnostic {
         Diagnostic(code: "RFVIEW003",
                    message: "Modifier `\(modifier.name)` has unsupported argument labels or arity.",
                    suggestion: suggestion, location: modifier.location)
     }
 }
 
-struct ModifierValue {
-    let expression: Expression
-    let mapping: Mapping
-    let location: SourceLocation?
+public struct ModifierValue {
+    public let expression: Expression
+    public let mapping: Mapping
+    public let location: SourceLocation?
 
-    func number(allowInfinity: Bool = false) throws -> String {
+    public init(expression: Expression, mapping: Mapping, location: SourceLocation?) {
+        self.expression = expression
+        self.mapping = mapping
+        self.location = location
+    }
+
+    public func number(allowInfinity: Bool = false) throws -> String {
         switch expression.value {
         case let .numberLiteral(value):
             guard let value = Double(value), value.isFinite else { throw invalid() }
@@ -57,7 +60,7 @@ struct ModifierValue {
         }
     }
 
-    func length(_ category: TokenCategory, platform: Platform) throws -> (value: String, isLiteral: Bool) {
+    public func length(_ category: TokenCategory, platform: Platform) throws -> (value: String, isLiteral: Bool) {
         switch expression.value {
         case .numberLiteral:
             return (try number(), true)

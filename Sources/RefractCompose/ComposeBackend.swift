@@ -196,9 +196,17 @@ public struct ComposeBackend: Sendable {
         let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
         if modifierChain != "Modifier" {
-            arguments.append("modifier = \(modifierChain)")
+            if modifierChain.contains(".background(") {
+                arguments.append("modifier = \(modifierChain.replacingOccurrences(of: ").", with: ")\n."))")
+            } else {
+                arguments.append("modifier = \(modifierChain)")
+            }
         }
-        arguments.append(contentsOf: textModifiers)
+        if textModifiers.contains(where: { $0.hasPrefix("style = ") }) {
+            arguments.append(contentsOf: textModifiers.sorted(by: { $0.hasPrefix("style = ") && !$1.hasPrefix("style = ") }))
+        } else {
+            arguments.append(contentsOf: textModifiers)
+        }
         if arguments.count == 1 {
             out.line("Text(\(arguments[0]))")
         } else {

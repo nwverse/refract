@@ -2,7 +2,7 @@ import RefractIR
 import RefractMapping
 
 extension ArkModifiers {
-    static func emitCanonical(_ modifiers: [Modifier], mapping: Mapping) throws -> String {
+    static func emitCanonical(_ modifiers: [Modifier], mapping: Mapping, isText: Bool = false) throws -> String {
         var parts: [String] = []
         var index = 0
         while index < modifiers.count {
@@ -58,11 +58,15 @@ extension ArkModifiers {
             case "background":
                 parts.append(".backgroundColor(\(try token(try arguments.one(), category: .color, mapping: mapping)))")
             case "cornerRadius":
-                guard index > 0, modifiers[index - 1].name == "background" else {
-                    throw Diagnostic(code: "RFVIEW003",
-                        message: "A corner radius must follow its background to preserve rounded-background semantics.",
-                        suggestion: "Use `.background(...).cornerRadius(...)` in that source order.",
-                        location: modifier.location)
+                let mappedToken: Bool
+                if case let .reference(name) = try arguments.one().value { mappedToken = name.hasPrefix("Design") } else { mappedToken = false }
+                if mappedToken {
+                    guard index > 0, modifiers[index - 1].name == "background" else {
+                        throw Diagnostic(code: "RFVIEW003",
+                            message: "A corner radius must follow its background to preserve rounded-background semantics.",
+                            suggestion: "Use `.background(...).cornerRadius(...)` in that source order.",
+                            location: modifier.location)
+                    }
                 }
                 parts.append(".borderRadius(\(try length(try arguments.one(), category: .radius, mapping: mapping)))")
             case "opacity":
@@ -73,22 +77,43 @@ extension ArkModifiers {
                                      suggestion: "Use a finite opacity in the inclusive range 0...1.", location: modifier.location)
                 }
                 parts.append(".opacity(\(value))")
+            case "fontSize", "fontWeight", "width", "height":
+                guard modifier.arguments.count == 1 else { throw arguments.invalid("Use one scalar attribute value.") }
+                parts.append(".\(modifier.name)(\(try ArkExpression.emit(try arguments.one(), mapping: mapping)))")
             case "font":
+                guard isText else {
+                    throw Diagnostic(code: "RFVIEW003",
+                        message: "Text styling cannot be attached to this non-Text view without changing its semantics.",
+                        suggestion: "Apply `font` directly to the Text view.", location: modifier.location)
+                }
                 parts.append(".font(\(try token(try arguments.one(), category: .font, mapping: mapping)))")
             case "foregroundStyle", "foregroundColor":
-                parts.append(".fontColor(\(try token(try arguments.one(), category: .color, mapping: mapping)))")
+                guard isText else {
+                    throw Diagnostic(code: "RFVIEW003",
+                        message: "Text styling cannot be attached to this non-Text view without changing its semantics.",
+                        suggestion: "Apply `\(modifier.name)` directly to the Text view.",
+                        location: modifier.location)
+                }
+                parts.append(".fontColor(\(try color(try arguments.one(), mapping: mapping)))")
             default:
                 throw Diagnostic(code: "RFVIEW003", message: "Modifier `\(modifier.name)` has no ArkUI mapping.",
                                  suggestion: "Use a supported modifier or a typed native component.", location: modifier.location)
             }
             index += 1
         }
-        return parts.joined()
+        return parts.joined(separator: "\n")
     }
 
     private static func length(_ expression: Expression, category: TokenCategory, mapping: Mapping) throws -> String {
         try ModifierValue(expression: expression, mapping: mapping, location: expression.location)
             .length(category, platform: .harmonyOS).value
+    }
+
+    private static func color(_ expression: Expression, mapping: Mapping) throws -> String {
+        if case let .reference(name) = expression.value, name.hasPrefix("Design") {
+            return try mapping.token(name, category: .color, platform: .harmonyOS, location: expression.location)
+        }
+        return try ArkExpression.emit(expression, mapping: mapping)
     }
 
     private static func token(_ expression: Expression, category: TokenCategory, mapping: Mapping) throws -> String {

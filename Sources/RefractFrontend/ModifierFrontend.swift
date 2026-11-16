@@ -14,9 +14,15 @@ extension Builder {
         }
         var arguments: [Expression] = []
         var labels: [String?] = []
+        let diagnosticCount = diagnostics.count
         for argument in call.arguments {
             labels.append(argument.label?.text)
-            guard let value = modifierValue(argument.expression) else { return nil }
+            guard let value = modifierValue(argument.expression) else {
+                if diagnostics.count > diagnosticCount {
+                    return Modifier(name: name, arguments: [], location: location(of: call))
+                }
+                return Modifier(name: name, arguments: [], location: location(of: call))
+            }
             arguments.append(value)
         }
         switch name {
@@ -54,6 +60,10 @@ extension Builder {
 
     private func modifierValue(_ expression: ExprSyntax) -> Expression? {
         let location = location(of: expression)
+        if let call = expression.as(FunctionCallExprSyntax.self),
+           call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
+            return platformValue(call)?.expression
+        }
         if let literal = expression.as(IntegerLiteralExprSyntax.self) {
             return Expression(.numberLiteral(literal.literal.text), location: location)
         }

@@ -20,6 +20,7 @@ extension ComposeBackend {
             case "padding":
                 context.imports.insert("androidx.compose.foundation.layout.padding")
                 if modifier.arguments.isEmpty {
+                    context.imports.insert("androidx.compose.ui.unit.dp")
                     parts.append(".padding(all = 16.dp)")
                 } else if modifier.arguments.count == 1 {
                     let value = try composeLength(try ModifierArguments(modifier: modifier).one(),
