@@ -59,7 +59,11 @@ extension ArkModifiers {
                 parts.append(".backgroundColor(\(try token(try arguments.one(), category: .color, mapping: mapping)))")
             case "cornerRadius":
                 let mappedToken: Bool
-                if case let .reference(name) = try arguments.one().value { mappedToken = name.hasPrefix("Design") } else { mappedToken = false }
+                if case let .reference(name) = try arguments.one().value {
+                    mappedToken = mapping.harmonyOS.tokens.radius[name] != nil
+                } else {
+                    mappedToken = false
+                }
                 if mappedToken {
                     guard index > 0, modifiers[index - 1].name == "background" else {
                         throw Diagnostic(code: "RFVIEW003",
@@ -110,7 +114,8 @@ extension ArkModifiers {
     }
 
     private static func color(_ expression: Expression, mapping: Mapping) throws -> String {
-        if case let .reference(name) = expression.value, name.hasPrefix("Design") {
+        if case let .reference(name) = expression.value,
+           mapping.harmonyOS.tokens.color[name] != nil {
             return try mapping.token(name, category: .color, platform: .harmonyOS, location: expression.location)
         }
         return try ArkExpression.emit(expression, mapping: mapping)

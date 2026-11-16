@@ -40,6 +40,7 @@ private let styledMapping = Mapping(
     #expect(kotlin.contains("color = AppColors.secondary"))
     #expect(kotlin.contains("style = AppTypography.title"))
     #expect(!kotlin.contains(".clip("))
+    #expect(kotlin.contains("import androidx.compose.foundation.background"))
 
     let ark = try ArkUIBackend().generate(module: module, mapping: styledMapping)
     #expect(ark.contains(".padding(AppSpacing.medium)"))
@@ -62,6 +63,15 @@ private let styledMapping = Mapping(
     #expect(kotlin.contains(".padding(horizontal = 16.dp).size(width = 120.dp, height = 44.dp)"))
     let ark = try ArkUIBackend().generate(module: module)
     #expect(ark.contains(".padding({ left: 16, right: 16 })\n      .width(120)\n      .height(44)"))
+}
+
+@Test func canonicalRejectsUnmappedColorTokens() throws {
+    let module = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "Unmapped", body: .text(Expression(.stringLiteral("Text")), modifiers: [
+            Modifier(name: "background", arguments: [Expression(.reference("AppColors.surface"))], argumentLabels: [nil]),
+        ], location: nil)),
+    ])
+    #expect(throws: Diagnostic.self) { try ArkUIBackend().generate(module: module, mapping: styledMapping) }
 }
 
 @Test(arguments: [

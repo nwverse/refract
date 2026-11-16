@@ -39,12 +39,12 @@ enum ArkModifiers {
     }
 
     private static func usesCanonicalValues(_ modifiers: [Modifier], mapping: Mapping) -> Bool {
-        if modifiers.contains(where: { ["font", "foregroundStyle", "frame"].contains($0.name) }) { return true }
+        if modifiers.contains(where: { ["font", "foregroundStyle", "frame", "background"].contains($0.name) }) { return true }
         return modifiers.contains { modifier in
             if modifier.argumentLabels.contains(where: { $0 != nil }) { return true }
             return modifier.arguments.contains { expression in
                 switch expression.value {
-                case let .reference(name) where name.hasPrefix("Design"):
+                case let .reference(name):
                     return TokenCategory.allCases.contains { mapping.harmonyOS.tokens[$0][name] != nil }
                 case .platformValue:
                     return true
