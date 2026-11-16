@@ -28,7 +28,7 @@ import Foundation
     #expect(try String(contentsOf: temporary.appendingPathComponent("android/Input.kt"), encoding: .utf8)
         .contains("text = \"Hello\""))
     #expect(try String(contentsOf: temporary.appendingPathComponent("harmony/Input.ets"), encoding: .utf8)
-        .contains("Text(\"Hello\")"))
+        .contains("Text('Hello')"))
     #expect(try runCLI(["check", "--input", input.path], executable: executable).status == 0)
 
     let rejection = try runCLI(["generate", "--input",

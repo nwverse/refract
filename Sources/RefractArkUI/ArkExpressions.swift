@@ -1,15 +1,14 @@
 import RefractIR
+import RefractMapping
 
 enum ArkExpression {
-    static func emit(_ expression: Expression, item: String? = nil) throws -> String {
+    static func emit(_ expression: Expression, item: String? = nil, mapping: Mapping = .empty) throws -> String {
         switch expression.value {
         case let .stringLiteral(value):
             return try ArkText.string(value)
         case let .stringKey(key):
-            throw Diagnostic(code: "arkui.unresolved_string_resource",
-                             message: "String resource `\(key)` has no validated ArkUI resource declaration.",
-                             suggestion: "Declare the key in the localization resource mapping.",
-                             location: expression.location)
+            let resource = try mapping.stringResource(key, platform: .harmonyOS, location: expression.location)
+            return "$r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)')"
         case let .boolLiteral(value):
             return value ? "true" : "false"
         case let .numberLiteral(value):
@@ -35,11 +34,8 @@ enum ArkExpression {
                              message: "This state expression requires the local-state lowering.",
                              suggestion: "Use a supported state read or interpolation.",
                              location: expression.location)
-        case .platformValue:
-            throw Diagnostic(code: "arkui.unsupported_platform_value",
-                             message: "Platform-value lowering is not available in this backend yet.",
-                             suggestion: "Use the interop backend implementation that selects the HarmonyOS value.",
-                             location: expression.location)
+        case let .platformValue(alternatives):
+            return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
         }
     }
 
@@ -90,11 +86,11 @@ enum ArkText {
     }
 
     static func string(_ value: String) throws -> String {
-        var result = "\""
+        var result = "'"
         for character in value {
             switch character {
             case "\\": result += "\\\\"
-            case "\"": result += "\\\""
+            case "'": result += "\\'"
             case "\n": result += "\\n"
             case "\r": result += "\\r"
             case "\t": result += "\\t"
@@ -109,7 +105,7 @@ enum ArkText {
                 }
             }
         }
-        return result + "\""
+        return result + "'"
     }
 
     static func header(_ value: String) -> String {
