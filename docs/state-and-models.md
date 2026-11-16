@@ -91,7 +91,7 @@ iOS form; ordinary SwiftUI `Toggle` takes a `Binding<Bool>`, not a model propert
 
 ```kotlin
 @Composable
-public fun CounterRow() {
+public fun CounterRow(modifier: Modifier = Modifier) {
     var count by remember { mutableStateOf(0) }
     Button(onClick = { count += 1 }) {
         Text("Increment")
@@ -102,6 +102,7 @@ public fun CounterRow() {
 public fun EnabledRow(
     isEnabled: Boolean,
     onIsEnabledChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Switch(checked = isEnabled, onCheckedChange = onIsEnabledChange)
 }
@@ -113,7 +114,7 @@ public interface ExtensionSettingsModel {
 }
 
 @Composable
-public fun ExtensionSettings(model: ExtensionSettingsModel) {
+public fun ExtensionSettings(model: ExtensionSettingsModel, modifier: Modifier = Modifier) {
     Button(onClick = { model.setEnabled(false) }) {
         Text("Disable")
     }
@@ -125,7 +126,8 @@ The concrete control names are illustrative here; the shared Compose backend own
 lowering owns the observable property access, not a second implementation of view generation.
 
 A local `@State` declaration produces `var property by remember { mutableStateOf(initialValue) }`; delegated reads
-and writes retain the same native snapshot observation. Model property reads append `.value` at the leaf. Binding reads use the value parameter directly and binding writes call its
+and writes retain the same native snapshot observation. Model property reads append `.value` at the leaf. Binding reads
+use the value parameter directly and binding writes call its
 setter callback. A state passed into a child binding uses `childState.value` and `{ value -> childState.value = value
 }`. A model-to-child binding is allowed only when the model declares the matching setter action; it cannot synthesize
 a write to a get-only property.
@@ -166,8 +168,15 @@ export struct EnabledRow {
   @Event onIsEnabledChange: (value: boolean) => void = (value: boolean): void => {};
 
   build() {
-    // The shared backend supplies the supported Toggle mapping.
-    // A write calls this.onIsEnabledChange(value), never this.isEnabled = value.
+    Row() {
+      Text($r('app.string.settings_enabled'))
+      Blank()
+      Toggle({ type: ToggleType.Switch, isOn: this.isEnabled })
+        .onChange((value: boolean) => {
+          this.onIsEnabledChange(value);
+        })
+    }
+    .justifyContent(FlexAlign.SpaceBetween)
   }
 }
 
@@ -224,8 +233,7 @@ ownership reason is explained, and a supported alternative is suggested.
 | Code | Rejected construct | Alternative |
 | --- | --- | --- |
 | `state.invalid_declaration` | `@ObservedObject`, `@StateObject`, `@EnvironmentObject`, `@Environment`, `@AppStorage`, `@SceneStorage`, `@FocusState`, `@GestureState` | local `@State`, parent `@Binding`, or a declared model interface |
-| `state.invalid_declaration` | multiple bindings in one wrapped declaration, missing explicit type, unsupported wrapper arguments | one typed stored property with the supported wrapper |
-| `state.missing_initializer` | `@State` without a local initializer | initialize the local value |
+| `state.invalid_declaration` | unsupported wrappers, malformed declarations, or a missing local initializer | use a supported wrapper and literal initialization |
 | `state.binding_initializer` | `@Binding` with an initial value | pass the parent's value and callback instead |
 | `state.invalid_projection` | unsupported `$` projection or `wrappedValue`/`projectedValue` access | use a supported binding input or child argument |
 | `state.unsupported_type` | unsupported optional, nested object or collection mutation | expose supported values and actions on a model |
