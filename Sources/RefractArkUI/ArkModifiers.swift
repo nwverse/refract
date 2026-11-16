@@ -3,7 +3,8 @@ import RefractMapping
 
 enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty) throws -> String {
-        try modifiers.map { modifier in
+        guard item == nil else {
+            return try modifiers.map { modifier in
             let arguments = modifier.arguments
             switch (modifier.name, arguments.count) {
             case ("padding", 0):
@@ -26,6 +27,8 @@ enum ArkModifiers {
                                  location: modifier.location)
             }
         }.joined()
+        }
+        return try emitCanonical(modifiers, mapping: mapping)
     }
 
     private static func attribute(_ name: String, _ value: Expression, item: String?, mapping: Mapping) throws -> String {

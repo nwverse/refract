@@ -181,8 +181,8 @@ public struct ComposeBackend: Sendable {
                           context: inout Context) throws {
         context.imports.insert("androidx.compose.material3.Text")
         let text = try renderExpression(expression, context: &context)
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
-        let textModifiers = textSpecificModifiers(modifiers, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, context: &context)
+        let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
         if modifierChain != "Modifier" {
             arguments.append("modifier = \(modifierChain)")
@@ -236,75 +236,6 @@ public struct ComposeBackend: Sendable {
                          message: "Conditional lowering is not yet supported by the Compose backend.",
                          suggestion: "Use a model-driven view instead.",
                          location: location)
-    }
-
-    // MARK: - Modifiers
-
-    func modifierChain(_ modifiers: [Modifier], isRoot: Bool, context: inout Context) throws -> String {
-        var parts: [String] = []
-        for modifier in modifiers {
-            // Text-only modifiers (font, foregroundColor) are emitted as Text parameters, not as Modifier entries.
-            if isTextOnlyModifier(modifier.name) { continue }
-            parts.append(try modifierCall(modifier, context: &context))
-        }
-        let base = isRoot ? "modifier" : "Modifier"
-        if parts.isEmpty {
-            return isRoot ? "modifier" : "Modifier"
-        }
-        return base + parts.joined()
-    }
-
-    private func isTextOnlyModifier(_ name: String) -> Bool {
-        switch name {
-        case "font", "foregroundColor": return true
-        default: return false
-        }
-    }
-
-    private func textSpecificModifiers(_ modifiers: [Modifier], context: inout Context) -> [String] {
-        var arguments: [String] = []
-        for modifier in modifiers {
-            switch modifier.name {
-            case "font":
-                context.imports.insert("androidx.compose.material3.MaterialTheme")
-                arguments.append("style = MaterialTheme.typography.titleLarge")
-            case "foregroundColor":
-                context.imports.insert("androidx.compose.material3.MaterialTheme")
-                arguments.append("color = MaterialTheme.colorScheme.onSurface")
-            default:
-                continue
-            }
-        }
-        return arguments
-    }
-
-    private func modifierCall(_ modifier: Modifier, context: inout Context) throws -> String {
-        switch modifier.name {
-        case "padding":
-            context.imports.insert("androidx.compose.foundation.layout.padding")
-            context.imports.insert("androidx.compose.ui.unit.dp")
-            if modifier.arguments.isEmpty {
-                return ".padding(all = 16.dp)"
-            }
-            if modifier.arguments.count == 1, let amount = modifier.arguments.first {
-                let value = try renderExpression(amount, context: &context)
-                return ".padding(all = \(value).dp)"
-            }
-            throw Diagnostic(code: "RF-C004",
-                             message: "Unsupported padding form.",
-                             suggestion: "Use .padding() or .padding(16).",
-                             location: modifier.location)
-        case "frame":
-            throw Diagnostic(code: "RF-C004",
-                             message: "Modifier '.frame' is not yet supported by the Compose backend.",
-                             suggestion: "Use .padding() for spacing or fillMaxWidth() through refract.json.",
-                             location: modifier.location)
-        default:
-            throw Diagnostic(code: "RF-C001",
-                             message: "Modifier '\(modifier.name)' has no Compose mapping.",
-                             suggestion: "Use a supported modifier or declare a custom mapping.",
-                             location: modifier.location)
-        }
     }
 
     // MARK: - Expressions

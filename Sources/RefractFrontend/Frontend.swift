@@ -144,6 +144,14 @@ final class Builder: SyntaxVisitor {
     }
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        if let builtin = builtinModifier(call, name: name) {
+            guard let updated = node.appendingModifier(builtin) else {
+                error("unsupportedModifierTarget", "This modifier target is not supported yet.",
+                      "Apply the modifier to a supported built-in view.", at: call)
+                return nil
+            }
+            return updated
+        }
         guard name == "padding", call.arguments.count <= 1, call.trailingClosure == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
                   "Use a supported subset modifier.", at: call)
