@@ -40,7 +40,7 @@ extension Generation {
             let key = "item.\(items.key)"
             writer.close(suffix: ", (item: \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
         case let .image(source, modifiers, _):
-            writer.line("Image(\(try image(source)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
+            writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .toggle(title, value, modifiers, _):
             writer.open("Row()")
             writer.line("Text(\(try ArkExpression.emit(title, mapping: mapping)))")
@@ -82,7 +82,7 @@ extension Generation {
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .label(title, source, modifiers, _):
             writer.open("Row({ space: 8 })")
-            writer.line("Image(\(try image(source)))")
+            writer.line("Image(\(try image(source, mapping: mapping)))")
             writer.line("Text(\(try ArkExpression.emit(title, mapping: mapping)))")
             writer.close()
             writer.line(".alignItems(VerticalAlign.Center)")
@@ -110,7 +110,15 @@ extension Generation {
         writer.close()
     }
 
-    private func image(_ source: ImageSource) throws -> String {
+    private func image(_ source: ImageSource, mapping: Mapping) throws -> String {
+        if source.kind == .system, !mapping.harmonyOS.symbols.isEmpty {
+            let symbol = try mapping.symbol(source.name, platform: .harmonyOS, location: source.location)
+            guard symbol.kind == .media else {
+                throw Diagnostic(code: "RFMAP002", message: "An ArkUI system image must map to an app media resource.",
+                                 suggestion: "Use kind `media` with a declared application media name.", location: source.location)
+            }
+            return "$r('app.media.\(symbol.name)')"
+        }
         guard ArkText.isResourceName(source.name) else {
             throw Diagnostic(code: "arkui.invalid_image_resource", message: "`\(source.name)` is not a valid image resource name.",
                              suggestion: "Use a declared ASCII resource identifier.", location: source.location)

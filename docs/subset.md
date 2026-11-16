@@ -342,8 +342,8 @@ explicitly pending. The corpus is reviewed hand-written coverage, not a claim th
 
 A localized case's mapping declares its keys under both platform `resources.strings` tables. Its fixture also
 includes `values/strings.xml` and `resources/base/element/string.json`, so key existence and formatting can be
-checked against application-owned native catalogs. The mapping schema must expose those catalog paths before the
-runner can perform the file check; this is tracked with #6/#8. Image system names similarly require a typed
-per-platform `symbols` registry, never a guessed `sys.media` resource; schema integration is tracked with #6.
-`v0-leaf-controls/symbols.json` records that proposed companion input only: it is not read by the runner and is not
-an alternate accepted `refract.json` schema. Every checked-in `refract.json` passes the real mapping loader.
+checked against application-owned native catalogs. Each platform's `resources.catalog` declares the relative base
+resource path. Image system names similarly require a typed per-platform `symbols` registry, never a guessed
+`sys.media` resource. Android accepts `materialIcon` (the typed v0 set is Settings, Person and Check) or `drawable`;
+HarmonyOS accepts `media` with an application-owned resource name. Missing symbols and wrong kinds are diagnostics.
+`v0-leaf-controls/symbols.json` records the original design input only; the executable mapping is `refract.json`.

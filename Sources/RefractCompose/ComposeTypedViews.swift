@@ -27,11 +27,9 @@ extension ComposeBackend {
         case let .image(source, modifiers, location):
             try emitImage(source, modifiers: modifiers, isRoot: isRoot, location: location,
                           into: &out, context: &context)
-        case let .label(_, _, _, location):
-            throw Diagnostic(code: "RF-C002",
-                             message: "A Label needs an explicit Android icon and accessibility contract.",
-                             suggestion: "Use a declared native component with a drawable and content description.",
-                             location: location)
+        case let .label(title, source, modifiers, location):
+            try emitLabel(title, source: source, modifiers: modifiers, isRoot: isRoot,
+                          location: location, into: &out, context: &context)
         case let .divider(modifiers, _):
             let horizontal = parentAxis != .horizontal
             context.imports.insert(horizontal ? "androidx.compose.material3.HorizontalDivider"
@@ -243,9 +241,34 @@ extension ComposeBackend {
                            location: SourceLocation?, into out: inout KotlinWriter,
                            context: inout Context) throws {
         guard source.kind == .application else {
-            throw Diagnostic(code: "RF-C002", message: "SF Symbols have no implicit Android drawable equivalent.",
-                             suggestion: "Use Image(\"drawable_name\") or a declared native component.",
-                             location: location ?? source.location)
+            guard !context.mapping.android.symbols.isEmpty else {
+                throw Diagnostic(code: "RF-C002", message: "SF Symbols have no implicit Android drawable equivalent.",
+                                 suggestion: "Use Image(\"drawable_name\") or a declared native component.",
+                                 location: location ?? source.location)
+            }
+            let symbol = try context.mapping.symbol(source.name, platform: .android, location: location ?? source.location)
+            switch symbol.kind {
+            case .materialIcon:
+                let icon = try materialIcon(named: symbol.name, location: location ?? source.location)
+                context.imports.insert("androidx.compose.material.icons.Icons")
+                context.imports.insert("androidx.compose.material.icons.filled.\(icon)")
+                context.imports.insert("androidx.compose.material3.Icon")
+                out.line("Icon(imageVector = Icons.Default.\(icon), contentDescription = null)")
+            case .drawable:
+                guard let resourceClass = context.androidResourceClass, isDrawableName(symbol.name) else {
+                    throw Diagnostic(code: "RF-C002", message: "A mapped Android drawable needs a valid R class and resource name.",
+                                     suggestion: "Use a declared lowercase drawable and the app's fully qualified R class.",
+                                     location: location ?? source.location)
+                }
+                context.imports.insert("androidx.compose.ui.res.painterResource")
+                context.imports.insert("androidx.compose.material3.Icon")
+                context.imports.insert(resourceClass)
+                out.line("Icon(painter = painterResource(R.drawable.\(symbol.name)), contentDescription = null)")
+            case .media:
+                throw Diagnostic(code: "RF-C002", message: "A media mapping is only valid for ArkUI.",
+                                 suggestion: "Use materialIcon or drawable for Android.", location: location ?? source.location)
+            }
+            return
         }
         guard let resourceClass = context.androidResourceClass else {
             throw Diagnostic(code: "RF-C002", message: "Application images require the Android R class in refract.json.",
@@ -262,6 +285,30 @@ extension ComposeBackend {
         context.imports.insert(resourceClass)
         let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
         out.line("Image(painter = painterResource(R.drawable.\(source.name)), contentDescription = null, modifier = \(chain))")
+    }
+
+    private func emitLabel(_ title: Expression, source: ImageSource, modifiers: [Modifier], isRoot: Bool,
+                           location: SourceLocation?, into out: inout KotlinWriter,
+                           context: inout Context) throws {
+        context.imports.insert("androidx.compose.foundation.layout.Arrangement")
+        context.imports.insert("androidx.compose.foundation.layout.Row")
+        context.imports.insert("androidx.compose.ui.Alignment")
+        context.imports.insert("androidx.compose.ui.unit.dp")
+        out.open("Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically)")
+        try emitImage(source, modifiers: [], isRoot: false, location: location, into: &out, context: &context)
+        context.imports.insert("androidx.compose.material3.Text")
+        out.line("Text(text = \(try renderExpression(title, context: &context)))")
+        out.close()
+    }
+
+    private func materialIcon(named name: String, location: SourceLocation?) throws -> String {
+        switch name {
+        case "Settings", "Person", "Check": return name
+        default:
+            throw Diagnostic(code: "RF-C002", message: "Material icon `\(name)` is not in the typed v0 symbol set.",
+                             suggestion: "Use Settings, Person or Check, or declare an application drawable instead.",
+                             location: location)
+        }
     }
 
     private func containerName(_ axis: ViewNode.StackAxis, context: inout Context) -> String {

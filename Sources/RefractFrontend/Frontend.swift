@@ -236,6 +236,18 @@ final class Builder: SyntaxVisitor {
             diagnostics.append(contentsOf: parser.diagnostics)
             return .text(value, modifiers: [], location: nodeLocation)
         case "Button":
+            if call.arguments.isEmpty, call.additionalTrailingClosures.count == 1,
+               call.additionalTrailingClosures.first?.label.text == "label",
+               let labelClosure = call.additionalTrailingClosures.first?.closure,
+               let action = localStateAction(call.trailingClosure) {
+                let children = children(of: labelClosure)
+                guard children?.count == 1, let child = children?.first else {
+                    error("unsupportedButton", "A custom Button label must contain one Label view.",
+                          "Use Button { model.save() } label: { Label(...) }", at: labelClosure)
+                    return nil
+                }
+                return .button(label: child, action: action, modifiers: [], location: nodeLocation)
+            }
             guard call.arguments.count == 1,
                   let argument = call.arguments.first,
                   argument.label == nil || argument.label?.text == "verbatim",

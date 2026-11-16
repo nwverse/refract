@@ -130,6 +130,15 @@ normalized names must agree. Resource APIs are emitted directly (`stringResource
 so a missing key is a compile-time diagnostic rather than a runtime lookup failure. `docs/localization.md` defines
 catalog parsing and typed formatting.
 
+## System symbols
+
+`symbols` maps a Swift `Image(systemName:)`/`Label(systemImage:)` name to a typed native icon or application media
+resource. Both platforms must declare the same source names. Android uses `materialIcon` for the explicitly supported
+v0 set (`Settings`, `Person`, `Check`) or `drawable` for an app-owned drawable name; HarmonyOS uses `media` for an
+app-owned media resource name. A missing symbol or wrong platform kind is a build-time error, never a guessed
+`sys.media` fallback. A legacy mapping without `symbols` retains the previous diagnostics for unmapped images; once a
+registry is declared, all referenced symbols are resolved and validated before generation.
+
 ## Native components
 
 `nativeComponents` uses the same typed declaration and target binding representation as `components`. Keeping a

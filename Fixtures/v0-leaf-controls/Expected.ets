@@ -8,9 +8,8 @@ export interface ControlsModel {
 @ComponentV2
 export struct LeafControls {
   @Require @Param model: ControlsModel;
-
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Row({ space: 8 }) {
         Image($r('app.media.profile'))
         Text($r('app.string.settings_profile'))
@@ -25,10 +24,9 @@ export struct LeafControls {
         .alignItems(VerticalAlign.Center)
       }
       .onClick(() => {
-        this.model.save()
+        this.model.save();
       })
       Divider()
     }
-    .alignItems(HorizontalAlign.Center)
   }
 }

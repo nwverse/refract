@@ -167,6 +167,21 @@
         "color": { "$ref": "#/$defs/tokenValues" }
       }
     },
+    "symbolMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name"],
+      "properties": {
+        "kind": { "enum": ["materialIcon", "drawable", "media"] },
+        "name": { "$ref": "#/$defs/qualifiedReference" }
+      }
+    },
+    "symbols": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": { "$ref": "#/$defs/symbolMapping" },
+      "maxProperties": 256
+    },
     "strings": {
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/resourceKey" },
@@ -250,6 +265,7 @@
         "nativeComponents": { "$ref": "#/$defs/components" },
         "modifiers": { "$ref": "#/$defs/modifiers" },
         "tokens": { "$ref": "#/$defs/tokens" },
+        "symbols": { "$ref": "#/$defs/symbols" },
         "resources": { "$ref": "#/$defs/androidResources" }
       }
     },
@@ -273,6 +289,7 @@
         "nativeComponents": { "$ref": "#/$defs/components" },
         "modifiers": { "$ref": "#/$defs/modifiers" },
         "tokens": { "$ref": "#/$defs/tokens" },
+        "symbols": { "$ref": "#/$defs/symbols" },
         "resources": { "$ref": "#/$defs/harmonyResources" }
       }
     }

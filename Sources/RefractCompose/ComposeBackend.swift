@@ -15,7 +15,9 @@ public struct ComposeBackend: Sendable {
         // Native references validate both target signatures at each call site below.
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
-        if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
+        if module.models.contains(where: { !$0.properties.isEmpty }) {
+            context.imports.insert("androidx.compose.runtime.State")
+        }
         try emitEnumDeclarations(module.enums, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
@@ -100,7 +102,11 @@ public struct ComposeBackend: Sendable {
                 parameters.append("\(name): \(kotlinType(type))")
                 parameters.append("on\(name.uppercasingFirst())Change: (\(kotlinType(type))) -> Unit")
             case let .model(reference, _):
-                context.imports.insert("androidx.compose.runtime.State")
+                if context.module.models.contains(where: {
+                    $0.name == reference.protocolName && !$0.properties.isEmpty
+                }) {
+                    context.imports.insert("androidx.compose.runtime.State")
+                }
                 parameters.append("\(reference.propertyName): \(reference.protocolName)")
             case .state:
                 // Local state is remembered inside the body, not a parameter.
