@@ -1,0 +1,1 @@
+Input.swift:4:5: error [state.binding_initializer]: @Binding property `isEnabled` cannot have an independent initializer. Suggestion: Pass the parent value and change callback instead
