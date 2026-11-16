@@ -78,6 +78,11 @@ shared core, such as a Rust library linked by every platform, can implement them
 (goal 4). How models expose observable state to Compose and ArkUI so that only the views that read a value update
 is a performance rule (goal 2) and is specified in `docs/performance.md`.
 
+Open decision 3 is resolved for the first slice: Compose interfaces expose `State<T>` and read `.value` at the leaf;
+ArkTS interfaces expose typed properties implemented by `@ObservedV2` classes with `@Trace` members, consumed through
+`@ComponentV2`/`@Param`. The minimum ArkUI API is 12. `@Binding` lowers to a value plus setter callback on both
+platforms; no observation adapter is generated. The detailed contract and evidence are in `docs/state-and-models.md`.
+
 ## Mixing with native code (goal 5)
 
 - **Native components inside Refract**: declared once (name, parameters with types) in Swift or `refract.json`,
@@ -118,7 +123,8 @@ is a performance rule (goal 2) and is specified in `docs/performance.md`.
 
 1. The exact IR shape (first PR of the generator skeleton).
 2. `refract.json` schema and where native component declarations live (Swift attributes vs JSON).
-3. How models expose fine-grained observation on each platform (Compose `State`/`StateFlow` vs generated holders;
-   ArkUI V1 vs V2 decorators) under goal 2.
+3. **Resolved:** Compose model properties expose `State<T>`; ArkUI uses V2 `@ObservedV2`/`@Trace` implementations
+   with `@ComponentV2`/`@Param` inputs, at API 12 or later. No generated observation adapter; see
+   `docs/state-and-models.md` for the contract and performance evidence requirements.
 4. Which HarmonyOS toolchain can compile generated ArkTS in CI on Linux.
 5. Minimum platform versions: Swift / Xcode, Kotlin / Compose BOM, HarmonyOS API level.

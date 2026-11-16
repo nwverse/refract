@@ -1,5 +1,14 @@
 # ArkUI generation pitfalls
 
+## An ArkTS interface does not enforce observation decorators
+
+`@ObservedV2` belongs on the implementation class and `@Trace` on each observable property; neither can be a
+requirement of a plain interface. `@Param` observes replacement of its value, not arbitrary class member mutation.
+An app implementation therefore needs a documented decorator contract and an integration example. Do not generate a
+plain model and claim it updates the UI. A `@Binding` maps to a `@Param` plus `@Event`, never assignment to the
+`@Param`. `@Require` constrains constructor input, not a definite-initialization fallback for an uninitialized
+`@Event`; use the documented empty callback initializer and always emit the parent's real callback.
+
 ## LazyForEach needs a native data source and stable identity
 
 A Swift `ForEach` over identified data must not lower to the ordinary ArkUI `ForEach` when lazy rendering is part
