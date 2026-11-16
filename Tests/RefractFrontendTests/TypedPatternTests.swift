@@ -112,3 +112,28 @@ struct ContentView: View {
     #expect(!unit.diagnostics.isEmpty)
     #expect(!unit.diagnostics.contains { $0.code == "RFSEM002" })
 }
+
+@Test func manuallyConstructedPatternsCannotBypassTypeValidation() {
+    let optional = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "Bad", parameters: [ScreenParameter(name: "title", type: .string, isOptional: true)],
+               body: .optionalBinding(subject: Expression(.reference("title")), binding: "title",
+                                      children: [], otherwise: [], location: nil)),
+    ])
+    #expect(throws: Diagnostic.self) { _ = try ComposeBackend().generate(module: optional) }
+    #expect(throws: Diagnostic.self) { _ = try ArkUIBackend().generate(module: optional) }
+
+    let missingBinding = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "Bad", parameters: [ScreenParameter(name: "content", type: .string, enumName: "Content")],
+               body: .switchExpression(subject: Expression(.reference("content")), enumName: "Content",
+                                       cases: [SwitchCase(name: "text", children: [])], location: nil)),
+    ], enums: [EnumDeclaration(name: "Content", cases: ["text"], payloadTypes: ["text": .string])])
+    #expect(throws: Diagnostic.self) { _ = try ComposeBackend().generate(module: missingBinding) }
+    #expect(throws: Diagnostic.self) { _ = try ArkUIBackend().generate(module: missingBinding) }
+}
+
+@Test func invalidEnumPayloadDeclarationCannotBeEmitted() {
+    let module = Module(sourceFile: "Input.swift", screens: [],
+                        enums: [EnumDeclaration(name: "Content", cases: ["text"], payloadTypes: ["other": .string])])
+    #expect(throws: Diagnostic.self) { _ = try ComposeBackend().generate(module: module) }
+    #expect(throws: Diagnostic.self) { _ = try ArkUIBackend().generate(module: module) }
+}
