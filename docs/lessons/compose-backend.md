@@ -22,3 +22,15 @@ Compose examples, and add to it when something surprises you.
   `contentType = { "TypeName" }`. Compose uses it to recycle composition, and the cost is one string constant.
 - **No SF Symbols.** `Image(systemName:)` is Apple-only. Emit `RF-C002`, never a placeholder or a silently
   dropped `Image`.
+- **Static lazy items still need identity.** A static list has no model id, but its generated `item` calls still need
+  unique source-derived keys and a `contentType`. Do not mistake source position within a fixed section for permission
+  to key a dynamic list by index. Check duplicate text keys and reject rather than aliasing rows.
+- **Do not nest vertical `LazyColumn` in vertical scrolling `Column`.** This does not provide finite-height native
+  scrolling. Emit `RF-C004` and ask for a single lazy list instead.
+- **Application drawables need the app's `R` class.** Resolve `android.resources.className` from the mapping and
+  import it. Do not guess a drawable package or invent a cross-platform symbol name.
+- **Scope extensions need their receiver.** `Modifier.weight(1f)` resolves inside `RowScope`/`ColumnScope`; importing
+  `androidx.compose.foundation.layout.weight` is not available to ordinary generated packages.
+- **Tests that import a module's API need its explicit test dependency.** Importing `RefractFrontend` from Compose
+  tests without listing it in the test target can surface as a missing SwiftSyntax C shim on Linux. Declare the real
+  module dependency rather than adding compiler search paths.
