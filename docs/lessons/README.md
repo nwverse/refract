@@ -13,3 +13,4 @@ add to it when you hit something new: what happened, why, and what to do instead
 | Building mixed-code examples | `docs/lessons/examples.md` |
 | Native string resources | `docs/lessons/localization.md` |
 | Golden fixtures and cross-workstream contracts | `docs/lessons/fixtures.md` |
+| Repository checks and CI | `docs/lessons/repository-tooling.md` |
