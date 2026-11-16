@@ -41,16 +41,16 @@ struct RefractCommand {
             throw CLIError.message("generate requires --android-out and --harmony-out")
         }
 
-        let inputURL = URL(fileURLWithPath: input)
-        let unit = Frontend.parse(SourceFile(path: inputURL.lastPathComponent,
-                                              contents: try String(contentsOf: inputURL, encoding: .utf8)))
-        for diagnostic in unit.diagnostics { FileHandle.standardError.write(Data((diagnostic.rendered + "\n").utf8)) }
-        guard !unit.hasErrors else { throw CLIError.message("generation stopped because the input has errors") }
-
         let mapping: Mapping
         if let path = options["--mapping"] {
             mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: path))
         } else { mapping = .empty }
+        let inputURL = URL(fileURLWithPath: input)
+        let unit = Frontend.parse(SourceFile(path: inputURL.lastPathComponent,
+                                              contents: try String(contentsOf: inputURL, encoding: .utf8)), mapping: mapping)
+        for diagnostic in unit.diagnostics { FileHandle.standardError.write(Data((diagnostic.rendered + "\n").utf8)) }
+        guard !unit.hasErrors else { throw CLIError.message("generation stopped because the input has errors") }
+
         let compose = try ComposeBackend().generate(module: unit.module, mapping: mapping)
         let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
         guard command == "generate" else { return }

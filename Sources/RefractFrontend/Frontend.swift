@@ -1,13 +1,14 @@
 import RefractIR
+import RefractMapping
 import SwiftParser
 import SwiftSyntax
 
 public struct Frontend {
     public init() {}
 
-    public static func parse(_ source: SourceFile) -> TranslationUnit {
+    public static func parse(_ source: SourceFile, mapping: Mapping? = nil) -> TranslationUnit {
         let tree = Parser.parse(source: source.contents)
-        let builder = Builder(file: source.path, tree: tree)
+        let builder = Builder(file: source.path, tree: tree, mapping: mapping)
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
                                               nativeDeclarations: builder.interop.declarations),
@@ -15,18 +16,21 @@ public struct Frontend {
     }
 }
 
-private final class Builder: SyntaxVisitor {
+final class Builder: SyntaxVisitor {
     let file: String
     let converter: SourceLocationConverter
     var screens: [Screen] = []
     var diagnostics: [Diagnostic] = []
     var interop: InteropFrontend
+    var designSystem: DesignSystemFrontend?
 
-    init(file: String, tree: SourceFileSyntax) {
+    init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
+        self.designSystem = nil
         super.init(viewMode: .sourceAccurate)
+        if let mapping { self.designSystem = DesignSystemFrontend(builder: self, mapping: mapping) }
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -69,8 +73,19 @@ private final class Builder: SyntaxVisitor {
         return .skipChildren
     }
 
-    private func view(_ expression: ExprSyntax) -> ViewNode? {
+    func view(_ expression: ExprSyntax) -> ViewNode? {
+        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {
+            guard let node = view(base) else { return nil }
+            if let call = member.parent?.as(FunctionCallExprSyntax.self),
+               call.calledExpression.id == member.id {
+                return modifier(call, name: member.declName.baseName.text, on: node)
+            }
+            return modifier(ExprSyntax(member), name: member.declName.baseName.text, on: node)
+        }
         if let call = expression.as(FunctionCallExprSyntax.self) {
+            if call.calledExpression.is(DeclReferenceExprSyntax.self) {
+                return view(call)
+            }
             if let member = call.calledExpression.as(MemberAccessExprSyntax.self), let base = member.base {
                 guard let node = view(base) else { return nil }
                 return modifier(call, name: member.declName.baseName.text, on: node)
@@ -86,8 +101,33 @@ private final class Builder: SyntaxVisitor {
         return nil
     }
 
-    private func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
-        guard name == "padding", call.arguments.count <= 1, call.trailingClosure == nil else {
+    func designSystemModifiers(before closure: ClosureExprSyntax?) -> [Modifier]? {
+        guard let closure, let call = closure.parent?.as(FunctionCallExprSyntax.self),
+              call.trailingClosure?.id == closure.id,
+              let member = call.calledExpression.as(MemberAccessExprSyntax.self) else { return nil }
+        guard let base = member.base,
+              case let .component(component, _)? = view(base) else { return nil }
+        let arguments = call.arguments.compactMap { argument -> Expression? in
+            guard let value = scalar(argument.expression) else { return nil }
+            return value.expression
+        }
+        return component.modifiers + [Modifier(name: member.declName.baseName.text, arguments: arguments,
+                                               location: location(of: member))]
+    }
+
+    func modifier(_ expression: ExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        if let call = expression.as(FunctionCallExprSyntax.self) {
+            return modifier(call, name: name, on: node)
+        }
+        if let member = expression.as(MemberAccessExprSyntax.self) {
+            return modifier(member, on: node)
+        }
+        error("unsupportedModifier", "The modifier `\(name)` is not supported.", at: expression)
+        return nil
+    }
+
+    func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        guard name == "padding" || name == "background" || designSystem != nil, call.arguments.count <= 1, call.trailingClosure == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
                   "Use a supported subset modifier.", at: call)
             return nil
@@ -100,7 +140,7 @@ private final class Builder: SyntaxVisitor {
         return modifier(name, arguments: arguments, on: node, at: call)
     }
 
-    private func modifier(_ member: MemberAccessExprSyntax, on node: ViewNode) -> ViewNode? {
+    func modifier(_ member: MemberAccessExprSyntax, on node: ViewNode) -> ViewNode? {
         let name = member.declName.baseName.text
         guard name == "padding", member.declName.argumentNames == nil else {
             error("unsupportedModifier", "The modifier `\(name)` is not supported.",
@@ -110,9 +150,11 @@ private final class Builder: SyntaxVisitor {
         return modifier(name, arguments: [], on: node, at: member)
     }
 
-    private func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
+    func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
                           at syntax: some SyntaxProtocol) -> ViewNode? {
         switch node {
+        case let .component(component, _):
+            return designSystem?.modifiers([Modifier(name: name, arguments: arguments, location: location(of: syntax))], on: component)
         case let .stack(axis, children, modifiers, location):
             return .stack(axis: axis, children: children, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
         case let .text(expression, modifiers, location):
@@ -125,7 +167,7 @@ private final class Builder: SyntaxVisitor {
         }
     }
 
-    private func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
+    func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard let reference = call.calledExpression.as(DeclReferenceExprSyntax.self) else {
             error("unsupportedView", "This view call is not supported.",
                   "Use VStack, HStack, Text, or Button.", at: call)
@@ -175,6 +217,7 @@ private final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
+            if let component = designSystem?.component(call, name: name) { return component }
             guard interop.declarations.contains(where: { $0.name == name }) else {
                 let component = NativeComponent(name: name)
                 diagnostics.append(contentsOf: interop.validate(component, declaration: nil, location: nodeLocation))
@@ -188,7 +231,7 @@ private final class Builder: SyntaxVisitor {
         }
     }
 
-    private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
+    func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
         let name = call.calledExpression.trimmedDescription
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
             guard let label = argument.label?.text, let value = scalar(argument.expression) else {
@@ -202,7 +245,7 @@ private final class Builder: SyntaxVisitor {
         return NativeComponent(name: name, arguments: arguments)
     }
 
-    private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
+    func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractView` requires exactly `ios`, `android`, and `harmonyOS` view-builder closures.",
                   "Supply all three typed platform view branches", at: call)
@@ -222,7 +265,7 @@ private final class Builder: SyntaxVisitor {
                              location: location(of: call))
     }
 
-    private func scalar(_ expression: ExprSyntax) -> TypedExpression? {
+    func scalar(_ expression: ExprSyntax) -> TypedExpression? {
         if let string = stringLiteral(expression) {
             return TypedExpression(Expression(.stringLiteral(string), location: location(of: expression)), .string)
         }
@@ -238,11 +281,20 @@ private final class Builder: SyntaxVisitor {
             return TypedExpression(Expression(.numberLiteral(literal.literal.text),
                                              location: location(of: expression)), .double)
         }
+        if expression.as(MemberAccessExprSyntax.self) != nil {
+            return TypedExpression(Expression(.reference(expression.trimmedDescription),
+                                             location: location(of: expression)), nil)
+        }
         if let reference = expression.as(DeclReferenceExprSyntax.self) {
             // Ownership of model/state references is refined by the state frontend. Native declarations still
             // retain their expected source types rather than accepting an arbitrary untyped expression.
             return TypedExpression(Expression(.reference(reference.baseName.text),
                                              location: location(of: expression)), nil)
+        }
+        if let call = expression.as(FunctionCallExprSyntax.self),
+           call.arguments.isEmpty,
+           call.calledExpression.as(MemberAccessExprSyntax.self) != nil {
+            return TypedExpression(Expression(.reference(call.trimmedDescription), location: location(of: expression)), nil)
         }
         if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
@@ -253,7 +305,7 @@ private final class Builder: SyntaxVisitor {
         return nil
     }
 
-    private func platformValue(_ call: FunctionCallExprSyntax) -> TypedExpression? {
+    func platformValue(_ call: FunctionCallExprSyntax) -> TypedExpression? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractValue` requires exactly `ios`, `android`, and `harmonyOS` arguments with compatible types.",
                   "Supply all three typed platform values", at: call)
@@ -275,7 +327,7 @@ private final class Builder: SyntaxVisitor {
             ios: values[0], android: values[1], harmonyOS: values[2])), location: location(of: call)), type)
     }
 
-    private struct TypedExpression {
+    struct TypedExpression {
         let expression: Expression
         let type: ValueType?
         init(_ expression: Expression, _ type: ValueType?) {
@@ -284,7 +336,7 @@ private final class Builder: SyntaxVisitor {
         }
     }
 
-    private func children(of closure: ClosureExprSyntax?) -> [ViewNode]? {
+    func children(of closure: ClosureExprSyntax?) -> [ViewNode]? {
         guard let closure else { return [] }
         var result: [ViewNode] = []
         for item in closure.statements {
@@ -299,24 +351,24 @@ private final class Builder: SyntaxVisitor {
         return result
     }
 
-    private func expression(in items: CodeBlockItemListSyntax) -> ExprSyntax? {
+    func expression(in items: CodeBlockItemListSyntax) -> ExprSyntax? {
         guard items.count == 1, let item = items.first else { return nil }
         if let expression = item.item.as(ExprSyntax.self) { return expression }
         return item.item.as(ReturnStmtSyntax.self)?.expression
     }
 
-    private func stringLiteral(_ expression: ExprSyntax) -> String? {
+    func stringLiteral(_ expression: ExprSyntax) -> String? {
         guard let literal = expression.as(StringLiteralExprSyntax.self), literal.segments.count == 1,
             case let .stringSegment(segment)? = literal.segments.first else { return nil }
         return segment.content.text
     }
 
-    private func location(of node: some SyntaxProtocol) -> RefractIR.SourceLocation {
+    func location(of node: some SyntaxProtocol) -> RefractIR.SourceLocation {
         let position = converter.location(for: node.positionAfterSkippingLeadingTrivia)
         return RefractIR.SourceLocation(file: file, line: position.line, column: position.column)
     }
 
-    private func error(_ code: String, _ message: String, _ suggestion: String? = nil,
+    func error(_ code: String, _ message: String, _ suggestion: String? = nil,
                        at node: some SyntaxProtocol) {
         diagnostics.append(Diagnostic(code: code, message: message, suggestion: suggestion,
                                       location: location(of: node)))

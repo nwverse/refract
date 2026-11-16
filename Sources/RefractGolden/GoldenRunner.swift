@@ -19,8 +19,7 @@ public struct GoldenResult: Sendable {
 
 public enum GoldenRunner {
     public static func generate(_ fixture: FixtureCase) throws -> GoldenResult {
-        let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input))
-        var diagnostics = unit.diagnostics
+        var diagnostics = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input)).diagnostics
         let mapping: Mapping
         do {
             if let contents = fixture.mapping {
@@ -33,6 +32,11 @@ public enum GoldenRunner {
         }
         // A mapping diagnostic is evaluated even when Swift parsing also fails: source and project
         // configuration are independent errors, and both must be reported before generation is skipped.
+        guard diagnostics.isEmpty || !mapping.android.components.isEmpty || !mapping.harmonyOS.components.isEmpty else {
+            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
+        }
+        let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input), mapping: mapping)
+        diagnostics = unit.diagnostics
         guard !unit.hasErrors else { return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics) }
         do {
             let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)

@@ -34,8 +34,8 @@ struct CorpusTests {
     @Test func repositoryManifestIsExplicitAndDeterministic() throws {
         let root = GoldenTests.repository
         let cases = try CorpusLoader.load(repository: root)
-        #expect(cases.map(\.name) == ["hello", "pending-contract", "rejected-image"])
-        #expect(cases.map(\.status) == [.ready, .ready, .ready])
+        #expect(cases.map(\.name) == ["hello", "pending-contract", "rejected-image", "mapping/brand-a", "mapping/brand-b"])
+        #expect(cases.map(\.status) == Array(repeating: .ready, count: 5))
         #expect(try CorpusLoader.load(repository: root).map(\.name) == cases.map(\.name))
     }
 

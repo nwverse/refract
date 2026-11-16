@@ -12,6 +12,14 @@
     {
       "path": "rejected-image",
       "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/brand-a",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/brand-b",
+      "implementationStatus": "ready"
     }
   ]
 }
