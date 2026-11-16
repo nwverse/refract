@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "settings_enabled", "value": "Enabled" },
+    { "name": "settings_disabled", "value": "Disabled" }
+  ]
+}
