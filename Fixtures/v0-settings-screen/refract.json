@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R",
+      "strings": {
+        "settings.profile": "settings_profile",
+        "settings.display.name": "settings_display_name",
+        "settings.preferences": "settings_preferences",
+        "settings.notifications": "settings_notifications",
+        "settings.save": "settings_save"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "strings": {
+        "settings.profile": "settings_profile",
+        "settings.display.name": "settings_display_name",
+        "settings.preferences": "settings_preferences",
+        "settings.notifications": "settings_notifications",
+        "settings.save": "settings_save"
+      }
+    }
+  }
+}

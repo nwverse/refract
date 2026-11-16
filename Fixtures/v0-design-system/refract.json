@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": ["example.design.AppSpacing", "example.design.PrimaryBadge"],
+    "components": {
+      "StatusBadge": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "none",
+        "modifiers": ["padding"],
+        "target": "PrimaryBadge",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "title", "target": "title" }],
+        "modifierParameter": "modifier",
+        "attributes": {
+          "padding": { "kind": "chain", "target": "padding", "arguments": [{ "source": "_" }] }
+        }
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "AppSpacing.medium" },
+      "radius": {},
+      "font": {},
+      "color": {}
+    },
+    "resources": {
+      "className": "refract.generated.R",
+      "strings": { "settings.online": "settings_online" }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.design", "symbols": ["AppSpacing", "PrimaryBadge"] }],
+    "components": {
+      "StatusBadge": {
+        "parameters": [{ "label": "title", "type": "stringKey", "required": true }],
+        "content": "none",
+        "modifiers": ["padding"],
+        "target": "PrimaryBadge",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "title", "target": "title" }],
+        "attributes": {
+          "padding": { "kind": "chain", "target": "padding", "arguments": [{ "source": "_" }] }
+        }
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {
+      "padding": { "parameters": [{ "label": "_", "type": "length", "required": true }] }
+    },
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "AppSpacing.medium" },
+      "radius": {},
+      "font": {},
+      "color": {}
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "strings": { "settings.online": "settings_online" }
+    }
+  }
+}
