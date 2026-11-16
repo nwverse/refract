@@ -83,7 +83,10 @@ public struct Mapping: Codable, Equatable, Sendable {
             guard validator.diagnostics.isEmpty else { return .failure(MappingError(diagnostics: validator.diagnostics)) }
             return .success(try JSONDecoder().decode(Mapping.self, from: data))
         } catch let error as MappingError {
-            return .failure(error)
+            return .failure(MappingError(diagnostics: error.diagnostics.map {
+                $0.code == "mappingSyntax" ? Diagnostic(code: "mapping.invalid_json", message: $0.message,
+                    suggestion: $0.suggestion, location: $0.location) : $0
+            }))
         } catch {
             return .failure(MappingError(diagnostics: [Diagnostic(code: "mappingType",
                 message: "The validated mapping cannot be decoded.",
@@ -151,9 +154,10 @@ public struct Mapping: Codable, Equatable, Sendable {
     }
 }
 
-public struct MappingError: Error, Equatable, Sendable {
+public struct MappingError: Error, Equatable, Sendable, CustomStringConvertible {
     public let diagnostics: [Diagnostic]
     public init(diagnostics: [Diagnostic]) { self.diagnostics = diagnostics }
+    public var description: String { diagnostics.map(\.rendered).joined(separator: "\n") }
 }
 
 public struct PlatformMapping: Codable, Equatable, Sendable {

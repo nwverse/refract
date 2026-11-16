@@ -144,7 +144,7 @@ value responsible, with one-based coordinates. Source-use errors point to the Sw
 | Code | Meaning |
 | --- | --- |
 | `mappingIO` | The mapping cannot be read as UTF-8. |
-| `mappingSyntax` | Malformed JSON, including the unexpected token's coordinate. |
+| `mapping.invalid_json` | Malformed JSON, including the unexpected token's coordinate. |
 | `mappingDuplicateKey` | Two identical object keys, rather than last-value-wins decoding. |
 | `mappingVersion` | A schema version other than the supported integer. |
 | `mappingUnknownKey` | A key not in the published schema, with its object path. |
@@ -166,7 +166,8 @@ value responsible, with one-based coordinates. Source-use errors point to the Sw
 | `missingTokenMapping` | A referenced token is absent on the selected platform. |
 | `missingResource` | A localized key is absent on the selected platform. |
 
-Errors are deterministic: JSON order for object validation, declaration order for arrays, Android before HarmonyOS,
+The golden runner expands `MappingError` so independent Swift and mapping diagnostics are both reported before
+output is skipped. Errors are deterministic: JSON order for object validation, declaration order for arrays, Android before HarmonyOS,
 and source order for use-site diagnostics. A load error prevents both outputs from being written. Resolution never
 returns partial source or a best-effort native call.
 

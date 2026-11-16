@@ -53,8 +53,8 @@ struct MappingTests {
         (json: "{\"schemaVersion\":1,\"unknown\":true}", code: "mappingUnknownKey", line: 1),
         (json: "{\"schemaVersion\":2}", code: "mappingVersion", line: 1),
         (json: "{\"schemaVersion\":\"1\"}", code: "mappingType", line: 1),
-        (json: "{\"schemaVersion\":1,}", code: "mappingSyntax", line: 1),
-        (json: "{\"schemaVersion\":1\n", code: "mappingSyntax", line: 2),
+        (json: "{\"schemaVersion\":1,}", code: "mapping.invalid_json", line: 1),
+        (json: "{\"schemaVersion\":1\n", code: "mapping.invalid_json", line: 2),
         (json: "{\"schemaVersion\":1,\"schemaVersion\":1}", code: "mappingDuplicateKey", line: 1)
     ])
     func malformedAndUnknownInput(test: (json: String, code: String, line: Int)) throws {
@@ -70,7 +70,7 @@ struct MappingTests {
     @Test(arguments: ["\\uD800", "\\uDC00", "\\uD800x", "\\uD800\\u0041", "\\x20"])
     func invalidUnicodeIsRejected(escape: String) throws {
         let data = Data("{\"schemaVersion\":1,\"x\":\"\(escape)\"}".utf8)
-        #expect(try diagnostics(data).contains { $0.code == "mappingSyntax" })
+        #expect(try diagnostics(data).contains { $0.code == "mapping.invalid_json" })
     }
 
     @Test func missingMappingsAreDiagnostics() throws {
