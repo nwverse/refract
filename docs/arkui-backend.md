@@ -58,82 +58,41 @@ runtime modifier registry or generic object bag is introduced.
 
 ## Stable-key lists
 
-`List` is the only lazy-list owner in the v0 backend. Its child builder contains one `LazyForEach` whose data source
-contains the evaluated item expressions and whose `keyGenerator` returns the subset's stable identity. Each datum
-becomes one `ListItem`; item content preserves the source order and item modifiers. Keys are strings in ArkUI, so the
-IR must carry a typed key expression and an explicit, injective conversion to string; array indices are not keys.
+`List` is the only lazy-list owner in the v0 backend. A dynamic row collection is a typed model property that
+implements ArkUI's `IDataSource` in the consuming app; it is not a plain Swift `Array` copied into a generated
+adapter. `LazyForEach` receives that data source directly and its `keyGenerator` returns the subset's stable stored
+identity. Each datum becomes one `ListItem`; item content preserves the source order and item modifiers. Keys are
+strings in ArkUI, so the IR carries a typed key expression and an explicit conversion for an `Int` identity; array
+indices are not keys. This decision follows the shared subset/model contract and avoids a second, independently
+synchronized source of truth.
 
 ```ts
 @ComponentV2
 export struct SettingsList {
-  @Param items: Array<SettingItem> = []
+  @Require @Param model: SettingsListModel;
 
-  private settingsData: SettingsListDataSource = new SettingsListDataSource()
-
-  aboutToAppear(): void {
-    this.settingsData.setItems(this.items)
-  }
-
-  @Monitor('items')
-  private onItemsChanged(): void {
-    this.settingsData.setItems(this.items)
-  }
-
-  build(): void {
-    List({ space: 0 }) {
-      LazyForEach(this.settingsData, (item: SettingItem) => {
+  build() {
+    List() {
+      LazyForEach(this.model.items, (item: SettingItem) => {
         ListItem() {
           Text(item.title)
         }
-            }, (item: SettingItem): string => item.id)    }
-  }
-}
-
-class SettingsListDataSource implements IDataSource {
-  private items: Array<SettingItem> = []
-  private listeners: Array<DataChangeListener> = []
-
-  setItems(items: Array<SettingItem>): void {
-    this.items = items
-    this.listeners.forEach((listener: DataChangeListener): void => {
-      listener.onDataReloaded()
-    })
-  }
-
-  totalCount(): number {
-    return this.items.length
-  }
-
-  getData(index: number): SettingItem {
-    return this.items[index]
-  }
-
-  registerDataChangeListener(listener: DataChangeListener): void {
-    if (this.listeners.indexOf(listener) < 0) {
-      this.listeners.push(listener)
-    }
-  }
-
-  unregisterDataChangeListener(listener: DataChangeListener): void {
-    const index: number = this.listeners.indexOf(listener)
-    if (index >= 0) {
-      this.listeners.splice(index, 1)
+      }, (item: SettingItem): string => item.id)
     }
   }
 }
 ```
 
-This is a shape specification, not evidence that it compiles; the toolchain check is listed below. It is ordinary
-generated product code, not a runtime dependency. The item type must be known so the data source has a concrete
-`getData` return type. The exact update API is checked against the installed SDK; `@Monitor` must not be emitted
-blindly if `@Param` arrays cannot be observed in the target version.
+This is a shape specification, not evidence that it compiles; the toolchain check is listed below. `SettingsListModel`
+exposes `items: IDataSource`, whose `getData` returns `SettingItem`. The app owns that implementation and its native
+listener notifications, with `@ObservedV2`/`@Trace` for observable item properties. The generator does not invent an
+observer registry or add a Refract runtime.
 
-Replacing the complete array reloads the list. In-place edits to an app-owned array are outside the supported model
-contract unless the app sends an observable replacement; this avoids falsely claiming fine-grained updates that the
-framework cannot see. Stable keys let ArkUI retain item state across a reload. Incremental insert/move/delete
-notifications are deliberately deferred until the input/model contract can describe them without changing semantics.
-A generated data source has no registration side effects before the component appears and unregisters listeners as
-required by `IDataSource`.
+Official `@Monitor` documentation states that watching an entire array does not observe replacement of an item or
+Array API mutations. Therefore a generated data-source copy synchronized by `@Monitor` is not a correct general list
+contract. Direct `IDataSource` ownership makes update delivery explicit and keeps stable keys across native list
+updates. The shared model frontend supplies the item type and identity; the backend never guesses `SettingItem` from
+a property named `items` and never silently uses an untyped `Item` fallback.
 
 ## Formatting and diagnostics
 
