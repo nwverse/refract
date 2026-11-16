@@ -74,7 +74,7 @@ struct Generation {
               resolver: InteropResolver? = nil) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
-            writer.open("\(containerName(axis))(\(axis == .depth ? "" : "{ space: 8 }"))")
+            writer.open("\(containerName(axis))()")
             for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .text(value, modifiers, _):
@@ -103,10 +103,15 @@ struct Generation {
                                  location: location)
             }
             for (index, branch) in branches.enumerated() {
-                let condition = try branch.condition.map { try ArkExpression.emit($0, item: item, mapping: mapping) }
-                if index > 0 { writer.closeBranch(condition.map { "else if (\($0))" } ?? "else") }
-                let prefix = index == 0 ? "if" : ""
-                writer.open(prefix + (index == 0 ? (condition.map { " (\($0))" } ?? "") : ""))
+                let condition = try branch.condition.map { try emitLocalExpression($0, item: item, mapping: mapping) }
+                if index == 0 {
+                    guard let condition else {
+                        throw Diagnostic(code: "arkui.invalid_conditional", message: "A conditional needs a first condition.", location: location)
+                    }
+                    writer.open("if (\(condition))")
+                } else {
+                    writer.closeBranch(condition.map { "else if (\($0))" } ?? "else")
+                }
                 for child in branch.children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             }
             writer.close()

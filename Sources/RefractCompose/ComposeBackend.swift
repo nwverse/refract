@@ -162,7 +162,7 @@ public struct ComposeBackend: Sendable {
                 try emit(child, isRoot: isRoot, into: &out, context: &context)
             }
         case let .conditional(branches, location):
-            try emitConditional(branches, location: location, into: &out, context: &context)
+            try emitControlFlow(branches, isRoot: isRoot, location: location, into: &out, context: &context)
         }
     }
 
@@ -250,14 +250,6 @@ public struct ComposeBackend: Sendable {
         for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
             out.line(String(line))
         }
-    }
-
-    private func emitConditional(_ branches: [ViewNode.ConditionBranch], location: SourceLocation?,
-                                 into out: inout KotlinWriter, context: inout Context) throws {
-        throw Diagnostic(code: "RF-C001",
-                         message: "Conditional lowering is not yet supported by the Compose backend.",
-                         suggestion: "Use a model-driven view instead.",
-                         location: location)
     }
 
     // MARK: - Modifiers

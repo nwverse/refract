@@ -8,7 +8,8 @@
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
-      "className": "refract.generated.R", "catalog": "strings.xml",
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
       "strings": { "settings.disable": "settings_disable" }
     }
   },
@@ -21,7 +22,8 @@
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
       "namespace": "app",
-      "stringTable": "string", "catalog": "string.json",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
       "strings": { "settings.disable": "settings_disable" }
     }
   }
