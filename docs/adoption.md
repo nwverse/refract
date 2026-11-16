@@ -99,10 +99,16 @@ The reverse direction — generated UI invoking an application-owned native comp
 
 ## 5. Verify generation and compilation
 
-Regenerate with the command above, then compare outputs apart from their declared source header and build:
+Regenerate with the command above, then run the consistency check, compare against the fixture and build.
+
+`scripts/check_examples.py` regenerates the current Hello output and compares both committed files byte-for-byte,
+checks that every mapped settings key exists in both base catalogs, and verifies that the iOS Sources phase includes
+every shared source. It does not invoke a native compiler and does not excuse a missing generated file. The additional
+fixture-body diffs below compare against #2's canonical reference apart from the source-name header:
 
 ```sh
 swift build
+python3 scripts/check_examples.py
 swift test
 diff <(tail -n +3 Fixtures/hello/Expected.kt) <(tail -n +3 examples/android/app/src/main/java/refract/generated/Hello.kt)
 diff <(tail -n +3 Fixtures/hello/Expected.ets) <(tail -n +3 examples/harmony/entry/src/main/ets/generated/Hello.ets)
