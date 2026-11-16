@@ -146,6 +146,13 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ./gradlew --no-daemon :app:compileDebugKotlin
+      - name: Stage the canonical fixture corpus through the CLI
+        run: python3 scripts/check_fixture_compilation.py
+      - name: Compile the canonical fixture corpus
+        working-directory: examples/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ./gradlew --no-daemon :fixtures:compileDebugKotlin
       - name: Reject unexpected files left in the checkout
         shell: bash
         run: |

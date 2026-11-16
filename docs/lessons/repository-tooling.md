@@ -23,3 +23,19 @@
   properties and Gradle build scripts and restore with `restore-keys`. The compile must still succeed from an
   empty cache; never let a CI job depend on a warm cache to download a pinned toolchain, and never let a pull
   request write a shared cache that a subsequent build treats as authoritative.
+- **Compile fixtures under their declared package.** When the canonical corpus's `Expected.kt` says
+  `package refract.generated` and references `refract.generated.R.string.<name>`, the Gradle module that compiles
+  it must use `namespace = "refract.generated"` so the Android plugin generates the matching `R` class. Compiling
+  fixture Kotlin under a different `namespace` produces a `com.example.app.R` class that the fixture cannot see,
+  and the gate fails with `unresolved reference R` even when the generated Kotlin is correct.
+- **Stage fixture outputs under the module's conventional `src/main/` rather than configuring custom
+  `sourceSets`.** AGP 9's library plugin reads `sourceSets.main.java.srcDirs` but does not propagate directories
+  added after plugin evaluation to the Kotlin compile task's source list, so `:module:compileDebugKotlin` reports
+  `NO-SOURCE` even though `sourceSets.main.java.srcDirs` shows the new directory. Writing the staged files under
+  `src/main/java/<package>/` and `src/main/res/values/` and adding those paths to `.gitignore` is deterministic,
+  requires no source set surgery, and keeps the regenerate-and-diff step in one script.
+- **Merge per-fixture Android resources with a duplicate-name guard.** When each fixture brings its own
+  `values/strings.xml`, concatenating them blindly produces duplicate `<string name="...">` declarations and the
+  build fails with `Error: Duplicate resources`. The merge script must deduplicate entries with identical values
+  and reject entries with conflicting values; silently overriding one fixture's resource with another's hides
+  drift between fixtures.

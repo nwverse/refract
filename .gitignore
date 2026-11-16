@@ -15,6 +15,9 @@ build/
 local.properties
 *.iml
 .idea/
+# Staged fixture Kotlin/resources, written by scripts/check_fixture_compilation.py.
+examples/android/fixtures/src/main/java/
+examples/android/fixtures/src/main/res/
 # HarmonyOS
 oh_modules/
 .hvigor/
