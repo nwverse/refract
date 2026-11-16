@@ -102,8 +102,11 @@ platforms; no observation adapter is generated. The detailed contract and eviden
 
 ## Testing
 
-- **Golden fixtures** in `Fixtures/<case>/`: `Input.swift`, `refract.json` when needed, `Expected.kt`,
-  `Expected.ets`, and `Expected.diagnostics` for rejected input. The test runner regenerates and diffs.
+- **Golden fixtures** are registered in `Fixtures/Corpus.json`. Each entry has a nested `path` relative to
+  `Fixtures/` and an `implementationStatus` of `ready` or `pending`. Every case contains `Input.swift`, optional
+  `refract.json`, and either both `Expected.kt` and `Expected.ets`, or `Expected.diagnostics`. All entries are
+  structurally validated. Ready cases regenerate and diff; pending cases are reported as known issues, never as
+  passing generation tests. Missing, duplicate or unlisted cases fail the suite. See `Fixtures/README.md`.
 - **Compile checks**: the examples compile generated Kotlin with Gradle and ArkTS with the HarmonyOS toolchain where
   available; where a toolchain is unavailable the PR says so.
 - **Benchmarks** in `bench/`: generated vs hand-written reference per platform (goal 2).
