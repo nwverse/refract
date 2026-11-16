@@ -420,7 +420,7 @@ private struct LegacyMapping: Decodable {
         switch type {
         case "string": .string
         case "boolean": .bool
-        case "number": .double // The explicit target type disambiguates an Int from a Double in InteropResolver.
+        case "number": .int // InteropResolver checks the explicit target type against the Swift Int/Double declaration.
         default: .string
         }
     }
