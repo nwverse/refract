@@ -27,6 +27,7 @@ let package = Package(
             dependencies: [
                 "RefractIR",
                 .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftParserDiagnostics", package: "swift-syntax"),
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
             ],
             swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]

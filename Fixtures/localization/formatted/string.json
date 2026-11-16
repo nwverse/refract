@@ -1,0 +1,5 @@
+{
+  "string": [
+    { "name": "profile_greeting", "value": "Hello %1$s, %2$d items, %3$f percent" }
+  ]
+}

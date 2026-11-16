@@ -112,7 +112,7 @@ struct ConditionalContent: View {
         Column(modifier = modifier) {
             if (isLoading) {
                 Text(text = "Loading")
-            } else if (hasError.value) {
+            } else if (hasError) {
                 Text(text = "Failed")
             } else {
                 Text(text = "Ready")
