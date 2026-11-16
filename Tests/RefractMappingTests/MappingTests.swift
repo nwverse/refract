@@ -94,7 +94,7 @@ struct MappingTests {
         let data = Data("""
         {"version":1,"nativeComponents":[{"swift":"RoutePreview","android":{"kind":"composable","symbol":"RoutePreview","module":"example.maps","parameters":[{"swift":"zoom","name":"cameraZoom","type":"Double"},{"swift":"showsTraffic","name":"showsTraffic","type":"Boolean"}]},"harmonyOS":{"kind":"component","symbol":"RoutePreview","module":"example.maps","parameters":[{"swift":"zoom","name":"cameraZoom","type":"number"},{"swift":"showsTraffic","name":"showsTraffic","type":"boolean"}]}}]}
         """.utf8)
-        let mapping = try Mapping.load(data: data).get()
+        let mapping = try Mapping.load(data: data)
         let native = try mapping.component(named: "RoutePreview", native: true, platform: .android)
         #expect(native.target == "RoutePreview")
         #expect(native.module == "example.maps")
@@ -140,11 +140,11 @@ struct MappingTests {
           }
         }
         """
-        return try Mapping.load(data: Data(text.utf8)).get()
+        return try Mapping.load(data: Data(text.utf8))
     }
 
     private func diagnostics(_ data: Data) throws -> [Diagnostic] {
-        switch Mapping.load(data: data) {
+        switch Mapping.validate(data: data) {
         case .success: return []
         case let .failure(error): return error.diagnostics
         }

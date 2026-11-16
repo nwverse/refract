@@ -13,7 +13,9 @@ import Testing
         .state(name: "enabled", type: .bool, initialValue: Expression(.boolLiteral(true)), location: nil),
         .binding(name: "title", type: .string, location: nil),
         .model(ModelReference(propertyName: "model", protocolName: "SettingsModel"), location: nil),
-    ], body: .native(NativeComponent(name: "Map", arguments: [Expression(.stringKey("map.title"))]), location: nil))
+    ], body: .native(NativeComponent(name: "Map", arguments: [
+        NativeArgument(label: "title", expression: Expression(.stringKey("map.title")), type: .string),
+    ]), location: nil))
     let module = Module(sourceFile: "Input.swift", screens: [screen])
     let decoded = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(module))
     #expect(decoded == module)

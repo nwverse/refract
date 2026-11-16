@@ -102,8 +102,11 @@ platforms; no observation adapter is generated. The detailed contract and eviden
 
 ## Testing
 
-- **Golden fixtures** in `Fixtures/<case>/`: `Input.swift`, `refract.json` when needed, `Expected.kt`,
-  `Expected.ets`, and `Expected.diagnostics` for rejected input. The test runner regenerates and diffs.
+- **Golden fixtures** are registered in `Fixtures/Corpus.json`. Each entry has a nested `path` relative to
+  `Fixtures/` and an `implementationStatus` of `ready` or `pending`. Every case contains `Input.swift`, optional
+  `refract.json`, and either both `Expected.kt` and `Expected.ets`, or `Expected.diagnostics`. All entries are
+  structurally validated. Ready cases regenerate and diff; pending cases are reported as known issues, never as
+  passing generation tests. Missing, duplicate or unlisted cases fail the suite. See `Fixtures/README.md`.
 - **Compile checks**: the examples compile generated Kotlin with Gradle and ArkTS with the HarmonyOS toolchain where
   available; where a toolchain is unavailable the PR says so.
 - **Benchmarks** in `bench/`: generated vs hand-written reference per platform (goal 2).
@@ -119,14 +122,39 @@ platforms; no observation adapter is generated. The detailed contract and eviden
 | `docs/` | Goals, rules, architecture, subset, performance, adoption, lessons |
 | `scripts/` | Hooks, privacy scan, repository checks |
 
+## IR and generator boundaries (resolved)
+
+Open decision 1 is resolved by the following initial contract. The IR is a typed, platform-neutral, `Sendable`
+value tree: `Module` contains ordered `Screen` values; each screen owns state declarations and a root `ViewNode`.
+`ViewNode` has typed cases for stacks, text, buttons, native components, and conditional branches rather than raw
+Swift syntax or backend strings. Expressions distinguish literals, localized string keys, references, and bindings.
+State declarations preserve local, parent-owned, and model-owned data. Source locations use one-based UTF-8 line and
+column coordinates and do not depend on SwiftSyntax.
+
+The frontend exposes `Frontend.parse(SourceFile) -> TranslationUnit`; it returns the IR and ordered diagnostics
+without writing files. Each backend exposes `generate(module:mapping:) throws -> String` and consumes the resolved
+`Mapping`. An unsupported IR node throws `Diagnostic` instead of emitting a placeholder. Backend-specific lowering
+and validation belong in separate backend files; feature-specific IR declarations can likewise be added in separate
+files without changing module dependencies.
+
+Diagnostics have stable string codes, a severity, an explanation, an optional concrete alternative, and a source
+location. Their golden text is `file:line:column: error [code]: message Suggestion: alternative`. An absent
+suggestion omits that suffix. Codes are API: changing one is an intentional fixture and compatibility change.
+
+The initial parser deliberately supports only `VStack`, `HStack`, `Text`, and string-title `Button` with an empty
+action. Other IR cases define the next typed boundaries and are not a claim that those features already parse or
+generate. New views and expressions extend these types with explicit ownership and source locations; no backend may
+introduce a second Swift parser.
+
 ## Open decisions
 
-1. The exact IR shape (first PR of the generator skeleton).
+1. **Resolved:** see "IR and generator boundaries" above.
 2. **Resolved:** `refract.json` uses the versioned JSON Schema and typed records in `docs/mapping.md`. Native views
    declare their cross-platform stored-property signature in Swift with `RefractNativeView`; the mapping owns the
    per-platform native symbols and typed argument bindings. An explicitly versioned native-only draft is normalized
    for compatibility, but the canonical full mapping keeps separate per-platform component and native-component
    registries. No runtime lookup or target-code template is allowed.
+
 3. **Resolved:** Compose model properties expose `State<T>`; ArkUI uses V2 `@ObservedV2`/`@Trace` implementations
    with `@ComponentV2`/`@Param` inputs, at API 12 or later. No generated observation adapter; see
    `docs/state-and-models.md` for the contract and performance evidence requirements.

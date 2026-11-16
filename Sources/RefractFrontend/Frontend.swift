@@ -9,7 +9,8 @@ public struct Frontend {
         let tree = Parser.parse(source: source.contents)
         let builder = Builder(file: source.path, tree: tree)
         builder.walk(tree)
-        return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens),
+        return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
+                                              nativeDeclarations: builder.interop.declarations),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -19,14 +20,20 @@ private final class Builder: SyntaxVisitor {
     let converter: SourceLocationConverter
     var screens: [Screen] = []
     var diagnostics: [Diagnostic] = []
+    var interop: InteropFrontend
 
     init(file: String, tree: SourceFileSyntax) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
+        self.interop = InteropFrontend(file: file, converter: converter)
         super.init(viewMode: .sourceAccurate)
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
+        if interop.declaration(node) {
+            diagnostics.append(contentsOf: interop.takeDiagnostics())
+            return .skipChildren
+        }
         guard node.inheritanceClause?.inheritedTypes.contains(where: {
             $0.type.trimmedDescription == "View"
         }) == true else { return .skipChildren }
@@ -43,6 +50,9 @@ private final class Builder: SyntaxVisitor {
             return .skipChildren
         }
         guard let expression = expression(in: items) else {
+            if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
+                return .visitChildren
+            }
             error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
                   "Return a supported view from `body`.", at: binding.pattern)
             return .skipChildren
@@ -53,8 +63,18 @@ private final class Builder: SyntaxVisitor {
         return .skipChildren
     }
 
+    override func visit(_ node: IfConfigDeclSyntax) -> SyntaxVisitorContinueKind {
+        error("RFVIEW005", "Free-form conditional compilation hides platform-specific Swift code from the generator.",
+              "Use `refractValue`, `refractView`, or a declared `RefractNativeView`", at: node.clauses)
+        return .skipChildren
+    }
+
     private func view(_ expression: ExprSyntax) -> ViewNode? {
         if let call = expression.as(FunctionCallExprSyntax.self) {
+            if let member = call.calledExpression.as(MemberAccessExprSyntax.self), let base = member.base {
+                guard let node = view(base) else { return nil }
+                return modifier(call, name: member.declName.baseName.text, on: node)
+            }
             return view(call)
         }
         if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {
@@ -66,6 +86,20 @@ private final class Builder: SyntaxVisitor {
         return nil
     }
 
+    private func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        guard name == "padding", call.arguments.count <= 1, call.trailingClosure == nil else {
+            error("unsupportedModifier", "The modifier `\(name)` is not supported.",
+                  "Use a supported subset modifier.", at: call)
+            return nil
+        }
+        var arguments: [Expression] = []
+        if let argument = call.arguments.first {
+            guard argument.label == nil, let value = scalar(argument.expression) else { return nil }
+            arguments.append(value.expression)
+        }
+        return modifier(name, arguments: arguments, on: node, at: call)
+    }
+
     private func modifier(_ member: MemberAccessExprSyntax, on node: ViewNode) -> ViewNode? {
         let name = member.declName.baseName.text
         guard name == "padding", member.declName.argumentNames == nil else {
@@ -73,15 +107,20 @@ private final class Builder: SyntaxVisitor {
                   "Use a supported subset modifier.", at: member)
             return nil
         }
+        return modifier(name, arguments: [], on: node, at: member)
+    }
+
+    private func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
+                          at syntax: some SyntaxProtocol) -> ViewNode? {
         switch node {
         case let .stack(axis, children, modifiers, location):
-            return .stack(axis: axis, children: children, modifiers: modifiers + [Modifier(name: name)], location: location)
+            return .stack(axis: axis, children: children, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
         case let .text(expression, modifiers, location):
-            return .text(expression, modifiers: modifiers + [Modifier(name: name)], location: location)
+            return .text(expression, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
         case let .button(label, action, modifiers, location):
-            return .button(label: label, action: action, modifiers: modifiers + [Modifier(name: name)], location: location)
-        case .native, .conditional:
-            error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: member)
+            return .button(label: label, action: action, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
+        case .native, .conditional, .platformView:
+            error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
             return nil
         }
     }
@@ -93,6 +132,11 @@ private final class Builder: SyntaxVisitor {
             return nil
         }
         let name = reference.baseName.text
+        if name == "refractValue" {
+            error("RFSEM001", "`refractValue` is a scalar expression, not a standalone view.",
+                  "Use it inside a supported argument or modifier", at: call)
+            return nil
+        }
         let nodeLocation = location(of: call)
         switch name {
         case "VStack", "HStack":
@@ -103,15 +147,15 @@ private final class Builder: SyntaxVisitor {
             return .stack(axis: name == "VStack" ? .vertical : .horizontal,
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
-            guard call.arguments.count == 1, call.arguments.first?.label == nil,
-                  let argument = call.arguments.first?.expression,
-                  let string = stringLiteral(argument), call.trailingClosure == nil else {
-                error("unsupportedText", "Text requires one unlabeled string literal.",
-                      "Use Text(\"literal\") in this version.", at: call)
+            guard call.arguments.count == 1,
+                  let argument = call.arguments.first, call.trailingClosure == nil,
+                  let value = scalar(argument.expression), value.type == .string,
+                  (argument.label == nil) || (argument.label?.text == "verbatim") else {
+                error("unsupportedText", "Text requires one string value, optionally labeled `verbatim`.",
+                      "Use Text(\"key\") or Text(verbatim: \"literal\")", at: call)
                 return nil
             }
-            return .text(Expression(.stringLiteral(string), location: location(of: argument)),
-                         modifiers: [], location: nodeLocation)
+            return .text(value.expression, modifiers: [], location: nodeLocation)
         case "Button":
             guard call.arguments.count == 1, call.arguments.first?.label == nil,
                   let argument = call.arguments.first?.expression,
@@ -128,10 +172,115 @@ private final class Builder: SyntaxVisitor {
             }
             let label = ViewNode.text(Expression(.stringLiteral(labelText)), modifiers: [], location: nodeLocation)
             return .button(label: label, action: nil, modifiers: [], location: nodeLocation)
+        case "refractView":
+            return platformView(call)
         default:
-            error("unsupportedView", "`\(name)` is not in the supported view subset.",
-                  "Use VStack, HStack, Text, or Button.", at: call)
+            guard interop.declarations.contains(where: { $0.name == name }) else {
+                let component = NativeComponent(name: name)
+                diagnostics.append(contentsOf: interop.validate(component, declaration: nil, location: nodeLocation))
+                return nil
+            }
+            guard !interop.invalidDeclarations.contains(name) else { return nil }
+            let component = nativeComponent(call)
+            guard let declaration = interop.declarations.first(where: { $0.name == name }) else { return nil }
+            diagnostics.append(contentsOf: interop.validate(component, declaration: declaration, location: nodeLocation))
+            return .native(component, location: nodeLocation)
+        }
+    }
+
+    private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
+        let name = call.calledExpression.trimmedDescription
+        let arguments = call.arguments.compactMap { argument -> NativeArgument? in
+            guard let label = argument.label?.text, let value = scalar(argument.expression) else {
+                error("RFNATIVE002", "Native component arguments require explicit labels and supported scalar values.",
+                      "Use the memberwise SwiftUI initializer signature", at: argument)
+                return nil
+            }
+            return NativeArgument(label: label, expression: value.expression, type: value.type,
+                                  location: location(of: argument))
+        }
+        return NativeComponent(name: name, arguments: arguments)
+    }
+
+    private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
+        guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
+            error("RFNATIVE003", "`refractView` requires exactly `ios`, `android`, and `harmonyOS` view-builder closures.",
+                  "Supply all three typed platform view branches", at: call)
             return nil
+        }
+        var branches: [[ViewNode]] = []
+        for argument in call.arguments {
+            guard let closure = argument.expression.as(ClosureExprSyntax.self),
+                  let children = children(of: closure) else {
+                error("RFSEM001", "A platform view branch must contain only supported view expressions.",
+                      "Use a supported view subtree or declared native component", at: argument)
+                return nil
+            }
+            branches.append(children)
+        }
+        return .platformView(PlatformAlternatives(ios: branches[0], android: branches[1], harmonyOS: branches[2]),
+                             location: location(of: call))
+    }
+
+    private func scalar(_ expression: ExprSyntax) -> TypedExpression? {
+        if let string = stringLiteral(expression) {
+            return TypedExpression(Expression(.stringLiteral(string), location: location(of: expression)), .string)
+        }
+        if let literal = expression.as(BooleanLiteralExprSyntax.self) {
+            return TypedExpression(Expression(.boolLiteral(literal.literal.tokenKind == .keyword(.true)),
+                                             location: location(of: expression)), .bool)
+        }
+        if let literal = expression.as(IntegerLiteralExprSyntax.self) {
+            return TypedExpression(Expression(.numberLiteral(literal.literal.text),
+                                             location: location(of: expression)), .int)
+        }
+        if let literal = expression.as(FloatLiteralExprSyntax.self) {
+            return TypedExpression(Expression(.numberLiteral(literal.literal.text),
+                                             location: location(of: expression)), .double)
+        }
+        if let reference = expression.as(DeclReferenceExprSyntax.self) {
+            // Ownership of model/state references is refined by the state frontend. Native declarations still
+            // retain their expected source types rather than accepting an arbitrary untyped expression.
+            return TypedExpression(Expression(.reference(reference.baseName.text),
+                                             location: location(of: expression)), nil)
+        }
+        if let call = expression.as(FunctionCallExprSyntax.self),
+           call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
+            return platformValue(call)
+        }
+        error("RFSEM001", "The expression `\(expression.trimmedDescription)` is not a supported scalar value.",
+              "Use a supported literal, typed property, or `refractValue`", at: expression)
+        return nil
+    }
+
+    private func platformValue(_ call: FunctionCallExprSyntax) -> TypedExpression? {
+        guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
+            error("RFNATIVE003", "`refractValue` requires exactly `ios`, `android`, and `harmonyOS` arguments with compatible types.",
+                  "Supply all three typed platform values", at: call)
+            return nil
+        }
+        var values: [Expression] = []
+        var type: ValueType?
+        for argument in call.arguments {
+            guard let value = scalar(argument.expression) else { return nil }
+            if let type, let other = value.type, type != other {
+                error("RFNATIVE003", "`refractValue` branches have different source types.",
+                      "Use one supported type in every platform branch", at: argument)
+                return nil
+            }
+            type = type ?? value.type
+            values.append(value.expression)
+        }
+        return TypedExpression(Expression(.platformValue(PlatformAlternatives(
+            ios: values[0], android: values[1], harmonyOS: values[2])), location: location(of: call)), type)
+    }
+
+    private struct TypedExpression {
+        let expression: Expression
+        let type: ValueType?
+        init(_ expression: Expression, _ type: ValueType?) {
+            self.expression = expression
+            self.type = type
         }
     }
 

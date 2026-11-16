@@ -1,62 +1,76 @@
 import Foundation
 import Testing
-import RefractFrontend
-import RefractIR
-import RefractMapping
-import RefractCompose
-import RefractArkUI
+import RefractGolden
 
 struct GoldenTests {
     static let repository = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    @Test(arguments: try FixtureCase.loadAll(in: repository))
+    @Test(arguments: try CorpusLoader.load(repository: repository))
     func golden(_ fixture: FixtureCase) throws {
-        let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input))
-        let expected = fixture.expectedDiagnostics ?? ""
-        #expect(unit.diagnostics.map { $0.rendered + "\n" }.joined() == expected)
-        guard !unit.hasErrors else {
-            #expect(fixture.expectedKotlin == nil && fixture.expectedArkTS == nil)
+        if fixture.status == .pending {
+            withKnownIssue("Pending conformance case: \(fixture.name). Its owner must mark it ready when implemented.") {
+                Issue.record("Pending cases do not claim successful generation.")
+            }
             return
         }
-        let mapping: Mapping
-        if let contents = fixture.mapping {
-            mapping = try JSONDecoder().decode(Mapping.self, from: Data(contents.utf8))
-        } else { mapping = .empty }
-        #expect(try ComposeBackend().generate(module: unit.module, mapping: mapping) == fixture.expectedKotlin)
-        #expect(try ArkUIBackend().generate(module: unit.module, mapping: mapping) == fixture.expectedArkTS)
+        let result = try GoldenRunner.generate(fixture)
+        #expect(GoldenRunner.differences(for: fixture, result: result) == [])
     }
 }
 
-struct FixtureCase: CustomTestStringConvertible, Sendable {
-    let name: String
-    let input: String
-    let mapping: String?
-    let expectedKotlin: String?
-    let expectedArkTS: String?
-    let expectedDiagnostics: String?
-
-    var testDescription: String { name }
-
-    static func loadAll(in root: URL) throws -> [FixtureCase] {
-        let folder = root.appendingPathComponent("Fixtures", isDirectory: true)
-        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter {
-            !$0.hasPrefix(".") && !$0.hasSuffix(".md")
-        }.sorted()
-        return try names.map { name in
-            let directory = folder.appendingPathComponent(name, isDirectory: true)
-            return try FixtureCase(name: name,
-                input: read(directory, "Input.swift", required: true)!,
-                mapping: read(directory, "refract.json", required: false),
-                expectedKotlin: read(directory, "Expected.kt", required: false),
-                expectedArkTS: read(directory, "Expected.ets", required: false),
-                expectedDiagnostics: read(directory, "Expected.diagnostics", required: false))
-        }
+struct CorpusTests {
+    @Test func repositoryManifestIsExplicitAndDeterministic() throws {
+        let root = GoldenTests.repository
+        let cases = try CorpusLoader.load(repository: root)
+        #expect(cases.map(\.name) == ["hello", "pending-contract", "rejected-image"])
+        #expect(cases.map(\.status) == [.ready, .ready, .ready])
+        #expect(try CorpusLoader.load(repository: root).map(\.name) == cases.map(\.name))
     }
 
-    private static func read(_ directory: URL, _ file: String, required: Bool) throws -> String? {
-        let url = directory.appendingPathComponent(file)
-        if !required, !FileManager.default.fileExists(atPath: url.path) { return nil }
-        return try String(contentsOf: url, encoding: .utf8)
+    @Test func pendingCasesAreStructuralAndMalformedCasesFail() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let fixtures = root.appendingPathComponent("Fixtures", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixtures.appendingPathComponent("nested/case"),
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("{ \"schemaVersion\": 1 }", "Corpus.json", in: fixtures)
+        #expect(throws: CorpusError.self) { try CorpusLoader.load(repository: root) }
+        try write("{ \"schemaVersion\": 1, \"cases\": [] }", "Corpus.json", in: fixtures)
+        #expect(throws: CorpusError.self) { try CorpusLoader.load(repository: root) }
+        try write(validManifest(path: "../case"), "Corpus.json", in: fixtures)
+        #expect(throws: CorpusError.self) { try CorpusLoader.load(repository: root) }
+        try write(validManifest(path: "unlisted"), "Corpus.json", in: fixtures)
+        #expect(throws: CorpusError.self) { try CorpusLoader.load(repository: root) }
+        try write(validManifest(path: "nested/case", status: "pending"), "Corpus.json", in: fixtures)
+        #expect(throws: CorpusError.self) { try CorpusLoader.load(repository: root) }
+
+        try write("struct Example: View {}", "Input.swift", in: fixtures.appendingPathComponent("nested/case"))
+        try write("Input.swift:1:1: error [unsupportedViewBody]: Unsupported. Suggestion: Use Text.",
+                  "Expected.diagnostics", in: fixtures.appendingPathComponent("nested/case"))
+        let cases = try CorpusLoader.load(repository: root)
+        #expect(cases.count == 1)
+        #expect(cases[0].name == "nested/case")
+        #expect(cases[0].status == .pending)
+        try write(validManifest(path: "nested/case"), "Corpus.json", in: fixtures)
+        #expect(try CorpusLoader.load(repository: root)[0].status == .ready)
     }
+
+    @Test func duplicateCasesAreRejected() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let fixtures = root.appendingPathComponent("Fixtures", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixtures, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("{ \"schemaVersion\": 1, \"cases\": [{\"path\":\"case\",\"implementationStatus\":\"pending\"},{\"path\":\"case\",\"implementationStatus\":\"ready\"}] }",
+                  "Corpus.json", in: fixtures)
+        #expect(throws: CorpusError.self) { try CorpusLoader.load(repository: root) }
+    }
+}
+
+private func validManifest(path: String, status: String = "ready") -> String {
+    "{ \"schemaVersion\": 1, \"cases\": [{\"path\": \"\(path)\", \"implementationStatus\": \"\(status)\"}] }"
+}
+
+private func write(_ value: String, _ name: String, in directory: URL) throws {
+    try Data((value + "\n").utf8).write(to: directory.appendingPathComponent(name))
 }

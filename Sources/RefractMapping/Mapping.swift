@@ -62,13 +62,20 @@ public struct Mapping: Codable, Equatable, Sendable {
                 suggestion: "Provide a readable UTF-8 refract.json file.",
                 location: SourceLocation(file: url.lastPathComponent, line: 1, column: 1))])
         }
-        switch load(data: data, file: url.lastPathComponent) {
+        switch validate(data: data, file: url.lastPathComponent) {
         case let .success(mapping): return mapping
         case let .failure(error): throw error
         }
     }
 
-    public static func load(data: Data, file: String = "refract.json") -> Result<Mapping, MappingError> {
+    public static func load(data: Data, file: String = "refract.json") throws -> Mapping {
+        switch validate(data: data, file: file) {
+        case let .success(mapping): return mapping
+        case let .failure(error): throw error
+        }
+    }
+
+    public static func validate(data: Data, file: String = "refract.json") -> Result<Mapping, MappingError> {
         do {
             let document = try MappingJSONDocument(data: data, file: file)
             let validator = MappingValidator(document: document)
