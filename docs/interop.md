@@ -28,8 +28,8 @@ defines the general SwiftUI subset and `docs/mapping.md` defines the complete ma
 ## The iOS source prelude
 
 The following declarations are the reference contract. A project normally places them in one separate Swift file
-compiled only by its iOS target. They are source declarations, not a linked Refract library. The generator carries an
-equivalent declaration spec (`InteropSpec`) for type checking; iOS-only declarations need not be repeated in every
+compiled only by its iOS target. They are source declarations, not a linked Refract library. The frontend's
+`InteropFrontend` implements the equivalent declaration checks; iOS-only declarations need not be repeated in every
 generated input file.
 
 ```swift
@@ -88,7 +88,10 @@ struct RouteScreen: View {
 }
 ```
 
-The mapping supplies the hand-written native symbols. Parameter arrays follow the Swift declaration order; `swift`
+The mapping supplies the hand-written native symbols. The canonical `schemaVersion: 1` representation is defined in
+`docs/mapping.md`: `android.nativeComponents` and `harmonyOS.nativeComponents` use the shared typed parameter and
+argument-binding records. The compact `version: 1` form below is a compatibility representation accepted by the
+same loader, not a second registry or a runtime format. Parameter arrays follow the Swift declaration order; `swift`
 is the external Swift label, `name` is the target label or object-literal property, and `type` is the target type.
 
 ```json

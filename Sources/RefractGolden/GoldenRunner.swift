@@ -34,14 +34,20 @@ public enum GoldenRunner {
         // A mapping diagnostic is evaluated even when Swift parsing also fails: source and project
         // configuration are independent errors, and both must be reported before generation is skipped.
         guard !unit.hasErrors else { return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics) }
-        do {
-            let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
-            let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
-            return GoldenResult(kotlin: kotlin, arkTS: ark, diagnostics: diagnostics)
-        } catch let diagnostic as Diagnostic {
-            diagnostics.append(diagnostic)
+        var kotlin: String?
+        var ark: String?
+        do { kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping) }
+        catch let diagnostic as Diagnostic { diagnostics.append(diagnostic) }
+        catch let group as DiagnosticGroup { diagnostics.append(contentsOf: group.diagnostics) }
+        catch let error as InteropMappingError { diagnostics.append(contentsOf: error.diagnostics) }
+        do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
+        catch let diagnostic as Diagnostic { diagnostics.append(diagnostic) }
+        catch let group as DiagnosticGroup { diagnostics.append(contentsOf: group.diagnostics) }
+        catch let error as InteropMappingError { diagnostics.append(contentsOf: error.diagnostics) }
+        guard diagnostics.isEmpty else {
             return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
         }
+        return GoldenResult(kotlin: kotlin, arkTS: ark, diagnostics: diagnostics)
     }
 
     /// Returns actionable mismatch descriptions instead of rewriting hand-authored expectations.

@@ -5,8 +5,7 @@
 export struct PlatformValueScreen {
   build() {
     Column({ space: 8 }) {
-      Text('Spacing')
-        .padding(16)
+      Text('Spacing').padding(16)
       Text('HarmonyOS')
     }
   }

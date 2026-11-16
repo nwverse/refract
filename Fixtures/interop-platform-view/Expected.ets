@@ -4,7 +4,6 @@
 @ComponentV2
 export struct PlatformViewScreen {
   build() {
-    Text('Status')
-      .padding(16)
+    Text('Status').padding(16)
   }
 }
