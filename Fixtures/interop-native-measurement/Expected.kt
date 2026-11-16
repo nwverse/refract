@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import refract.generated.R
 
 @Immutable
 public data class SettingRow(
@@ -59,7 +60,7 @@ public fun MeasurementRow(
                     modifier = Modifier,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(text = stringResource(refract.generated.R.string.settings_item, row.id))
+                    Text(text = stringResource(R.string.settings_item, row.id))
                     Switch(
                         checked = row.enabled,
                         onCheckedChange = onCheckedChange,
