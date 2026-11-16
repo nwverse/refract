@@ -26,6 +26,14 @@ Requirements: JDK 21, Android SDK Platform 37.2 and Build Tools 37.0.0. The wrap
 uses Android Gradle Plugin 9.5.0, Kotlin/Compose plugin 2.4.21 and Compose BOM 2026.09.00; the BOM requires
 compileSdk 37. `ANDROID_HOME` is the only machine-specific configuration; do not commit `local.properties`.
 
+`gradle/wrapper/gradle-wrapper.jar` is the official Gradle 9.8.2 wrapper jar, extracted from
+`gradle-9.8.2/lib/plugins/gradle-wrapper-main-9.8.2.jar` inside the verified Gradle 9.8.2 distribution (the zip
+whose SHA-256 is recorded as `distributionSha256Sum` in `gradle-wrapper.properties`). Its SHA-256 is
+`3b8a25775a69158b5ad2b1d17a80a88dc7b40a352a73eb27d06c612a7ce68e98`. If the wrapper is regenerated with
+`gradle wrapper`, restore that exact jar rather than a jar from a different Gradle version: an older jar's
+`Install.unzip` references `org.gradle.internal.file.PathTraversalChecker`, which is not bundled in older jars
+and crashes the bootstrap with `NoClassDefFoundError` on a cold distribution cache.
+
 AGP 9 supplies built-in Kotlin support. Do not apply `org.jetbrains.kotlin.android`; use
 `KotlinAndroidProjectExtension.compilerOptions` to retain JVM 17 bytecode while building with JDK 21.
 
