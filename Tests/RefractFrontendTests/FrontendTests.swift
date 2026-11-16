@@ -26,7 +26,7 @@ import RefractIR
 
 @Test func frontendRejectsUnknownViewWithCodedDiagnostic() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
-    struct Bad: View { var body: some View { Image("photo") } }
+    struct Bad: View { var body: some View { Gauge("photo") } }
     """))
     #expect(unit.hasErrors)
     #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
