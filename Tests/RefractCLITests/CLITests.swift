@@ -19,24 +19,37 @@ import Foundation
     defer { try? FileManager.default.removeItem(at: temporary) }
     try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
     let input = temporary.appendingPathComponent("Input.swift")
-    try Data("struct Hello: View { var body: some View { Text(\"Hello\") } }".utf8).write(to: input)
+    try Data("struct Hello: View { var body: some View { Text(\"hello.title\") } }".utf8).write(to: input)
 
-    let generation = try runCLI(["generate", "--input", input.path,
+    let mapping = temporary.appendingPathComponent("refract.json")
+    let resources = """
+    "imports":[],"components":{},"nativeComponents":{},"modifiers":{},"tokens":{"spacing":{},"radius":{},"font":{},"color":{}}
+    """
+    let android = "\"output\":{\"directory\":\"generated\",\"packageName\":\"refract.generated\"}," + resources
+    try Data("""
+    {"schemaVersion":1,"android":{\(android),"resources":{"className":"example.resources.R","catalog":"strings.xml","strings":{"hello.title":"hello_title"}}},"harmonyOS":{"output":{"directory":"generated"},\(resources),"resources":{"namespace":"app","stringTable":"string","catalog":"string.json","strings":{"hello.title":"hello_title"}}}}
+    """.utf8).write(to: mapping)
+    try Data("<resources><string name=\"hello_title\">Hello</string></resources>".utf8)
+        .write(to: temporary.appendingPathComponent("strings.xml"))
+    try Data("{\"string\":[{\"name\":\"hello_title\",\"value\":\"Hello\"}]}".utf8)
+        .write(to: temporary.appendingPathComponent("string.json"))
+
+    let generation = try runCLI(["generate", "--input", input.path, "--mapping", mapping.path,
                                  "--android-out", temporary.appendingPathComponent("android").path,
                                  "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(generation.status == 0, Comment(rawValue: generation.stderr))
     #expect(try String(contentsOf: temporary.appendingPathComponent("android/Input.kt"), encoding: .utf8)
-        .contains("text = \"Hello\""))
+        .contains("stringResource(example.resources.R.string.hello_title)"))
     #expect(try String(contentsOf: temporary.appendingPathComponent("harmony/Input.ets"), encoding: .utf8)
-        .contains("Text('Hello')"))
-    #expect(try runCLI(["check", "--input", input.path], executable: executable).status == 0)
+        .contains("$r('app.string.hello_title')"))
+    #expect(try runCLI(["check", "--input", input.path, "--mapping", mapping.path], executable: executable).status == 0)
 
     let rejection = try runCLI(["generate", "--input",
                                 root.appendingPathComponent("Fixtures/rejected-image/Input.swift").path,
                                 "--android-out", temporary.appendingPathComponent("android").path,
                                 "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable)
     #expect(rejection.status != 0)
-    #expect(rejection.stderr.contains("[RF-C001]"))
+    #expect(rejection.stderr.contains("[RF-C002]"))
     #endif
 }
 
@@ -65,8 +78,8 @@ private func builtCLIExecutable() -> URL {
     let second = temporary.appendingPathComponent("Second.swift")
     let android = temporary.appendingPathComponent("android")
     let harmony = temporary.appendingPathComponent("harmony")
-    try Data("struct First: View { var body: some View { Text(\"First\") } }".utf8).write(to: first)
-    try Data("struct Second: View { var body: some View { Text(\"Second\") } }".utf8).write(to: second)
+    try Data("struct First: View { var body: some View { Text(verbatim: \"First\") } }".utf8).write(to: first)
+    try Data("struct Second: View { var body: some View { Text(verbatim: \"Second\") } }".utf8).write(to: second)
     let arguments = ["--input", first.path, "--input", second.path,
                      "--android-out", android.path, "--harmony-out", harmony.path]
     let generated = try runCLI(["generate"] + arguments, executable: executable)
@@ -83,7 +96,7 @@ private func builtCLIExecutable() -> URL {
                                "--android-out", rejectedAndroid.path, "--harmony-out", rejectedHarmony.path],
                               executable: executable)
     #expect(rejected.status != 0)
-    #expect(rejected.stderr.contains("[RF-C001]"))
+    #expect(rejected.stderr.contains("[RF-C002]"))
     #expect(!FileManager.default.fileExists(atPath: rejectedAndroid.path))
     #expect(!FileManager.default.fileExists(atPath: rejectedHarmony.path))
     #endif
@@ -102,7 +115,7 @@ private func builtCLIExecutable() -> URL {
     defer { try? FileManager.default.removeItem(at: temporary) }
     try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
     let valid = temporary.appendingPathComponent("Valid.swift")
-    try Data("struct Valid: View { var body: some View { Text(\"Valid\") } }".utf8).write(to: valid)
+    try Data("struct Valid: View { var body: some View { Text(verbatim: \"Valid\") } }".utf8).write(to: valid)
     let missing = root.appendingPathComponent("Fixtures/interop-native-missing")
     let android = temporary.appendingPathComponent("android")
     let harmony = temporary.appendingPathComponent("harmony")
@@ -115,6 +128,98 @@ private func builtCLIExecutable() -> URL {
     #expect(result.stderr.contains("has no HarmonyOS mapping"))
     #expect(result.stderr.components(separatedBy: "has no Android mapping").count == 2)
     #expect(result.stderr.components(separatedBy: "has no HarmonyOS mapping").count == 2)
+    #expect(!FileManager.default.fileExists(atPath: android.path))
+    #expect(!FileManager.default.fileExists(atPath: harmony.path))
+    #endif
+}
+
+@Test func cliRejectsUndefinedStackSpacingWithoutOutput() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input",
+        root.appendingPathComponent("Fixtures/v0-reject-undefined-spacing/Input.swift").path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status != 0)
+    #expect(result.stderr.contains("[RFVIEW003]"))
+    #expect(!result.stderr.contains("undefinedValue.dp"))
+    #expect(!FileManager.default.fileExists(atPath: android.path))
+    #expect(!FileManager.default.fileExists(atPath: harmony.path))
+    #endif
+}
+
+@Test func cliRejectsMalformedSwiftWithoutPartialOutput() throws {
+    #if os(Linux) || os(macOS)
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    let valid = temporary.appendingPathComponent("Valid.swift")
+    let malformed = temporary.appendingPathComponent("Syntax.swift")
+    let source = """
+    import SwiftUI
+
+    struct SyntaxScreen: View {
+        var body: some View {
+            Text(verbatim: "unterminated"
+        }
+    }
+    """
+    try Data("struct Valid: View { var body: some View { Text(verbatim: \"Valid\") } }".utf8).write(to: valid)
+    try Data(source.utf8).write(to: malformed)
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input", valid.path, "--input", malformed.path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status != 0)
+    #expect(result.stderr.contains("Syntax.swift:"))
+    #expect(result.stderr.contains("[RFSYN001]"))
+    #expect(result.stderr.contains("Correct the Swift syntax"))
+    #expect(!FileManager.default.fileExists(atPath: android.path))
+    #expect(!FileManager.default.fileExists(atPath: harmony.path))
+
+    let checked = try runCLI(["check", "--input", malformed.path], executable: executable)
+    #expect(checked.status != 0)
+    #expect(checked.stderr.contains("[RFSYN001]"))
+    #endif
+}
+
+@Test func cliRejectsUnsupportedViewDeclarationWithoutPartialOutput() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    let valid = temporary.appendingPathComponent("Valid.swift")
+    try Data("struct Valid: View { var body: some View { Text(verbatim: \"Valid\") } }".utf8).write(to: valid)
+    let rejected = root.appendingPathComponent("Fixtures/rejected-view-declaration/Input.swift")
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input", valid.path, "--input", rejected.path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status != 0)
+    #expect(result.stderr.contains("[RFSYN004]"))
+    #expect(result.stderr.contains("unsupportedHelper"))
+    #expect(result.stderr.contains("model protocol"))
     #expect(!FileManager.default.fileExists(atPath: android.path))
     #expect(!FileManager.default.fileExists(atPath: harmony.path))
     #endif

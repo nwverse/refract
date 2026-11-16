@@ -8,16 +8,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
 @Composable
 public fun Counter(modifier: Modifier = Modifier) {
-    val count = remember { mutableStateOf(0) }
+    var count by remember { mutableStateOf(0) }
     Column(modifier = modifier) {
-        Text(text = "Count: ${count.value}")
-        Button(onClick = { count.value += 1 }, modifier = Modifier) {
+        Text(text = "Count: ${count}")
+        Button(onClick = { count += 1 }, modifier = Modifier) {
             Text(text = "Increment")
         }
     }

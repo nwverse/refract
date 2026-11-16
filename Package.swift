@@ -26,7 +26,9 @@ let package = Package(
             name: "RefractFrontend",
             dependencies: [
                 "RefractIR",
+                "RefractMapping",
                 .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftParserDiagnostics", package: "swift-syntax"),
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
             ],
             swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
@@ -49,8 +51,8 @@ let package = Package(
             dependencies: ["RefractMapping"],
             exclude: ["Fixtures"]
         ),
-        .testTarget(name: "RefractComposeTests", dependencies: ["RefractCompose"]),
-        .testTarget(name: "RefractArkUITests", dependencies: ["RefractArkUI", "RefractFrontend"]),
+        .testTarget(name: "RefractComposeTests", dependencies: ["RefractCompose", "RefractFrontend", "RefractMapping"]),
+        .testTarget(name: "RefractArkUITests", dependencies: ["RefractArkUI", "RefractFrontend", "RefractCompose"]),
         .testTarget(name: "RefractCLITests"),
         .testTarget(name: "RefractGoldenTests", dependencies: ["RefractGolden"]),
         .target(

@@ -9,13 +9,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 
 @Composable
 public fun Hello(modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        Text(text = "Hello")
+        Text(text = stringResource(refract.generated.R.string.hello_title))
         Button(onClick = { }, modifier = Modifier) {
-            Text(text = "Go")
+            Text(text = stringResource(refract.generated.R.string.hello_go))
         }
     }
 }

@@ -8,6 +8,6 @@ struct UnsupportedAsyncModel: View {
     let model: AsyncSettingsModel
 
     var body: some View {
-        Text("Unsupported")
+        Text(verbatim: "Unsupported")
     }
 }

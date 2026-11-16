@@ -9,11 +9,10 @@ The current examples use the view body from `Fixtures/hello/Input.swift`, shared
 `examples/shared/Hello.swift`. The CLI output is compiled in Android and copied unchanged to the HarmonyOS project.
 This verifies a small end-to-end generation path, not the whole settings-screen subset.
 
-`examples/shared/SettingsScreen.swift` and `NativeComponentScreen.swift` are prepared shared sources, not yet
-accepted by the current CLI. Actual generation currently stops at the missing model/state frontend path; localized
-text also remains a literal rather than a native resource call. Their native call sites are therefore intentionally
-not enabled until the corresponding #1/#5/#7/#8 integration lands. The canonical #2 fixture and `RefractModel`
-contract from #5 remain authoritative; the example mapping validates against the published #6 schema.
+`examples/shared/SettingsScreen.swift` is a prepared shared source, not yet accepted by the current CLI. Model and
+binding support has landed, but actual generation still stops at TextField/Section parsing and localized-resource
+lowering. Its native call site is therefore intentionally not enabled until #4/#8 integration lands. The canonical
+#2 fixture and `RefractModel` contract from #5 remain authoritative; the example mapping validates against #6.
 HarmonyOS compilation is still unavailable; `examples/harmony/README.md` records exactly which tools must be acquired.
 
 ## 1. Start with the native app
@@ -50,9 +49,11 @@ For the later model-backed screen, a plain typed `let model: <Protocol>` refers 
 `RefractModel`; `@Binding` becomes a value and a callback. The app owns Compose `State<T>` and ArkUI
 `@ObservedV2`/`@Trace` implementations. The generated code never constructs or mirrors the application model.
 
-A native component inside a generated screen must have a statically declared, typed mapping and a normal SwiftUI
-implementation for iOS. A missing declaration or mismatched parameters is a build error, not runtime lookup. That
-full interop example is a subsequent integration step owned by #7/#10.
+The focused `examples/shared/NativeComponentScreen.swift` is generated successfully. It declares
+`NativeProfileStatusBadge: RefractNativeView` in the same input, with an ordinary SwiftUI body for iOS, and the
+mapping selects the application-owned native implementation. There is no runtime lookup or adapter. The generated
+screen's root is only this native component; navigation and surrounding layout stay hand-written because the current
+Compose extended-layout lowering is still limited.
 
 ## 3. Generate before changing the call site
 
@@ -94,14 +95,22 @@ HarmonyOS's hand-written `GeneratedProfile` page similarly imports `Hello` and p
 `@ComponentV2` in its `build()` method. The page owns routing; generated code has no `@Entry`. The original
 `NativeProfile` remains a native destination for rollback.
 
-The reverse direction — generated UI invoking an application-owned native component — will be demonstrated using
-#7's canonical typed interop fixture. It must compile without a Refract adapter on either platform.
+The reverse direction is now present in both apps. `NativeComponentScreen.kt` calls the native
+`NativeProfileStatusBadge(modifier:)`; `NativeComponentScreen.ets` imports and calls the ArkUI badge. Android's
+`SettingsApp` calls the generated screen from a hand-written destination, which then calls the hand-written badge.
+The Android toolchain compiles this complete native → generated → native chain. Both screens now use
+`--mapping examples/refract.json` so resource keys and typed native components are validated in the same generation
+configuration.
+
+The full model-backed settings screen remains pending; this focused interop success does not imply that all v0
+containers, leaf controls or localized strings already generate.
 
 ## 5. Verify generation and compilation
 
 Regenerate with the command above, then run the consistency check, compare against the fixture and build.
 
-`scripts/check_examples.py` regenerates the current Hello output and compares both committed files byte-for-byte,
+`scripts/check_examples.py` regenerates the current Hello and native-component outputs and compares both committed
+files for each screen byte-for-byte,
 checks that every mapped settings key exists in both base catalogs, and verifies that the iOS Sources phase includes
 every shared source. It does not invoke a native compiler and does not excuse a missing generated file. The additional
 fixture-body diffs below compare against #2's canonical reference apart from the source-name header:

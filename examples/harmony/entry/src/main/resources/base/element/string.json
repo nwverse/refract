@@ -13,6 +13,14 @@
       "value": "Refract example"
     },
     {
+      "name": "example_hello",
+      "value": "Hello"
+    },
+    {
+      "name": "example_go",
+      "value": "Go"
+    },
+    {
       "name": "settings_profile",
       "value": "Profile"
     },

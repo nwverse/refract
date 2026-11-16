@@ -16,6 +16,7 @@ public struct ComposeBackend: Sendable {
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
         if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
+        try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
@@ -28,19 +29,33 @@ public struct ComposeBackend: Sendable {
         out.line()
         out.line("package \(context.packageName)")
         out.line()
+        for item in mapping.android.imports.map(\.module) {
+            context.imports.insert(item)
+        }
+        for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
+            context.imports.insert(item.module)
+        }
+        let usedNativeNames = selectedNativeNames(in: module.screens.map(\.body))
+        for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
+            if usedNativeNames.contains(item.key), let module = item.value.module {
+                context.imports.insert("\(module).\(item.value.target)")
+            }
+        }
         for item in context.imports.sorted() {
             out.line("import \(item)")
         }
-        for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
-            out.line("import \(item.module)")
-        }
-        for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
-            if let module = item.value.module {
-                out.line("import \(module).\(item.value.target)")
-            }
-        }
         out.append(bodyWriter.text)
         return out.text
+    }
+
+    private func selectedNativeNames(in bodies: [ViewNode]) -> Set<String> {
+        func collect(_ node: ViewNode, into names: inout Set<String>) {
+            if case let .native(component, _) = node { names.insert(component.name) }
+            for child in node.children(for: .android) { collect(child, into: &names) }
+        }
+        var names: Set<String> = []
+        for body in bodies { collect(body, into: &names) }
+        return names
     }
 
     private func emit(_ screen: Screen, into out: inout KotlinWriter, context: inout Context) throws {
@@ -73,6 +88,10 @@ public struct ComposeBackend: Sendable {
 
     private func parameterList(for screen: Screen, context: inout Context) -> [String] {
         var parameters: [String] = []
+        for input in screen.parameters {
+            context.imports.insert("androidx.compose.ui.Modifier")
+            parameters.append("\(input.name): \(kotlinType(input.type))")
+        }
         for state in screen.states {
             switch state {
             case let .binding(name, type, _):
@@ -92,11 +111,15 @@ public struct ComposeBackend: Sendable {
 
     private func emitStates(_ states: [StateDeclaration], into out: inout KotlinWriter, context: inout Context) throws {
         for state in states {
+            if case .state = state {
+                context.imports.insert("androidx.compose.runtime.getValue")
+                context.imports.insert("androidx.compose.runtime.setValue")
+            }
             if case let .state(name, type, initial, _) = state {
                 context.imports.insert("androidx.compose.runtime.remember")
                 context.imports.insert("androidx.compose.runtime.mutableStateOf")
                 let initialText = try renderExpression(initial ?? defaultInitial(type), context: &context)
-                out.line("val \(name) = remember { mutableStateOf(\(initialText)) }")
+                out.line("var \(name) by remember { mutableStateOf(\(initialText)) }")
             }
         }
     }
@@ -111,12 +134,18 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Views
 
-    private func emit(_ node: ViewNode, isRoot: Bool = false, into out: inout KotlinWriter,
-                      context: inout Context) throws {
+    func emit(_ node: ViewNode, isRoot: Bool = false, parentAxis: ViewNode.StackAxis? = nil,
+              into out: inout KotlinWriter, context: inout Context) throws {
         switch node {
         case let .stack(axis, children, modifiers, location):
             try emitStack(axis: axis, children: children, modifiers: modifiers, isRoot: isRoot,
                           location: location, into: &out, context: &context)
+        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput,
+             .label, .divider, .spacer:
+            try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
+        case let .toggle(title, value, modifiers, location):
+            try emitToggle(title: title, value: value, modifiers: modifiers, isRoot: isRoot,
+                           location: location, into: &out, context: &context)
         case let .text(expression, modifiers, location):
             try emitText(expression, modifiers: modifiers, isRoot: isRoot, location: location,
                          into: &out, context: &context)
@@ -125,6 +154,8 @@ public struct ComposeBackend: Sendable {
                            location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .component(component, location):
+            try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .platformView(alternatives, _):
             // The Android branch is selected at build time; no runtime dispatch is emitted.
             for child in alternatives.android {
@@ -132,11 +163,6 @@ public struct ComposeBackend: Sendable {
             }
         case let .conditional(branches, location):
             try emitConditional(branches, location: location, into: &out, context: &context)
-        default:
-            throw Diagnostic(code: "RF-C001",
-                             message: "This extended view IR is awaiting its Compose lowering.",
-                             suggestion: "Use a supported view while the shared backend contract is implemented.",
-                             location: node.sourceLocation)
         }
     }
 
@@ -158,7 +184,7 @@ public struct ComposeBackend: Sendable {
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
         out.open("\(call)(modifier = \(modifierChain))")
         for child in children {
-            try emit(child, into: &out, context: &context)
+            try emit(child, parentAxis: axis, into: &out, context: &context)
         }
         out.close()
     }
@@ -217,6 +243,15 @@ public struct ComposeBackend: Sendable {
         out.line("\(target.symbol)(\(arguments.joined(separator: ", ")))")
     }
 
+    private func emitDesignSystem(_ component: ComponentReference, location: SourceLocation?, isRoot: Bool,
+                                  into out: inout KotlinWriter, context: inout Context) throws {
+        let source = try ComposeDesignSystem().emit(component, location: location, isRoot: isRoot,
+            mapping: context.mapping, addImport: { context.imports.insert($0) })
+        for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
+            out.line(String(line))
+        }
+    }
+
     private func emitConditional(_ branches: [ViewNode.ConditionBranch], location: SourceLocation?,
                                  into out: inout KotlinWriter, context: inout Context) throws {
         throw Diagnostic(code: "RF-C001",
@@ -227,7 +262,7 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Modifiers
 
-    private func modifierChain(_ modifiers: [Modifier], isRoot: Bool, context: inout Context) throws -> String {
+    func modifierChain(_ modifiers: [Modifier], isRoot: Bool, context: inout Context) throws -> String {
         var parts: [String] = []
         for modifier in modifiers {
             // Text-only modifiers (font, foregroundColor) are emitted as Text parameters, not as Modifier entries.
@@ -296,25 +331,34 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Expressions
 
-    private func renderExpression(_ expression: Expression, context: inout Context) throws -> String {
+    func renderExpression(_ expression: Expression, context: inout Context) throws -> String {
         switch expression.value {
         case let .stringLiteral(value):
             return "\"\(value.escapedForKotlin())\""
+        case let .verbatimText(value):
+            return "\"\(value.escapedForKotlin())\""
         case .stringKey:
-            throw Diagnostic(code: "RF-C001",
-                             message: "Localised string keys are not yet supported by the Compose backend.",
-                             suggestion: "Use a string literal until #8 lands.",
+            throw Diagnostic(code: "R.string.unsupported_expression",
+                             message: "A string key must be validated as localized text before emission.",
+                             suggestion: "Use a static localization key through the localization frontend",
                              location: expression.location)
+        case .localizedText:
+            context.imports.insert("androidx.compose.ui.res.stringResource")
+            return try LocalizedTextEmitter.compose(expression, mapping: context.mapping) {
+                try renderExpression($0, context: &context)
+            }
         case let .boolLiteral(value):
             return value ? "true" : "false"
         case let .numberLiteral(text):
             return text
+        case let .layoutSpacing(token):
+            return String(token.points)
         case let .reference(name):
             return name
         case let .binding(name):
             return name
         case let .valueProperty(.state(name)):
-            return "\(name).value"
+            return name
         case let .valueProperty(.binding(name)):
             return name
         case let .valueProperty(.model(model, property)):
@@ -336,9 +380,9 @@ public struct ComposeBackend: Sendable {
     private func renderAction(_ action: StateAction, context: inout Context) throws -> String {
         switch action {
         case let .assign(.state(name), value):
-            return "\(name).value = \(try renderExpression(value, context: &context))"
+            return "\(name) = \(try renderExpression(value, context: &context))"
         case let .increment(.state(name), value):
-            return "\(name).value += \(try renderExpression(value, context: &context))"
+            return "\(name) += \(try renderExpression(value, context: &context))"
         case let .assign(.binding(name), value):
             return "on\(name.uppercasingFirst())Change(\(try renderExpression(value, context: &context)))"
         case let .increment(.binding(name), value):
@@ -363,7 +407,7 @@ public struct ComposeBackend: Sendable {
 
     // MARK: - Context
 
-    private struct Context {
+    struct Context {
         var packageName: String = "refract.generated"
         var imports: Set<String> = [
             "androidx.compose.runtime.Composable",
@@ -371,10 +415,15 @@ public struct ComposeBackend: Sendable {
         ]
         let mapping: Mapping
         let module: Module
+        var androidResourceClass: String?
 
         init(module: Module, mapping: Mapping) {
             self.mapping = mapping
             self.module = module
+            self.androidResourceClass = mapping.android.resources.className
+            if let packageName = mapping.android.output.packageName {
+                self.packageName = packageName
+            }
         }
     }
 }
@@ -415,7 +464,7 @@ struct KotlinWriter {
 
 // MARK: - Helpers
 
-private extension String {
+extension String {
     func uppercasingFirst() -> String {
         guard let first else { return self }
         return first.uppercased() + dropFirst()

@@ -1,1 +1,1 @@
-Input.swift:7:9: error [RFSEM003]: Mutating count while evaluating body can repeatedly invalidate view construction Suggestion: Move the mutation into a control action
+Input.swift:6:9: error [unsupportedViewBody]: The `body` getter must return exactly one view expression. Suggestion: Return a supported view from `body`.

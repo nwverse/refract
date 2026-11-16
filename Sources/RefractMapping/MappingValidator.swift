@@ -274,7 +274,10 @@ final class MappingValidator {
 
     private func resources(_ value: JSON?, _ platform: Platform) {
         guard let value, object(value, "a resource catalog") else { return }
-        fields(value, allowed: platform == .android ? ["className", "strings"] : ["namespace", "stringTable", "strings"])
+        fields(value, allowed: platform == .android ? ["className", "catalog", "strings"] : ["namespace", "stringTable", "catalog", "strings"])
+        if let catalog = field("catalog", in: value) {
+            pattern(catalog, "^[^\\\\]+$", "a native base string catalog path", code: "mappingResource")
+        }
         if platform == .android {
             pattern(field("className", in: value, required: true), "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+\\.R$",
                     "the application's fully qualified R class", code: "mappingResource")
