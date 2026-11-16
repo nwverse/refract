@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import refract.generated.R
 
 @Composable
 public fun OptionalGreeting(
@@ -20,7 +21,7 @@ public fun OptionalGreeting(
             val value = title
             Text(text = value)
         } else {
-            Text(text = stringResource(refract.generated.R.string.content_empty))
+            Text(text = stringResource(R.string.content_empty))
         }
     }
 }

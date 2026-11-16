@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import refract.generated.R
 
 public interface CountModel {
     public val count: State<Int>
@@ -20,7 +21,7 @@ public fun FormattedText(
     modifier: Modifier = Modifier,
 ) {
     Text(
-        text = stringResource(refract.generated.R.string.settings_item_count, model.count.value),
+        text = stringResource(R.string.settings_item_count, model.count.value),
         modifier = modifier,
     )
 }

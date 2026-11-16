@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import refract.generated.R
 
 public interface ControlsModel {
     public fun save()
@@ -33,13 +34,13 @@ public fun LeafControls(
     Column(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(imageVector = Icons.Default.Person, contentDescription = null)
-            Text(text = stringResource(refract.generated.R.string.settings_profile))
+            Text(text = stringResource(R.string.settings_profile))
         }
         Icon(imageVector = Icons.Default.Settings, contentDescription = null)
         Button(onClick = { model.save() }, modifier = Modifier) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(imageVector = Icons.Default.Check, contentDescription = null)
-                Text(text = stringResource(refract.generated.R.string.settings_save))
+                Text(text = stringResource(R.string.settings_save))
             }
         }
         HorizontalDivider(modifier = Modifier)

@@ -64,6 +64,7 @@ extension Mapping {
 
 public enum LocalizedTextEmitter {
     public static func compose(_ expression: RefractIR.Expression, mapping: Mapping,
+                               packageName: String? = nil,
                                argument: (RefractIR.Expression) throws -> String) throws -> String {
         guard case let .localizedText(text) = expression.value else {
             throw unsupported(expression)
@@ -72,7 +73,9 @@ public enum LocalizedTextEmitter {
         _ = try StringResourceName.make(key: text.key, location: expression.location)
         let resource = try mapping.stringResource(text.key, platform: .android, location: expression.location)
         let values = try text.arguments.map(argument)
-        let reference = resource.className.map { "\($0).string.\(resource.nativeName)" } ?? "R.string.\(resource.nativeName)"
+        let reference = resource.className.map {
+            $0 == packageName.map { "\($0).R" } ? "R.string.\(resource.nativeName)" : "\($0).string.\(resource.nativeName)"
+        } ?? "R.string.\(resource.nativeName)"
         return "stringResource(\(([reference] + values).joined(separator: ", ")))"
     }
 

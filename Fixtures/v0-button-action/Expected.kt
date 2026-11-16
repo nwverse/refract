@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import refract.generated.R
 
 public interface SaveModel {
     public fun save()
@@ -20,6 +21,6 @@ public fun ButtonAction(
     modifier: Modifier = Modifier,
 ) {
     Button(onClick = { model.save() }, modifier = modifier) {
-        Text(text = stringResource(refract.generated.R.string.settings_save))
+        Text(text = stringResource(R.string.settings_save))
     }
 }
