@@ -7,3 +7,4 @@ add to it when you hit something new: what happened, why, and what to do instead
 | --- | --- |
 | Working with many Agents in one repository | `docs/lessons/workflow.md` |
 | ArkUI generation | `docs/lessons/arkui.md` |
+| Repository checks and CI | `docs/lessons/repository-tooling.md` |

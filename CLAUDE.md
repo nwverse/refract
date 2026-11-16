@@ -84,6 +84,6 @@ This is a public open-source repository, and its history is public too.
 | Area | Docs |
 | --- | --- |
 | Rules and goals | `docs/SUPER_RULES.md` highest-priority rules · `docs/GOALS.md` the five goals and their evidence |
-| Design | `docs/architecture.md` pipeline, modules, models, mixing, testing, open decisions · `docs/arkui-backend.md` ArkTS lowering, list identity and toolchain verification · `docs/state-and-models.md` state, bindings and observation |
-| Process | `docs/collaboration.md` claims, comment templates, PRs, merging · `docs/roadmap.md` phases and workstreams |
-| Lessons | `docs/lessons/` pitfalls by topic (index `docs/lessons/README.md`) |
+| Design | `docs/architecture.md` pipeline, modules, models, mixing, testing, open decisions · `docs/arkui-backend.md` ArkTS lowering, list identity and toolchain verification · `docs/state-and-models.md` state, bindings and observation · `docs/subset.md` accepted SwiftUI subset · `docs/performance.md` generated-code performance rules |
+| Process | `docs/collaboration.md` claims, comment templates, PRs, merging · `docs/roadmap.md` phases and workstreams · `docs/ci.md` repository checks, CI prerequisites and local verification · `docs/adoption.md` incremental adoption guide |
+| Lessons | `docs/lessons/` pitfalls by topic; every file under this directory is listed in its README |

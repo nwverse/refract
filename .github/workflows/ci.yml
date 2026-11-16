@@ -1,0 +1,142 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift build, tests and golden fixtures
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            swift-version: 6.0.3
+          - os: macos-15
+            swift-version: 6.0.3
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out the sources
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Select Swift ${{ matrix.swift-version }}
+        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
+        with:
+          swift-version: ${{ matrix.swift-version }}
+      - name: Show the selected toolchain
+        run: swift --version
+      - name: Build with locked dependencies
+        run: swift build --disable-automatic-resolution
+      - name: Run the complete test suite
+        run: swift test --disable-automatic-resolution
+      - name: Regenerate and compare every golden fixture
+        run: |
+          swift test --disable-automatic-resolution --skip-build --filter GoldenTests
+          git diff --exit-code -- Fixtures
+      - name: Reject unexpected generated or dependency files
+        shell: bash
+        run: |
+          set -euo pipefail
+          unexpected=$(git status --short --untracked-files=all)
+          if [[ -n "$unexpected" ]]; then
+            printf 'Unexpected files after build and tests:\n%s\n' "$unexpected"
+            exit 1
+          fi
+
+  repository-checks:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the sources
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Test the privacy checker in an isolated repository
+        run: python3 -I scripts/test/test_privacy_check.py
+      - name: Test the documentation checker
+        run: python3 -I scripts/test/test_doc_paths.py --self-test
+      - name: Check public repository content and paths
+        # Hosted CI has the built-in rules; the local hooks additionally use machine-specific private values.
+        run: python3 scripts/privacy_check.py
+      - name: Test the pull-request issue-link policy
+        run: node scripts/test/pr_needs_issue_test.mjs
+      - name: Check documentation once its owning workstreams have landed
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Temporary bootstrap gate tracked by issue #11. The checker itself never ignores a missing path.
+          required=(Package.swift docs/subset.md docs/performance.md docs/adoption.md)
+          missing=()
+          for path in "${required[@]}"; do
+            if [[ ! -e "$path" ]]; then
+              missing+=("$path")
+            fi
+          done
+          if ((${#missing[@]})); then
+            printf '::warning title=Documentation check prerequisite::Missing %s; the full check must be enabled before issue #11 closes.\n' "${missing[*]}"
+            exit 0
+          fi
+          python3 -I scripts/test/test_doc_paths.py
+
+  workflow-lint:
+    name: Lint changed workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out history for the changed-file comparison
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Lint workflows when they changed
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            changed=$(git diff --name-only "$BASE_SHA...$GITHUB_SHA" -- .github/workflows)
+          elif [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            changed=$(git diff --name-only "$BASE_SHA..$GITHUB_SHA" -- .github/workflows)
+          else
+            changed=$(git ls-files .github/workflows)
+          fi
+          if [[ -z "$changed" ]]; then
+            echo "No workflow changes; actionlint is not needed."
+            exit 0
+          fi
+          tool_dir=$(mktemp -d "${TMPDIR:-/tmp}/refract-actionlint.XXXXXX")
+          trap 'rm -rf "${tool_dir:?}"' EXIT
+          version=1.7.10
+          base_url="https://github.com/rhysd/actionlint/releases/download/v${version}"
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL "$base_url/$archive" -o "$tool_dir/$archive"
+          curl --proto '=https' --tlsv1.2 -fsSL "$base_url/checksums.txt" -o "$tool_dir/checksums.txt"
+          expected=$(python3 - "$tool_dir/checksums.txt" "$archive" <<'PY'
+          import sys
+          checksums, archive = sys.argv[1:]
+          for line in open(checksums, encoding="ascii"):
+              digest, name = line.split()
+              if name.removeprefix("*") == archive:
+                  print(digest)
+                  break
+          else:
+              raise SystemExit("No checksum for the selected actionlint archive")
+          PY
+          )
+          printf '%s  %s\n' "$expected" "$tool_dir/$archive" | sha256sum --check --strict
+          tar -xzf "$tool_dir/$archive" -C "$tool_dir" actionlint
+          "$tool_dir/actionlint" -color
