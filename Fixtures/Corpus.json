@@ -299,7 +299,7 @@
     },
     {
       "path": "v0-styled-text",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-text-input",
