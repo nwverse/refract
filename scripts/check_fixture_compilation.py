@@ -99,8 +99,8 @@ def regenerate_and_stage(fixture: str) -> None:
     package_directory.mkdir(parents=True, exist_ok=True)
     generated = expected_kt.read_text(encoding="utf-8").replace(
         f"{package}.R.", f"{namespace}.R."
-    )
-    if package != namespace and f"stringResource(R.string." in generated:
+    ).replace(f"import {package}.R\n", f"import {namespace}.R\n")
+    if package != namespace and f"import {namespace}.R\n" not in generated and f"stringResource(R.string." in generated:
         generated = generated.replace(
             f"package {package}\n", f"package {package}\n\nimport {namespace}.R\n", 1
         )
