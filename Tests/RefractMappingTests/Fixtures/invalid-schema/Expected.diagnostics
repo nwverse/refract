@@ -1,0 +1,2 @@
+refract.json:3:3: error [mappingDuplicateKey]: The JSON key `schemaVersion` is duplicated at `root`. Suggestion: Keep one `schemaVersion` key and remove the duplicate.
+refract.json:3:20: error [mappingVersion]: The schema version 2 is not supported. Suggestion: Use schema version 1.

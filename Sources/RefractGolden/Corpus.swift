@@ -28,6 +28,17 @@ public struct FixtureCase: Sendable {
     public let expectedKotlin: String?
     public let expectedArkTS: String?
     public let expectedDiagnostics: String?
+
+    public init(name: String, status: Status, input: String, mapping: String?, expectedKotlin: String?,
+                expectedArkTS: String?, expectedDiagnostics: String?) {
+        self.name = name
+        self.status = status
+        self.input = input
+        self.mapping = mapping
+        self.expectedKotlin = expectedKotlin
+        self.expectedArkTS = expectedArkTS
+        self.expectedDiagnostics = expectedDiagnostics
+    }
 }
 
 public struct CorpusError: Error, CustomStringConvertible {
