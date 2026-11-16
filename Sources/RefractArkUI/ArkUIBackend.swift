@@ -28,7 +28,7 @@ public struct ArkUIBackend: Sendable {
                 try emitLocalState(state, into: &writer)
             }
             writer.open("build()")
-            try emit(screen.body, into: &writer)
+            try emit(screen.body, into: &writer, mapping: mapping)
             writer.close()
             writer.close()
         }
@@ -36,7 +36,7 @@ public struct ArkUIBackend: Sendable {
     }
 
     func emit(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
-              lazyOwner: Bool = false) throws {
+              lazyOwner: Bool = false, mapping: Mapping = .empty) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
             writer.open("\(containerName(axis))()")
@@ -80,7 +80,7 @@ public struct ArkUIBackend: Sendable {
                              suggestion: "Use the interop backend implementation that selects the HarmonyOS branch.",
                              location: location)
         default:
-            try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner)
+            try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping)
         }
     }
 
@@ -103,7 +103,7 @@ private extension StateDeclaration {
 
 struct ArkWriter {
     private(set) var text = ""
-    private var depth = 0
+    var depth = 0
 
     mutating func line(_ value: String = "", unlessEmpty: Bool = false) {
         if value.isEmpty {

@@ -83,16 +83,16 @@ import RefractIR
 }
 
 @Test(arguments: [
-    "@ObservedObject var model: SettingsModel",
-    "@State private var count: Int",
+    ("@ObservedObject var model: SettingsModel", "RFSTATE001"),
+    ("@State private var count: Int", "RFSTATE002"),
 ])
-func frontendRejectsUnsupportedStoredProperties(_ declaration: String) {
+func frontendRejectsUnsupportedStoredProperties(_ declaration: String, _ code: String) {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Unsupported: View {
         \(declaration)
         var body: some View { Text("Unsupported") }
     }
     """))
-    #expect(unit.diagnostics.map(\.code) == ["state.invalid_declaration"])
+    #expect(unit.diagnostics.map(\.code) == [code])
     #expect(unit.module.screens.isEmpty)
 }

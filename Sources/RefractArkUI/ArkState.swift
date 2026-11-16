@@ -3,8 +3,9 @@ import RefractIR
 func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWriter) throws {
     if case let .binding(name, type, _) = declaration {
         let type = try stateType(type)
-        writer.line("@Require @Param \(name): \(type)")
-        writer.line("@Event on\(name.prefix(1).uppercased())\(name.dropFirst())Change: (value: \(type)) => void = (value: \(type)): void => {}")
+        writer.line("@Require @Param \(name): \(type);")
+        writer.line("@Event on\(name.prefix(1).uppercased())\(name.dropFirst())Change: (value: \(type)) => void = (value: \(type)): void => {};")
+        writer.line()
         return
     }
     guard case let .state(name, type, initial, location) = declaration else {
@@ -16,7 +17,8 @@ func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWrite
         throw Diagnostic(code: "arkui.state_missing_initializer", message: "Local state `\(name)` needs an initializer.",
                          suggestion: "Initialize @State in the Swift declaration.", location: location)
     }
-    writer.line("@Local private \(name): \(try stateType(type)) = \(try emitLocalExpression(initial))")
+    writer.line("@Local private \(name): \(try stateType(type)) = \(try emitLocalExpression(initial));")
+    writer.line()
 }
 
 private func stateType(_ type: ValueType) throws -> String {

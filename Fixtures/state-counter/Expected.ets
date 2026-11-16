@@ -3,7 +3,8 @@
 
 @ComponentV2
 export struct Counter {
-  @Local private count: number = 0
+  @Local private count: number = 0;
+
   build() {
     Column() {
       Text(`Count: ${this.count}`)

@@ -81,11 +81,15 @@ public struct ComposeBackend: Sendable {
 
     private func emitStates(_ states: [StateDeclaration], into out: inout KotlinWriter, context: inout Context) throws {
         for state in states {
+            if case .state = state {
+                context.imports.insert("androidx.compose.runtime.getValue")
+                context.imports.insert("androidx.compose.runtime.setValue")
+            }
             if case let .state(name, type, initial, _) = state {
                 context.imports.insert("androidx.compose.runtime.remember")
                 context.imports.insert("androidx.compose.runtime.mutableStateOf")
                 let initialText = try renderExpression(initial ?? defaultInitial(type), context: &context)
-                out.line("val \(name) = remember { mutableStateOf(\(initialText)) }")
+                out.line("var \(name) by remember { mutableStateOf(\(initialText)) }")
             }
         }
     }
@@ -121,6 +125,9 @@ public struct ComposeBackend: Sendable {
             }
         case let .conditional(branches, location):
             try emitConditional(branches, location: location, into: &out, context: &context)
+        case let .toggle(title, value, modifiers, location):
+            try emitToggle(title: title, value: value, modifiers: modifiers, isRoot: isRoot,
+                           location: location, into: &out, context: &context)
         default:
             throw Diagnostic(code: "RF-C001",
                              message: "This extended view IR is awaiting its Compose lowering.",
@@ -190,6 +197,51 @@ public struct ComposeBackend: Sendable {
         }
         out.open("Button(onClick = \(onClick), modifier = \(modifierChain))")
         try emit(label, into: &out, context: &context)
+        out.close()
+    }
+
+    private func emitToggle(title: Expression, value: Expression, modifiers: [Modifier], isRoot: Bool,
+                            location: SourceLocation?, into out: inout KotlinWriter,
+                            context: inout Context) throws {
+        context.imports.insert("androidx.compose.foundation.layout.Arrangement")
+        context.imports.insert("androidx.compose.foundation.layout.Row")
+        context.imports.insert("androidx.compose.material3.Switch")
+        context.imports.insert("androidx.compose.ui.res.stringResource")
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        out.line("Row(")
+        out.depth += 1
+        out.line("modifier = \(modifierChain),")
+        out.line("horizontalArrangement = Arrangement.SpaceBetween,")
+        out.depth -= 1
+        out.line(") {")
+        out.depth += 1
+        guard case let .stringKey(key) = title.value else {
+            throw Diagnostic(code: "RFSTATE003", message: "A toggle title must be a localization key.",
+                             suggestion: "Use a canonical settings.* key.", location: location)
+        }
+        let resource = try context.mapping.stringResource(key, platform: .android, location: title.location)
+        guard let className = resource.className else {
+            throw Diagnostic(code: "R.string.invalid_resource", message: "Android string resources need a generated R class name.",
+                             suggestion: "Declare resources.className in refract.json.", location: title.location)
+        }
+        out.line("Text(text = stringResource(\(className).string.\(resource.nativeName))")
+        let checked = try renderExpression(value, context: &context)
+        let onChange: String
+        switch value.value {
+        case let .valueProperty(.state(name)):
+            onChange = "{ value -> \(name) = value }"
+        case let .valueProperty(.binding(name)):
+            onChange = "on\(name.uppercasingFirst())Change"
+        default:
+            throw Diagnostic(code: "RFSTATE003", message: "A switch needs a local state or parent binding.",
+                             suggestion: "Use a projected Bool state or binding.", location: value.location)
+        }
+        out.line("Switch(")
+        out.depth += 1
+        out.line("checked = \(checked),")
+        out.line("onCheckedChange = \(onChange),")
+        out.depth -= 1
+        out.line(")")
         out.close()
     }
 
@@ -298,7 +350,7 @@ public struct ComposeBackend: Sendable {
         case let .binding(name):
             return name
         case let .valueProperty(.state(name)):
-            return "\(name).value"
+            return name
         case let .valueProperty(.binding(name)):
             return name
         case let .interpolatedString(segments):
@@ -318,9 +370,9 @@ public struct ComposeBackend: Sendable {
     private func renderAction(_ action: StateAction, context: inout Context) throws -> String {
         switch action {
         case let .assign(.state(name), value):
-            return "\(name).value = \(try renderExpression(value, context: &context))"
+            return "\(name) = \(try renderExpression(value, context: &context))"
         case let .increment(.state(name), value):
-            return "\(name).value += \(try renderExpression(value, context: &context))"
+            return "\(name) += \(try renderExpression(value, context: &context))"
         case let .assign(.binding(name), value):
             return "on\(name.uppercasingFirst())Change(\(try renderExpression(value, context: &context)))"
         case let .increment(.binding(name), value):

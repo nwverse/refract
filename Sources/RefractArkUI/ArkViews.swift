@@ -1,8 +1,9 @@
 import RefractIR
+import RefractMapping
 
 extension ArkUIBackend {
     func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
-                      lazyOwner: Bool = false) throws {
+                      lazyOwner: Bool = false, mapping: Mapping = .empty) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
             var arguments: [String] = []
@@ -47,12 +48,25 @@ extension ArkUIBackend {
         case let .image(source, modifiers, _):
             writer.line("Image(\(try image(source)))\(try ArkModifiers.emit(modifiers, item: item))")
         case let .toggle(title, value, modifiers, _):
-            // The corpus' model/action control contract supplies the value and write path; title is accessibility metadata.
-            _ = title
-            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try ArkExpression.emit(value)) })")
+            writer.open("Row()")
+            writer.line("Text(\(try resourceReference(title, mapping: mapping)))")
+            writer.line("Blank()")
+            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value)) })")
+            writer.depth += 1
             writer.open(".onChange((value: boolean) =>")
-            writer.line("\(try ArkExpression.assignment(value, to: "value"));")
+            switch value.value {
+            case let .valueProperty(.state(name)):
+                writer.line("this.\(name) = value;")
+            case let .valueProperty(.binding(name)):
+                writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            default:
+                throw Diagnostic(code: "RFSTATE003", message: "An editable toggle needs a local state or parent binding.",
+                                 suggestion: "Use a projected Bool @State or @Binding property.", location: value.location)
+            }
             writer.close(suffix: ")")
+            writer.depth -= 1
+            writer.close()
+            writer.line(".justifyContent(FlexAlign.SpaceBetween)")
             writer.line(try ArkModifiers.emit(modifiers, item: item), unlessEmpty: true)
         case let .textInput(placeholder, value, modifiers, _):
             var arguments = ["text: \(try ArkExpression.emit(value))"]
@@ -88,6 +102,15 @@ extension ArkUIBackend {
             try emit(node, into: &writer, item: item)
         }
         writer.close()
+    }
+
+    private func resourceReference(_ title: Expression, mapping: Mapping) throws -> String {
+        guard case let .stringKey(key) = title.value else {
+            throw Diagnostic(code: "RFSTATE003", message: "A toggle title must be a canonical localization key.",
+                             suggestion: "Use a settings.* key.", location: title.location)
+        }
+        let resource = try mapping.stringResource(key, platform: .harmonyOS, location: title.location)
+        return "$r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)')"
     }
 
     private func image(_ source: ImageSource) throws -> String {
