@@ -391,13 +391,13 @@ final class Builder: SyntaxVisitor {
     }
 
     func viewStatements(_ items: CodeBlockItemListSyntax, body: PatternBindingSyntax) -> ViewNode? {
-        if items.count != 1, let first = items.first {
+        if items.count != 1, items.first != nil {
             diagnostics.append(Diagnostic(code: "unsupportedViewBody",
                 message: "The `body` getter must return exactly one view expression.",
                 suggestion: "Return a supported view from `body`.", location: location(of: body.pattern)))
             return nil
         }
-        guard let expression = expression(in: items) else {
+        guard expression(in: items) != nil else {
             guard items.count == 1, let first = items.first else {
                 error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
                       "Return a supported view from `body`.", at: items)

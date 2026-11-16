@@ -43,17 +43,6 @@ extension Builder {
         return .conditional(conditions: branches, location: location(of: statement))
     }
 
-    func rejectUnsupportedControlFlow(_ expression: ExprSyntax) -> ViewNode? {
-        if expression.is(SwitchExprSyntax.self) {
-            error("RFCTRL003", "Switch requires a declared enum-typed immutable screen input.",
-                  "Use `let value: YourEnum` with a local no-payload enum declaration", at: expression)
-        } else {
-            error("RFCTRL001", "This statement is not a supported view-builder conditional.",
-                  "Use if/else with a typed Boolean condition", at: expression)
-        }
-        return nil
-    }
-
     private func typedBoolean(_ expression: ExprSyntax) -> Expression? {
         if let value = expression.as(BooleanLiteralExprSyntax.self) {
             return Expression(.boolLiteral(value.literal.tokenKind == .keyword(.true)), location: location(of: value))
