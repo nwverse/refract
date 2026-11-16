@@ -12,6 +12,22 @@
     {
       "path": "rejected-image",
       "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/plain",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/formatted",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-android",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "localization/missing-harmony",
+      "implementationStatus": "ready"
     }
   ]
 }

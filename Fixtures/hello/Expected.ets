@@ -5,9 +5,9 @@
 export struct Hello {
   build() {
     Column() {
-      Text("Hello")
+      Text($r('app.string.hello_title'))
       Button() {
-        Text("Go")
+        Text($r('app.string.hello_go'))
       }
     }
   }

@@ -24,7 +24,8 @@ public enum GoldenRunner {
         let mapping: Mapping
         do {
             if let contents = fixture.mapping {
-                mapping = try Mapping.load(data: Data(contents.utf8), file: "refract.json")
+                mapping = try Mapping.load(data: Data(contents.utf8), file: "refract.json",
+                                           resourceBaseURL: fixture.resourceBaseURL)
             } else { mapping = .empty }
         } catch let error as MappingError {
             return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics + error.diagnostics)
@@ -35,6 +36,9 @@ public enum GoldenRunner {
         // configuration are independent errors, and both must be reported before generation is skipped.
         guard !unit.hasErrors else { return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics) }
         do {
+            // Resolve every localized value before either backend emits. This catches a missing second-platform
+            // resource instead of returning one successful output followed by a late backend error.
+            try LocalizationResourceValidator.validate(module: unit.module, mapping: mapping)
             let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
             let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
             return GoldenResult(kotlin: kotlin, arkTS: ark, diagnostics: diagnostics)

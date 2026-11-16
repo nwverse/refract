@@ -1,0 +1,3 @@
+<resources>
+  <string name="profile_greeting">Hello %1$s, %2$d items, %3$f percent</string>
+</resources>

@@ -1,10 +1,17 @@
 import RefractIR
+import RefractMapping
 
 enum ArkExpression {
-    static func emit(_ expression: Expression) throws -> String {
+    static func emit(_ expression: Expression, mapping: Mapping = .empty) throws -> String {
         switch expression.value {
         case let .stringLiteral(value):
             return try ArkText.string(value)
+        case let .verbatimText(value):
+            return try ArkText.string(value)
+        case .localizedText:
+            return try LocalizedTextEmitter.arkUI(expression, mapping: mapping) {
+                try ArkExpression.emit($0, mapping: mapping)
+            }
         case let .stringKey(key):
             throw Diagnostic(code: "arkui.unresolved_string_resource",
                              message: "String resource `\(key)` has no validated ArkUI resource declaration.",

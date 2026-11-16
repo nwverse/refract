@@ -51,6 +51,7 @@ struct RefractCommand {
         if let path = options["--mapping"] {
             mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: path))
         } else { mapping = .empty }
+        try LocalizationResourceValidator.validate(module: unit.module, mapping: mapping)
         let compose = try ComposeBackend().generate(module: unit.module, mapping: mapping)
         let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
         guard command == "generate" else { return }

@@ -13,12 +13,14 @@ public struct Mapping: Codable, Equatable, Sendable {
     public let schemaVersion: Int
     public let android: PlatformMapping
     public let harmonyOS: PlatformMapping
+    public private(set) var resourceBaseURL: URL?
 
     public init(schemaVersion: Int = 1, android: PlatformMapping = .empty,
-                harmonyOS: PlatformMapping = .empty) {
+                harmonyOS: PlatformMapping = .empty, resourceBaseURL: URL? = nil) {
         self.schemaVersion = schemaVersion
         self.android = android
         self.harmonyOS = harmonyOS
+        self.resourceBaseURL = resourceBaseURL
     }
 
     public static let empty = Mapping()
@@ -44,6 +46,7 @@ public struct Mapping: Codable, Equatable, Sendable {
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
         android = try values.decode(PlatformMapping.self, forKey: .android)
         harmonyOS = try values.decode(PlatformMapping.self, forKey: .harmonyOS)
+        resourceBaseURL = nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -63,14 +66,20 @@ public struct Mapping: Codable, Equatable, Sendable {
                 location: SourceLocation(file: url.lastPathComponent, line: 1, column: 1))])
         }
         switch validate(data: data, file: url.lastPathComponent) {
-        case let .success(mapping): return mapping
+        case let .success(mapping):
+            var mapping = mapping
+            mapping.resourceBaseURL = url.deletingLastPathComponent()
+            return mapping
         case let .failure(error): throw error
         }
     }
 
-    public static func load(data: Data, file: String = "refract.json") throws -> Mapping {
+    public static func load(data: Data, file: String = "refract.json", resourceBaseURL: URL? = nil) throws -> Mapping {
         switch validate(data: data, file: file) {
-        case let .success(mapping): return mapping
+        case let .success(mapping):
+            var mapping = mapping
+            mapping.resourceBaseURL = resourceBaseURL
+            return mapping
         case let .failure(error): throw error
         }
     }
@@ -149,8 +158,7 @@ public struct Mapping: Codable, Equatable, Sendable {
     }
 
     static func isResourceKey(_ key: String) -> Bool {
-        let parts = key.split(separator: ".", omittingEmptySubsequences: false)
-        return parts.allSatisfy { !$0.isEmpty && $0.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber) } }
+        LocalizationKey.isCanonical(key)
     }
 }
 
@@ -350,13 +358,15 @@ public struct Resources: Codable, Equatable, Sendable {
     public var className: String?
     public var namespace: String?
     public var stringTable: String?
+    public var catalog: String?
     public var strings: [String: String]
 
     public init(className: String? = nil, namespace: String? = nil, stringTable: String? = nil,
-                strings: [String: String] = [:]) {
+                catalog: String? = nil, strings: [String: String] = [:]) {
         self.className = className
         self.namespace = namespace
         self.stringTable = stringTable
+        self.catalog = catalog
         self.strings = strings
     }
     public static let empty = Resources()

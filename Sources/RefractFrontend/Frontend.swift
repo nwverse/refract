@@ -21,6 +21,7 @@ private final class Builder: SyntaxVisitor {
     var screens: [Screen] = []
     var diagnostics: [Diagnostic] = []
     var interop: InteropFrontend
+    var parameters: [ScreenParameter] = []
 
     init(file: String, tree: SourceFileSyntax) {
         self.file = file
@@ -38,6 +39,13 @@ private final class Builder: SyntaxVisitor {
             $0.type.trimmedDescription == "View"
         }) == true else { return .skipChildren }
 
+        parameters = []
+        let members = node.memberBlock.members
+        if hasTypedInputs(members) {
+            guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
+            screens.append(body)
+            return .skipChildren
+        }
         guard node.memberBlock.members.count == 1,
             let body = node.memberBlock.members.first?.decl.as(VariableDeclSyntax.self),
             body.bindings.count == 1,
@@ -59,7 +67,8 @@ private final class Builder: SyntaxVisitor {
         }
         guard let root = view(expression) else { return .skipChildren }
 
-        screens.append(Screen(name: node.name.text, body: root, location: location(of: node.name)))
+        screens.append(Screen(name: node.name.text, parameters: parameters, body: root,
+                              location: location(of: node.name)))
         return .skipChildren
     }
 
@@ -140,29 +149,27 @@ private final class Builder: SyntaxVisitor {
         let nodeLocation = location(of: call)
         switch name {
         case "VStack", "HStack":
-            guard call.arguments.isEmpty, let children = children(of: call.trailingClosure) else {
+            guard call.arguments.isEmpty, call.trailingClosure != nil,
+                  let children = children(of: call.trailingClosure) else {
                 error("unsupportedViewArguments", "\(name) supports only an unlabeled child closure.", at: call)
                 return nil
             }
             return .stack(axis: name == "VStack" ? .vertical : .horizontal,
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
-            guard call.arguments.count == 1,
-                  let argument = call.arguments.first, call.trailingClosure == nil,
-                  let value = scalar(argument.expression), value.type == .string,
-                  (argument.label == nil) || (argument.label?.text == "verbatim") else {
-                error("unsupportedText", "Text requires one string value, optionally labeled `verbatim`.",
-                      "Use Text(\"key\") or Text(verbatim: \"literal\")", at: call)
+            var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar)
+            guard let value = parser.text(call, arguments: call.arguments) else {
+                diagnostics.append(contentsOf: parser.diagnostics)
                 return nil
             }
-            return .text(value.expression, modifiers: [], location: nodeLocation)
+            diagnostics.append(contentsOf: parser.diagnostics)
+            return .text(value, modifiers: [], location: nodeLocation)
         case "Button":
             guard call.arguments.count == 1, call.arguments.first?.label == nil,
                   let argument = call.arguments.first?.expression,
-                  let labelText = stringLiteral(argument),
                   call.additionalTrailingClosures.isEmpty else {
-                error("unsupportedButton", "Button requires one string-literal title and an empty action.",
-                      "Use Button(\"title\") { }.", at: call)
+                error("unsupportedButton", "Button requires one localized string title and an empty action.",
+                      "Use Button(\"key\") { } or a literal text label with explicit provenance", at: call)
                 return nil
             }
             if let action = call.trailingClosure, !action.statements.isEmpty {
@@ -170,7 +177,13 @@ private final class Builder: SyntaxVisitor {
                       "Use an empty action until model actions are available.", at: action)
                 return nil
             }
-            let label = ViewNode.text(Expression(.stringLiteral(labelText)), modifiers: [], location: nodeLocation)
+            var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar)
+            guard let labelText = parser.localized(argument) else {
+                diagnostics.append(contentsOf: parser.diagnostics)
+                return nil
+            }
+            diagnostics.append(contentsOf: parser.diagnostics)
+            let label = ViewNode.text(labelText, modifiers: [], location: nodeLocation)
             return .button(label: label, action: nil, modifiers: [], location: nodeLocation)
         case "refractView":
             return platformView(call)
@@ -224,25 +237,27 @@ private final class Builder: SyntaxVisitor {
 
     private func scalar(_ expression: ExprSyntax) -> TypedExpression? {
         if let string = stringLiteral(expression) {
-            return TypedExpression(Expression(.stringLiteral(string), location: location(of: expression)), .string)
+            return TypedExpression(Expression(.stringLiteral(string), type: .string,
+                                             location: location(of: expression)), .string)
         }
         if let literal = expression.as(BooleanLiteralExprSyntax.self) {
             return TypedExpression(Expression(.boolLiteral(literal.literal.tokenKind == .keyword(.true)),
-                                             location: location(of: expression)), .bool)
+                                             type: .bool, location: location(of: expression)), .bool)
         }
         if let literal = expression.as(IntegerLiteralExprSyntax.self) {
-            return TypedExpression(Expression(.numberLiteral(literal.literal.text),
+            return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .int,
                                              location: location(of: expression)), .int)
         }
         if let literal = expression.as(FloatLiteralExprSyntax.self) {
-            return TypedExpression(Expression(.numberLiteral(literal.literal.text),
+            return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .double,
                                              location: location(of: expression)), .double)
         }
         if let reference = expression.as(DeclReferenceExprSyntax.self) {
-            // Ownership of model/state references is refined by the state frontend. Native declarations still
-            // retain their expected source types rather than accepting an arbitrary untyped expression.
-            return TypedExpression(Expression(.reference(reference.baseName.text),
-                                             location: location(of: expression)), nil)
+            // A bare screen input carries its declared type; nested model members are refined by the state frontend.
+            let name = reference.baseName.text
+            let type = parameters.first { $0.name == name }?.type
+            return TypedExpression(Expression(.reference(name), type: type,
+                                             location: location(of: expression)), type)
         }
         if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
@@ -273,15 +288,6 @@ private final class Builder: SyntaxVisitor {
         }
         return TypedExpression(Expression(.platformValue(PlatformAlternatives(
             ios: values[0], android: values[1], harmonyOS: values[2])), location: location(of: call)), type)
-    }
-
-    private struct TypedExpression {
-        let expression: Expression
-        let type: ValueType?
-        init(_ expression: Expression, _ type: ValueType?) {
-            self.expression = expression
-            self.type = type
-        }
     }
 
     private func children(of closure: ClosureExprSyntax?) -> [ViewNode]? {

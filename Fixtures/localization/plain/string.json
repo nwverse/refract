@@ -1,0 +1,7 @@
+{
+  "string": [
+    { "name": "settings_title", "value": "Settings" },
+    { "name": "settings_subtitle", "value": "Account & privacy" },
+    { "name": "settings_footer", "value": "Version information" }
+  ]
+}

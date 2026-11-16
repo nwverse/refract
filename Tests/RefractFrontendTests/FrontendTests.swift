@@ -7,8 +7,8 @@ import RefractIR
     struct Hello: View {
         var body: some View {
             VStack {
-                Text("Hello")
-                HStack { Button("Go") { } }
+                Text("hello.title")
+                HStack { Button("hello.go") { } }
             }
         }
     }
