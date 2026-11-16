@@ -95,6 +95,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case component(ComponentReference, location: SourceLocation?)
     case platformView(PlatformAlternatives<[ViewNode]>, location: SourceLocation?)
     case conditional(conditions: [ConditionBranch], location: SourceLocation?)
+    case switchExpression(subject: Expression, enumName: String, cases: [SwitchCase], location: SourceLocation?)
     case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
     case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
@@ -176,16 +177,18 @@ public struct Module: Codable, Equatable, Sendable {
     public let nativeDeclarations: [NativeDeclaration]
     public let models: [ModelProtocol]
     public let itemTypes: [ItemType]
+    public let enums: [EnumDeclaration]
     public init(sourceFile: String, screens: [Screen], nativeDeclarations: [NativeDeclaration] = [],
-                models: [ModelProtocol] = [], itemTypes: [ItemType] = []) {
+                models: [ModelProtocol] = [], itemTypes: [ItemType] = [], enums: [EnumDeclaration] = []) {
         self.sourceFile = sourceFile
         self.screens = screens
         self.nativeDeclarations = nativeDeclarations
         self.models = models
         self.itemTypes = itemTypes
+        self.enums = enums
     }
 
-    private enum CodingKeys: String, CodingKey { case sourceFile, screens, nativeDeclarations, models, itemTypes }
+    private enum CodingKeys: String, CodingKey { case sourceFile, screens, nativeDeclarations, models, itemTypes, enums }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         sourceFile = try values.decode(String.self, forKey: .sourceFile)
@@ -193,6 +196,7 @@ public struct Module: Codable, Equatable, Sendable {
         nativeDeclarations = try values.decodeIfPresent([NativeDeclaration].self, forKey: .nativeDeclarations) ?? []
         models = try values.decodeIfPresent([ModelProtocol].self, forKey: .models) ?? []
         itemTypes = try values.decodeIfPresent([ItemType].self, forKey: .itemTypes) ?? []
+        enums = try values.decodeIfPresent([EnumDeclaration].self, forKey: .enums) ?? []
     }
 }
 

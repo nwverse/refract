@@ -26,7 +26,19 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "control-reject-associated-value",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "control-reject-if-let",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-reject-nonexhaustive",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-switch-enum",
       "implementationStatus": "ready"
     },
     {

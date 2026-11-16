@@ -153,14 +153,16 @@ or `@Binding` properties. Each condition is emitted directly into the native bui
 composed, and no `AnyView` or runtime view registry is introduced. A root Compose conditional uses a native `Box`
 to forward the caller's modifier without changing the branch children. Optional binding, optional chaining,
 availability clauses, arbitrary predicates, matching patterns and casts use `RFCTRL001`–`RFCTRL005` diagnostics.
-General `switch` is rejected with `RFCTRL003` until the declared-enum slice is implemented; its frontend will
-check exhaustive source cases before emitting native control flow.
+A `switch` over an immutable `let value: LocalEnum` input accepts a locally declared enum with no inheritance,
+raw values, generic parameters or associated values. Every case must appear explicitly exactly once: `default`,
+duplicate/missing cases, bindings, casts and other patterns are rejected (`RFCTRL003`, `RFCTRL005`–`RFCTRL007`).
+Compose emits `when` without an `else` fallback; ArkUI emits native enum `===` comparisons in source order. Both
+backends validate the declaration and complete case set before emitting code.
 
 The remaining planned conditional contract is below. It is not a claim that every listed form is implemented:
 
-`switch` over a declared enum will emit Kotlin `when` and
-ArkTS `if`/`else` comparisons in v0, with exhaustive source cases. Conditions beyond the initial Boolean-property
-slice are planned to support `!`, `&&`, `||`, and equality/ordering of typed scalar values. Optional unwrapping,
+Conditions beyond the initial Boolean-property slice are planned to support `!`, `&&`, `||`, and
+equality/ordering of typed scalar values. Optional unwrapping,
 implicit casts and arbitrary predicates are rejected. `if` content is a view branch, never a statement that
 mutates state during composition.
 
@@ -252,9 +254,11 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFSEM002` | Type is not supported or cannot be inferred | Declare an explicit supported type |
 | `RFCTRL001` | View condition is not a supported typed Boolean | Use a declared Boolean model, state or binding property |
 | `RFCTRL002` | Optional binding or availability condition is unsupported | Expose a typed nonoptional Boolean from the model |
-| `RFCTRL003` | Switch is not yet in the implemented control-flow slice | Use the supported enum-switch contract once available |
+| `RFCTRL003` | Switch subject is not a declared enum-typed input | Use an immutable local no-payload enum input |
 | `RFCTRL004` | Optional chaining, type checks or casts are unsupported | Use a nonoptional declared Boolean property |
-| `RFCTRL005` | Matching-pattern condition is unsupported | Use a declared Boolean property |
+| `RFCTRL005` | Matching-pattern condition or switch branch is unsupported | Use a declared Boolean property or explicit no-payload cases |
+| `RFCTRL006` | Enum has a raw value, payload, inheritance or unsupported declaration | Declare a finite no-payload local enum without inheritance |
+| `RFCTRL007` | Enum switch has a missing or duplicate case | List every declared case exactly once |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |
