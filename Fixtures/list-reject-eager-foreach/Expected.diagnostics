@@ -1,0 +1,1 @@
+Input.swift:6:21: error [RFLIST003]: This ForEach would eagerly render an unsupported or untyped collection. Suggestion: Use List { ForEach(model.items) { item in ... } } with an identifiable model collection

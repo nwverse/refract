@@ -1,0 +1,1 @@
+Input.swift:17:38: error [RFLIST002]: ForEach identity must be the item's declared stable stored id. Suggestion: Use ForEach(model.items) or ForEach(model.items, id: \.id); never use \.self, another property, or an array index
