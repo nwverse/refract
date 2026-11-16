@@ -17,8 +17,14 @@ import RefractGolden
     #expect(!kotlin.contains("Row(\n                    modifier = Modifier.testTag"))
     let ark = try #require(result.arkTS)
     #expect(ark.contains(".font(AppTypography.rowTitle)"))
-    #expect(ark.contains(".id('settings_toggle')"))
-    #expect(ark.contains(".accessibilityText(row.title)"))
+    let toggleChain = "              Toggle({ type: ToggleType.Switch, isOn: row.enabled })\n" +
+        "                .onChange((enabled: boolean) => {\n" +
+        "                  this.model.setEnabled(row.id, enabled);\n" +
+        "                })\n" +
+        "                .id('settings_toggle').accessibilityText(row.title)"
+    #expect(ark.contains(toggleChain))
+    #expect(ark.contains("            }\n            .justifyContent(FlexAlign.SpaceBetween)"))
+    #expect(!ark.contains(".justifyContent(FlexAlign.SpaceBetween)\n    .accessibilityText(row.title)"))
     #expect(!ark.contains("androidx.compose"))
     #expect(!ark.contains("remember("))
 }

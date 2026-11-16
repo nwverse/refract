@@ -42,6 +42,25 @@ extension Generation {
         case let .image(source, modifiers, _):
             writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .toggle(title, value, modifiers, nativeModifiers, _):
+            var rowModifiers: [Modifier] = []
+            var switchModifiers = nativeModifiers.map { operation -> Modifier in
+                switch operation.operation {
+                case let .testTag(value):
+                    return Modifier(name: "nativeTestTag", arguments: [value], argumentLabels: [nil], location: operation.location)
+                case let .contentDescription(value):
+                    return Modifier(name: "accessibilityLabel", arguments: [value], argumentLabels: [nil], location: operation.location)
+                case .retainCallback:
+                    return Modifier(name: "retainCallback", location: operation.location)
+                }
+            }
+            for modifier in modifiers {
+                switch modifier.name {
+                case "accessibilityLabel", "nativeTestTag":
+                    switchModifiers.append(modifier)
+                default:
+                    rowModifiers.append(modifier)
+                }
+            }
             writer.open("Row()")
             writer.line("Text(\(try ArkExpression.emit(title, item: item, mapping: mapping)))")
             writer.line("Blank()")
@@ -68,21 +87,11 @@ extension Generation {
                                  suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)
             }
             writer.close(suffix: ")")
-            writer.depth -= 1
-            let switchModifiers = nativeModifiers.map { operation -> Modifier in
-                switch operation.operation {
-                case let .testTag(value):
-                    return Modifier(name: "nativeTestTag", arguments: [value], argumentLabels: [nil], location: operation.location)
-                case let .contentDescription(value):
-                    return Modifier(name: "accessibilityLabel", arguments: [value], argumentLabels: [nil], location: operation.location)
-                case .retainCallback:
-                    return Modifier(name: "retainCallback", location: operation.location)
-                }
-            }
             writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.depth -= 1
             writer.close()
             writer.line(".justifyContent(FlexAlign.SpaceBetween)")
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(rowModifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .textInput(placeholder, value, modifiers, _):
             var arguments = ["text: \(try emitLocalExpression(value, item: item, mapping: mapping))"]
             if let placeholder { arguments.insert("placeholder: \(try ArkExpression.emit(placeholder, mapping: mapping))", at: 0) }
