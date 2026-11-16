@@ -11,10 +11,10 @@ export interface ExtensionSettingsModel {
 export struct ExtensionSettings {
   @Require @Param model: ExtensionSettingsModel
   build() {
-    Column() {
+    Column({ space: 8 }) {
       Text(this.model.title)
       Button() {
-        Text("Disable")
+        Text('Disable')
       }
       .onClick(() => {
         this.model.setEnabled(false);

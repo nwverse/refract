@@ -6,10 +6,10 @@ export struct EnabledRow {
   @Require @Param isEnabled: boolean
   @Event onIsEnabledChange: (value: boolean) => void = (value: boolean): void => {}
   build() {
-    Column() {
+    Column({ space: 8 }) {
       Text(`Enabled: ${this.isEnabled}`)
       Button() {
-        Text("Disable")
+        Text('Disable')
       }
       .onClick(() => {
         this.onIsEnabledChange(false);
