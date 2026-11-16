@@ -51,13 +51,8 @@ struct SubsetCorpusTests {
         for fixture in try CorpusLoader.load(repository: GoldenTests.repository) where fixture.name.hasPrefix("v0-") {
             guard fixture.mapping != nil else { continue }
             let directory = GoldenTests.repository.appendingPathComponent("Fixtures/\(fixture.name)")
-            do {
+            #expect(throws: Never.self, Comment(rawValue: "Mapping must match the published schema in \(fixture.name)")) {
                 _ = try Mapping.load(contentsOf: directory.appendingPathComponent("refract.json"))
-            } catch let error as MappingError {
-                // Schema extensions proposed with #6 are visible rather than silently accepted.
-                #expect(error.diagnostics.allSatisfy {
-                    $0.code == "mappingUnknownKey" && $0.message.contains("symbols")
-                }, Comment(rawValue: "Unexpected mapping error in \(fixture.name): \(error.diagnostics.map(\.rendered).joined(separator: "\n"))"))
             }
         }
     }
