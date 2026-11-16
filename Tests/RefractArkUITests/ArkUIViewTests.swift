@@ -5,8 +5,8 @@ import RefractIR
 @Test func arkUIEmitsLayoutScrollAndLeafViews() throws {
     let text: (String) -> ViewNode = { .text(Expression(.stringLiteral($0)), modifiers: [], location: nil) }
     let body = ViewNode.scroll(axis: .vertical,
-        child: .layout(LayoutContainer(axis: .vertical, alignment: .leading, spacing: Expression(.numberLiteral("8"))), children: [
-            .layout(LayoutContainer(axis: .horizontal, alignment: .center, spacing: Expression(.numberLiteral("4"))), children: [text("Enabled"), .spacer(location: nil)], modifiers: [], location: nil),
+        child: .layout(LayoutContainer(axis: .vertical, alignment: .leading, spacing: Expression(.layoutSpacing(.medium))), children: [
+            .layout(LayoutContainer(axis: .horizontal, alignment: .center, spacing: Expression(.layoutSpacing(.small))), children: [text("Enabled"), .spacer(location: nil)], modifiers: [], location: nil),
             .layout(LayoutContainer(axis: .depth, alignment: .topLeading), children: [text("Background"), text("Foreground")], modifiers: [], location: nil),
             .image(source: ImageSource(kind: .system, name: "gear"), modifiers: [], location: nil),
             .label(title: Expression(.stringLiteral("Profile")), image: ImageSource(kind: .system, name: "person"), modifiers: [], location: nil),

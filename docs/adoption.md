@@ -63,6 +63,7 @@ From the repository root:
 swift build
 .build/debug/refract generate \
   --input examples/shared/Hello.swift \
+  --mapping examples/refract.json \
   --android-out examples/android/app/src/main/java/refract/generated \
   --harmony-out examples/harmony/entry/src/main/ets/generated
 ```
@@ -97,9 +98,9 @@ HarmonyOS's hand-written `GeneratedProfile` page similarly imports `Hello` and p
 The reverse direction is now present in both apps. `NativeComponentScreen.kt` calls the native
 `NativeProfileStatusBadge(modifier:)`; `NativeComponentScreen.ets` imports and calls the ArkUI badge. Android's
 `SettingsApp` calls the generated screen from a hand-written destination, which then calls the hand-written badge.
-The Android toolchain compiles this complete native → generated → native chain. Generate this second screen with
-`--mapping examples/refract.json`, using the same output directories as Hello. Hello itself needs no native mapping;
-keeping its generation mapping-free avoids importing unrelated native declarations.
+The Android toolchain compiles this complete native → generated → native chain. Both screens now use
+`--mapping examples/refract.json` so resource keys and typed native components are validated in the same generation
+configuration.
 
 The full model-backed settings screen remains pending; this focused interop success does not imply that all v0
 containers, leaf controls or localized strings already generate.

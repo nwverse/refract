@@ -1,0 +1,1 @@
+Input.swift:4:5: error [RFSYN004]: Declaration `func unsupportedHelper() {}` is not supported inside a generated View. Suggestion: Move methods, initializers and nested types into the model protocol or a native component.

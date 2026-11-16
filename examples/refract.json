@@ -23,7 +23,10 @@
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
       "className": "com.example.refract.R",
+      "catalog": "android/app/src/main/res/values/strings.xml",
       "strings": {
+        "example.hello": "example_hello",
+        "example.go": "example_go",
         "settings.profile": "settings_profile",
         "settings.display.name": "settings_display_name",
         "settings.preferences": "settings_preferences",
@@ -58,7 +61,10 @@
     "resources": {
       "namespace": "app",
       "stringTable": "string",
+      "catalog": "harmony/entry/src/main/resources/base/element/string.json",
       "strings": {
+        "example.hello": "example_hello",
+        "example.go": "example_go",
         "settings.profile": "settings_profile",
         "settings.display.name": "settings_display_name",
         "settings.preferences": "settings_preferences",

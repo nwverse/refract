@@ -35,8 +35,7 @@ def regenerate_hello() -> None:
                 "generate",
                 "--input", str(ROOT / "examples/shared" / source),
             ]
-            if source != "Hello.swift":
-                command += ["--mapping", str(ROOT / "examples/refract.json")]
+            command += ["--mapping", str(ROOT / "examples/refract.json")]
             command += [
                 "--android-out", str(output / "android"),
                 "--harmony-out", str(output / "harmony"),
@@ -60,6 +59,7 @@ def check_resources() -> None:
     if android != harmony:
         fail("Android and HarmonyOS string registries differ")
     if set(android) != {
+        "example.hello", "example.go",
         "settings.profile", "settings.display.name", "settings.preferences",
         "settings.notifications", "settings.save", "settings.native.component",
     }:

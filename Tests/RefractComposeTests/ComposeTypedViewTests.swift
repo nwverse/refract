@@ -9,9 +9,10 @@ import RefractMapping
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct TypedLayout: View {
         var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: .medium) {
                 List { Text("settings.profile") }
                 HStack { Text(verbatim: "Enabled"); Spacer(); Divider() }
+                HStack { Text(verbatim: "Default spacing") }
             }.padding(16)
         }
     }
@@ -24,7 +25,7 @@ import RefractMapping
     let output = try ComposeBackend().generate(module: unit.module, mapping: mapping)
     #expect(output.contains("horizontalAlignment = Alignment.Start"))
     #expect(output.contains("verticalArrangement = Arrangement.spacedBy(8.dp)"))
-    #expect(output.contains("LazyColumn(modifier = Modifier)"))
+    #expect(output.components(separatedBy: "Row(modifier = Modifier) {").count == 3)
     #expect(output.contains("item(key = \"row:settings.profile\", contentType = \"Text\")"))
     #expect(output.contains("Spacer(modifier = Modifier.weight(1f))"))
     #expect(output.contains("VerticalDivider(modifier = Modifier)"))
