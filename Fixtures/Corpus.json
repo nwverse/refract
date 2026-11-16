@@ -126,6 +126,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "rejected-model-overload",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "rejected-model-property",
       "implementationStatus": "ready"
     },

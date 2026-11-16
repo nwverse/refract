@@ -35,8 +35,9 @@ public struct ComposeBackend: Sendable {
         for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
             context.imports.insert(item.module)
         }
+        let usedNativeNames = selectedNativeNames(in: module.screens.map(\.body))
         for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
-            if let module = item.value.module {
+            if usedNativeNames.contains(item.key), let module = item.value.module {
                 context.imports.insert("\(module).\(item.value.target)")
             }
         }
@@ -45,6 +46,16 @@ public struct ComposeBackend: Sendable {
         }
         out.append(bodyWriter.text)
         return out.text
+    }
+
+    private func selectedNativeNames(in bodies: [ViewNode]) -> Set<String> {
+        func collect(_ node: ViewNode, into names: inout Set<String>) {
+            if case let .native(component, _) = node { names.insert(component.name) }
+            for child in node.children(for: .android) { collect(child, into: &names) }
+        }
+        var names: Set<String> = []
+        for body in bodies { collect(body, into: &names) }
+        return names
     }
 
     private func emit(_ screen: Screen, into out: inout KotlinWriter, context: inout Context) throws {
