@@ -4,9 +4,9 @@
 @ComponentV2
 export struct PlatformValueScreen {
   build() {
-    Column() {
-      Text("Spacing").padding(16)
-      Text("HarmonyOS")
+    Column({ space: 8 }) {
+      Text('Spacing').padding(16)
+      Text('HarmonyOS')
     }
   }
 }

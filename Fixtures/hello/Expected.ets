@@ -4,10 +4,10 @@
 @ComponentV2
 export struct Hello {
   build() {
-    Column() {
-      Text("Hello")
+    Column({ space: 8 }) {
+      Text('Hello')
       Button() {
-        Text("Go")
+        Text('Go')
       }
     }
   }
