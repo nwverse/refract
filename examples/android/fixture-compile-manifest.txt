@@ -17,3 +17,5 @@ v0-binding-state
 list-foreach
 list-foreach-explicit-id
 v0-item-toggle
+v0-item-toggle-value
+benchmark-settings

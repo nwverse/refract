@@ -63,12 +63,17 @@ extension Builder {
     }
 
     private func titleItem(_ title: Expression) -> String? {
-        guard case let .localizedText(text) = title.value else { return nil }
+        guard case let .localizedText(text) = title.value, !text.arguments.isEmpty,
+              let item = currentListItem else { return nil }
         for argument in text.arguments {
-            guard case let .reference(reference) = argument.value,
-                  let item = currentListItem, reference.hasPrefix(item + ".") else { return nil }
+            guard argument.type != nil, case let .reference(reference) = argument.value,
+                  let property = reference.split(separator: ".").last,
+                  currentListItemType?.properties.contains(where: {
+                      $0.name == property && $0.type == argument.type
+                  }) == true,
+                  reference == "\(item).\(property)" else { return nil }
         }
-        return currentListItem
+        return item
     }
 
     private func toggleSetterValue(_ closure: ClosureExprSyntax) -> String? {

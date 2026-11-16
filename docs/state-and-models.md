@@ -96,10 +96,12 @@ Toggle("settings.item\(row.id)", isOn: Binding(
 ```
 
 The model declares `func setEnabled(_ id: Int, value: Bool)` (with the matching identity type). Compose emits a
-`Switch` reading `row.enabled` and calling `model.setEnabled(row.id, value)`. ArkUI emits the same direct model call
-from its `Toggle.onChange`; the app supplies `@ObservedV2`/`@Trace` row values and its `BasicDataSource` as specified
-below. The title is a localized key whose typed interpolation arguments must belong to that same row; an interpolated
-item title uses the platform's native string formatting, not string substitution. Different rows, non-Bool values,
+`Switch` reading `row.enabled` and calling `model.setEnabled(row.id, enabled)`. ArkUI emits the same direct model call
+from its `Toggle.onChange` with the scope-safe `enabled` parameter, even when the row itself is named `value`. The app
+supplies `@ObservedV2`/`@Trace` row values and its `BasicDataSource` as specified below. The title must have at least
+one typed interpolation argument, and every argument must be a declared scalar property of that same row; static or
+model-only titles do not establish this item association. An interpolated item title uses native string formatting,
+not string substitution. Different rows, non-Bool values,
 mismatched labels/types/identities, side effects and general getter/setter computation are build-time errors. No
 observer registry, per-row binding adapter or synthetic model mutation is generated. See
 `Fixtures/v0-item-toggle/` for the exact native shape.

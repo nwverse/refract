@@ -84,6 +84,35 @@ func frontendRejectsInvalidItemToggleBinding(_ getter: String, _ setter: String)
     #expect(unit.module.screens.isEmpty)
 }
 
+@Test(arguments: [
+    ("settings.item", true),
+    ("settings.item\\(model.title)", true),
+    ("settings.item\\(other.id)", false),
+])
+func frontendRejectsItemToggleTitleOutsideCurrentRow(_ title: String, _ modelTitle: Bool) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SettingsModel: RefractModel {
+        \(modelTitle ? "var title: String { get }" : "")
+        var rows: [SettingRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct SettingRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct ItemToggle: View {
+        let model: SettingsModel
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("\(title)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                ))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.contains { $0.code == "state.invalid_projection" })
+    #expect(unit.module.screens.isEmpty)
+}
+
 @Test func frontendRejectsUnknownToggleProjection() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct ToggleRow: View {

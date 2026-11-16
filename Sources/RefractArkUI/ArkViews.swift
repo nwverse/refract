@@ -47,7 +47,11 @@ extension Generation {
             writer.line("Blank()")
             writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value, item: item, mapping: mapping)) })")
             writer.depth += 1
-            writer.open(".onChange((value: boolean) =>")
+            if case .valueProperty(.itemBinding) = value.value {
+                writer.open(".onChange((enabled: boolean) =>")
+            } else {
+                writer.open(".onChange((value: boolean) =>")
+            }
             switch value.value {
             case let .valueProperty(.state(name)):
                 writer.line("this.\(name) = value;")
@@ -58,7 +62,7 @@ extension Generation {
                     throw Diagnostic(code: "state.invalid_projection", message: "An item toggle cannot write through a different list item.",
                                      suggestion: "Use the current LazyForEach item.", location: value.location)
                 }
-                writer.line("this.\(binding.model).\(binding.action)(\(binding.item).\(binding.key), value);")
+                writer.line("this.\(binding.model).\(binding.action)(\(binding.item).\(binding.key), enabled);")
             default:
                 throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state, parent binding or typed item binding.",
                                  suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)

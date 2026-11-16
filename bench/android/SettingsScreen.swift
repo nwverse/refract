@@ -25,7 +25,7 @@ struct SettingsScreen: View {
                         Text(row.title)
                         Text(row.subtitle)
                     }
-                    Toggle("Setting \(row.id)", isOn: Binding(
+                    Toggle("settings.item\(row.id)", isOn: Binding(
                         get: { row.enabled },
                         set: { model.setEnabled(row.id, value: $0) }
                     ))

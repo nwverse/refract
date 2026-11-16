@@ -2,7 +2,7 @@
 // Source: Input.swift
 @file:Suppress("RemoveRedundantQualifierName")
 
-package refract.generated
+package refract.generated.itemtoggle
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -43,10 +43,10 @@ public fun ItemToggle(
                 modifier = Modifier,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(text = stringResource(refract.generated.R.string.settings_item, row.id))
+                Text(text = stringResource(refract.generated.itemtoggle.R.string.settings_item, row.id))
                 Switch(
                     checked = row.enabled,
-                    onCheckedChange = { value -> model.setEnabled(row.id, value) },
+                    onCheckedChange = { enabled -> model.setEnabled(row.id, enabled) },
                 )
             }
         }

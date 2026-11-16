@@ -30,8 +30,8 @@ export struct ItemToggle {
             Text($r('app.string.settings_item', row.id))
             Blank()
             Toggle({ type: ToggleType.Switch, isOn: row.enabled })
-              .onChange((value: boolean) => {
-                this.model.setEnabled(row.id, value);
+              .onChange((enabled: boolean) => {
+                this.model.setEnabled(row.id, enabled);
               })
           }
           .justifyContent(FlexAlign.SpaceBetween)

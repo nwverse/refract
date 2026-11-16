@@ -2,6 +2,10 @@
   "schemaVersion": 1,
   "cases": [
     {
+      "path": "benchmark-settings",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "compose-image",
       "implementationStatus": "ready"
     },
@@ -243,6 +247,10 @@
     },
     {
       "path": "v0-item-toggle",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-item-toggle-value",
       "implementationStatus": "ready"
     },
     {

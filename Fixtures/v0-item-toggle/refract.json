@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "android": {
-    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "output": { "directory": "generated", "packageName": "refract.generated.itemtoggle" },
     "imports": [],
     "components": {},
     "nativeComponents": {},
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
-      "className": "refract.generated.R",
+      "className": "refract.generated.itemtoggle.R",
       "catalog": "values/strings.xml",
       "strings": { "settings.item": "settings_item" }
     }

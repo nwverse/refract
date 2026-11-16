@@ -25,6 +25,7 @@ measurement and no performance claim (goal 2 of docs/GOALS.md).
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import shutil
 import subprocess
 import sys
@@ -90,14 +91,18 @@ def regenerate_and_stage(fixture: str) -> None:
                 "regenerate and review it"
             )
 
-    STAGING_JAVA.mkdir(parents=True, exist_ok=True)
+    # Preserve each fixture's declared package while sharing the fixture module's R class.
+    # Android library R classes are generated in the Gradle namespace, not each Kotlin subpackage.
+    package = json.loads(mapping_json.read_text(encoding="utf-8"))["android"]["output"]["packageName"]
+    namespace = "refract.generated"
+    package_directory = STAGING_JAVA.parent.joinpath(*package.split("."))
+    package_directory.mkdir(parents=True, exist_ok=True)
+    generated = expected_kt.read_text(encoding="utf-8").replace(
+        f"{package}.R.", f"{namespace}.R."
+    )
+    target = package_directory / f"{fixture}.kt"
+    target.write_text(generated, encoding="utf-8")
     STAGING_RES.mkdir(parents=True, exist_ok=True)
-    # Drop the per-fixture Kotlin into the package path expected by the fixture's
-    # `package refract.generated` declaration. The file name is the fixture name
-    # so two fixtures that both define a struct named e.g. `LocalState` cannot
-    # collide on disk.
-    target = STAGING_JAVA / f"{fixture}.kt"
-    target.write_bytes(expected_kt.read_bytes())
     # Each fixture brings its own values/strings.xml. Concatenate the entries
     # into a single staged strings.xml so that resources with the same name do
     # not silently override each other.

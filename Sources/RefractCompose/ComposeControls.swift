@@ -41,7 +41,7 @@ extension ComposeBackend {
         case let .valueProperty(.binding(name)):
             onChange = "on\(name.uppercasingFirst())Change"
         case let .valueProperty(.itemBinding(binding)):
-            onChange = "{ value -> \(binding.model).\(binding.action)(\(binding.item).\(binding.key), value) }"
+            onChange = "{ enabled -> \(binding.model).\(binding.action)(\(binding.item).\(binding.key), enabled) }"
         default:
             throw Diagnostic(code: "state.invalid_projection", message: "A switch needs a local state, parent binding or typed item binding.",
                              suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)
