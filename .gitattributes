@@ -1,0 +1,2 @@
+# Generated golden outputs are compared byte for byte.
+Fixtures/** -text

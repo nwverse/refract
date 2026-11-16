@@ -1,0 +1,29 @@
+name: Feature request
+description: A new capability or an improvement to an existing one
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Write in any language.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who needs this, in what situation, and why the current behavior falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable statements, naming the goals in docs/GOALS.md this must keep and the evidence for each.
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true

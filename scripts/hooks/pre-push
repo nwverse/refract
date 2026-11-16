@@ -1,0 +1,25 @@
+#!/bin/bash
+# Refuse a push whose commits would bring private values: what each pushed branch adds on top of origin/main, with
+# the commit messages. A branch that shares no history with it is scanned whole. Install: git config core.hooksPath scripts/hooks
+set -u
+root="$(git rev-parse --show-toplevel)"
+zero="0000000000000000000000000000000000000000"
+refused=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue # a deletion
+  base=""
+  for ref in refs/remotes/origin/main "$remote_sha"; do
+    sha="$(git rev-parse --verify -q "$ref^{commit}")" || continue
+    base="$sha"
+    break
+  done
+  if [ -z "$base" ]; then # an empty remote: scan everything
+    python3 "$root/scripts/privacy_check.py" --range "$local_sha..$local_sha" </dev/null >&2 || refused="$refused $remote_ref"
+    python3 "$root/scripts/privacy_check.py" </dev/null >&2 || refused="$refused $remote_ref"
+    continue
+  fi
+  python3 "$root/scripts/privacy_check.py" --range "$base..$local_sha" </dev/null >&2 || refused="$refused $remote_ref"
+done
+[ -z "$refused" ] && exit 0
+echo "pre-push: refused$refused; fix what is reported above" >&2
+exit 1

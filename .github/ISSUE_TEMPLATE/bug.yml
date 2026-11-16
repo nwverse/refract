@@ -1,0 +1,43 @@
+name: Bug report
+description: Generated code, diagnostics or tooling behave differently from the docs or from what you expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Write in any language. Redact tokens, host names, emails and private paths before pasting logs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Minimal Swift input
+      description: The smallest Refract source (and refract.json, if relevant) that shows the problem.
+      render: swift
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Affected backend
+      multiple: true
+      options:
+        - iOS (SwiftUI source)
+        - Android (Jetpack Compose)
+        - HarmonyOS (ArkUI)
+        - Generator / CLI
+        - Docs
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Refract commit or version, Swift version, platform toolchain versions.

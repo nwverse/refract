@@ -1,0 +1,24 @@
+.DS_Store
+# SwiftPM and editors
+/.build/
+/.swiftpm/
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+Package.resolved.orig
+# Gradle / Android / Kotlin
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+# HarmonyOS
+oh_modules/
+.hvigor/
+# Node and Python
+node_modules/
+__pycache__/
+# Agent worktrees and machine-specific notes (see CLAUDE.md)
+/.worktrees/
+/CLAUDE.local.md
+/tmp/
