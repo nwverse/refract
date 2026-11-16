@@ -86,6 +86,18 @@ func unsupportedEnumDeclarationsAreRejected(_ declaration: String) {
     #expect(throws: Diagnostic.self) { _ = try ArkUIBackend().generate(module: module) }
 }
 
+@Test func enumInputIsNotImplicitlyAString() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum Tab { case home }
+    struct WrongText: View {
+        let tab: Tab
+        var body: some View { Text("Selected: \\(tab)") }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFSEM002"])
+    #expect(unit.module.screens.isEmpty)
+}
+
 private extension String {
     func index(of substring: String) -> String.Index? { range(of: substring)?.lowerBound }
 }

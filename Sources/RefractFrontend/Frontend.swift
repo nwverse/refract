@@ -208,7 +208,8 @@ final class Builder: SyntaxVisitor {
                 return .text(value, modifiers: [], location: nodeLocation)
             }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
-                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText)
+                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText,
+                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
             guard let value = parser.text(call, arguments: call.arguments) else {
                 diagnostics.append(contentsOf: parser.diagnostics)
                 return nil
@@ -227,7 +228,8 @@ final class Builder: SyntaxVisitor {
             let action = localStateAction(call.trailingClosure)
             guard action != nil || call.trailingClosure?.statements.isEmpty != false else { return nil }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
-                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText)
+                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText,
+                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
             guard let labelText = parser.text(call, arguments: call.arguments,
                                               allowsTrailingClosure: true) else {
                 diagnostics.append(contentsOf: parser.diagnostics)
@@ -312,6 +314,12 @@ final class Builder: SyntaxVisitor {
                                              location: location(of: expression)), nil)
         }
         if let reference = expression.as(DeclReferenceExprSyntax.self) {
+            // An enum is a finite control-flow subject, not a scalar text or formatting value.
+            guard !parameters.contains(where: { $0.name == reference.baseName.text && $0.enumName != nil }) else {
+                error("RFSEM002", "An enum input cannot be used as a scalar expression.",
+                      "Switch explicitly over the enum, or expose a separate scalar model property", at: expression)
+                return nil
+            }
             // A bare screen input carries its declared type; nested model members are refined by the state frontend.
             let name = reference.baseName.text
             let type = parameters.first { $0.name == name }?.type
@@ -368,8 +376,8 @@ final class Builder: SyntaxVisitor {
         }
         guard let expression = item.item.as(ExprSyntax.self) else {
             if item.item.is(SwitchExprSyntax.self) {
-                error("RFCTRL003", "This switch cannot be lowered yet.",
-                      "Use exhaustive switches over declared no-payload enums when that slice is implemented", at: item)
+                error("RFCTRL003", "Switch requires a declared enum-typed immutable screen input.",
+                      "Use `let value: YourEnum` with a local no-payload enum declaration", at: item)
             } else {
                 error("unsupportedStatement", "Only view expressions and typed conditionals are allowed in a view builder.",
                       "Remove local statements or move them behind a model", at: item)
@@ -401,12 +409,9 @@ final class Builder: SyntaxVisitor {
             if let switchStatement = first.item.as(ExpressionStmtSyntax.self)?.expression.as(SwitchExprSyntax.self) {
                 return view(switchStatement)
             }
-            if let switchExpression = first.item.as(ExpressionStmtSyntax.self)?.expression.as(SwitchExprSyntax.self) {
-                return rejectUnsupportedControlFlow(ExprSyntax(switchExpression))
-            }
             if first.item.is(SwitchExprSyntax.self) {
-                error("RFCTRL003", "This switch cannot be lowered yet.",
-                      "Use exhaustive switches over declared no-payload enums when that slice is implemented", at: first)
+                error("RFCTRL003", "Switch requires a declared enum-typed immutable screen input.",
+                      "Use `let value: YourEnum` with a local no-payload enum declaration", at: first)
                 return nil
             }
             error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",

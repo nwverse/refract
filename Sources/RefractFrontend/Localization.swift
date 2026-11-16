@@ -99,6 +99,18 @@ struct LocalizationFrontend {
     let converter: SourceLocationConverter
     let scalar: (ExprSyntax) -> TypedExpression?
     let stateText: (ExprSyntax) -> Expression?
+    let enumInputNames: Set<String>
+
+    init(file: String, converter: SourceLocationConverter,
+         scalar: @escaping (ExprSyntax) -> TypedExpression?,
+         stateText: @escaping (ExprSyntax) -> Expression?,
+         enumInputNames: Set<String> = []) {
+        self.file = file
+        self.converter = converter
+        self.scalar = scalar
+        self.stateText = stateText
+        self.enumInputNames = enumInputNames
+    }
     private(set) var diagnostics: [Diagnostic] = []
 
     mutating func text(_ call: FunctionCallExprSyntax, arguments: LabeledExprListSyntax,
@@ -235,9 +247,21 @@ struct LocalizationFrontend {
                 key += segment.content.text
             case let .expressionSegment(segment):
                 let expressions = segment.expressions.map(\.expression)
-                guard expressions.count == 1, let expression = expressions.first,
-                      let value = scalar(expression) else {
+                guard expressions.count == 1, let expression = expressions.first else {
                     error("R.string.interpolation", "Localized interpolation must contain one typed scalar expression.",
+                          "Use a declared String, Int or Double input without custom formatting", at: segment)
+                    return nil
+                }
+                if let reference = expression.as(DeclReferenceExprSyntax.self),
+                   enumInputNames.contains(reference.baseName.text) {
+                    diagnostics.append(Diagnostic(code: "RFSEM002",
+                        message: "An enum input cannot be used as a scalar expression.",
+                        suggestion: "Switch explicitly over the enum, or expose a separate scalar model property",
+                        location: location(of: expression)))
+                    return nil
+                }
+                guard let value = scalar(expression) else {
+                    error("R.string.interpolation", "Localized interpolation requires a supported scalar expression.",
                           "Use a declared String, Int or Double input without custom formatting", at: segment)
                     return nil
                 }
