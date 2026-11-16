@@ -238,20 +238,21 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFSYN004` | Unsupported declaration, method or computed property | Move logic into the model protocol or a native component |
 | `RFSEM001` | Expression is outside the typed subset | Use a declared scalar property or a model action |
 | `RFSEM002` | Type is not supported or cannot be inferred | Declare an explicit supported type |
-| `RFSEM003` | Mutation occurs while evaluating `body` | Move the mutation into a control action |
-| `RFVIEW001` | View has no v0 mapping | Use a supported view or declare a typed native component |
-| `RFVIEW002` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |
+| `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
+| `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
+| `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |
 | `RFVIEW003` | Modifier argument or axis is unsupported | Use a documented token, scalar dimension or alignment |
 | `RFVIEW004` | Container children or label shape is invalid | Use the documented child and label forms |
 | `RFVIEW005` | Per-platform variation is hidden in free-form `#if` | Use the declared, type-checked platform-value construct |
 | `RFLIST001` | Collection lacks a stable, typed identity | Use `Identifiable` with a stored String or Int id |
 | `RFLIST002` | Index, object identity or generated UUID is used as a key | Use the item's stable stored id |
 | `RFLIST003` | Dynamic rows are eagerly rendered | Use List with an identifiable model collection |
-| `RFSTATE001` | Property wrapper is unsupported | Use @State, @Binding or a plain let model input as documented |
-| `RFSTATE002` | State declaration lacks a supported literal initializer | Initialize state with a Bool, Int, Double or String literal |
-| `RFSTATE003` | Binding has an initializer or unsupported type | Pass an initialized binding from the parent with a supported scalar type |
-| `RFSTATE004` | Model protocol or observation contract is invalid | Declare a RefractModel protocol with typed properties and Void actions |
-| `RFSTATE005` | Model construction or required observation is missing | Inject the application-owned observed model through the component parameter |
+| `state.invalid_declaration` | Property wrapper or stored input is outside the supported ownership contract | Use @State, @Binding or a plain let model input as documented |
+| `state.missing_initializer` | Local state lacks a supported literal initializer | Initialize state with a Bool, Int, Double or String literal |
+| `state.binding_initializer` | Binding has an initializer or unsupported ownership | Pass an initialized binding from the parent with a supported scalar type |
+| `model.invalid_property` | Model property is writable, computed, static or untyped | Declare a get-only typed instance property on a RefractModel protocol |
+| `model.invalid_action` | Model action is async, throwing or otherwise unsupported | Declare a synchronous nonthrowing Void action with supported parameters |
+| `model.unsupported_requirement` | Model has associated types, initializers or another unsupported requirement | Keep other requirements in app-owned native code |
 | `R.string.literal` | User-facing literal text is not explicitly non-localized | Use a resource key or Text(verbatim:) for intentional literal text |
 | `R.string.invalid_key` | Key is not canonical or is dynamically selected | Use lowercase ASCII letters/digits in nonempty dot-separated segments |
 | `R.string.not_configured` | Resource configuration is missing | Configure the platform resource registry and base catalog |
@@ -267,7 +268,7 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFMAP002` | Component, token, symbol or resource mapping is missing | Declare the required mapping for both target platforms |
 | `RFMAP003` | Mapping types or argument labels disagree | Align the Swift declaration and both platform bindings |
 | `RFNATIVE001` | Native component declaration is missing | Declare the application view and both typed platform implementations |
-| `RFNATIVE002` | Native component parameters disagree | Match every parameter label and supported type across the declarations |
+| `RFMAP003` | Native component parameters disagree with the Swift declaration or platform binding | Match every parameter label and supported type in declaration order |
 | `RFNATIVE003` | Platform-value declaration is malformed or incomplete | Declare one typed value for every required platform |
 
 ## 7. Corpus coverage
@@ -313,9 +314,9 @@ Every case directory has the `v0-` prefix. The manifest is the authoritative lis
 Backend and feature issues may add focused cases, but must not create a competing semantics corpus. A correction to
 source meaning, diagnostics or golden performance behavior is coordinated on issue #2 and documented here.
 
-The initial corpus has 30 v0 cases: 18 accepted and 12 rejected. `v0-literal-text` is the first new ready case;
-other cases remain explicitly pending until their owning frontend/backend lands. This is reviewed hand-written
-coverage, not a claim that all 30 already pass generation.
+The initial corpus has 30 v0 cases: 18 accepted and 12 rejected. `Fixtures/Corpus.json` is the authoritative
+ready/pending record. Cases become ready only after actual dual-backend golden verification; every other case remains
+explicitly pending. The corpus is reviewed hand-written coverage, not a claim that all 30 already pass generation.
 
 A localized case's mapping declares its keys under both platform `resources.strings` tables. Its fixture also
 includes `values/strings.xml` and `resources/base/element/string.json`, so key existence and formatting can be
