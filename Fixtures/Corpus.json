@@ -7,19 +7,19 @@
     },
     {
       "path": "interop-native-callers",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-native-component",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-native-mismatch",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-native-missing",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-native-undeclared",
@@ -27,7 +27,7 @@
     },
     {
       "path": "interop-platform-value",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-platform-value-incomplete",
@@ -35,7 +35,7 @@
     },
     {
       "path": "interop-platform-view",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "interop-reject-conditional-compilation",

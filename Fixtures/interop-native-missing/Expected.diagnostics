@@ -1,2 +1,2 @@
-Input.swift:14:9: error [RFMAP002]: Native component `RoutePreview` has no Android mapping. Suggestion: Declare a composable implementation with ordered parameters `zoom: Double`, `showsTraffic: Bool`.
-Input.swift:14:9: error [RFMAP002]: Native component `RoutePreview` has no HarmonyOS mapping. Suggestion: Declare a component implementation with ordered parameters `zoom: Double`, `showsTraffic: Bool`.
+Input.swift:14:9: error [RFMAP002]: Native component `RoutePreview` has no Android mapping. Suggestion: Declare a typed implementation with ordered parameters `zoom: double, showsTraffic: bool`.
+Input.swift:14:9: error [RFMAP002]: Native component `RoutePreview` has no HarmonyOS mapping. Suggestion: Declare a typed implementation with ordered parameters `zoom: double, showsTraffic: bool`.

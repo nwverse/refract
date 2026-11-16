@@ -61,6 +61,25 @@ func nativeMappingRejectsWrongHarmonyStyle(style: NativeTarget.ArgumentStyle) th
     #expect(error?.diagnostics.allSatisfy { $0.code == "RFMAP003" } == true)
 }
 
+@Test func nativeMappingRejectsOnlyTheMismatchedLegacyTarget() throws {
+    let android = NativeTarget(symbol: "RoutePreview", module: "example.maps", kind: .composable,
+        argumentStyle: .named,
+        parameters: [NativeTarget.Parameter(label: "zoom", type: .double, targetType: "Double"),
+                     NativeTarget.Parameter(label: "showsTraffic", type: .bool, targetType: "Boolean")],
+        arguments: [NativeTarget.Argument(source: "zoom", target: "cameraZoom"),
+                    NativeTarget.Argument(source: "showsTraffic", target: "showsTraffic")])
+    let harmony = NativeTarget(symbol: "RoutePreview", module: "example.maps", kind: .component,
+        argumentStyle: .object,
+        parameters: [NativeTarget.Parameter(label: "zoom", type: .double, targetType: "string"),
+                     NativeTarget.Parameter(label: "showsTraffic", type: .bool, targetType: "boolean")],
+        arguments: android.arguments)
+    let error = #expect(throws: InteropMappingError.self) {
+        try InteropMapping.validate(declaration: declaration, android: android, harmonyOS: harmony)
+    }
+    #expect(error?.diagnostics.count == 1)
+    #expect(error?.diagnostics[0].message.contains("HarmonyOS") == true)
+}
+
 @Test func nativeMappingRejectsInvalidSymbolAndTargetLabel() throws {
     let invalid = NativeTarget(symbol: "RoutePreview()", module: "example.maps", kind: .composable,
         argumentStyle: .named,
