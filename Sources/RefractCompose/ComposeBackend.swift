@@ -16,6 +16,7 @@ public struct ComposeBackend: Sendable {
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
         if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
+        try emitEnumDeclarations(module.enums, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
@@ -90,7 +91,7 @@ public struct ComposeBackend: Sendable {
         var parameters: [String] = []
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
-            parameters.append("\(input.name): \(kotlinType(input.type))")
+            parameters.append("\(input.name): \(input.enumName ?? kotlinType(input.type))")
         }
         for state in screen.states {
             switch state {
@@ -161,8 +162,11 @@ public struct ComposeBackend: Sendable {
             for child in alternatives.android {
                 try emit(child, isRoot: isRoot, into: &out, context: &context)
             }
+        case let .switchExpression(subject, enumName, cases, location):
+            try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases, isRoot: isRoot,
+                               location: location, into: &out, context: &context)
         case let .conditional(branches, location):
-            try emitConditional(branches, location: location, into: &out, context: &context)
+            try emitControlFlow(branches, isRoot: isRoot, location: location, into: &out, context: &context)
         }
     }
 
@@ -250,14 +254,6 @@ public struct ComposeBackend: Sendable {
         for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
             out.line(String(line))
         }
-    }
-
-    private func emitConditional(_ branches: [ViewNode.ConditionBranch], location: SourceLocation?,
-                                 into out: inout KotlinWriter, context: inout Context) throws {
-        throw Diagnostic(code: "RF-C001",
-                         message: "Conditional lowering is not yet supported by the Compose backend.",
-                         suggestion: "Use a model-driven view instead.",
-                         location: location)
     }
 
     // MARK: - Modifiers

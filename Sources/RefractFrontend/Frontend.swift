@@ -17,7 +17,8 @@ public struct Frontend {
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
                                               nativeDeclarations: builder.interop.declarations,
-                                              models: builder.models, itemTypes: builder.itemTypes),
+                                              models: builder.models, itemTypes: builder.itemTypes,
+                                              enums: builder.enums),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -34,8 +35,10 @@ final class Builder: SyntaxVisitor {
     var currentStates: [StateDeclaration] = []
     var models: [ModelProtocol] = []
     var itemTypes: [ItemType] = []
+    var enums: [EnumDeclaration] = []
     var currentModels: [ModelReference] = []
     var currentListItem: String?
+    var currentListItemType: ItemType?
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -51,6 +54,7 @@ final class Builder: SyntaxVisitor {
                   }) == true else { return nil }
             return declaration.name.text
         })
+        collectEnums(tree)
         collectItemTypes(tree)
         collectModels(tree)
     }
@@ -87,13 +91,8 @@ final class Builder: SyntaxVisitor {
                   "Return a supported view from `body`.", at: node.name)
             return .skipChildren
         }
-        guard let expression = expression(in: items) else {
-            if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
-                return .visitChildren
-            }
-            error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
-                  "Return a supported view from `body`.", at: binding.pattern)
-            return .skipChildren
+        if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
+            return .visitChildren
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
         currentStates = states
@@ -105,7 +104,7 @@ final class Builder: SyntaxVisitor {
             currentStates = []
             currentModels = []
         }
-        guard let root = view(expression) else { return .skipChildren }
+        guard let root = viewStatements(items, body: binding) else { return .skipChildren }
 
         screens.append(Screen(name: node.name.text, parameters: parameters, states: states,
                               body: root, location: location(of: node.name)))
@@ -206,11 +205,17 @@ final class Builder: SyntaxVisitor {
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
             if let argument = call.arguments.first, argument.label == nil,
-               let value = modelProperty(argument.expression) {
-                return .text(value, modifiers: [], location: nodeLocation)
+               let value = modelTypedProperty(argument.expression) {
+                guard value.type == .string else {
+                    error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
+                          "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
+                    return nil
+                }
+                return .text(value.expression, modifiers: [], location: nodeLocation)
             }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
-                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText)
+                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText,
+                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
             guard let value = parser.text(call, arguments: call.arguments) else {
                 diagnostics.append(contentsOf: parser.diagnostics)
                 return nil
@@ -229,7 +234,8 @@ final class Builder: SyntaxVisitor {
             let action = localStateAction(call.trailingClosure)
             guard action != nil || call.trailingClosure?.statements.isEmpty != false else { return nil }
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
-                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText)
+                                              stateText: currentStates.isEmpty ? { _ in nil } : stateText,
+                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
             guard let labelText = parser.text(call, arguments: call.arguments,
                                               allowsTrailingClosure: true) else {
                 diagnostics.append(contentsOf: parser.diagnostics)
@@ -314,6 +320,12 @@ final class Builder: SyntaxVisitor {
                                              location: location(of: expression)), nil)
         }
         if let reference = expression.as(DeclReferenceExprSyntax.self) {
+            // An enum is a finite control-flow subject, not a scalar text or formatting value.
+            guard !parameters.contains(where: { $0.name == reference.baseName.text && $0.enumName != nil }) else {
+                error("RFSEM002", "An enum input cannot be used as a scalar expression.",
+                      "Switch explicitly over the enum, or expose a separate scalar model property", at: expression)
+                return nil
+            }
             // A bare screen input carries its declared type; nested model members are refined by the state frontend.
             let name = reference.baseName.text
             let type = parameters.first { $0.name == name }?.type
@@ -355,15 +367,64 @@ final class Builder: SyntaxVisitor {
         guard let closure else { return [] }
         var result: [ViewNode] = []
         for item in closure.statements {
-            guard let expression = item.item.as(ExprSyntax.self) else {
-                error("unsupportedStatement", "Only view expressions are allowed in a view builder.",
-                      "Remove local statements or move them behind a model.", at: item)
-                return nil
-            }
-            guard let child = view(expression) else { return nil }
+            guard let child = viewStatement(item) else { return nil }
             result.append(child)
         }
         return result
+    }
+
+    func viewStatement(_ item: CodeBlockItemSyntax) -> ViewNode? {
+        if let statement = item.item.as(ExpressionStmtSyntax.self) {
+            if let conditional = statement.expression.as(IfExprSyntax.self) { return view(conditional) }
+            if let switchStatement = statement.expression.as(SwitchExprSyntax.self) {
+                return view(switchStatement)
+            }
+        }
+        guard let expression = item.item.as(ExprSyntax.self) else {
+            if item.item.is(SwitchExprSyntax.self) {
+                error("RFCTRL003", "Switch requires a declared enum-typed immutable screen input.",
+                      "Use `let value: YourEnum` with a local no-payload enum declaration", at: item)
+            } else {
+                error("unsupportedStatement", "Only view expressions and typed conditionals are allowed in a view builder.",
+                      "Remove local statements or move them behind a model", at: item)
+            }
+            return nil
+        }
+        if let switchStatement = expression.as(SwitchExprSyntax.self) {
+            return view(switchStatement)
+        }
+        return view(expression)
+    }
+
+    func viewStatements(_ items: CodeBlockItemListSyntax, body: PatternBindingSyntax) -> ViewNode? {
+        if items.count != 1, items.first != nil {
+            diagnostics.append(Diagnostic(code: "unsupportedViewBody",
+                message: "The `body` getter must return exactly one view expression.",
+                suggestion: "Return a supported view from `body`.", location: location(of: body.pattern)))
+            return nil
+        }
+        guard expression(in: items) != nil else {
+            guard items.count == 1, let first = items.first else {
+                error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
+                      "Return a supported view from `body`.", at: items)
+                return nil
+            }
+            if let conditional = first.item.as(ExpressionStmtSyntax.self)?.expression.as(IfExprSyntax.self) {
+                return view(conditional)
+            }
+            if let switchStatement = first.item.as(ExpressionStmtSyntax.self)?.expression.as(SwitchExprSyntax.self) {
+                return view(switchStatement)
+            }
+            if first.item.is(SwitchExprSyntax.self) {
+                error("RFCTRL003", "Switch requires a declared enum-typed immutable screen input.",
+                      "Use `let value: YourEnum` with a local no-payload enum declaration", at: first)
+                return nil
+            }
+            error("unsupportedViewBody", "The `body` getter must return exactly one view expression.",
+                  "Return a supported view from `body`.", at: body.pattern)
+            return nil
+        }
+        return viewStatement(items.first!)
     }
 
     func expression(in items: CodeBlockItemListSyntax) -> ExprSyntax? {

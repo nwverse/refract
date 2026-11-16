@@ -4,7 +4,7 @@
 @ComponentV2
 export struct LocalizedPlain {
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text($r('app.string.settings_title'))
       Text($r('app.string.settings_subtitle'))
       Text($r('app.string.settings_footer'))

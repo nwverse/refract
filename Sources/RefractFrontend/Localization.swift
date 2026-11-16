@@ -48,8 +48,17 @@ extension Builder {
                 continue
             }
             guard variable.bindingSpecifier.tokenKind == .keyword(.let), binding.initializer == nil,
-                  binding.accessorBlock == nil, let type = binding.typeAnnotation?.type,
-                  let valueType = ValueType(frontendName: type.trimmedDescription) else {
+                  binding.accessorBlock == nil, let type = binding.typeAnnotation?.type else {
+                error("R.string.interpolation", "Formatted text inputs must be immutable typed properties.",
+                      "Declare a supported scalar or local no-payload enum input", at: member)
+                return nil
+            }
+            if let declaration = enums.first(where: { $0.name == type.trimmedDescription }) {
+                parameters.append(ScreenParameter(name: identifier.text, type: .string, enumName: declaration.name,
+                                                  location: location(of: identifier)))
+                continue
+            }
+            guard let valueType = ValueType(frontendName: type.trimmedDescription) else {
                 error("R.string.interpolation", "Formatted text inputs must be immutable String, Int or Double properties.",
                       "Declare inputs as `let name: String`, `let count: Int` or `let ratio: Double`", at: member)
                 return nil
@@ -59,12 +68,17 @@ extension Builder {
         }
         guard let body, let binding = body.bindings.first,
               let accessors = binding.accessorBlock?.accessors,
-              case let .getter(items) = accessors,
-              let expression = expression(in: items), let root = view(expression) else {
+              case let .getter(items) = accessors else {
             error("unsupportedViewBody", "A View with scalar inputs must have one expression-bodied body.",
                   "Return a supported view from `body`", at: node.name)
             return nil
         }
+        if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
+            error("RFVIEW005", "Free-form conditional compilation hides platform-specific Swift code from the generator.",
+                  "Use `refractValue`, `refractView`, or a declared `RefractNativeView`", at: body)
+            return nil
+        }
+        guard let root = viewStatements(items, body: binding) else { return nil }
         return Screen(name: node.name.text, parameters: parameters, body: root,
                       location: location(of: node.name))
     }
@@ -85,6 +99,18 @@ struct LocalizationFrontend {
     let converter: SourceLocationConverter
     let scalar: (ExprSyntax) -> TypedExpression?
     let stateText: (ExprSyntax) -> Expression?
+    let enumInputNames: Set<String>
+
+    init(file: String, converter: SourceLocationConverter,
+         scalar: @escaping (ExprSyntax) -> TypedExpression?,
+         stateText: @escaping (ExprSyntax) -> Expression?,
+         enumInputNames: Set<String> = []) {
+        self.file = file
+        self.converter = converter
+        self.scalar = scalar
+        self.stateText = stateText
+        self.enumInputNames = enumInputNames
+    }
     private(set) var diagnostics: [Diagnostic] = []
 
     mutating func text(_ call: FunctionCallExprSyntax, arguments: LabeledExprListSyntax,
@@ -221,9 +247,21 @@ struct LocalizationFrontend {
                 key += segment.content.text
             case let .expressionSegment(segment):
                 let expressions = segment.expressions.map(\.expression)
-                guard expressions.count == 1, let expression = expressions.first,
-                      let value = scalar(expression) else {
+                guard expressions.count == 1, let expression = expressions.first else {
                     error("R.string.interpolation", "Localized interpolation must contain one typed scalar expression.",
+                          "Use a declared String, Int or Double input without custom formatting", at: segment)
+                    return nil
+                }
+                if let reference = expression.as(DeclReferenceExprSyntax.self),
+                   enumInputNames.contains(reference.baseName.text) {
+                    diagnostics.append(Diagnostic(code: "RFSEM002",
+                        message: "An enum input cannot be used as a scalar expression.",
+                        suggestion: "Switch explicitly over the enum, or expose a separate scalar model property",
+                        location: location(of: expression)))
+                    return nil
+                }
+                guard let value = scalar(expression) else {
+                    error("R.string.interpolation", "Localized interpolation requires a supported scalar expression.",
                           "Use a declared String, Int or Double input without custom formatting", at: segment)
                     return nil
                 }

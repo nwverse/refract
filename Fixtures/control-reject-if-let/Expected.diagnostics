@@ -1,0 +1,1 @@
+Input.swift:5:12: error [RFCTRL002]: Optional binding and availability conditions are not supported in view conditionals. Suggestion: Expose a typed Boolean from the model instead
