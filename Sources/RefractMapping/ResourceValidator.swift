@@ -55,8 +55,13 @@ public enum LocalizationResourceValidator {
                 return [items.collection] + visit(items.content)
             case let .image(_, modifiers, _):
                 return modifiers.flatMap(\.arguments)
-            case let .toggle(title, value, modifiers, _):
-                return [title, value] + modifiers.flatMap(\.arguments)
+            case let .toggle(title, value, modifiers, nativeModifiers, _):
+                return [title, value] + modifiers.flatMap(\.arguments) + nativeModifiers.compactMap {
+                    switch $0.operation {
+                    case let .testTag(value), let .contentDescription(value): value
+                    case .retainCallback: nil
+                    }
+                }
             case let .textInput(placeholder, value, modifiers, _):
                 return (placeholder.map { [$0] } ?? []) + [value] + modifiers.flatMap(\.arguments)
             case let .label(title, _, modifiers, _):

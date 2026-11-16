@@ -74,6 +74,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-measurement",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-mismatch",
       "implementationStatus": "ready"
     },

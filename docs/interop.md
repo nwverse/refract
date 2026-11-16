@@ -181,6 +181,7 @@ action appear in the message or suggestion.
 | `RFMAP003` | Missing, extra, reordered or mistyped mapping parameters | Match the stored-property signature exactly |
 | `RFNATIVE002` | Wrong label, order, count or source argument type | Use the memberwise SwiftUI initializer signature |
 | `RFNATIVE003` | A `refractValue` or `refractView` alternative is absent, repeated or differently typed | Supply the three required alternatives with compatible types |
+| `RFNATIVE004` | Unknown/mistyped native measurement operation, invalid receiver or unstable callback capture | Use the closed `refractNativeModifier` operations and explicit stable model/item identity |
 | `RFVIEW005` | A free-form `#if` in generated input | Use `refractValue`, `refractView` or a native component |
 | `RFSEM001` | Side-effecting, opaque or otherwise unsupported branch content | Use a supported value, view subtree or declared model |
 
@@ -232,6 +233,65 @@ avoid both problems. Although the source syntax wraps a subtree, generation flat
 
 Free-form conditional compilation is not an alternative. It can hide arbitrary declarations from the generator and
 let platforms drift, so the frontend rejects it even when it names a supported operating system.
+
+## Measurement and retained native callbacks
+
+A benchmark or an existing native test harness can require native measurement hooks without changing the source's
+accessibility or callback semantics. Use an explicit platform view branch and the closed
+`refractNativeModifier` operation list; do not invent SwiftUI `testTag` or `remember` modifiers for iOS:
+
+```swift
+refractView(
+    ios: {
+        Toggle("settings.item\(row.id)", isOn: itemEnabled)
+            .accessibilityLabel(row.title)
+    },
+    android: {
+        Toggle("settings.item\(row.id)", isOn: itemEnabled)
+            .refractNativeModifier(
+                .testTag("settings_toggle"),
+                .contentDescription(row.title),
+                .retainCallback(identity: "settings.setEnabled")
+            )
+    },
+    harmonyOS: {
+        Toggle("settings.item\(row.id)", isOn: itemEnabled)
+            .refractNativeModifier(
+                .testTag("settings_toggle"),
+                .contentDescription(row.title)
+            )
+    }
+)
+```
+
+`RefractNativeModifier` is a source-owned, closed operation enum. It is not a runtime modifier object, an arbitrary
+Kotlin/ArkTS string or a general modifier language. The initial accepted operations are:
+
+- `testTag(String)`: Compose `Modifier.testTag` and ArkUI `.id`, on the actual selected control;
+- `contentDescription(String)`: Compose `Modifier.semantics { contentDescription = ... }` and ArkUI
+  `.accessibilityText`, not a fabricated SwiftUI modifier;
+- `retainCallback(identity: String)`: on Android, retain a checked model action with all of its captured stable
+  references. A no-argument action remembers its model; a typed item-toggle action remembers `(model, row.id)`.
+  The identity must be a literal ASCII dot-separated name of the source action. HarmonyOS rejects this operation
+  until a native typed callback-identity contract is available; it is never silently discarded.
+
+Only values whose source type is statically known to be `String` are accepted for measurement/accessibility text.
+A list item uses the same typed item-property resolution as other supported expressions. The callback's model and
+current item identity are part of the `remember` key: a literal identity alone cannot retain a callback that captures
+an old model or a different row. Arbitrary captures, computed identities, unknown operations and duplicate operations
+are `RFNATIVE004` build-time errors.
+
+The source remains ordinary SwiftUI on iOS. Its real `.accessibilityLabel` behavior is accepted only in the explicit
+iOS branch; an iOS branch does not supply Android test identifiers. There is no generated registry, callback cache,
+wrapper view or runtime platform branch. Typography continues through declared design tokens, such as
+`MaterialTheme.typography.bodyLarge`; row modifiers use ordinary native chains, including
+`.padding(horizontal: 16, vertical: 8)` with one direct Compose `padding` call and the corresponding ArkUI edge object.
+
+`Fixtures/interop-native-measurement` exercises these forms through the real CLI on both backends, including the
+typed item toggle from the model-action contract. It is included in the real Android fixture compilation manifest.
+That proves accepted Kotlin compilation, not macrobenchmark parity or device performance. `bench/android` keeps its
+hand-written reference and labelled generated stand-in unchanged until the complete benchmark integration is
+reviewed; macro execution and complete paired timing evidence belong to #120.
 
 ## Refract inside native code
 

@@ -17,7 +17,7 @@ enum ArkModifiers {
                 case "accessibilityLabel":
                     return ".accessibilityText(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
                 default:
-                    throw Diagnostic(code: "arkui.unsupported_modifier",
+                    throw Diagnostic(code: "RFNATIVE004",
                         message: "Modifier `\(modifier.name)` is not supported on an ArkUI toggle.",
                         suggestion: "Keep native measurement operations on the selected toggle control.",
                         location: modifier.location)

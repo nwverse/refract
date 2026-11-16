@@ -18,8 +18,12 @@ extension ComposeBackend {
                 index += 1
                 continue
             case "padding":
-                let arguments = try ModifierArguments(modifier: modifier).labeled()
-                if modifier.argumentLabels.allSatisfy({ $0 == "horizontal" || $0 == "vertical" || $0 == "value" }),
+                context.imports.insert("androidx.compose.foundation.layout.padding")
+                if modifier.argumentLabels.count == modifier.arguments.count,
+                   modifier.argumentLabels.allSatisfy({ $0 == "horizontal" || $0 == "vertical" }),
+                   !modifier.argumentLabels.isEmpty, modifier.argumentLabels.count == modifier.arguments.count,
+                   modifier.arguments.count > 1,
+                   let arguments = try? ModifierArguments(modifier: modifier).labeled(),
                    Set(arguments.keys).isSubset(of: ["horizontal", "vertical", "value"]),
                    arguments.count == 2 || arguments.count == 4 {
                     context.imports.insert("androidx.compose.foundation.layout.padding")
@@ -39,8 +43,7 @@ extension ComposeBackend {
                     let arguments = try ModifierArguments(modifier: modifier).labeled()
                     guard arguments.count == 2, let axis = arguments["edges"] ?? arguments["horizontal"] ?? arguments["vertical"],
                           let amount = arguments["value"] else {
-                        throw ModifierArguments(modifier: modifier).invalid(
-                            "Use `.padding(.horizontal, value)` or `.padding(.vertical, value)`.")
+                        throw ModifierArguments(modifier: modifier).invalid("Use a declared edge set and spacing value.")
                     }
                     let axisName: String
                     if arguments["horizontal"] != nil {
@@ -187,6 +190,11 @@ extension ComposeBackend {
             throw Diagnostic(code: "RFVIEW003", message: "This modifier requires a declared design token.",
                              suggestion: "Use a token in the mapping's \(category.rawValue) category.", location: expression.location)
         }
-        return try context.mapping.token(name, category: category, platform: .android, location: expression.location)
+        let token = try context.mapping.token(name, category: category, platform: .android, location: expression.location)
+        if token.hasPrefix("androidx.compose.material3.MaterialTheme.") {
+            context.imports.insert("androidx.compose.material3.MaterialTheme")
+            return String(token.dropFirst("androidx.compose.material3.".count))
+        }
+        return token
     }
 }

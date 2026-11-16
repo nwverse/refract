@@ -17,7 +17,10 @@ extension ArkModifiers {
                     parts.append(".padding(\(try length(try arguments.one(), category: .spacing, mapping: mapping)))")
                 } else {
                     let values = try arguments.labeled()
-                    if modifier.argumentLabels.allSatisfy({ $0 != nil }),
+                    if !modifier.argumentLabels.isEmpty,
+                       modifier.argumentLabels.count == modifier.arguments.count,
+                       modifier.arguments.count > 1,
+                       modifier.argumentLabels.allSatisfy({ $0 == "horizontal" || $0 == "vertical" }),
                        Set(values.keys).isSubset(of: ["horizontal", "vertical", "value"]),
                        values.count == 2 || values.count == 4 {
                         var edges: [String] = []
@@ -28,16 +31,16 @@ extension ArkModifiers {
                         }
                         parts.append(".padding({ \(edges.joined(separator: ", ")) })")
                     } else {
-                    guard values.count == 2, let amount = values["value"],
-                          let axis = values["horizontal"] ?? values["vertical"] else {
-                        throw arguments.invalid("Use horizontal or vertical edge insets with one spacing value.")
-                    }
-                    let horizontal = values["horizontal"] != nil
-                    guard case let .reference(name) = axis.value,
-                          name == (horizontal ? ".horizontal" : ".vertical") else {
-                        throw arguments.invalid("Use the matching horizontal or vertical edge set.")
-                    }
-                    let value = try length(amount, category: .spacing, mapping: mapping)
+                        guard values.count == 2, let amount = values["value"],
+                              let axis = values["horizontal"] ?? values["vertical"] else {
+                            throw arguments.invalid("Use horizontal or vertical edge insets with one spacing value.")
+                        }
+                        let horizontal = values["horizontal"] != nil
+                        guard case let .reference(name) = axis.value,
+                              name == (horizontal ? ".horizontal" : ".vertical") else {
+                            throw arguments.invalid("Use the matching horizontal or vertical edge set.")
+                        }
+                        let value = try length(amount, category: .spacing, mapping: mapping)
                         parts.append(horizontal
                             ? ".padding({ left: \(value), right: \(value) })"
                             : ".padding({ top: \(value), bottom: \(value) })")

@@ -91,6 +91,58 @@ private let measurementMapping = Mapping(
     #expect(writer.text.contains("Button(onClick = onClick"))
 }
 
+@Test func retainedItemToggleUsesMergedTypedAction() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol Model: RefractModel {
+        var rows: [Row] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct Row: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct Screen: View {
+        let model: Model
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("settings.item\\(row.id)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                ))
+                .refractNativeModifier(.testTag("settings_toggle"), .contentDescription(row.title), .retainCallback(identity: "settings.setEnabled"))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/interop-native-measurement/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("remember(model, row.id)"))
+    #expect(kotlin.contains("onCheckedChange = onCheckedChange"))
+    #expect(kotlin.contains("modifier = Modifier.testTag(\"settings_toggle\").semantics { contentDescription = row.title }"))
+    let diagnostic = #expect(throws: Diagnostic.self) {
+        try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    }
+    #expect(diagnostic?.code == "RFNATIVE004")
+}
+
+@Test func nativeModifierRejectsComputedAndMisplacedRetention() {
+    let computed = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Invalid: View { var body: some View { Text(verbatim: "Title").refractNativeModifier(.testTag("row_\\(unknown)")) } }
+    """))
+    #expect(computed.diagnostics.contains { $0.code == "RFNATIVE004" })
+    let localState = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Invalid: View {
+        @State private var enabled: Bool = false
+        var body: some View { Toggle("settings.enabled", isOn: $enabled).refractNativeModifier(.retainCallback(identity: "settings.enabled")) }
+    }
+    """))
+    #expect(localState.diagnostics.map(\.code) == ["RFNATIVE004"])
+    let text = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Invalid: View { var body: some View { Text(verbatim: "Title").refractNativeModifier(.retainCallback(identity: "row")) } }
+    """))
+    #expect(text.diagnostics.map(\.code) == ["RFNATIVE004"])
+}
+
 @Test func directionalPaddingAndTypographyKeepNativeRowShape() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct RowShape: View {

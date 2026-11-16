@@ -24,10 +24,17 @@ extension Builder {
         }
         switch name {
         case "padding":
+            if arguments.count == 2, labels == [nil, nil],
+               case let .reference(axis) = arguments[0].value,
+               axis == ".horizontal" || axis == ".vertical" {
+                labels[0] = axis == ".horizontal" ? "horizontal" : "vertical"
+                labels[1] = "value"
+                break
+            }
             if arguments.count == 1, labels == [nil] { break }
             if arguments.count == 2 || arguments.count == 4,
-               Set(labels).isSubset(of: ["horizontal", "vertical", "value"]),
-               labels.contains("horizontal") || labels.contains("vertical") {
+               labels.allSatisfy({ $0 == "horizontal" || $0 == "vertical" || $0 == "value" }),
+               labels.contains(where: { $0 == "horizontal" || $0 == "vertical" }) {
                 if labels.count == 2, labels[0] == nil, labels[1] == nil,
                    case let .reference(axis) = arguments[0].value,
                    axis == ".horizontal" || axis == ".vertical" {

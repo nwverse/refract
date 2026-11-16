@@ -120,7 +120,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case listItem(child: ViewNode, location: SourceLocation?)
     case forEach(ListItems, location: SourceLocation?)
     case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
-    case toggle(title: Expression, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    case toggle(title: Expression, value: Expression, modifiers: [Modifier], nativeModifiers: [NativeModifier] = [], location: SourceLocation?)
     case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
     case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case divider(modifiers: [Modifier], location: SourceLocation?)

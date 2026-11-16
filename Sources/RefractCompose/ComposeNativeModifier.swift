@@ -14,7 +14,7 @@ struct ComposeNativeModifier {
                        context: inout ComposeBackend.Context) throws -> ViewNode {
         var seen: Set<String> = []
         var result = node
-        if operations.contains(where: {
+        if case .button = node, operations.contains(where: {
             if case .retainCallback = $0.operation { return true }
             return false
         }) {

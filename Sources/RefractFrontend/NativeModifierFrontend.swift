@@ -33,7 +33,7 @@ extension Builder {
             case "testTag", "contentDescription":
                 guard operationCall.arguments.count == 1, operationCall.arguments.first?.label == nil,
                       operationCall.trailingClosure == nil,
-                      let value = scalar(operationCall.arguments.first!.expression),
+                      let value = modelTypedProperty(operationCall.arguments.first!.expression) ?? scalar(operationCall.arguments.first!.expression),
                       value.type == .string else {
                     error("RFNATIVE004", "`\(name)` requires one statically typed String value.",
                               "Use a literal, declared String input, or typed item/model String property", at: operationCall)
@@ -46,15 +46,27 @@ extension Builder {
                       operationCall.trailingClosure == nil,
                       let identity = stringLiteral(operationCall.arguments.first!.expression),
                       !identity.isEmpty, identity.allSatisfy({
-                          $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "_" || $0 == "-")
+                          $0.isASCII && ($0.isLetter || $0.isNumber || $0 == ".")
                       }) else {
                     error("RFNATIVE004", "Retained callback identity requires one literal ASCII identifier.",
                               "Use `.retainCallback(identity: \"screen.action\")` on the action-owning view", at: operationCall)
                     return nil
                 }
-                guard case .button = node else {
+                switch node {
+                case let .button(_, action?, _, _):
+                    if case .modelMethod = action { break }
+                    error("RFNATIVE004", "Callback retention requires a typed model action.",
+                              "Attach retention to a Button with a declared model action", at: operationCall)
+                    return nil
+                case let .toggle(_, value, _, _, _):
+                    guard case .valueProperty(.itemBinding) = value.value else {
+                        error("RFNATIVE004", "Toggle callback retention requires a checked item model action.",
+                                  "Use the typed current-item Binding with its stable stored id", at: operationCall)
+                        return nil
+                    }
+                default:
                     error("RFNATIVE004", "Callback retention requires a typed action on the modified view.",
-                              "Attach retention directly to a Button with a declared model action", at: operationCall)
+                              "Attach retention directly to a model-action Button or typed item Toggle", at: operationCall)
                     return nil
                 }
                 operation = .retainCallback(identity: identity)
@@ -66,6 +78,11 @@ extension Builder {
             operations.append(operation)
             locations.append(location(of: operationCall))
         }
+        if case let .toggle(title, value, modifiers, nativeModifiers, location) = node {
+            return .toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers + zip(operations, locations).map {
+                NativeModifier(operation: $0.0, location: $0.1)
+            }, location: location)
+        }
         return .nativeModifier(child: node,
                                operations: zip(operations, locations).map {
                                    NativeModifier(operation: $0.0, location: $0.1)
@@ -75,7 +92,7 @@ extension Builder {
     func accessibilityLabel(_ call: FunctionCallExprSyntax, on node: ViewNode) -> ViewNode? {
         guard call.arguments.count == 1, call.arguments.first?.label == nil,
               call.trailingClosure == nil,
-              let value = scalar(call.arguments.first!.expression), value.type == .string else {
+              let value = modelTypedProperty(call.arguments.first!.expression) ?? scalar(call.arguments.first!.expression), value.type == .string else {
             error("RFNATIVE004", "The iOS accessibilityLabel branch requires one typed String value.",
                       "Keep the real SwiftUI accessibility modifier in the explicit iOS branch", at: call)
             return nil
