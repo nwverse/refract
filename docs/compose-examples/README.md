@@ -1,12 +1,12 @@
 # Compose examples
 
-Hand-written Swift input and the exact Kotlin the Compose backend is expected to emit for it. These are design
-examples, not the conformance corpus: the conformance corpus lives in `Fixtures/` and is owned by #2 with the
-runner from #1. Once those land, every example here moves into `Fixtures/<case>/` unchanged.
+Hand-written Swift input and the intended Kotlin for each Compose lowering decision. These are design examples,
+not the conformance corpus: the executable corpus lives in `Fixtures/`, and the generator and its golden runner
+are now available. Examples are promoted only after frontend support, an IR contract and hand-reviewed expectations
+are ready; they are not executed by the golden runner merely because they live here.
 
-The purpose of this directory is to fix the Kotlin shape **before** the emitter exists, so the implementation is a
-transcription rather than a design exercise. Each example follows `docs/compose-backend.md`; if the two disagree,
-the doc is wrong and is corrected.
+This directory records the Kotlin shape chosen for each construct. Each example follows `docs/compose-backend.md`;
+a disagreement is a design issue to resolve explicitly, not a reason to overwrite either side automatically.
 
 Format: one directory per case, with `Input.swift`, `Expected.kt`, and an optional `Notes.md` explaining the
 choices. `refract.json` is omitted when the case uses only platform defaults; when a case needs design-system
