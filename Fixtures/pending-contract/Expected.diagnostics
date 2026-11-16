@@ -1,1 +1,1 @@
-Input.swift:3:9: error [unsupportedView]: `Image` is not in the supported view subset. Suggestion: Use VStack, HStack, Text, or Button.
+Input.swift:3:9: error [RFNATIVE001]: View `Image` is neither in the supported subset nor declared as a `RefractNativeView`. Suggestion: Declare `Image: RefractNativeView` with typed stored properties and an iOS SwiftUI body
