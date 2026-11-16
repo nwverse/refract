@@ -51,6 +51,31 @@ def regenerate_hello() -> None:
     print("Hello and native-component Kotlin/ArkTS are identical to actual regenerated output")
 
 
+def regenerate_identified_list() -> None:
+    outputs = {
+        "android": ROOT / "examples/android/app/src/main/java/refract/generated/IdentifiedList.kt",
+        "harmony": ROOT / "examples/harmony/entry/src/main/ets/generated/IdentifiedList.ets",
+    }
+    source = ROOT / "examples/shared/IdentifiedList.swift"
+    canonical = ROOT / "Fixtures/v0-identified-list/Input.swift"
+    if source.read_bytes() != canonical.read_bytes():
+        fail("the identified-list example must retain the canonical Swift input")
+    with tempfile.TemporaryDirectory(prefix="refract-list-example-check.") as temporary:
+        output = Path(temporary)
+        subprocess.run([
+            str(ROOT / ".build/debug/refract"), "generate", "--input", str(source),
+            "--android-out", str(output / "android"), "--harmony-out", str(output / "harmony"),
+        ], cwd=ROOT, check=True)
+        for platform, expected in outputs.items():
+            actual = output / platform / expected.name
+            if actual.read_bytes() != expected.read_bytes():
+                fail(
+                    f"regenerated identified-list {platform} differs from "
+                    f"{expected.relative_to(ROOT)}; regenerate and review it"
+                )
+    print("Identified-list Kotlin/ArkTS are identical to actual regenerated canonical output")
+
+
 def check_resources() -> None:
     mapping = json.loads((ROOT / "examples/refract.json").read_text(encoding="utf-8"))
     if mapping.get("schemaVersion") != 1:
@@ -125,6 +150,7 @@ def check_ios_references() -> None:
 def main() -> int:
     try:
         regenerate_hello()
+        regenerate_identified_list()
         check_resources()
         check_harmony_resources()
         check_ios_references()
