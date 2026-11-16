@@ -39,13 +39,24 @@ public enum GoldenRunner {
             // Resolve every localized value before either backend emits. This catches a missing second-platform
             // resource instead of returning one successful output followed by a late backend error.
             try LocalizationResourceValidator.validate(module: unit.module, mapping: mapping)
-            let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
-            let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
-            return GoldenResult(kotlin: kotlin, arkTS: ark, diagnostics: diagnostics)
         } catch let diagnostic as Diagnostic {
             diagnostics.append(diagnostic)
             return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
         }
+        var kotlin: String?
+        var ark: String?
+        do { kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping) }
+        catch let diagnostic as Diagnostic { diagnostics.append(diagnostic) }
+        catch let group as DiagnosticGroup { diagnostics.append(contentsOf: group.diagnostics) }
+        catch let error as InteropMappingError { diagnostics.append(contentsOf: error.diagnostics) }
+        do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
+        catch let diagnostic as Diagnostic { diagnostics.append(diagnostic) }
+        catch let group as DiagnosticGroup { diagnostics.append(contentsOf: group.diagnostics) }
+        catch let error as InteropMappingError { diagnostics.append(contentsOf: error.diagnostics) }
+        guard diagnostics.isEmpty else {
+            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
+        }
+        return GoldenResult(kotlin: kotlin, arkTS: ark, diagnostics: diagnostics)
     }
 
     /// Returns actionable mismatch descriptions instead of rewriting hand-authored expectations.

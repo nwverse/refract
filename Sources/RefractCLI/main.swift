@@ -20,6 +20,12 @@ struct RefractCommand {
         } catch let diagnostic as Diagnostic {
             writeError(diagnostic.rendered)
             exit(1)
+        } catch let group as DiagnosticGroup {
+            for diagnostic in group.diagnostics { writeError(diagnostic.rendered) }
+            exit(1)
+        } catch let error as InteropMappingError {
+            for diagnostic in error.diagnostics { writeError(diagnostic.rendered) }
+            exit(1)
         } catch {
             writeError("refract: \(error)")
             exit(1)
@@ -75,6 +81,10 @@ struct RefractCommand {
             writeError(diagnostic.rendered)
             hasErrors = true
             mapping = .empty
+        } catch let error as MappingError {
+            for diagnostic in error.diagnostics { writeError(diagnostic.rendered) }
+            hasErrors = true
+            mapping = .empty
         }
         guard !hasErrors else { throw CLIError.message("validation stopped because the input has errors") }
         for unit in units {
@@ -84,17 +94,31 @@ struct RefractCommand {
         var outputs: [(directory: String, filename: String, contents: String)] = []
         for unit in units {
             let name = URL(fileURLWithPath: unit.module.sourceFile).deletingPathExtension().lastPathComponent
-            let compose = try ComposeBackend().generate(module: unit.module, mapping: mapping)
-            let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
-            guard command == "generate" else { continue }
+            var compose: String?
+            var ark: String?
+            do { compose = try ComposeBackend().generate(module: unit.module, mapping: mapping) }
+            catch { hasErrors = true; reportGeneration(error) }
+            do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
+            catch { hasErrors = true; reportGeneration(error) }
+            guard command == "generate", let compose, let ark else { continue }
             outputs.append((options["--android-out"]!, name + ".kt", compose))
             outputs.append((options["--harmony-out"]!, name + ".ets", ark))
         }
+        guard !hasErrors else { throw CLIError.message("generation stopped because validation failed") }
         for output in outputs {
             let folder = URL(fileURLWithPath: output.directory, isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try Data(output.contents.utf8).write(to: folder.appendingPathComponent(output.filename), options: .atomic)
         }
+    }
+
+    private static func reportGeneration(_ error: Error) {
+        if let diagnostic = error as? Diagnostic { writeError(diagnostic.rendered) }
+        else if let group = error as? DiagnosticGroup {
+            for diagnostic in group.diagnostics { writeError(diagnostic.rendered) }
+        } else if let error = error as? InteropMappingError {
+            for diagnostic in error.diagnostics { writeError(diagnostic.rendered) }
+        } else { writeError("refract: \(error)") }
     }
 
     private static func writeError(_ text: String) {

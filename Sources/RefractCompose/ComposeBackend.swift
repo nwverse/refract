@@ -11,7 +11,8 @@ public struct ComposeBackend: Sendable {
     public init() {}
 
     public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        var context = Context(mapping: mapping)
+        var context = Context(module: module, mapping: mapping)
+        // Native references validate both target signatures at each call site below.
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
         if !module.models.isEmpty { context.imports.insert("androidx.compose.runtime.State") }
@@ -29,6 +30,14 @@ public struct ComposeBackend: Sendable {
         out.line()
         for item in context.imports.sorted() {
             out.line("import \(item)")
+        }
+        for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
+            out.line("import \(item.module)")
+        }
+        for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
+            if let module = item.value.module {
+                out.line("import \(module).\(item.value.target)")
+            }
         }
         out.append(bodyWriter.text)
         return out.text
@@ -119,7 +128,7 @@ public struct ComposeBackend: Sendable {
             try emitButton(label: label, action: action, modifiers: modifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
         case let .native(component, location):
-            try emitNative(component, location: location, into: &out, context: &context)
+            try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .platformView(alternatives, _):
             // The Android branch is selected at build time; no runtime dispatch is emitted.
             for child in alternatives.android {
@@ -199,12 +208,17 @@ public struct ComposeBackend: Sendable {
         out.close()
     }
 
-    private func emitNative(_ component: NativeComponent, location: SourceLocation?,
+    private func emitNative(_ component: NativeComponent, location: SourceLocation?, isRoot: Bool,
                             into out: inout KotlinWriter, context: inout Context) throws {
-        throw Diagnostic(code: "RF-C001",
-                         message: "Native component '\(component.name)' has no Compose mapping yet.",
-                         suggestion: "Declare the component in refract.json or use a supported view.",
-                         location: location)
+        let resolver = InteropResolver(module: context.module, mapping: context.mapping)
+        let target = try resolver.target(for: component, platform: .android, location: location)
+        var arguments = try InteropEmission.arguments(for: component, target: target) {
+            try renderExpression($0, context: &context)
+        }
+        if isRoot, let modifier = resolver.nativeComponent(for: component, platform: .android)?.modifierParameter {
+            arguments.append("\(modifier) = modifier")
+        }
+        out.line("\(target.symbol)(\(arguments.joined(separator: ", ")))")
     }
 
     private func emitConditional(_ branches: [ViewNode.ConditionBranch], location: SourceLocation?,
@@ -367,9 +381,11 @@ public struct ComposeBackend: Sendable {
             "androidx.compose.ui.Modifier",
         ]
         let mapping: Mapping
+        let module: Module
 
-        init(mapping: Mapping) {
+        init(module: Module, mapping: Mapping) {
             self.mapping = mapping
+            self.module = module
         }
     }
 }

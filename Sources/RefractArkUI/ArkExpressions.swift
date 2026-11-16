@@ -38,15 +38,12 @@ enum ArkExpression {
                              message: "A projected binding needs a supported control or child component argument.",
                              suggestion: "Pass the binding to a supported binding-aware view.",
                              location: expression.location)
+        case let .platformValue(alternatives):
+            return try emit(alternatives.harmonyOS, item: item)
         case .valueProperty, .interpolatedString:
             throw Diagnostic(code: "arkui.unsupported_state_expression",
                              message: "This state expression requires the local-state lowering.",
                              suggestion: "Use a supported state read or interpolation.",
-                             location: expression.location)
-        case .platformValue:
-            throw Diagnostic(code: "arkui.unsupported_platform_value",
-                             message: "Platform-value lowering is not available in this backend yet.",
-                             suggestion: "Use the interop backend implementation that selects the HarmonyOS value.",
                              location: expression.location)
         }
     }

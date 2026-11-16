@@ -124,6 +124,10 @@ struct LocalizationFrontend {
     }
 
     mutating func localized(_ expression: ExprSyntax) -> Expression? {
+        if let call = expression.as(FunctionCallExprSyntax.self),
+           call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
+            return platformText(call)
+        }
         if expression.as(StringLiteralExprSyntax.self) != nil, let value = stateText(expression) {
             if case .interpolatedString = value.value {
                 return value
@@ -168,12 +172,30 @@ struct LocalizationFrontend {
                 break
             }
         }
+        if let call = expression.as(FunctionCallExprSyntax.self),
+           call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
+            return Expression(.stringLiteral(call.arguments.first?.expression.trimmedDescription ?? ""),
+                              type: .string, location: location(of: expression))
+        }
         guard let value = scalar(expression), value.type == .string else {
             error("R.string.invalid_key", "This expression does not provide a static localization key.",
                   "Use a static key or Text(verbatim:) for intentional literal text", at: expression)
             return nil
         }
         return value.expression
+    }
+
+    private mutating func platformText(_ call: FunctionCallExprSyntax) -> Expression? {
+        guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else { return nil }
+        var values: [Expression] = []
+        for argument in call.arguments {
+            guard let literal = argument.expression.as(StringLiteralExprSyntax.self),
+                  let text = literal.representedLiteralValue else { return nil }
+            values.append(Expression(.verbatimText(text), type: .string, location: location(of: argument.expression)))
+        }
+        return Expression(.platformValue(PlatformAlternatives(
+            ios: values[0], android: values[1], harmonyOS: values[2])), type: .string,
+            location: location(of: call))
     }
 
     private mutating func localizedLiteral(_ literal: StringLiteralExprSyntax) -> Expression? {
