@@ -121,6 +121,11 @@ public struct ComposeBackend: Sendable {
             }
         case let .conditional(branches, location):
             try emitConditional(branches, location: location, into: &out, context: &context)
+        default:
+            throw Diagnostic(code: "RF-C001",
+                             message: "This extended view IR is awaiting its Compose lowering.",
+                             suggestion: "Use a supported view while the shared backend contract is implemented.",
+                             location: node.sourceLocation)
         }
     }
 

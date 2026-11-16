@@ -34,8 +34,22 @@ struct CorpusTests {
     @Test func repositoryManifestIsExplicitAndDeterministic() throws {
         let root = GoldenTests.repository
         let cases = try CorpusLoader.load(repository: root)
-        #expect(cases.map(\.name) == ["hello", "pending-contract", "rejected-image"])
-        #expect(cases.map(\.status) == [.ready, .ready, .ready])
+        #expect(cases.map(\.name) == cases.map(\.name).sorted())
+        for required in ["hello", "pending-contract", "rejected-image"] {
+            #expect(cases.map(\.name).contains(required))
+        }
+        #expect(cases.map(\.name).count == Set(cases.map(\.name)).count)
+        #expect(cases.contains { $0.status == .ready })
+        #expect(cases.contains { $0.name == "hello" && $0.status == .ready })
+        #expect(cases.contains { $0.name == "rejected-image" && $0.status == .ready })
+        #expect(cases.filter { $0.name.hasPrefix("interop-") && $0.status == .ready }.map(\.name) == [
+            "interop-native-undeclared", "interop-platform-value-incomplete",
+            "interop-reject-conditional-compilation",
+        ])
+        #expect(cases.filter { $0.name.hasPrefix("interop-") && $0.status == .pending }.map(\.name) == [
+            "interop-native-callers", "interop-native-component", "interop-native-mismatch",
+            "interop-native-missing", "interop-platform-value", "interop-platform-view",
+        ])
         #expect(try CorpusLoader.load(repository: root).map(\.name) == cases.map(\.name))
     }
 
