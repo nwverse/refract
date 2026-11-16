@@ -49,6 +49,11 @@ extension Builder {
     }
 
     func dynamicList(_ call: FunctionCallExprSyntax) -> ViewNode? {
+        if currentListItem != nil {
+            error("RFLIST003", "A dynamic List cannot be nested inside another dynamic row.",
+                  "Expose a separate screen or a flat model collection with stable identity", at: call)
+            return nil
+        }
         if call.arguments.count == 2, call.arguments[call.arguments.index(after: call.arguments.startIndex)].label?.text == "id" {
             let argument = call.arguments[call.arguments.index(after: call.arguments.startIndex)]
             error("RFLIST002", "An explicit List identity must use the item's stable stored id.",
@@ -95,6 +100,95 @@ extension Builder {
                               key: descriptor.key, keyType: descriptor.keyType, content: content,
                               location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [], location: location(of: call))
+    }
+
+    func forEachCall(_ expression: ExprSyntax) -> FunctionCallExprSyntax? {
+        guard let call = expression.as(FunctionCallExprSyntax.self),
+              call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "ForEach" else { return nil }
+        return call
+    }
+
+    func forEachList(_ call: FunctionCallExprSyntax, owner: FunctionCallExprSyntax) -> ViewNode? {
+        guard currentListItem == nil else {
+            error("RFLIST003", "ForEach cannot be nested inside another dynamic row.",
+                  "Use one flat ForEach(model.items) directly inside List", at: call)
+            return nil
+        }
+        guard let collectionExpression = call.arguments.first?.expression,
+              call.arguments.first?.label == nil,
+              (call.arguments.count == 1 ||
+               (call.arguments.count == 2 && call.arguments.last?.label?.text == "id")),
+              let closure = call.trailingClosure, call.additionalTrailingClosures.isEmpty,
+              let itemName = closureItemName(closure) else {
+            error("RFLIST003", "ForEach requires one model collection, an optional stored id, and one named item closure.",
+                  "Use List { ForEach(model.items) { item in ... } } or the explicit id: \\.id form", at: call)
+            return nil
+        }
+        guard let descriptor = modelCollectionDescriptor(collectionExpression) else {
+            if collectionExpression.as(MemberAccessExprSyntax.self)?.declName.baseName.text == "indices" {
+                error("RFLIST002", "An array index is not stable list identity.",
+                      "Use ForEach(model.items) or ForEach(model.items, id: \\.id) with a stored String or Int id",
+                      at: collectionExpression)
+            } else if collectionExpression.as(MemberAccessExprSyntax.self) == nil {
+                error("RFLIST003", "This ForEach would eagerly render an unsupported or untyped collection.",
+                      "Use List { ForEach(model.items) { item in ... } } with an identifiable model collection",
+                      at: collectionExpression)
+            } else {
+                error("RFLIST001", "ForEach needs a declared identifiable model collection with stable typed identity.",
+                      "Use a RefractModel collection of Identifiable items with a stored String or Int id",
+                      at: collectionExpression)
+            }
+            return nil
+        }
+        let (collection, item) = descriptor
+        if call.arguments.count == 2, let identity = call.arguments.last?.expression,
+           !isDeclaredStoredID(identity, item: item) {
+            error("RFLIST002", "ForEach identity must be the item's declared stable stored id.",
+                  "Use ForEach(model.items) or ForEach(model.items, id: \\.id); never use \\.self, another property, or an array index",
+                  at: identity)
+            return nil
+        }
+        let previousItem = currentListItem
+        let previousType = currentListItemType
+        currentListItem = itemName
+        currentListItemType = item
+        defer {
+            currentListItem = previousItem
+            currentListItemType = previousType
+        }
+        let row = children(of: closure)
+        guard let row else { return nil }
+        guard row.count == 1, let content = row.first else {
+            error("RFLIST003", "A ForEach row must contain exactly one view.",
+                  "Wrap multiple row views in one supported container", at: closure)
+            return nil
+        }
+        let items = ListItems(collection: collection, itemName: itemName, itemType: item.name,
+                              key: item.identity.name, keyType: item.identity.type, content: content,
+                              location: location(of: call))
+        return .list(children: [.forEach(items, location: location(of: call))], modifiers: [],
+                     location: location(of: owner))
+    }
+
+    private func isDeclaredStoredID(_ expression: ExprSyntax, item: ItemType) -> Bool {
+        guard let keyPath = expression.as(KeyPathExprSyntax.self), keyPath.root == nil,
+              keyPath.components.count == 1, let component = keyPath.components.first,
+              case let .property(property) = component.component,
+              property.genericArgumentClause == nil else { return false }
+        return property.declName.baseName.text == item.identity.name
+    }
+
+    private func modelCollectionDescriptor(_ expression: ExprSyntax) -> (Expression, ItemType)? {
+        guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+              let base = member.base?.as(DeclReferenceExprSyntax.self),
+              let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
+              let model = models.first(where: { $0.name == reference.protocolName }),
+              let property = model.properties.first(where: { $0.name == member.declName.baseName.text }),
+              let descriptor = property.collection,
+              let item = itemTypes.first(where: { $0.name == descriptor.itemType }) else { return nil }
+        return (Expression(.valueProperty(.model(model: reference.propertyName,
+                                                 property: member.declName.baseName.text)),
+                           location: location(of: expression)), item)
     }
 
     private func modelCollectionProperty(_ expression: ExprSyntax) -> Expression? {

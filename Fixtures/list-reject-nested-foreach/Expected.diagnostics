@@ -1,0 +1,1 @@
+Input.swift:18:17: error [RFLIST003]: ForEach must be the sole dynamic child directly owned by List, not nested or eagerly rendered. Suggestion: Use List { ForEach(model.items) { item in ... } } with a stable stored id
