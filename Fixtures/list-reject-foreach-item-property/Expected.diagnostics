@@ -1,0 +1,2 @@
+Input.swift:18:22: error [RFSEM001]: List item `item` has no declared stored property `missing`. Suggestion: Use a scalar property declared by the Identifiable item type
+Input.swift:18:22: error [R.string.invalid_key]: This expression does not provide a static localization key. Suggestion: Use a static key or Text(verbatim:) for intentional literal text

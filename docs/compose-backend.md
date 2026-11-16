@@ -142,8 +142,8 @@ build-time diagnostic, never a silently dropped call (goal 3).
 
 ### Lists
 
-`List(items) { item in RowView(item: item) }` and `LazyVStack { ForEach(items) { … } }` both become a
-`LazyColumn`:
+`List(items) { item in RowView(item: item) }` and `List { ForEach(items) { item in RowView(item: item) } }` both
+become a `LazyColumn`. The two source forms share the same typed IR, identity validation and native output:
 
 ```kotlin
 LazyColumn(modifier = modifier) {
