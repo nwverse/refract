@@ -5,6 +5,11 @@ func emitComposeModels(_ models: [ModelProtocol], into out: inout KotlinWriter) 
         out.line()
         out.open("public interface \(model.name)")
         for property in model.properties {
+            if property.collection != nil {
+                throw Diagnostic(code: "compose.unsupported_collection_model",
+                                 message: "This model collection needs the shared typed-list lowering.",
+                                 suggestion: "Use the identified-list backend implementation.", location: property.location)
+            }
             out.line("public val \(property.name): State<\(try composeModelType(property.type))>")
         }
         for action in model.actions {
