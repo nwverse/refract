@@ -34,8 +34,12 @@ struct CorpusTests {
     @Test func repositoryManifestIsExplicitAndDeterministic() throws {
         let root = GoldenTests.repository
         let cases = try CorpusLoader.load(repository: root)
-        #expect(cases.map(\.name) == ["hello", "pending-contract", "rejected-image"])
-        #expect(cases.map(\.status) == [.ready, .ready, .ready])
+        let manifestData = try Data(contentsOf: root.appendingPathComponent("Fixtures/Corpus.json"))
+        let manifest = try JSONDecoder().decode(FixtureCorpus.self, from: manifestData)
+        #expect(cases.map(\.name) == manifest.cases.map(\.path))
+        #expect(cases.map(\.status) == manifest.cases.map {
+            $0.implementationStatus == .ready ? .ready : .pending
+        })
         #expect(try CorpusLoader.load(repository: root).map(\.name) == cases.map(\.name))
     }
 

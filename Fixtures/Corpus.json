@@ -12,6 +12,26 @@
     {
       "path": "rejected-image",
       "implementationStatus": "ready"
+    },
+    {
+      "path": "performance/compose-state",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/compose-lazy-list",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/arkui-observation",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/arkui-lazy-list",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/arkui-reuse",
+      "implementationStatus": "pending"
     }
   ]
 }
