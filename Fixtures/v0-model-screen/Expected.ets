@@ -10,7 +10,6 @@ export interface ProfileModel {
 @ComponentV2
 export struct ModelScreen {
   @Require @Param model: ProfileModel;
-
   build() {
     Column() {
       Text(this.model.title)

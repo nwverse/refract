@@ -63,12 +63,22 @@ extension Generation {
             writer.line(".justifyContent(FlexAlign.SpaceBetween)")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .textInput(placeholder, value, modifiers, _):
-            var arguments = ["text: \(try ArkExpression.emit(value, item: item, mapping: mapping))"]
+            var arguments = ["text: \(try emitLocalExpression(value, item: item, mapping: mapping))"]
             if let placeholder { arguments.insert("placeholder: \(try ArkExpression.emit(placeholder, mapping: mapping))", at: 0) }
             writer.line("TextInput({ \(arguments.joined(separator: ", ")) })")
+            writer.depth += 1
             writer.open(".onChange((value: string) =>")
-            writer.line("\(try ArkExpression.assignment(value, to: "value"));")
+            switch value.value {
+            case let .valueProperty(.state(name)):
+                writer.line("this.\(name) = value;")
+            case let .valueProperty(.binding(name)):
+                writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            default:
+                throw Diagnostic(code: "state.invalid_projection", message: "A text input needs a String local state or parent binding.",
+                                 suggestion: "Use `text: $name` with String @State or @Binding ownership.", location: value.location)
+            }
             writer.close(suffix: ")")
+            writer.depth -= 1
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .label(title, source, modifiers, _):
             writer.open("Row({ space: 8 })")
