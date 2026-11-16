@@ -49,7 +49,7 @@
     { "path": "v0-reject-state-wrapper", "implementationStatus": "ready" },
     { "path": "v0-reject-unsupported-modifier", "implementationStatus": "ready" },
     { "path": "v0-reject-unsupported-view", "implementationStatus": "ready" },
-    { "path": "v0-scroll-content", "implementationStatus": "pending" },
+    { "path": "v0-scroll-content", "implementationStatus": "ready" },
     { "path": "v0-settings-screen", "implementationStatus": "pending" },
     { "path": "v0-stack-layout", "implementationStatus": "pending" },
     { "path": "v0-static-list", "implementationStatus": "pending" },
