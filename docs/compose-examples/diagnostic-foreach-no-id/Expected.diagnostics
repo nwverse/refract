@@ -1,0 +1,1 @@
+RF-C003 ItemListView.swift:10:9 error: 'List(items)' iterates over 'Item', which is not 'Identifiable' and has no 'id:' key path; conform 'Item' to 'Identifiable' or use 'ForEach(items, id: \.label)' to give Compose a stable key
