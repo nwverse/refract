@@ -48,8 +48,17 @@ extension Builder {
                 continue
             }
             guard variable.bindingSpecifier.tokenKind == .keyword(.let), binding.initializer == nil,
-                  binding.accessorBlock == nil, let type = binding.typeAnnotation?.type,
-                  let valueType = ValueType(frontendName: type.trimmedDescription) else {
+                  binding.accessorBlock == nil, let type = binding.typeAnnotation?.type else {
+                error("R.string.interpolation", "Formatted text inputs must be immutable typed properties.",
+                      "Declare a supported scalar or local no-payload enum input", at: member)
+                return nil
+            }
+            if let declaration = enums.first(where: { $0.name == type.trimmedDescription }) {
+                parameters.append(ScreenParameter(name: identifier.text, type: .string, enumName: declaration.name,
+                                                  location: location(of: identifier)))
+                continue
+            }
+            guard let valueType = ValueType(frontendName: type.trimmedDescription) else {
                 error("R.string.interpolation", "Formatted text inputs must be immutable String, Int or Double properties.",
                       "Declare inputs as `let name: String`, `let count: Int` or `let ratio: Double`", at: member)
                 return nil
@@ -59,12 +68,17 @@ extension Builder {
         }
         guard let body, let binding = body.bindings.first,
               let accessors = binding.accessorBlock?.accessors,
-              case let .getter(items) = accessors,
-              let expression = expression(in: items), let root = view(expression) else {
+              case let .getter(items) = accessors else {
             error("unsupportedViewBody", "A View with scalar inputs must have one expression-bodied body.",
                   "Return a supported view from `body`", at: node.name)
             return nil
         }
+        if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
+            error("RFVIEW005", "Free-form conditional compilation hides platform-specific Swift code from the generator.",
+                  "Use `refractValue`, `refractView`, or a declared `RefractNativeView`", at: body)
+            return nil
+        }
+        guard let root = viewStatements(items, body: binding) else { return nil }
         return Screen(name: node.name.text, parameters: parameters, body: root,
                       location: location(of: node.name))
     }

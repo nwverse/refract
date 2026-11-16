@@ -17,7 +17,8 @@ public struct Frontend {
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
                                               nativeDeclarations: builder.interop.declarations,
-                                              models: builder.models, itemTypes: builder.itemTypes),
+                                              models: builder.models, itemTypes: builder.itemTypes,
+                                              enums: builder.enums),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -34,6 +35,7 @@ final class Builder: SyntaxVisitor {
     var currentStates: [StateDeclaration] = []
     var models: [ModelProtocol] = []
     var itemTypes: [ItemType] = []
+    var enums: [EnumDeclaration] = []
     var currentModels: [ModelReference] = []
     var currentListItem: String?
 
@@ -51,6 +53,7 @@ final class Builder: SyntaxVisitor {
                   }) == true else { return nil }
             return declaration.name.text
         })
+        collectEnums(tree)
         collectItemTypes(tree)
         collectModels(tree)
     }
@@ -359,8 +362,8 @@ final class Builder: SyntaxVisitor {
     func viewStatement(_ item: CodeBlockItemSyntax) -> ViewNode? {
         if let statement = item.item.as(ExpressionStmtSyntax.self) {
             if let conditional = statement.expression.as(IfExprSyntax.self) { return view(conditional) }
-            if statement.expression.is(SwitchExprSyntax.self) {
-                return rejectUnsupportedControlFlow(statement.expression)
+            if let switchStatement = statement.expression.as(SwitchExprSyntax.self) {
+                return view(switchStatement)
             }
         }
         guard let expression = item.item.as(ExprSyntax.self) else {
@@ -373,13 +376,13 @@ final class Builder: SyntaxVisitor {
             }
             return nil
         }
-        if expression.is(SwitchExprSyntax.self) {
-            return rejectUnsupportedControlFlow(expression)
+        if let switchStatement = expression.as(SwitchExprSyntax.self) {
+            return view(switchStatement)
         }
         return view(expression)
     }
 
-    private func viewStatements(_ items: CodeBlockItemListSyntax, body: PatternBindingSyntax) -> ViewNode? {
+    func viewStatements(_ items: CodeBlockItemListSyntax, body: PatternBindingSyntax) -> ViewNode? {
         if items.count != 1, let first = items.first {
             diagnostics.append(Diagnostic(code: "unsupportedViewBody",
                 message: "The `body` getter must return exactly one view expression.",
@@ -394,6 +397,9 @@ final class Builder: SyntaxVisitor {
             }
             if let conditional = first.item.as(ExpressionStmtSyntax.self)?.expression.as(IfExprSyntax.self) {
                 return view(conditional)
+            }
+            if let switchStatement = first.item.as(ExpressionStmtSyntax.self)?.expression.as(SwitchExprSyntax.self) {
+                return view(switchStatement)
             }
             if let switchExpression = first.item.as(ExpressionStmtSyntax.self)?.expression.as(SwitchExprSyntax.self) {
                 return rejectUnsupportedControlFlow(ExprSyntax(switchExpression))

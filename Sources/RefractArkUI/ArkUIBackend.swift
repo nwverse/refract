@@ -42,6 +42,7 @@ struct Generation {
             }
         }
         for line in importLines { writer.line(line) }
+        try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
@@ -55,7 +56,7 @@ struct Generation {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for input in screen.parameters {
-                writer.line("@Param @Require public var \(input.name): \(try arkType(input.type))")
+                writer.line("@Param @Require public var \(input.name): \(try input.enumName ?? arkType(input.type))")
             }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
@@ -110,6 +111,9 @@ struct Generation {
                 for child in branch.children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             }
             writer.close()
+        case let .switchExpression(subject, enumName, cases, _):
+            try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
+                               into: &writer, mapping: mapping, resolver: resolver)
         case let .native(component, location):
             guard let resolver else {
                 throw Diagnostic(code: "arkui.unresolved_native_component",
