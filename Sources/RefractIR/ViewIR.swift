@@ -90,6 +90,13 @@ public struct ItemType: Codable, Equatable, Sendable {
 }
 
 public extension ViewNode {
+    func children(for platform: TargetPlatform) -> [ViewNode] {
+        if case let .platformView(alternatives, _) = self {
+            return platform == .android ? alternatives.android : alternatives.harmonyOS
+        }
+        return children
+    }
+
     var children: [ViewNode] {
         switch self {
         case let .stack(_, children, _, _), let .layout(_, children, _, _), let .list(children, _, _): children
