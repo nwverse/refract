@@ -24,16 +24,27 @@ extension Builder {
         }
         switch name {
         case "padding":
-            if arguments.count == 1, labels == [nil] { break }
             if arguments.count == 2, labels == [nil, nil],
                case let .reference(axis) = arguments[0].value,
                axis == ".horizontal" || axis == ".vertical" {
                 labels[0] = axis == ".horizontal" ? "horizontal" : "vertical"
                 labels[1] = "value"
-                arguments[0] = Expression(.reference(axis), location: arguments[0].location)
                 break
             }
-            error("RFVIEW003", "Padding requires one value or horizontal/vertical edges plus one value.",
+            if arguments.count == 1, labels == [nil] { break }
+            if arguments.count == 2 || arguments.count == 4,
+               labels.allSatisfy({ $0 == "horizontal" || $0 == "vertical" || $0 == "value" }),
+               labels.contains(where: { $0 == "horizontal" || $0 == "vertical" }) {
+                if labels.count == 2, labels[0] == nil, labels[1] == nil,
+                   case let .reference(axis) = arguments[0].value,
+                   axis == ".horizontal" || axis == ".vertical" {
+                    labels[0] = axis == ".horizontal" ? "horizontal" : "vertical"
+                    labels[1] = "value"
+                    break
+                }
+                if labels[0] != nil, labels.allSatisfy({ $0 != nil }) { break }
+            }
+            error("RFVIEW003", "Padding requires one value, one or both axes, or an edge set plus one value.",
                   "Use `.padding(value)` or `.padding(.horizontal, value)` / `.padding(.vertical, value)`.", at: call)
             return nil
         case "frame":

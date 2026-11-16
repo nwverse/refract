@@ -41,7 +41,7 @@ extension Generation {
             writer.close(suffix: ", (\(items.itemName): \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
         case let .image(source, modifiers, _):
             writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
-        case let .toggle(title, value, modifiers, _):
+        case let .toggle(title, value, modifiers, nativeModifiers, _):
             writer.open("Row()")
             writer.line("Text(\(try ArkExpression.emit(title, item: item, mapping: mapping)))")
             writer.line("Blank()")
@@ -69,6 +69,17 @@ extension Generation {
             }
             writer.close(suffix: ")")
             writer.depth -= 1
+            let switchModifiers = nativeModifiers.map { operation -> Modifier in
+                switch operation.operation {
+                case let .testTag(value):
+                    return Modifier(name: "nativeTestTag", arguments: [value], argumentLabels: [nil], location: operation.location)
+                case let .contentDescription(value):
+                    return Modifier(name: "accessibilityLabel", arguments: [value], argumentLabels: [nil], location: operation.location)
+                case .retainCallback:
+                    return Modifier(name: "retainCallback", location: operation.location)
+                }
+            }
+            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping), unlessEmpty: true)
             writer.close()
             writer.line(".justifyContent(FlexAlign.SpaceBetween)")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)

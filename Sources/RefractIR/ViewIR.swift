@@ -100,7 +100,7 @@ public extension ViewNode {
     var children: [ViewNode] {
         switch self {
         case let .stack(_, children, _, _), let .layout(_, children, _, _), let .list(children, _, _): children
-        case let .scroll(_, child, _, _), let .listItem(child, _): [child]
+        case let .scroll(_, child, _, _), let .listItem(child, _), let .nativeModifier(child, _, _): [child]
         case let .button(label, _, _, _): [label]
         case let .section(_, children, _): children
         case let .component(component, _): component.children
@@ -116,10 +116,11 @@ public extension ViewNode {
     var sourceLocation: SourceLocation? {
         switch self {
         case let .stack(_, _, _, location), let .text(_, _, location), let .button(_, _, _, location),
-             let .native(_, location), let .component(_, location), let .platformView(_, location), let .conditional(_, location),
+             let .native(_, location), let .nativeModifier(_, _, location), let .component(_, location),
+             let .platformView(_, location), let .conditional(_, location),
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
-             let .image(_, _, location), let .toggle(_, _, _, location), let .textInput(_, _, _, location),
+             let .image(_, _, location), let .toggle(_, _, _, _, location), let .textInput(_, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
              let .switchExpression(_, _, _, location), let .optionalBinding(_, _, _, _, location): location
         }

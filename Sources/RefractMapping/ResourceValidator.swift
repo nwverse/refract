@@ -19,6 +19,13 @@ public enum LocalizationResourceValidator {
                 return children.flatMap(visit) + modifiers.flatMap(\.arguments)
             case let .button(label, _, modifiers, _):
                 return visit(label) + modifiers.flatMap(\.arguments)
+            case let .nativeModifier(child, operations, _):
+                return visit(child) + operations.compactMap { modifier in
+                    switch modifier.operation {
+                    case let .testTag(value), let .contentDescription(value): value
+                    case .retainCallback: nil
+                    }
+                }
             case let .native(component, _):
                 return component.arguments.map(\.expression)
             case let .component(component, _):
@@ -48,8 +55,13 @@ public enum LocalizationResourceValidator {
                 return [items.collection] + visit(items.content)
             case let .image(_, modifiers, _):
                 return modifiers.flatMap(\.arguments)
-            case let .toggle(title, value, modifiers, _):
-                return [title, value] + modifiers.flatMap(\.arguments)
+            case let .toggle(title, value, modifiers, nativeModifiers, _):
+                return [title, value] + modifiers.flatMap(\.arguments) + nativeModifiers.compactMap {
+                    switch $0.operation {
+                    case let .testTag(value), let .contentDescription(value): value
+                    case .retainCallback: nil
+                    }
+                }
             case let .textInput(placeholder, value, modifiers, _):
                 return (placeholder.map { [$0] } ?? []) + [value] + modifiers.flatMap(\.arguments)
             case let .label(title, _, modifiers, _):

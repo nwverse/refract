@@ -49,6 +49,14 @@ private let styledMapping = Mapping(
     #expect(ark.contains(".font(AppTypography.title)\n      .fontColor(AppColors.secondary)"))
 }
 
+@Test func canonicalMeasurementAttributesPreserveItemAliases() throws {
+    let ark = try ArkModifiers.emit([
+        Modifier(name: "accessibilityLabel", arguments: [Expression(.reference("row.title"))], argumentLabels: [nil]),
+        Modifier(name: "nativeTestTag", arguments: [Expression(.stringLiteral("row_title"))], argumentLabels: [nil]),
+    ], item: "row")
+    #expect(ark == ".accessibilityText(row.title).id('row_title')")
+}
+
 @Test func canonicalFrameAndDirectionalPaddingPreserveDimensions() throws {
     let modifiers = [
         Modifier(name: "padding", arguments: [Expression(.reference(".horizontal")), Expression(.numberLiteral("16"))],

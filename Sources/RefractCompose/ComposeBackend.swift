@@ -150,8 +150,8 @@ public struct ComposeBackend: Sendable {
         case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput,
              .label, .divider, .spacer:
             try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
-        case let .toggle(title, value, modifiers, location):
-            try emitToggle(title: title, value: value, modifiers: modifiers, isRoot: isRoot,
+        case let .toggle(title, value, modifiers, nativeModifiers, location):
+            try emitToggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
         case let .text(expression, modifiers, location):
             try emitText(expression, modifiers: modifiers, isRoot: isRoot, location: location,
@@ -161,6 +161,9 @@ public struct ComposeBackend: Sendable {
                            location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .nativeModifier(child, operations, _):
+            try ComposeNativeModifier().emit(child, operations: operations, isRoot: isRoot,
+                                             into: &out, context: &context)
         case let .component(component, location):
             try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .platformView(alternatives, _):
@@ -246,7 +249,9 @@ public struct ComposeBackend: Sendable {
         context.imports.insert("androidx.compose.material3.Button")
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
         let onClick: String
-        if let action {
+        if modifiers.contains(where: { $0.name == "retainCallback" }) {
+            onClick = "onClick"
+        } else if let action {
             onClick = "{ \(try renderAction(action, context: &context)) }"
         } else {
             onClick = "{ }"
@@ -332,7 +337,7 @@ public struct ComposeBackend: Sendable {
         }
     }
 
-    private func renderAction(_ action: StateAction, context: inout Context) throws -> String {
+    func renderAction(_ action: StateAction, context: inout Context) throws -> String {
         switch action {
         case let .assign(.state(name), value):
             return "\(name) = \(try renderExpression(value, context: &context))"
@@ -371,6 +376,7 @@ public struct ComposeBackend: Sendable {
         let mapping: Mapping
         let module: Module
         var androidResourceClass: String?
+        var retainedItem: (name: String, type: String)?
 
         init(module: Module, mapping: Mapping) {
             self.mapping = mapping

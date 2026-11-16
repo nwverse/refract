@@ -19,7 +19,20 @@ extension ComposeBackend {
                 continue
             case "padding":
                 context.imports.insert("androidx.compose.foundation.layout.padding")
-                if modifier.arguments.isEmpty {
+                if modifier.argumentLabels.count == modifier.arguments.count,
+                   modifier.argumentLabels.allSatisfy({ $0 == "horizontal" || $0 == "vertical" }),
+                   !modifier.argumentLabels.isEmpty, modifier.argumentLabels.count == modifier.arguments.count,
+                   modifier.arguments.count > 1,
+                   let arguments = try? ModifierArguments(modifier: modifier).labeled(),
+                   Set(arguments.keys).isSubset(of: ["horizontal", "vertical", "value"]),
+                   arguments.count == 2 || arguments.count == 4 {
+                    context.imports.insert("androidx.compose.foundation.layout.padding")
+                    var directional: [String] = []
+                    for key in ["horizontal", "vertical"] where arguments[key] != nil {
+                        directional.append("\(key) = \(try composeLength(arguments[key]!, category: .spacing, context: &context))")
+                    }
+                    parts.append(".padding(\(directional.joined(separator: ", ")))")
+                } else if modifier.arguments.isEmpty {
                     context.imports.insert("androidx.compose.ui.unit.dp")
                     parts.append(".padding(all = 16.dp)")
                 } else if modifier.arguments.count == 1 {
@@ -30,8 +43,7 @@ extension ComposeBackend {
                     let arguments = try ModifierArguments(modifier: modifier).labeled()
                     guard arguments.count == 2, let axis = arguments["edges"] ?? arguments["horizontal"] ?? arguments["vertical"],
                           let amount = arguments["value"] else {
-                        throw ModifierArguments(modifier: modifier).invalid(
-                            "Use `.padding(.horizontal, value)` or `.padding(.vertical, value)`.")
+                        throw ModifierArguments(modifier: modifier).invalid("Use a declared edge set and spacing value.")
                     }
                     let axisName: String
                     if arguments["horizontal"] != nil {
@@ -122,6 +134,21 @@ extension ComposeBackend {
                 }
                 context.imports.insert("androidx.compose.ui.draw.alpha")
                 parts.append(".alpha(\(value)f)")
+            case "nativeTestTag":
+                context.imports.insert("androidx.compose.ui.platform.testTag")
+                parts.append(".testTag(\(try renderExpression(try ModifierArguments(modifier: modifier).one(), context: &context)))")
+            case "nativeContentDescription":
+                context.imports.insert("androidx.compose.ui.semantics.contentDescription")
+                context.imports.insert("androidx.compose.ui.semantics.semantics")
+                parts.append(".semantics { contentDescription = \(try renderExpression(try ModifierArguments(modifier: modifier).one(), context: &context)) }")
+            case "retainCallback":
+                index += 1
+                continue
+            case "accessibilityLabel":
+                throw Diagnostic(code: "RFNATIVE004",
+                    message: "An iOS SwiftUI accessibility modifier cannot be emitted as an Android measurement hook.",
+                    suggestion: "Use `.contentDescription` in the Android branch of the explicit platform alternative.",
+                    location: modifier.location)
             default:
                 throw Diagnostic(code: "RFVIEW003", message: "Modifier `\(modifier.name)` has no Compose mapping.",
                                  suggestion: "Use a supported modifier or a typed native component.", location: modifier.location)
@@ -163,6 +190,11 @@ extension ComposeBackend {
             throw Diagnostic(code: "RFVIEW003", message: "This modifier requires a declared design token.",
                              suggestion: "Use a token in the mapping's \(category.rawValue) category.", location: expression.location)
         }
-        return try context.mapping.token(name, category: category, platform: .android, location: expression.location)
+        let token = try context.mapping.token(name, category: category, platform: .android, location: expression.location)
+        if token.hasPrefix("androidx.compose.material3.MaterialTheme.") {
+            context.imports.insert("androidx.compose.material3.MaterialTheme")
+            return String(token.dropFirst("androidx.compose.material3.".count))
+        }
+        return token
     }
 }

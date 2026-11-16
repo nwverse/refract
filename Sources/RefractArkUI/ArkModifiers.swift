@@ -4,6 +4,26 @@ import RefractMapping
 enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty,
                      isText: Bool = false) throws -> String {
+        if modifiers.contains(where: {
+            switch $0.name {
+            case "nativeTestTag", "accessibilityLabel": true
+            default: false
+            }
+        }) {
+            return try modifiers.map { modifier in
+                switch modifier.name {
+                case "nativeTestTag":
+                    return ".id(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
+                case "accessibilityLabel":
+                    return ".accessibilityText(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
+                default:
+                    throw Diagnostic(code: "RFNATIVE004",
+                        message: "Modifier `\(modifier.name)` is not supported on an ArkUI toggle.",
+                        suggestion: "Keep native measurement operations on the selected toggle control.",
+                        location: modifier.location)
+                }
+            }.joined()
+        }
         guard usesCanonicalValues(modifiers, mapping: mapping) else {
             return try modifiers.map { modifier in
                 let arguments = modifier.arguments

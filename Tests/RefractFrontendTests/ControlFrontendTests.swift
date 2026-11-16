@@ -14,7 +14,7 @@ func frontendParsesOnlyDeclaredBoolToggleProjection(_ declaration: String, _ exp
     }
     """))
     #expect(unit.diagnostics.isEmpty)
-    guard case let .toggle(title, value, _, _) = unit.module.screens.first?.body else {
+    guard case let .toggle(title, value, _, _, _) = unit.module.screens.first?.body else {
         Issue.record("Expected a typed toggle")
         return
     }
@@ -44,7 +44,7 @@ func frontendParsesOnlyDeclaredBoolToggleProjection(_ declaration: String, _ exp
     #expect(unit.diagnostics.isEmpty)
     guard case let .list(children, _, _) = unit.module.screens.first?.body,
           case let .forEach(items, _) = children.first,
-          case let .toggle(title, value, _, _) = items.content,
+          case let .toggle(title, value, _, _, _) = items.content,
           case let .valueProperty(.itemBinding(binding)) = value.value else {
         Issue.record("Expected a typed item toggle")
         return

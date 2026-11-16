@@ -63,6 +63,9 @@ extension ComposeBackend {
         out.depth -= 1
         out.line(") { \(item) ->")
         out.depth += 1
+        let previousItem = context.retainedItem
+        context.retainedItem = (items.itemName, items.itemType)
+        defer { context.retainedItem = previousItem }
         try emit(items.content, parentAxis: .vertical, into: &out, context: &context)
         out.close()
     }

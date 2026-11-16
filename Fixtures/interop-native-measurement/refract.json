@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": { "DesignTypography.rowTitle": "androidx.compose.material3.MaterialTheme.typography.bodyLarge" },
+      "color": {}
+    },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "strings": { "settings.item": "settings_item" }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.design", "symbols": ["AppTypography"] }],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": { "DesignTypography.rowTitle": "AppTypography.rowTitle" },
+      "color": {}
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": { "settings.item": "settings_item" }
+    }
+  }
+}

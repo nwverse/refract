@@ -120,6 +120,28 @@ struct Generation {
         case let .switchExpression(subject, enumName, cases, _):
             try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
                                into: &writer, mapping: mapping, resolver: resolver)
+        case let .nativeModifier(child, operations, location):
+            var modifiers: [Modifier] = []
+            for operation in operations {
+                switch operation.operation {
+                case let .testTag(value):
+                    modifiers.append(Modifier(name: "nativeTestTag", arguments: [value], argumentLabels: [nil],
+                                              location: operation.location))
+                case let .contentDescription(value):
+                    modifiers.append(Modifier(name: "accessibilityLabel", arguments: [value], argumentLabels: [nil],
+                                              location: operation.location))
+                case .retainCallback:
+                    throw Diagnostic(code: "RFNATIVE004",
+                        message: "HarmonyOS callback retention requires a typed callback-identity representation.",
+                        suggestion: "Use a direct typed callback; do not discard the retention operation or add a runtime cache.",
+                        location: operation.location ?? location)
+                }
+            }
+            guard let modified = child.appendingModifier(contentsOf: modifiers) else {
+                throw Diagnostic(code: "RFNATIVE004", message: "The native test id cannot be attached to this ArkUI receiver.",
+                                 suggestion: "Apply testTag to a concrete view or container.", location: location)
+            }
+            try emit(modified, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
         case let .optionalBinding(subject, binding, children, otherwise, location):
             try emitOptionalBinding(subject: subject, binding: binding, children: children, otherwise: otherwise,
                                     location: location, into: &writer, mapping: mapping, resolver: resolver)
@@ -192,7 +214,7 @@ struct Generation {
         switch node {
         case let .stack(_, _, values, _), let .layout(_, _, values, _), let .scroll(_, _, values, _),
              let .list(_, values, _), let .text(_, values, _), let .button(_, _, values, _),
-             let .image(_, values, _), let .toggle(_, _, values, _), let .textInput(_, _, values, _),
+             let .image(_, values, _), let .toggle(_, _, values, _, _), let .textInput(_, _, values, _),
              let .label(_, _, values, _), let .divider(values, _):
             modifiers = values
         default:

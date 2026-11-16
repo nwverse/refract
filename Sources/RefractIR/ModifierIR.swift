@@ -1,4 +1,13 @@
 public extension ViewNode {
+    func appendingModifier(contentsOf additions: [Modifier]) -> ViewNode? {
+        var result = self
+        for modifier in additions {
+            guard let updated = result.appendingModifier(modifier) else { return nil }
+            result = updated
+        }
+        return result
+    }
+
     /// Adds a modifier without losing the type, payload or source location of an existing view.
     /// Containers whose IR does not carry modifiers return nil so the frontend can diagnose them.
     func appendingModifier(_ modifier: Modifier) -> ViewNode? {
@@ -17,8 +26,8 @@ public extension ViewNode {
             return .list(children: children, modifiers: modifiers + [modifier], location: location)
         case let .image(source, modifiers, location):
             return .image(source: source, modifiers: modifiers + [modifier], location: location)
-        case let .toggle(title, value, modifiers, location):
-            return .toggle(title: title, value: value, modifiers: modifiers + [modifier], location: location)
+        case let .toggle(title, value, modifiers, nativeModifiers, location):
+            return .toggle(title: title, value: value, modifiers: modifiers + [modifier], nativeModifiers: nativeModifiers, location: location)
         case let .textInput(placeholder, value, modifiers, location):
             return .textInput(placeholder: placeholder, value: value, modifiers: modifiers + [modifier], location: location)
         case let .label(title, image, modifiers, location):
@@ -28,7 +37,7 @@ public extension ViewNode {
         case let .component(component, location):
             return .component(ComponentReference(name: component.name, arguments: component.arguments,
                 children: component.children, modifiers: component.modifiers + [modifier]), location: location)
-        case .native, .platformView, .conditional, .optionalBinding, .switchExpression, .section, .listItem, .forEach, .spacer:
+        case .native, .nativeModifier, .platformView, .conditional, .optionalBinding, .switchExpression, .section, .listItem, .forEach, .spacer:
             return nil
         }
     }
