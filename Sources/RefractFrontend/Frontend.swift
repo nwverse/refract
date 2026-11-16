@@ -11,7 +11,7 @@ public struct Frontend {
         builder.walk(tree)
         return TranslationUnit(module: Module(sourceFile: source.path, screens: builder.screens,
                                               nativeDeclarations: builder.interop.declarations,
-                                              models: builder.models),
+                                              models: builder.models, itemTypes: builder.itemTypes),
                                diagnostics: builder.diagnostics)
     }
 }
@@ -24,13 +24,16 @@ final class Builder: SyntaxVisitor {
     var interop: InteropFrontend
     var currentStates: [StateDeclaration] = []
     var models: [ModelProtocol] = []
+    var itemTypes: [ItemType] = []
     var currentModels: [ModelReference] = []
+    var currentListItem: String?
 
     init(file: String, tree: SourceFileSyntax) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
         super.init(viewMode: .sourceAccurate)
+        collectItemTypes(tree)
         collectModels(tree)
     }
 
@@ -170,7 +173,7 @@ final class Builder: SyntaxVisitor {
         case "Text":
             guard call.arguments.count == 1,
                   let argument = call.arguments.first, call.trailingClosure == nil,
-                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? scalar(argument.expression),
+                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? modelProperty(argument.expression).map({ TypedExpression($0, .string) }) ?? scalar(argument.expression),
                   value.type == .string,
                   (argument.label == nil) || (argument.label?.text == "verbatim") else {
                 error("unsupportedText", "Text requires one string value, optionally labeled `verbatim`.",
