@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "RefractCompose", targets: ["RefractCompose"]),
         .library(name: "RefractArkUI", targets: ["RefractArkUI"]),
         .executable(name: "refract", targets: ["RefractCLI"]),
+        .library(name: "RefractGolden", targets: ["RefractGolden"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", exact: "600.0.1"),
@@ -43,7 +44,11 @@ let package = Package(
         .testTarget(name: "RefractComposeTests", dependencies: ["RefractCompose"]),
         .testTarget(name: "RefractArkUITests", dependencies: ["RefractArkUI"]),
         .testTarget(name: "RefractCLITests"),
-        .testTarget(name: "RefractGoldenTests", dependencies: ["RefractFrontend", "RefractMapping", "RefractCompose", "RefractArkUI"]),
+        .testTarget(name: "RefractGoldenTests", dependencies: ["RefractGolden"]),
+        .target(
+            name: "RefractGolden",
+            dependencies: ["RefractFrontend", "RefractMapping", "RefractCompose", "RefractArkUI"]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

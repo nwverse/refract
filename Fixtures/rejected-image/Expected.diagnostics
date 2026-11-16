@@ -1,0 +1,1 @@
+Input.swift:3:9: error [RFNATIVE001]: View `Image` is neither in the supported subset nor declared as a `RefractNativeView`. Suggestion: Declare `Image: RefractNativeView` with typed stored properties and an iOS SwiftUI body

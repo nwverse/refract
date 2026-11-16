@@ -42,13 +42,14 @@ public enum ValueType: String, Codable, Sendable {
 }
 
 public struct Expression: Codable, Equatable, Sendable {
-    public enum Value: Codable, Equatable, Sendable {
+    public indirect enum Value: Codable, Equatable, Sendable {
         case stringLiteral(String)
         case stringKey(String)
         case boolLiteral(Bool)
         case numberLiteral(String)
         case reference(String)
         case binding(String)
+        case platformValue(PlatformAlternatives<Expression>)
     }
 
     public let value: Value
@@ -77,6 +78,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case text(Expression, modifiers: [Modifier], location: SourceLocation?)
     case button(label: ViewNode, action: Expression?, modifiers: [Modifier], location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
+    case platformView(PlatformAlternatives<[ViewNode]>, location: SourceLocation?)
     case conditional(conditions: [ConditionBranch], location: SourceLocation?)
 
     public enum StackAxis: String, Codable, Sendable { case vertical, horizontal, depth }
@@ -108,8 +110,8 @@ public struct ModelReference: Codable, Equatable, Sendable {
 
 public struct NativeComponent: Codable, Equatable, Sendable {
     public let name: String
-    public let arguments: [Expression]
-    public init(name: String, arguments: [Expression] = []) {
+    public let arguments: [NativeArgument]
+    public init(name: String, arguments: [NativeArgument] = []) {
         self.name = name
         self.arguments = arguments
     }
@@ -132,9 +134,11 @@ public struct Screen: Codable, Equatable, Sendable {
 public struct Module: Codable, Equatable, Sendable {
     public let sourceFile: String
     public let screens: [Screen]
-    public init(sourceFile: String, screens: [Screen]) {
+    public let nativeDeclarations: [NativeDeclaration]
+    public init(sourceFile: String, screens: [Screen], nativeDeclarations: [NativeDeclaration] = []) {
         self.sourceFile = sourceFile
         self.screens = screens
+        self.nativeDeclarations = nativeDeclarations
     }
 }
 
