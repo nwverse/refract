@@ -67,10 +67,29 @@ public struct ActionArgument: Codable, Equatable, Sendable {
 }
 
 
+/// A checked read/write path for a Bool property of the current typed list item.
+/// The application model owns the mutation; no item observer or runtime adapter is involved.
+public struct ItemBinding: Codable, Equatable, Sendable {
+    public let model: String
+    public let item: String
+    public let property: String
+    public let key: String
+    public let action: String
+
+    public init(model: String, item: String, property: String, key: String, action: String) {
+        self.model = model
+        self.item = item
+        self.property = property
+        self.key = key
+        self.action = action
+    }
+}
+
 public enum ValueProperty: Codable, Equatable, Sendable {
     case state(String)
     case binding(String)
     case model(model: String, property: String)
+    case itemBinding(ItemBinding)
 }
 
 public enum WritableProperty: Codable, Equatable, Sendable {

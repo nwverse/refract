@@ -13,18 +13,98 @@ extension Builder {
     private func toggleControl(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard call.arguments.count == 2, call.trailingClosure == nil,
               call.arguments.first?.label == nil,
-              let title = stringLiteral(call.arguments.first!.expression),
               call.arguments.last?.label?.text == "isOn",
-              let projection = call.arguments.last?.expression.as(DeclReferenceExprSyntax.self),
-              projection.baseName.text.hasPrefix("$"),
-              let property = controlBinding(named: String(projection.baseName.text.dropFirst())) else {
-            error("state.invalid_projection", "Toggle requires a title and `$property` for a declared scalar state or binding.",
-                  "Use `Toggle(\"settings.enabled\", isOn: $isEnabled)` with Bool ownership", at: call)
+              let titleExpression = controlToggleTitle(call.arguments.first!.expression),
+              let value = controlToggleValue(call.arguments.last!.expression, title: titleExpression) else {
+            error("state.invalid_projection",
+                  "Toggle requires a local/parent Bool binding or a typed list-item Bool binding backed by a model action.",
+                  "Use `isOn: $isEnabled`, or a matching item getter and `model.action(item.id, value: $0)` setter", at: call)
             return nil
         }
-        return .toggle(title: Expression(.stringKey(title), location: location(of: call)),
-                       value: Expression(.valueProperty(property), location: location(of: projection)),
-                       modifiers: [], location: location(of: call))
+        return .toggle(title: titleExpression, value: value, modifiers: [], location: location(of: call))
+    }
+
+    private func controlToggleTitle(_ expression: ExprSyntax) -> Expression? {
+        if let key = stringLiteral(expression) {
+            return Expression(.stringKey(key), location: location(of: expression))
+        }
+        var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
+                                          typedScalar: modelTypedProperty,
+                                          stateText: { _ in nil }, enumInputNames: [])
+        defer { diagnostics.append(contentsOf: parser.diagnostics) }
+        guard let literal = expression.as(StringLiteralExprSyntax.self),
+              let text = parser.localized(ExprSyntax(literal)),
+              case let .localizedText(localized) = text.value else { return nil }
+        return Expression(.localizedText(localized), type: .string, location: location(of: expression))
+    }
+
+    private func controlToggleValue(_ expression: ExprSyntax, title: Expression) -> Expression? {
+        if let projection = expression.as(DeclReferenceExprSyntax.self), projection.baseName.text.hasPrefix("$"),
+           let property = controlBinding(named: String(projection.baseName.text.dropFirst())) {
+            return Expression(.valueProperty(property), type: .bool, location: location(of: projection))
+        }
+        guard let binding = expression.as(FunctionCallExprSyntax.self),
+              binding.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Binding",
+              binding.arguments.map(\.label?.text) == ["get", "set"], binding.trailingClosure == nil,
+              let get = binding.arguments.first?.expression.as(ClosureExprSyntax.self),
+              get.signature == nil, get.statements.count == 1,
+              let getter = get.statements.first?.item.as(ExprSyntax.self),
+              let property = modelTypedProperty(getter), property.type == .bool,
+              case let .reference(read) = property.expression.value,
+              let item = currentListItem, read.hasPrefix(item + "."),
+              currentListItemType?.properties.contains(where: { $0.type == .bool && read == item + "." + $0.name }) == true,
+              let set = binding.arguments.last?.expression.as(ClosureExprSyntax.self),
+              let valueName = toggleSetterValue(set),
+              let item = currentListItem, item == titleItem(title),
+              let action = toggleSetterAction(set, valueName: valueName, item: item) else { return nil }
+        return Expression(.valueProperty(.itemBinding(ItemBinding(
+            model: action.model, item: item, property: String(read.dropFirst(item.count + 1)),
+            key: action.key, action: action.name))), type: .bool, location: location(of: expression))
+    }
+
+    private func titleItem(_ title: Expression) -> String? {
+        guard case let .localizedText(text) = title.value else { return nil }
+        for argument in text.arguments {
+            guard case let .reference(reference) = argument.value,
+                  let item = currentListItem, reference.hasPrefix(item + ".") else { return nil }
+        }
+        return currentListItem
+    }
+
+    private func toggleSetterValue(_ closure: ClosureExprSyntax) -> String? {
+        guard closure.statements.count == 1 else { return nil }
+        guard let signature = closure.signature, let parameters = signature.parameterClause else { return "$0" }
+        switch parameters {
+        case let .parameterClause(clause):
+            guard clause.parameters.count == 1, clause.parameters.first?.secondName == nil else { return nil }
+            return clause.parameters.first?.firstName.text
+        case let .simpleInput(input):
+            guard input.count == 1 else { return nil }
+            return input.first?.name.text
+        }
+    }
+
+    private func toggleSetterAction(_ closure: ClosureExprSyntax, valueName: String,
+                                    item: String) -> (model: String, key: String, name: String)? {
+        guard let call = closure.statements.first?.item.as(ExprSyntax.self)?.as(FunctionCallExprSyntax.self),
+              call.trailingClosure == nil,
+              let member = call.calledExpression.as(MemberAccessExprSyntax.self),
+              member.declName.argumentNames == nil,
+              let base = member.base?.as(DeclReferenceExprSyntax.self),
+              let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
+              let contract = models.first(where: { $0.name == reference.protocolName }),
+              let action = contract.actions.first(where: { $0.name == member.declName.baseName.text }),
+              action.parameters.count == 2, action.parameters[0].type == currentListItemType?.identity.type,
+              action.parameters[1].type == .bool else { return nil }
+        let arguments = Array(call.arguments)
+        guard arguments.count == 2,
+              arguments[0].label?.text == action.parameters[0].externalName,
+              arguments[1].label?.text == action.parameters[1].externalName,
+              let identity = currentListItemType?.identity,
+              modelTypedProperty(arguments[0].expression)?.expression.value
+                == .reference(item + "." + identity.name),
+              arguments[1].expression.as(DeclReferenceExprSyntax.self)?.baseName.text == valueName else { return nil }
+        return (reference.propertyName, identity.name, action.name)
     }
 
     private func textFieldControl(_ call: FunctionCallExprSyntax) -> ViewNode? {
