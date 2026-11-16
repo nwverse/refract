@@ -10,8 +10,7 @@ import Foundation
     #if os(Linux) || os(macOS)
     let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    let executable = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        .appendingPathComponent("refract")
+    let executable = builtCLIExecutable()
     guard FileManager.default.isExecutableFile(atPath: executable.path) else {
         Issue.record("Build the refract executable with `swift build` before running `swift test`.")
         return
@@ -39,6 +38,18 @@ import Foundation
     #expect(rejection.status != 0)
     #expect(rejection.stderr.contains("[RFNATIVE001]"))
     #endif
+}
+
+private func builtCLIExecutable() -> URL {
+    var buildProducts = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
+    // SwiftPM runs tests from a bundle on macOS but beside its executables on Linux.
+    if buildProducts.lastPathComponent == "MacOS",
+       buildProducts.deletingLastPathComponent().lastPathComponent == "Contents" {
+        buildProducts.deleteLastPathComponent()
+        buildProducts.deleteLastPathComponent()
+        buildProducts.deleteLastPathComponent()
+    }
+    return buildProducts.appendingPathComponent("refract")
 }
 
 private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {
