@@ -35,8 +35,9 @@ the binary from an empty temporary directory.
 ## CI jobs
 
 The workflow runs on pull requests, pushes to `main`, and manual dispatch. It has read-only repository permissions
-and never interpolates pull-request text into a shell command. Repository checks and changed-workflow linting are
-independent jobs.
+and never interpolates pull-request text into a shell command. Swift, repository checks and changed-workflow linting
+are independent jobs. The required Swift and repository jobs run on every pull request; workflow linting runs on the
+changed workflow set.
 
 During the initial repository bootstrap, the full documentation check waits for the following paths promised by
 their owning workstreams:
@@ -53,10 +54,12 @@ renamed, update its original documentation references in the owning change rathe
 
 Both Swift jobs run `swift build`, the complete `swift test`, and the documented `swift test --filter GoldenTests`
 regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. The
-jobs use Swift 6.0.3, the language-mode baseline declared by `Package.swift`, on Ubuntu 24.04 and macOS 15; the local
-Linux verification uses Swift 6.4.2. Dependencies stay locked by `Package.resolved`. There is no skip for the Swift
-or fixture jobs. macOS CI verifies generator portability; it does not constitute an iOS device or simulator
-measurement.
+jobs use Swift 6.4.2, the verified toolchain selected for this phase, on Ubuntu 24.04 and macOS 26. The manifest's
+Swift 6 language mode is preserved, but `Package.swift` currently also enables an upcoming compiler feature that is
+redundant in Swift 6; Swift 6.0.3 rejects it. #1 owns the package compatibility fix, recorded in that issue, and #11
+does not bypass it by lowering language mode or changing shared compiler flags. Dependencies stay locked by
+`Package.resolved`. There is no skip for the Swift or fixture jobs. macOS CI verifies generator portability; it does
+not constitute an iOS device or simulator measurement.
 
 ## Branch integration
 
