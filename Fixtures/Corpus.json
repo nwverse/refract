@@ -22,6 +22,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "control-if-else",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "control-reject-if-let",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
       "implementationStatus": "ready"
     },
@@ -167,7 +175,7 @@
     },
     {
       "path": "v0-button-action",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-conditional-content",
@@ -183,11 +191,11 @@
     },
     {
       "path": "v0-hello-text",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-identified-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-leaf-controls",
@@ -231,7 +239,7 @@
     },
     {
       "path": "v0-reject-missing-resource",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-native-missing",
@@ -275,7 +283,7 @@
     },
     {
       "path": "v0-static-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-styled-text",

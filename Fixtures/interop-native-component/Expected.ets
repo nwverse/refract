@@ -5,7 +5,7 @@ import { RoutePreview } from 'example.maps';
 @ComponentV2
 export struct RouteScreen {
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text('Route')
       RoutePreview({ cameraZoom: 12.0, showsTraffic: true })
     }
