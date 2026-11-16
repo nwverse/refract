@@ -167,7 +167,7 @@
     },
     {
       "path": "v0-identified-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-leaf-controls",
@@ -255,7 +255,7 @@
     },
     {
       "path": "v0-static-list",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-styled-text",
