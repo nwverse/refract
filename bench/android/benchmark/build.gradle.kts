@@ -30,6 +30,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":screen"))
     implementation("androidx.benchmark:benchmark-macro-junit4:1.4.1")
     implementation("androidx.benchmark:benchmark-junit4:1.4.1")
     implementation("androidx.test.ext:junit:1.2.1")

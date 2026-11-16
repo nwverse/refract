@@ -1,9 +1,11 @@
 # Android generated-vs-native benchmark harness
 
 The app module contains a performance-shaped Compose settings screen and a hand-written reference of the same UI.
-**The `Generated*` functions are currently hand-checked contract stand-ins for the source in
-`SettingsScreen.swift`, not output produced by the unfinished generator.** Replace them with generator output and
-keep this notice until the replacement is in place. There is no benchmark runtime library in either screen.
+**The `Generated*` functions remain hand-checked contract stand-ins for the source in
+`SettingsScreen.swift`.** The real CLI now generates `SettingsScreen.kt`/`.ets`, but the generated shape is not yet
+equivalent to the preserved reference: test tags, accessibility semantics, typography and retained callback identity
+must be resolved before replacing the stand-in. Keep this notice until that replacement is verified. There is no
+benchmark runtime library in either compared screen.
 
 `report.py` pairs `Generated` and `Reference` results from the benchmark integration, reports raw samples and
 p50/p99, rejects missing pairs, non-finite values and different build/device contexts, and returns nonzero for a
@@ -55,7 +57,20 @@ distribution from the public Gradle service; no local proxy or internal mirror i
 
 ## Adding real generated benchmarks
 
-Regenerate `GeneratedSettingsScreen.kt` from `SettingsScreen.swift`, retain the generated header, and diff the
-native semantics against the reference. Do not benchmark a hand-edited "generated" file. Add fixtures for every new
-performance rule in `Fixtures/performance/`, then measure any changed native pattern before merging. A compile
-success alone cannot satisfy goal 2, and emulator-only measurements cannot close the physical-device evidence gap.
+After `swift build`, run `JAVA_HOME=/path/to/jdk bench/android/generate-and-compile.sh`. It regenerates both native
+outputs into the ignored `tmp/benchmark-generated/` directory, installs the exact Kotlin as
+`screen/src/main/java/dev/refract/bench/SettingsScreen.kt`, and compiles the shared library, app and
+self-instrumented test release artifacts without starting an emulator. The `:screen` Android library owns the
+real generated UI, unchanged hand-written reference and model boundary; app and test modules depend on that
+library rather than recompiling generated source under incompatible resource namespaces. `SettingsModel.kt`
+retains only the hand-written `BenchmarkSettingsModel` implementation; the CLI owns the `SettingsModel`
+interface and `SettingRow` declarations. `refract.json` and the Android/HarmonyOS catalogs declare the same
+`settings.item` resource. Diff both outputs and do not edit the Kotlin/ArkTS independently. ArkTS generation is
+not ArkTS compilation.
+
+The `Generated*` stand-in and hand-written reference remain unchanged until their native semantics match the real
+output. A compile success alone cannot satisfy goal 2, and emulator-only measurements cannot close the
+physical-device evidence gap. The current environment has no `/dev/kvm` or attached physical device. A clean Google
+APIs API 35 attempt also failed to provide a writable benchmark output volume and stable package/mount services;
+do not repeatedly restart it or substitute toy measurements. A named target with responsive package/graphics
+services, writable `/sdcard/Android/media` and complete paired JSON/Perfetto traces is required for macro evidence.

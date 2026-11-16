@@ -1,23 +1,6 @@
 package dev.refract.bench
 
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
-
-@Immutable
-data class SettingRow(
-    val id: Int,
-    val title: String,
-    val subtitle: String,
-    val enabled: Boolean,
-)
-
-interface SettingsModel {
-    val title: State<String>
-    val rows: State<List<SettingRow>>
-
-    fun setEnabled(id: Int, value: Boolean)
-}
 
 class BenchmarkSettingsModel : SettingsModel {
     override val title = mutableStateOf("Native settings")
