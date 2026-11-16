@@ -19,7 +19,6 @@ export interface SettingsListModel {
 @ComponentV2
 export struct IdentifiedList {
   @Require @Param model: SettingsListModel;
-
   build() {
     List() {
       LazyForEach(this.model.items, (item: SettingItem) => {

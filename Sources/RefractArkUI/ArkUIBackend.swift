@@ -61,7 +61,8 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
-            if !screen.parameters.isEmpty || !screen.states.isEmpty { writer.line() }
+            // Local-state emission already supplies the separator before build().
+            if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
             try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver)
             writer.close()
