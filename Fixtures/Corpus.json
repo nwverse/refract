@@ -143,11 +143,11 @@
     },
     {
       "path": "v0-native-component",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-binding-initializer",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-reject-body-mutation",

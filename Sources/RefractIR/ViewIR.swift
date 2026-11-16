@@ -71,6 +71,20 @@ public struct ItemType: Codable, Equatable, Sendable {
 }
 
 public extension ViewNode {
+    var children: [ViewNode] {
+        switch self {
+        case let .stack(_, children, _, _), let .layout(_, children, _, _), let .list(children, _, _): children
+        case let .scroll(_, child, _, _), let .listItem(child, _): [child]
+        case let .button(label, _, _, _): [label]
+        case let .section(_, children, _): children
+        case let .component(component, _): component.children
+        case let .forEach(items, _): [items.content]
+        case let .conditional(branches, _): branches.flatMap(\.children)
+        case let .platformView(alternatives, _): alternatives.ios + alternatives.android + alternatives.harmonyOS
+        default: []
+        }
+    }
+
     var sourceLocation: SourceLocation? {
         switch self {
         case let .stack(_, _, _, location), let .text(_, _, location), let .button(_, _, _, location),
