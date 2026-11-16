@@ -36,13 +36,17 @@ jobs:
         with:
           swift-version: ${{ matrix.swift-version }}
       - name: Show the selected toolchain
-        run: swift --version
+        id: swift
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift --version
+          printf 'bin_path=%s\n' "$(swift build --show-bin-path --disable-automatic-resolution)" >> "$GITHUB_OUTPUT"
       - name: Build with locked dependencies
         run: swift build --disable-automatic-resolution
-      - name: Diagnose the macOS CLI test executable location
-        if: runner.os == 'macOS'
-        run: swift test --disable-automatic-resolution --skip-build --filter cliGeneratesBothPlatformsAndRejectsUnsupportedInput
       - name: Run the complete test suite
+        env:
+          REFRACT_CLI_PATH: ${{ steps.swift.outputs.bin_path }}/refract
         run: swift test --disable-automatic-resolution
       - name: Regenerate and compare every golden fixture
         run: |

@@ -12,9 +12,7 @@ import Foundation
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let executable = builtCLIExecutable()
     guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-        let runner = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        let siblings = (try? FileManager.default.contentsOfDirectory(atPath: executable.deletingLastPathComponent().path)) ?? []
-        Issue.record("Build the refract executable with `swift build` before running `swift test`. Runner: \(runner.path); candidate: \(executable.path); files: \(siblings)")
+        Issue.record("Build the refract executable with `swift build` before running `swift test`. Candidate: \(executable.path)")
         return
     }
     let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -43,18 +41,12 @@ import Foundation
 }
 
 private func builtCLIExecutable() -> URL {
-    let executableName = "refract"
-    #if os(macOS)
-    let bundled = Bundle.main.bundleURL
-        .deletingLastPathComponent()
-        .appendingPathComponent(executableName)
-    if FileManager.default.isExecutableFile(atPath: bundled.path) {
-        return bundled
+    if let path = ProcessInfo.processInfo.environment["REFRACT_CLI_PATH"] {
+        return URL(fileURLWithPath: path)
     }
-    #endif
     return URL(fileURLWithPath: CommandLine.arguments[0])
         .deletingLastPathComponent()
-        .appendingPathComponent(executableName)
+        .appendingPathComponent("refract")
 }
 
 @Test func cliGeneratesMultipleInputsAndDoesNotWriteOnAnyDiagnostic() throws {
