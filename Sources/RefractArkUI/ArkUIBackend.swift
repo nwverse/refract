@@ -24,6 +24,7 @@ public struct ArkUIBackend: Sendable {
                 writer.line("import { \(item.value.target) } from '\(module)';")
             }
         }
+        try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
             guard ArkText.isIdentifier(screen.name) else {
                 throw Diagnostic(code: "arkui.invalid_component_name",

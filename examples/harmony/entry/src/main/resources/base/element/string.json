@@ -31,6 +31,10 @@
     {
       "name": "settings_save",
       "value": "Save"
+    },
+    {
+      "name": "settings_native_component",
+      "value": "Generated screen with a native component"
     }
   ]
 }
