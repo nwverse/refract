@@ -29,6 +29,14 @@ Requirements: JDK 21, Android SDK Platform 37.2 and Build Tools 37.0.0. The wrap
 uses Android Gradle Plugin 9.5.0, Kotlin/Compose plugin 2.4.21 and Compose BOM 2026.09.00; the BOM requires
 compileSdk 37. `ANDROID_HOME` is the only machine-specific configuration; do not commit `local.properties`.
 
+`gradle/wrapper/gradle-wrapper.jar` is the official Gradle 9.8.2 wrapper jar, extracted from
+`gradle-9.8.2/lib/plugins/gradle-wrapper-main-9.8.2.jar` inside the verified Gradle 9.8.2 distribution (the zip
+whose SHA-256 is recorded as `distributionSha256Sum` in `gradle-wrapper.properties`). Its SHA-256 is
+`3b8a25775a69158b5ad2b1d17a80a88dc7b40a352a73eb27d06c612a7ce68e98`. If the wrapper is regenerated with
+`gradle wrapper`, restore that exact jar rather than a jar from a different Gradle version: an older jar's
+`Install.unzip` references `org.gradle.internal.file.PathTraversalChecker`, which is not bundled in older jars
+and crashes the bootstrap with `NoClassDefFoundError` on a cold distribution cache.
+
 AGP 9 supplies built-in Kotlin support. Do not apply `org.jetbrains.kotlin.android`; use
 `KotlinAndroidProjectExtension.compilerOptions` to retain JVM 17 bytecode while building with JDK 21.
 
@@ -44,6 +52,16 @@ local debug key by the Android plugin; no application signing key is committed. 
 performance result for this example.
 
 To compile only the Kotlin and its resources, run `./gradlew :app:compileDebugKotlin`.
+
+## CI compile gate
+
+`.github/workflows/ci.yml` runs an `android-compile` job on every pull request and on every push to `main`. The job
+builds the `refract` CLI, runs `scripts/check_examples.py` to regenerate this example and reject stale committed
+output, then invokes `./gradlew --no-daemon :app:compileDebugKotlin` against a pinned JDK 21 + Android SDK
+(platform `android-37.2`, build tools `37.0.0`). The compile is byte-equivalent to the local command above; the
+job never edits the generated files and never accepts a Kotlin compiler failure. It is a compile-only gate with
+no emulator, no device and no performance measurement. See `../../docs/ci.md` for the toolchain pins and cache
+layout.
 
 ## Regenerate and check
 

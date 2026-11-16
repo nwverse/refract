@@ -11,7 +11,7 @@ export interface ExtensionSettingsModel {
 export struct ExtensionSettings {
   @Require @Param model: ExtensionSettingsModel;
   build() {
-    Column({ space: 8 }) {
+    Column() {
       Text(this.model.title)
       Button() {
         Text('Disable')

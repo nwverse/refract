@@ -29,6 +29,7 @@
     },
     "resources": {
       "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
       "strings": { "settings.online": "settings_online" }
     }
   },
@@ -61,6 +62,7 @@
     "resources": {
       "namespace": "app",
       "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
       "strings": { "settings.online": "settings_online" }
     }
   }

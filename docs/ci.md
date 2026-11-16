@@ -35,9 +35,9 @@ the binary from an empty temporary directory.
 ## CI jobs
 
 The workflow runs on pull requests, pushes to `main`, and manual dispatch. It has read-only repository permissions
-and never interpolates pull-request text into a shell command. Swift, repository checks and changed-workflow linting
-are independent jobs. The required Swift and repository jobs run on every pull request; workflow linting runs on the
-changed workflow set.
+and never interpolates pull-request text into a shell command. Swift, Android compile, repository checks and
+changed-workflow linting are independent jobs. The required Swift, Android compile and repository jobs run on every
+pull request; workflow linting runs on the changed workflow set.
 
 During the initial repository bootstrap, the full documentation check waits for the following paths promised by
 their owning workstreams:
@@ -66,6 +66,40 @@ enables an upcoming compiler feature that is redundant in Swift 6; Swift 6.0.3 r
 compatibility fix, recorded in that issue, and #11 does not bypass it by lowering language mode or changing shared
 compiler flags. Dependencies stay locked by `Package.resolved`. There is no skip for the Swift or fixture jobs.
 macOS CI verifies generator portability; it does not constitute an iOS device or simulator measurement.
+
+## Android generated-code compile gate
+
+The `android-compile` job proves that the committed generated Kotlin compiles with the documented Android
+toolchain on every pull request and on every push to `main`. A generator change can pass the golden tests while
+producing Kotlin that no longer builds; this job catches that at CI time.
+
+The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
+
+1. Build the `refract` CLI with the same locked dependencies as the Swift job.
+2. Run `python3 scripts/check_examples.py` to regenerate the example sources through the actual CLI and reject
+   stale committed Kotlin/ArkTS. `git diff --exit-code` over the generated directories then fails on any drift
+   the script did not catch.
+3. Install JDK 21 (Temurin) and a pinned Android SDK: platform `android-37.2`, build tools `37.0.0`, and the
+   command-line tools zip whose SHA-256 is recorded in the workflow. The pinned toolchain mirrors the documented
+   values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
+4. Run `./gradlew --no-daemon :app:compileDebugKotlin` from `examples/android/`. The checked-in Gradle wrapper
+   (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle
+   through `services.gradle.org`. Android Gradle Plugin, Kotlin and the Compose BOM are pinned in the same
+   Gradle scripts; no version is left to resolve at CI time.
+5. Restore `~/.gradle/caches` and `~/.gradle/wrapper` via `actions/cache` keyed by the wrapper and Gradle build
+   scripts. The cache is read-only on pull requests from forks. The job never runs `gradlew --write-locks` or
+   accepts an untrusted lockfile change as part of the gate.
+6. Reject any untracked files left in the checkout after the compile.
+
+The gate is compile-only. It produces no APK, no emulator or device run, and no performance measurement;
+`docs/GOALS.md` goal 2 is not exercised by this job and no such claim may be inferred from it. HarmonyOS remains
+unverified in CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not
+hidden by this job. To run the same check locally, follow `examples/android/README.md`: build the CLI, run
+`scripts/check_examples.py`, then `./gradlew :app:compileDebugKotlin` with `ANDROID_HOME` and a JDK 21 on `PATH`.
+
+The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or
+changes the Android toolchain must update the generated files or the toolchain pins in the same change rather than
+being merged with a red job.
 
 ## Branch integration
 
