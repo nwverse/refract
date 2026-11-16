@@ -131,6 +131,9 @@ private final class Builder: SyntaxVisitor {
         case .native, .conditional, .platformView:
             error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
             return nil
+        default:
+            error("unsupportedModifierTarget", "This extended view modifier target is not supported yet.", at: syntax)
+            return nil
         }
     }
 
