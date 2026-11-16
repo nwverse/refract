@@ -1,0 +1,1 @@
+Input.swift:4:9: error [RFNATIVE002]: Native component RoutePreview maps Double as String instead of the declared numeric target type Suggestion: Match every parameter label and supported type across the declarations

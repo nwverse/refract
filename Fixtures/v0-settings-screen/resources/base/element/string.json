@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "settings_profile", "value": "Profile" },
+    { "name": "settings_display_name", "value": "Display name" },
+    { "name": "settings_preferences", "value": "Preferences" },
+    { "name": "settings_notifications", "value": "Notifications" },
+    { "name": "settings_save", "value": "Save" }
+  ]
+}
