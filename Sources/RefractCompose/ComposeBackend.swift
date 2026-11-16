@@ -30,12 +30,9 @@ public struct ComposeBackend: Sendable {
         out.line()
         out.line("package \(context.packageName)")
         out.line()
-        for item in context.imports.sorted() {
-            out.line("import \(item)")
-        }
-        for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
-            out.line("import \(item.module)")
-        }
+        var imports = context.imports
+        imports.formUnion(InteropResolver(module: module, mapping: mapping).imports(for: .android).map(\.module))
+        for item in imports.sorted() { out.line("import \(item)") }
         for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
             if let module = item.value.module {
                 out.line("import \(module).\(item.value.target)")

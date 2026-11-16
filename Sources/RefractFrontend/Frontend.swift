@@ -238,7 +238,8 @@ final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
-            if designSystem?.isCandidate(name) == true {
+            if interop.declarations.contains(where: { $0.name == name }) == false,
+               designSystem?.isCandidate(name) == true {
                 return designSystem?.component(call, name: name)
             }
             guard interop.declarations.contains(where: { $0.name == name }) else {

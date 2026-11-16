@@ -49,7 +49,9 @@ public enum GoldenRunner {
         catch let group as DiagnosticGroup { diagnostics.append(contentsOf: group.diagnostics) }
         catch let error as InteropMappingError { diagnostics.append(contentsOf: error.diagnostics) }
         guard diagnostics.isEmpty else {
-            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
+            var seen: Set<Diagnostic> = []
+            return GoldenResult(kotlin: nil, arkTS: nil,
+                                diagnostics: diagnostics.filter { seen.insert($0).inserted })
         }
         return GoldenResult(kotlin: kotlin, arkTS: ark, diagnostics: diagnostics)
     }
