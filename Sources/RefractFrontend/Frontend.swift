@@ -60,6 +60,7 @@ final class Builder: SyntaxVisitor {
         guard node.inheritanceClause?.inheritedTypes.contains(where: {
             $0.type.trimmedDescription == "View"
         }) == true else { return .skipChildren }
+        guard validateViewMembers(node) else { return .skipChildren }
 
         parameters = []
         let members = node.memberBlock.members

@@ -5,7 +5,7 @@
 export struct ScrollContent {
   build() {
     Scroll() {
-      Column({ space: 8 }) {
+      Column() {
         Text('First')
         Text('Second')
       }
