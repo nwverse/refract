@@ -207,6 +207,49 @@ observes replacement of its model reference but does not by itself make class me
 similarly observes assignment of the decorated value, with deep class-property observation supplied by
 `@ObservedV2`/`@Trace`.
 
+### Identified-list replacement
+
+For a source property such as `var items: [SettingItem] { get }`, the generated ArkUI interface requires
+`items: BasicDataSource<SettingItem>`; Compose retains `State<List<SettingItem>>`. These are two native boundaries
+for the same declared source collection, not a requirement that the app's shared model use an ArkUI type.
+
+The HarmonyOS app owns a `BasicDataSource` implementation and its storage. When its Swift-facing model receives a
+replacement array, that implementation updates its storage and delivers the corresponding native data-source change
+notifications (for example reload, or explicit insert/delete/move operations). `LazyForEach` subscribes through
+`registerDataChangeListener`; generated code does not copy the array, poll it, watch it with `@Monitor`, or invent a
+second observer registry. Stable `String`/`Int` ids are converted to string keys so those updates preserve logical
+row identity. In-place collection mutation is outside the source subset and must not be presented as an observable
+replacement.
+
+The source's value-type item becomes an explicitly typed native class for ArkUI. Scalar item fields are immutable in
+the first list slice. Mutable fields require the app-facing observation implementation to supply native V2 property
+observation; the generated class shape alone is not evidence of compiler acceptance or update behavior.
+
+The following app-owned pseudocode illustrates the boundary; it is not emitted by Refract and has not been compiled
+with a HarmonyOS SDK here. `AppItemDataSource` is the application's concrete `BasicDataSource<SettingItem>` subclass.
+
+```typescript
+@ObservedV2
+export class SettingsListModelImplementation implements SettingsListModel {
+  @Trace items: BasicDataSource<SettingItem>;
+
+  constructor(items: BasicDataSource<SettingItem>) {
+    this.items = items;
+  }
+
+  replaceItems(replacement: Array<SettingItem>): void {
+    let source = this.items as AppItemDataSource;
+    source.replaceAll(replacement);
+    source.notifyReload();
+  }
+}
+```
+
+`replaceAll` and `notifyReload` are illustrative application implementation methods on that concrete subclass, not
+claimed `BasicDataSource` SDK methods without compiler verification. A whole-data reload is the conservative
+replacement path; fine-grained notifications may be used when the app can describe the exact change. No device
+performance claim follows from this structural contract.
+
 After `@Event` invokes the parent write, synchronization back to the child `@Param` is asynchronous. Generated event
 handlers must not read the child parameter and assume that it has already changed. Controls that require this
 immediate value behavior must receive an explicit backend mapping or be rejected, rather than assigning `@Param` as a

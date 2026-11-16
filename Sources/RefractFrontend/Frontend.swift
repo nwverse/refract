@@ -27,6 +27,7 @@ final class Builder: SyntaxVisitor {
     var itemTypes: [ItemType] = []
     var currentModels: [ModelReference] = []
     var currentListItem: String?
+    var currentListItemType: ItemType?
 
     init(file: String, tree: SourceFileSyntax) {
         self.file = file
@@ -173,7 +174,7 @@ final class Builder: SyntaxVisitor {
         case "Text":
             guard call.arguments.count == 1,
                   let argument = call.arguments.first, call.trailingClosure == nil,
-                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? modelProperty(argument.expression).map({ TypedExpression($0, .string) }) ?? scalar(argument.expression),
+                  let value = stateText(argument.expression).map({ TypedExpression($0, .string) }) ?? modelTypedProperty(argument.expression) ?? scalar(argument.expression),
                   value.type == .string,
                   (argument.label == nil) || (argument.label?.text == "verbatim") else {
                 error("unsupportedText", "Text requires one string value, optionally labeled `verbatim`.",
@@ -297,7 +298,7 @@ final class Builder: SyntaxVisitor {
             ios: values[0], android: values[1], harmonyOS: values[2])), location: location(of: call)), type)
     }
 
-    private struct TypedExpression {
+    struct TypedExpression {
         let expression: Expression
         let type: ValueType?
         init(_ expression: Expression, _ type: ValueType?) {
