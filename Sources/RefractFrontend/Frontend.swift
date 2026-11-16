@@ -141,20 +141,10 @@ final class Builder: SyntaxVisitor {
 
     private func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
                           at syntax: some SyntaxProtocol) -> ViewNode? {
-        switch node {
-        case let .stack(axis, children, modifiers, location):
-            return .stack(axis: axis, children: children, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
-        case let .text(expression, modifiers, location):
-            return .text(expression, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
-        case let .button(label, action, modifiers, location):
-            return .button(label: label, action: action, modifiers: modifiers + [Modifier(name: name, arguments: arguments)], location: location)
-        case .native, .conditional, .platformView:
-            error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
-            return nil
-        default:
-            error("unsupportedModifierTarget", "This extended view modifier target is not supported yet.", at: syntax)
-            return nil
-        }
+        let modifier = Modifier(name: name, arguments: arguments, location: location(of: syntax))
+        if let updated = node.appendingModifier(modifier) { return updated }
+        error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
+        return nil
     }
 
     func view(_ call: FunctionCallExprSyntax) -> ViewNode? {
