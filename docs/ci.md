@@ -46,15 +46,18 @@ their owning workstreams:
 | --- | --- |
 | `docs/subset.md` | #2 |
 | `docs/performance.md` | #9 |
-| `docs/adoption.md` | #10 |
 
-The workflow prints an annotation while any prerequisite is absent. This is not a permanent allowlist: the checker
-itself has no missing-path exceptions, and the full command must run in CI before #11 closes. If a promised path is
-renamed, update its original documentation references in the owning change rather than deleting a broken reference.
+The workflow prints an annotation while either prerequisite is absent. This is not a permanent allowlist: the checker
+itself has no missing-path exceptions, and the full command must run in CI before #11 closes. Once both paths exist,
+every maintained document must pass, including indexed examples and fixture references. The temporary gate is not
+removed just because these filenames exist. If a promised path is renamed, update its original documentation
+references in the owning change rather than deleting a broken reference.
 
 Both Swift jobs run `swift build`, the complete `swift test`, and the documented `swift test --filter GoldenTests`
-regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. The
-jobs request Swift 6.4.2 on Ubuntu 24.04 and macOS 26. The stable setup-swift release has a hard-coded catalog that
+regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. CLI
+integration tests accept `REFRACT_CLI_PATH`, which the workflow derives from `swift build --show-bin-path`; this
+avoids assuming that SwiftPM test runners and products use the same directory layout on every operating system.
+The jobs request Swift 6.4.2 on Ubuntu 24.04 and macOS 26. The stable setup-swift release has a hard-coded catalog that
 ends at 6.2.1, so the workflow uses the pinned v3.0.0-beta.1 commit that installs through Swiftly. Its Linux path
 verifies the Swiftly archive with Swift's official GPG keys; signature verification is not disabled. The pinned
 installer does not modify the developer's shell profile. This pin needs a follow-up when a stable setup-swift release
