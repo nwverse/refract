@@ -1,0 +1,1 @@
+Input.swift:18:13: error [RFLIST003]: Static and dynamic rows cannot be mixed in one List in v0. Suggestion: Use List { ForEach(model.items) { item in ... } } alone, or a separate static List

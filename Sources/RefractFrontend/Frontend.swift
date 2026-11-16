@@ -119,6 +119,11 @@ final class Builder: SyntaxVisitor {
     }
 
     func view(_ expression: ExprSyntax) -> ViewNode? {
+        if let call = expression.as(FunctionCallExprSyntax.self), forEachCall(expression) != nil {
+            error("RFLIST003", "ForEach must be the sole dynamic child directly owned by List, not nested or eagerly rendered.",
+                  "Use List { ForEach(model.items) { item in ... } } with a stable stored id", at: call)
+            return nil
+        }
         if let call = expression.as(FunctionCallExprSyntax.self) {
             // SwiftSyntax represents `Text("x").padding() { ... }` as a call whose called expression
             // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure

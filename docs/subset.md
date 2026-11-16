@@ -130,10 +130,12 @@ List(model.items) { item in
 }
 ```
 
-V0 accepts `List(model.items)` and `ForEach(model.items) { item in ... }` inside a `List`. `ForEach(model.items,
-id: \.id)` is also accepted when the model explicitly adopts `Identifiable` or supplies the same key path. The id
-expression must be a stored `String` or `Int` property. Object identity, array offsets and UUID creation during a
-body evaluation are rejected.
+V0 accepts `List(model.items)` and `List { ForEach(model.items) { item in ... } }`. `ForEach(model.items,
+id: \.id)` is also accepted when the model explicitly adopts `Identifiable` and `\.id` names the same stored identity
+property. Both source forms use the same typed `ListItems`/`ModelCollection` IR and native lowering. A `ForEach` must
+be the sole dynamic child directly owned by `List`: nesting it, placing it in a stack or `ScrollView`, and mixing it
+with static rows are rejected with `RFLIST003`. The id expression must be the stored `String` or `Int` `id` property.
+`\.self`, another property, object identity, array offsets and UUID creation during a body evaluation are rejected.
 
 Compose emits `items(items = model.items.value, key = { it.id }, contentType = { "SettingItem" })`. The item type is
 immutable and list identity is supplied directly to the platform. Do not use an index as a fallback or wrap each
@@ -268,11 +270,11 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFSEM001` | Expression is outside the typed subset | Use a declared scalar property or a model action |
 | `RFSEM002` | Type is not supported or cannot be inferred | Declare an explicit supported type |
 | `RFCTRL001` | View condition is not a supported typed Boolean | Use a declared Boolean model, state or binding property |
-| `RFCTRL002` | Optional binding or availability condition is unsupported | Expose a typed nonoptional Boolean from the model |
-| `RFCTRL003` | Switch subject is not a declared enum-typed input | Use an immutable local no-payload enum input |
-| `RFCTRL004` | Optional chaining, type checks or casts are unsupported | Use a nonoptional declared Boolean property |
-| `RFCTRL005` | Matching-pattern condition or switch branch is unsupported | Use a declared Boolean property or explicit no-payload cases |
-| `RFCTRL006` | Enum has a raw value, payload, inheritance or unsupported declaration | Declare a finite no-payload local enum without inheritance |
+| `RFCTRL002` | Optional binding is outside the supported scalar-input form, or availability is unsupported | Use a distinct alias, a declared optional scalar input and an explicit else branch |
+| `RFCTRL003` | Switch subject is not a declared enum-typed input | Use an immutable local enum input |
+| `RFCTRL004` | Optional chaining, type checks or casts are unsupported | Use a supported explicit binding or declared Boolean property |
+| `RFCTRL005` | Matching-pattern condition or switch branch is unsupported | Use a declared Boolean property or explicit matching enum cases with distinct scalar bindings |
+| `RFCTRL006` | Enum has a raw value, unsupported payload shape, inheritance or unsupported declaration | Declare a finite local enum with no payload or exactly one scalar payload per case |
 | `RFCTRL007` | Enum switch has a missing or duplicate case | List every declared case exactly once |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
@@ -282,7 +284,7 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFVIEW005` | Per-platform variation is hidden in free-form `#if` | Use the declared, type-checked platform-value construct |
 | `RFLIST001` | Collection lacks a stable, typed identity | Use `Identifiable` with a stored String or Int id |
 | `RFLIST002` | Index, object identity or generated UUID is used as a key | Use the item's stable stored id |
-| `RFLIST003` | Dynamic rows are eagerly rendered | Use List with an identifiable model collection |
+| `RFLIST003` | Dynamic rows are misplaced, nested, eagerly rendered, or mixed with static rows | Use the sole `ForEach(model.items)` child of `List`, or canonical `List(model.items)` |
 | `state.invalid_declaration` | Property wrapper or stored input is outside the supported ownership contract | Use @State, @Binding or a plain let model input as documented |
 | `state.missing_initializer` | Local state lacks a supported literal initializer | Initialize state with a Bool, Int, Double or String literal |
 | `state.binding_initializer` | Binding has an initializer or unsupported ownership | Pass an initialized binding from the parent with a supported scalar type |

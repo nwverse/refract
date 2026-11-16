@@ -116,13 +116,13 @@ def merge_strings(source: Path, target: Path, fixture: str) -> None:
     source_root = ET.parse(source).getroot()
     source_entries = [(child.attrib["name"], (child.text or "").strip())
                       for child in source_root.findall("string")]
-    if not source_entries:
-        fail(f"{fixture}: values/strings.xml declares no <string> entries")
-
+    # Model-only fixtures may legitimately have no localized resources. Keep an
+    # empty root so a later fixture can merge its entries into the same catalog.
     if target.exists():
         target_root = ET.parse(target).getroot()
     else:
         target_root = ET.Element("resources")
+        target_root.text = "\n"
     existing: dict[str, str] = {child.attrib["name"]: (child.text or "").strip()
                                 for child in target_root.findall("string")}
     for name, value in source_entries:

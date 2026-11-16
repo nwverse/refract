@@ -16,3 +16,5 @@ v0-local-state
 v0-binding-state
 control-optional-binding
 control-switch-payload
+list-foreach
+list-foreach-explicit-id

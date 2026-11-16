@@ -109,7 +109,25 @@ extension Builder {
     }
 
     private func staticList(_ call: FunctionCallExprSyntax) -> ViewNode? {
-        guard call.arguments.isEmpty, let children = children(of: call.trailingClosure) else { return nil }
+        guard call.arguments.isEmpty else { return nil }
+        guard call.additionalTrailingClosures.isEmpty else {
+            error("RFVIEW004", "List accepts only its content trailing closure in v0.",
+                  "Use List { ForEach(model.items) { item in ... } } or the documented static rows", at: call)
+            return nil
+        }
+        let closure = call.trailingClosure
+        let dynamicCalls = closure?.statements.compactMap { statement in
+            statement.item.as(ExprSyntax.self).flatMap { forEachCall($0) }
+        }
+        if let forEach = dynamicCalls?.first ?? nil {
+            guard closure?.statements.count == 1, dynamicCalls?.count == 1 else {
+                error("RFLIST003", "Static and dynamic rows cannot be mixed in one List in v0.",
+                      "Use List { ForEach(model.items) { item in ... } } alone, or a separate static List", at: forEach)
+                return nil
+            }
+            return forEachList(forEach, owner: call)
+        }
+        guard let children = children(of: closure) else { return nil }
         return .list(children: children.map { child in
             if case .section = child { return child }
             return .listItem(child: child, location: child.sourceLocation)

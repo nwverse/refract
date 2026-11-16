@@ -90,6 +90,38 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "list-foreach",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-foreach-explicit-id",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-reject-eager-foreach",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-reject-foreach-identity",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-reject-foreach-item-property",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-reject-misplaced-foreach",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-reject-mixed-rows",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-reject-nested-foreach",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "localization/formatted",
       "implementationStatus": "ready"
     },
