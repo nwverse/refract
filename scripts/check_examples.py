@@ -69,7 +69,7 @@ def check_resources() -> None:
         fail("Android and HarmonyOS string registries differ")
     if set(android) != {
         "settings.profile", "settings.display.name", "settings.preferences",
-        "settings.notifications", "settings.save",
+        "settings.notifications", "settings.save", "settings.native.component",
     }:
         fail("settings resource registry does not match the shared source keys")
 
@@ -101,6 +101,24 @@ def check_resources() -> None:
     print("Android, HarmonyOS and iOS base catalogs contain every mapped settings key")
 
 
+def check_harmony_resources() -> None:
+    root = ROOT / "examples/harmony"
+    for relative in (
+        "AppScope/resources/base/media/app_icon.svg",
+        "entry/src/main/resources/base/media/app_icon.svg",
+    ):
+        path = root / relative
+        if not path.is_file():
+            fail(f"missing HarmonyOS media resource: {relative}")
+        icon = ET.parse(path).getroot()
+        if not icon.tag.endswith("svg"):
+            fail(f"invalid HarmonyOS SVG resource: {relative}")
+    for relative in ("AppScope/app.json5", "entry/src/main/module.json5"):
+        if '"$media:app_icon"' not in (root / relative).read_text(encoding="utf-8"):
+            fail(f"expected app_icon reference is missing from {relative}")
+    print("HarmonyOS application and ability icon resources exist")
+
+
 def check_ios_references() -> None:
     project = (ROOT / "examples/ios/RefractExample.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
     for name in ("Hello", "SettingsScreen", "NativeComponentScreen"):
@@ -116,6 +134,7 @@ def main() -> int:
     try:
         regenerate_hello()
         check_resources()
+        check_harmony_resources()
         check_ios_references()
     except (KeyError, ValueError, OSError, subprocess.CalledProcessError, ET.ParseError) as error:
         print(f"check_examples: {error}", file=sys.stderr)

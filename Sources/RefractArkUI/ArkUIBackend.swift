@@ -41,6 +41,7 @@ struct Generation {
             }
         }
         for line in importLines { writer.line(line) }
+        try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
             guard ArkText.isIdentifier(screen.name) else {
                 throw Diagnostic(code: "arkui.invalid_component_name",

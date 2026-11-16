@@ -7,11 +7,6 @@
     "nativeComponents": {},
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
-    "symbols": {
-      "gear": "Icons.Default.Settings",
-      "person": "Icons.Default.Person",
-      "checkmark": "Icons.Default.Check"
-    },
     "resources": {
       "className": "refract.generated.R",
       "strings": {
@@ -27,11 +22,6 @@
     "nativeComponents": {},
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
-    "symbols": {
-      "gear": "app.media.settings",
-      "person": "app.media.profile",
-      "checkmark": "app.media.confirm"
-    },
     "resources": {
       "namespace": "app",
       "stringTable": "string",
