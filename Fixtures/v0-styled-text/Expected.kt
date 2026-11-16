@@ -22,8 +22,7 @@ public fun StyledText(modifier: Modifier = Modifier) {
         modifier = modifier
             .padding(AppSpacing.medium)
             .fillMaxWidth()
-            .background(AppColors.surface)
-            .clip(RoundedCornerShape(AppRadius.small)),
+            .background(AppColors.surface, RoundedCornerShape(AppRadius.small)),
         color = AppColors.secondary,
         style = AppTypography.title,
     )

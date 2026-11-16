@@ -12,6 +12,10 @@
 - **Hand-written expectations are a semantic review, not formatting.** Check identity, observation, accessibility,
   resource semantics, list laziness and ordinary public native signatures. Regeneration verifies the implementation;
   it does not decide what correct native code should be.
+- **Modifier order is not universal semantics.** Compose modifier order affects rendering; a SwiftUI background
+  followed by a corner radius should become a shaped `background(color, shape)`, not a rectangular background with
+  later clipping. ArkUI background color and border radius are attributes, not that same ordered operation.
+  Review the rendered result, not just a one-call-per-source-modifier mapping.
 - **Target-specific collection boundaries need explicit semantics.** ArkUI `LazyForEach` consumes `IDataSource`;
   an array-to-data-source mirror can miss changes or add work. The source contract must say who owns updates instead
   of hiding synchronization in `build()` or an undocumented lifecycle callback.
