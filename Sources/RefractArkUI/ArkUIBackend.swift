@@ -76,7 +76,6 @@ struct Generation {
             writer.open("\(containerName(axis))(\(axis == .depth ? "" : "{ space: 8 }"))")
             for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
-            if axis == .vertical { writer.line(".alignItems(HorizontalAlign.Center)") }
         case let .text(value, modifiers, _):
             writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
         case let .button(label, action, modifiers, _):
@@ -89,7 +88,7 @@ struct Generation {
                 writer.close()
             }
             if let action {
-                writer.open("  .onClick(() =>")
+                writer.open(".onClick(() =>")
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
