@@ -157,6 +157,17 @@ public struct Mapping: Codable, Equatable, Sendable {
                         namespace: resources.namespace, table: resources.stringTable)
     }
 
+    public func symbol(_ name: String, platform: Platform,
+                       location: SourceLocation? = nil) throws -> SymbolMapping {
+        guard let symbol = self.platform(platform).symbols[name] else {
+            throw Diagnostic(code: "RFMAP002",
+                message: "System image `\(name)` has no \(platform.displayName) mapping.",
+                suggestion: "Declare the typed symbol mapping for both platforms; do not guess a native media name.",
+                location: location)
+        }
+        return symbol
+    }
+
     static func isResourceKey(_ key: String) -> Bool {
         LocalizationKey.isCanonical(key)
     }
@@ -176,10 +187,11 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
     public var modifiers: [String: ModifierSignature]
     public var tokens: TokenSet
     public var resources: Resources
+    public var symbols: [String: SymbolMapping]
 
     public init(output: Output = .unspecified, imports: [NativeImport] = [], components: [String: Component] = [:],
                 nativeComponents: [String: Component] = [:], modifiers: [String: ModifierSignature] = [:],
-                tokens: TokenSet = .empty, resources: Resources = .empty) {
+                tokens: TokenSet = .empty, resources: Resources = .empty, symbols: [String: SymbolMapping] = [:]) {
         self.output = output
         self.imports = imports
         self.components = components
@@ -187,11 +199,47 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
         self.modifiers = modifiers
         self.tokens = tokens
         self.resources = resources
+        self.symbols = symbols
     }
 
     public static let empty = PlatformMapping()
 
-    enum CodingKeys: String, CodingKey { case output, imports, components, nativeComponents, modifiers, tokens, resources }
+    enum CodingKeys: String, CodingKey { case output, imports, components, nativeComponents, modifiers, tokens, resources, symbols }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        output = try values.decode(Output.self, forKey: .output)
+        imports = try values.decode([NativeImport].self, forKey: .imports)
+        components = try values.decode([String: Component].self, forKey: .components)
+        nativeComponents = try values.decode([String: Component].self, forKey: .nativeComponents)
+        modifiers = try values.decode([String: ModifierSignature].self, forKey: .modifiers)
+        tokens = try values.decode(TokenSet.self, forKey: .tokens)
+        resources = try values.decode(Resources.self, forKey: .resources)
+        symbols = try values.decodeIfPresent([String: SymbolMapping].self, forKey: .symbols) ?? [:]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(output, forKey: .output)
+        try values.encode(imports, forKey: .imports)
+        try values.encode(components, forKey: .components)
+        try values.encode(nativeComponents, forKey: .nativeComponents)
+        try values.encode(modifiers, forKey: .modifiers)
+        try values.encode(tokens, forKey: .tokens)
+        try values.encode(resources, forKey: .resources)
+        if !symbols.isEmpty { try values.encode(symbols, forKey: .symbols) }
+    }
+}
+
+public struct SymbolMapping: Codable, Equatable, Sendable {
+    public enum Kind: String, Codable, Sendable { case materialIcon, drawable, media }
+    public let kind: Kind
+    public let name: String
+
+    public init(kind: Kind, name: String) {
+        self.kind = kind
+        self.name = name
+    }
 }
 
 public struct Output: Codable, Equatable, Sendable {

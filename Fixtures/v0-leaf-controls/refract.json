@@ -7,6 +7,11 @@
     "nativeComponents": {},
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "symbols": {
+      "gear": { "kind": "materialIcon", "name": "Settings" },
+      "person": { "kind": "materialIcon", "name": "Person" },
+      "checkmark": { "kind": "materialIcon", "name": "Check" }
+    },
     "resources": {
       "className": "refract.generated.R",
       "catalog": "values/strings.xml",
@@ -23,6 +28,11 @@
     "nativeComponents": {},
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "symbols": {
+      "gear": { "kind": "media", "name": "settings" },
+      "person": { "kind": "media", "name": "profile" },
+      "checkmark": { "kind": "media", "name": "confirm" }
+    },
     "resources": {
       "namespace": "app",
       "stringTable": "string",

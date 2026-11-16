@@ -211,7 +211,7 @@
     },
     {
       "path": "v0-leaf-controls",
-      "implementationStatus": "pending"
+      "implementationStatus": "ready"
     },
     {
       "path": "v0-literal-text",

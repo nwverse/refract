@@ -34,13 +34,14 @@ final class MappingValidator {
     }
 
     private func platform(_ value: JSON, _ platform: Platform) {
-        fields(value, allowed: ["output", "imports", "components", "nativeComponents", "modifiers", "tokens", "resources"])
+        fields(value, allowed: ["output", "imports", "components", "nativeComponents", "modifiers", "tokens", "resources", "symbols"])
         output(field("output", in: value, required: true), platform)
         imports(field("imports", in: value, required: true), platform)
         components(field("components", in: value, required: true), "components")
         components(field("nativeComponents", in: value, required: true), "nativeComponents")
         modifiers(field("modifiers", in: value, required: true))
         tokens(field("tokens", in: value, required: true))
+        symbols(field("symbols", in: value), platform)
         resources(field("resources", in: value, required: true), platform)
     }
 
@@ -272,6 +273,28 @@ final class MappingValidator {
         }
     }
 
+    private func symbols(_ value: JSON?, _ platform: Platform) {
+        guard let value, object(value, "a system-symbol registry") else { return }
+        for (key, symbol, _) in value.object ?? [] {
+            if !matches(key, "^[A-Za-z_][A-Za-z0-9_]*$") {
+                error("mappingValue", "System symbol `\(key)` is not a supported identifier.",
+                      "Use a declared SF Symbol name such as `gear` or `person`.", at: symbol.location)
+            }
+            fields(symbol, allowed: ["kind", "name"])
+            guard let kind = field("kind", in: symbol, required: true)?.string else { continue }
+            if platform == .android && kind == "media" || platform == .harmonyOS && kind != "media" {
+                error("mappingPlatformMismatch", "The symbol kind `\(kind)` is invalid for this platform.",
+                      "Use materialIcon or drawable for Android and media for HarmonyOS.", at: symbol.location)
+            }
+            if !["materialIcon", "drawable", "media"].contains(kind) {
+                error("mappingValue", "The symbol kind `\(kind)` is unsupported.",
+                      "Use materialIcon, drawable or media.", at: symbol.location)
+            }
+            pattern(field("name", in: symbol, required: true), Self.referencePattern,
+                    "a typed native symbol or media resource", code: "mappingValue")
+        }
+    }
+
     private func resources(_ value: JSON?, _ platform: Platform) {
         guard let value, object(value, "a resource catalog") else { return }
         fields(value, allowed: platform == .android ? ["className", "catalog", "strings"] : ["namespace", "stringTable", "catalog", "strings"])
@@ -353,6 +376,13 @@ final class MappingValidator {
             }
         }
         compareModifierSignatures(android.property("modifiers"), harmony.property("modifiers"))
+        let androidSymbols = Set(android.property("symbols")?.object?.map { $0.0 } ?? [])
+        let harmonySymbols = Set(harmony.property("symbols")?.object?.map { $0.0 } ?? [])
+        for key in androidSymbols.symmetricDifference(harmonySymbols).sorted() {
+            error("mappingPlatformMismatch", "System symbol `\(key)` is missing on one platform.",
+                  "Declare a typed native mapping for every source symbol on both platforms.",
+                  at: (androidSymbols.contains(key) ? harmony : android).location)
+        }
         for category in TokenCategory.allCases {
             let a = Set(android.property("tokens")?.property(category.rawValue)?.object?.map { $0.0 } ?? [])
             let h = Set(harmony.property("tokens")?.property(category.rawValue)?.object?.map { $0.0 } ?? [])
