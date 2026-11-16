@@ -35,8 +35,9 @@ public struct ComposeBackend: Sendable {
         for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
             context.imports.insert(item.module)
         }
+        let usedNativeNames = selectedNativeNames(in: module.screens.map(\.body))
         for item in mapping.android.nativeComponents.sorted(by: { $0.key < $1.key }) {
-            if let module = item.value.module {
+            if usedNativeNames.contains(item.key), let module = item.value.module {
                 context.imports.insert("\(module).\(item.value.target)")
             }
         }
@@ -45,6 +46,16 @@ public struct ComposeBackend: Sendable {
         }
         out.append(bodyWriter.text)
         return out.text
+    }
+
+    private func selectedNativeNames(in bodies: [ViewNode]) -> Set<String> {
+        func collect(_ node: ViewNode, into names: inout Set<String>) {
+            if case let .native(component, _) = node { names.insert(component.name) }
+            for child in node.children(for: .android) { collect(child, into: &names) }
+        }
+        var names: Set<String> = []
+        for body in bodies { collect(body, into: &names) }
+        return names
     }
 
     private func emit(_ screen: Screen, into out: inout KotlinWriter, context: inout Context) throws {
@@ -143,6 +154,8 @@ public struct ComposeBackend: Sendable {
                            location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .component(component, location):
+            try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .platformView(alternatives, _):
             // The Android branch is selected at build time; no runtime dispatch is emitted.
             for child in alternatives.android {
@@ -228,6 +241,15 @@ public struct ComposeBackend: Sendable {
             arguments.append("\(modifier) = modifier")
         }
         out.line("\(target.symbol)(\(arguments.joined(separator: ", ")))")
+    }
+
+    private func emitDesignSystem(_ component: ComponentReference, location: SourceLocation?, isRoot: Bool,
+                                  into out: inout KotlinWriter, context: inout Context) throws {
+        let source = try ComposeDesignSystem().emit(component, location: location, isRoot: isRoot,
+            mapping: context.mapping, addImport: { context.imports.insert($0) })
+        for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
+            out.line(String(line))
+        }
     }
 
     // MARK: - Modifiers

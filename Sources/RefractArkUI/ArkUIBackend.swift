@@ -30,11 +30,12 @@ struct Generation {
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
         }
-        for declaration in resolver.imports(for: .harmonyOS) where declaration.symbols.contains(where: emittedImports.contains) {
+        for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module })
+            where declaration.symbols.contains(where: emittedImports.contains) {
             importLines.append("import { \(declaration.symbols.filter(emittedImports.contains).joined(separator: ", ")) } from '\(declaration.module)';")
         }
-        for native in module.nativeDeclarations {
-            let target = try resolver.target(for: NativeComponent(name: native.name), platform: .harmonyOS)
+        for native in usedNativeComponents(in: module.screens.map(\.body)) {
+            let target = try resolver.target(for: native.component, platform: .harmonyOS, location: native.location)
             if emittedImports.contains(target.symbol) && !target.module.isEmpty &&
                 !resolver.imports(for: .harmonyOS).contains(where: { $0.module == target.module && $0.symbols.contains(target.symbol) }) {
                 importLines.append("import { \(target.symbol) } from '\(target.module)';")
@@ -121,6 +122,8 @@ struct Generation {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
             }
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
+        case let .component(component, location):
+            try ArkDesignSystem().emit(component, location: location, mapping: mapping, writer: &writer)
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
                 try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
@@ -138,10 +141,35 @@ struct Generation {
         }
     }
 
+    private func usedNativeComponents(in bodies: [ViewNode]) -> [(component: NativeComponent, location: RefractIR.SourceLocation?)] {
+        func collect(_ node: ViewNode, into result: inout [(component: NativeComponent, location: RefractIR.SourceLocation?)]) {
+            if case let .native(component, location) = node { result.append((component, location)) }
+            for child in node.children(for: .harmonyOS) { collect(child, into: &result) }
+        }
+        var result: [(component: NativeComponent, location: RefractIR.SourceLocation?)] = []
+        for body in bodies { collect(body, into: &result) }
+        return result
+    }
+
     private func collectImports(_ node: ViewNode, resolver: InteropResolver, into emittedImports: inout Set<String>) throws {
-        for child in node.children { try collectImports(child, resolver: resolver, into: &emittedImports) }
+        for child in node.children(for: .harmonyOS) { try collectImports(child, resolver: resolver, into: &emittedImports) }
         if case let .native(component, location) = node {
             emittedImports.insert(try resolver.target(for: component, platform: .harmonyOS, location: location).symbol)
+        }
+        if case let .component(component, location) = node {
+            emittedImports.insert(try mapping.component(named: component.name, platform: .harmonyOS,
+                                                       location: location).target)
+            for modifier in component.modifiers {
+                for argument in modifier.arguments {
+                    if case let .reference(reference) = argument.value {
+                        for category in TokenCategory.allCases {
+                            if let target = mapping.harmonyOS.tokens[category][reference] {
+                                emittedImports.insert(target.split(separator: ".").first.map(String.init) ?? target)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
