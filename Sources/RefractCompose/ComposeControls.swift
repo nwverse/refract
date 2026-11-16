@@ -25,6 +25,7 @@ extension ComposeBackend {
                                  suggestion: "Declare resources.className in refract.json.", location: title.location)
             }
             let reference = className == "\(context.packageName).R" ? "R" : className
+            if reference == "R" { context.imports.insert(className) }
             out.line("Text(text = stringResource(\(reference).string.\(resource.nativeName)))")
         } else {
             guard title.type == .string else {

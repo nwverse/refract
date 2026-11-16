@@ -30,7 +30,8 @@ import RefractMapping
     #expect(output.contains("Spacer(modifier = Modifier.weight(1f))"))
     #expect(output.contains("VerticalDivider(modifier = Modifier)"))
     #expect(!output.contains("import androidx.compose.foundation.layout.weight"))
-    #expect(!output.contains("import refract."))
+    #expect(output.contains("import refract.generated.R\n"))
+    #expect(output.components(separatedBy: "import refract.").count == 2)
 }
 
 @Test func composeRejectsSystemImageWithStableCode() throws {
