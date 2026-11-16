@@ -1,0 +1,1 @@
+# Keep release obfuscation disabled for this small readable example.

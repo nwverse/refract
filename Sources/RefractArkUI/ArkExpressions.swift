@@ -1,7 +1,7 @@
 import RefractIR
 
 enum ArkExpression {
-    static func emit(_ expression: Expression) throws -> String {
+    static func emit(_ expression: Expression, item: String? = nil) throws -> String {
         switch expression.value {
         case let .stringLiteral(value):
             return try ArkText.string(value)
@@ -21,11 +21,19 @@ enum ArkExpression {
             }
             return value
         case let .reference(name):
+            if let item, name == item || name.hasPrefix(item + ".") {
+                return try referenceName(name, location: expression.location)
+            }
             return "this.\(try referenceName(name, location: expression.location))"
         case .binding:
             throw Diagnostic(code: "arkui.unsupported_binding_projection",
                              message: "A projected binding needs a supported control or child component argument.",
                              suggestion: "Pass the binding to a supported binding-aware view.",
+                             location: expression.location)
+        case .valueProperty, .interpolatedString:
+            throw Diagnostic(code: "arkui.unsupported_state_expression",
+                             message: "This state expression requires the local-state lowering.",
+                             suggestion: "Use a supported state read or interpolation.",
                              location: expression.location)
         case .platformValue:
             throw Diagnostic(code: "arkui.unsupported_platform_value",
@@ -33,6 +41,16 @@ enum ArkExpression {
                              suggestion: "Use the interop backend implementation that selects the HarmonyOS value.",
                              location: expression.location)
         }
+    }
+
+    static func assignment(_ binding: Expression, to value: String) throws -> String {
+        guard case let .binding(name) = binding.value else {
+            throw Diagnostic(code: "arkui.invalid_control_binding",
+                             message: "An editable ArkUI control requires a local or parent-owned binding.",
+                             suggestion: "Use a supported @State or @Binding projected value.",
+                             location: binding.location)
+        }
+        return "this.\(try referenceName(name, location: binding.location)) = \(value)"
     }
 
     static func referenceName(_ expression: Expression) throws -> String {
@@ -65,6 +83,10 @@ enum ArkText {
 
     static func isIdentifier(_ value: Substring) -> Bool {
         isIdentifier(String(value))
+    }
+
+    static func isResourceName(_ value: String) -> Bool {
+        !value.isEmpty && value.allSatisfy { $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }
     }
 
     static func string(_ value: String) throws -> String {

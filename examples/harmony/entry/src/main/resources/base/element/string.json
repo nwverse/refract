@@ -1,0 +1,36 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Native and generated ArkUI example"
+    },
+    {
+      "name": "entry_desc",
+      "value": "Refract example entry ability"
+    },
+    {
+      "name": "entry_label",
+      "value": "Refract example"
+    },
+    {
+      "name": "settings_profile",
+      "value": "Profile"
+    },
+    {
+      "name": "settings_display_name",
+      "value": "Display name"
+    },
+    {
+      "name": "settings_preferences",
+      "value": "Preferences"
+    },
+    {
+      "name": "settings_notifications",
+      "value": "Notifications"
+    },
+    {
+      "name": "settings_save",
+      "value": "Save"
+    }
+  ]
+}

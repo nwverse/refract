@@ -6,23 +6,43 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-callers",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "interop-native-component",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "interop-native-mismatch",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "interop-native-missing",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "interop-native-undeclared",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-platform-value",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "interop-platform-value-incomplete",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-platform-view",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "interop-reject-conditional-compilation",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "pending-contract",
-      "implementationStatus": "ready"
-    },
-    {
-      "path": "rejected-image",
-      "implementationStatus": "ready"
-    },
-    {
-      "path": "performance/compose-state",
-      "implementationStatus": "pending"
-    },
-    {
-      "path": "performance/compose-lazy-list",
-      "implementationStatus": "pending"
-    },
-    {
-      "path": "performance/arkui-observation",
       "implementationStatus": "pending"
     },
     {
@@ -30,8 +50,28 @@
       "implementationStatus": "pending"
     },
     {
+      "path": "performance/arkui-observation",
+      "implementationStatus": "pending"
+    },
+    {
       "path": "performance/arkui-reuse",
       "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/compose-lazy-list",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "performance/compose-state",
+      "implementationStatus": "pending"
+    },
+    {
+      "path": "rejected-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "state-counter",
+      "implementationStatus": "ready"
     }
   ]
 }

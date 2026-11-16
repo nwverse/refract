@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Native application module hosting generated ArkUI components.",
+  "main": "",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
