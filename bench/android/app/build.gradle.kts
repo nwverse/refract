@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.refract.bench"
+    namespace = "dev.refract.bench.host"
     compileSdk = 36
 
     defaultConfig {
@@ -29,6 +29,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":screen"))
     implementation(platform("androidx.compose:compose-bom:2025.12.01"))
     implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.compose.foundation:foundation")

@@ -9,7 +9,7 @@
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
       "className": "dev.refract.bench.R",
-      "catalog": "app/src/main/res/values/strings.xml",
+      "catalog": "screen/src/main/res/values/strings.xml",
       "strings": { "settings.item": "settings_item" }
     }
   },
