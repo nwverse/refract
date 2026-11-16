@@ -28,6 +28,7 @@
     { "path": "rejected-model-associated-type", "implementationStatus": "ready" },
     { "path": "rejected-model-async", "implementationStatus": "ready" },
     { "path": "rejected-model-property", "implementationStatus": "ready" },
+    { "path": "rejected-view-declaration", "implementationStatus": "ready" },
     { "path": "state-counter", "implementationStatus": "ready" },
     { "path": "v0-binding-state", "implementationStatus": "ready" },
     { "path": "v0-button-action", "implementationStatus": "pending" },
