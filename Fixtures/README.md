@@ -1,10 +1,25 @@
 # Golden fixtures
 
-Each directory is one conformance case. `Input.swift` is required; `refract.json` is optional. A valid case has
-`Expected.kt` and `Expected.ets`. A rejected case has `Expected.diagnostics` and no generated-output files.
-Diagnostics use the stable format `file:line:column: error [code]: message Suggestion: alternative`, one per line.
+Each manifest entry is one conformance case, with a nested path relative to `Fixtures/`:
 
-The runner discovers directories in lexical order and regenerates every case. The test fails on any byte difference.
+```json
+{
+  "schemaVersion": 1,
+  "cases": [
+    { "path": "hello", "implementationStatus": "ready" },
+    { "path": "state/parent-binding", "implementationStatus": "pending" }
+  ]
+}
+```
+
+`Input.swift` is required; `refract.json` is optional. An accepted case has both `Expected.kt` and `Expected.ets`.
+A rejected case has only `Expected.diagnostics`. Diagnostics use the stable format
+`file:line:column: error [code]: message Suggestion: alternative`, one per line.
+
+The runner follows manifest order. Every ready case regenerates and fails on any byte difference. A pending case
+has the same required files but is reported as a known issue until its owning feature is implemented and its entry
+becomes ready. Pending is not generation success. Missing, duplicate, invalid or unlisted directories fail the
+suite; an empty manifest is also invalid.
 
 Run all fixtures from the package root:
 
