@@ -5,8 +5,8 @@ struct Counter: View {
 
     var body: some View {
         VStack {
-            Text("Count: \(count)")
-            Button("Increment") { count += 1 }
+            Text(verbatim: "Count: \(count)")
+            Button(verbatim: "Increment") { count += 1 }
         }
     }
 }

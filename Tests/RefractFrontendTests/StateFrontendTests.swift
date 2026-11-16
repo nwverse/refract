@@ -8,8 +8,8 @@ import RefractIR
         @State private var count: Int = 0
         var body: some View {
             VStack {
-                Text("Count: \\(count)")
-                Button("Increment") { count += 1 }
+                Text(verbatim: "Count: \\(count)")
+                Button(verbatim: "Increment") { count += 1 }
             }
         }
     }
@@ -50,8 +50,8 @@ import RefractIR
         @Binding var isEnabled: Bool
         var body: some View {
             VStack {
-                Text("Enabled: \\(isEnabled)")
-                Button("Disable") { isEnabled = false }
+                Text(verbatim: "Enabled: \\(isEnabled)")
+                Button(verbatim: "Disable") { isEnabled = false }
             }
         }
     }
@@ -90,7 +90,7 @@ func frontendRejectsUnsupportedStoredProperties(_ declaration: String) {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Unsupported: View {
         \(declaration)
-        var body: some View { Text("Unsupported") }
+        var body: some View { Text(verbatim: "Unsupported") }
     }
     """))
     #expect(unit.diagnostics.map(\.code) == ["state.invalid_declaration"])
