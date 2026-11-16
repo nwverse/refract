@@ -5,14 +5,19 @@ extension Builder {
     func collectItemTypes(_ tree: SourceFileSyntax) {
         for statement in tree.statements {
             guard let node = statement.item.as(StructDeclSyntax.self),
-                  node.inheritanceClause?.inheritedTypes.map(\.type.trimmedDescription) == ["Identifiable"] else { continue }
+                  node.inheritanceClause?.inheritedTypes.contains(where: {
+                      $0.type.trimmedDescription == "Identifiable"
+                  }) == true else { continue }
             var properties: [ItemProperty] = []
             var identity: ItemProperty?
+            var identityDeclaration: VariableDeclSyntax?
             for member in node.memberBlock.members {
                 guard let declaration = member.decl.as(VariableDeclSyntax.self),
                       declaration.bindingSpecifier.tokenKind == .keyword(.let),
-                      declaration.attributes.isEmpty, declaration.bindings.count == 1,
+                      declaration.attributes.isEmpty, declaration.modifiers.isEmpty,
+                      declaration.bindings.count == 1,
                       let binding = declaration.bindings.first,
+                      binding.initializer == nil, binding.accessorBlock == nil,
                       let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
                       let type = scalarType(binding.typeAnnotation?.type.trimmedDescription ?? "") else {
                     error("RFLIST001", "Identifiable item fields must be stored scalar let properties.",
@@ -21,11 +26,21 @@ extension Builder {
                 }
                 let property = ItemProperty(name: name, type: type)
                 properties.append(property)
-                if name == "id" { identity = property }
+                if name == "id" {
+                    identity = property
+                    identityDeclaration = declaration
+                }
             }
             guard let identity else {
                 error("RFLIST001", "Identifiable item `\(node.name.text)` lacks a stable typed id.",
                       "Declare a stored String or Int id", at: node.name)
+                return
+            }
+            guard identity.type == .string || identity.type == .int else {
+                if let declaration = identityDeclaration {
+                    error("RFLIST001", "Identifiable item `\(node.name.text)` has an unsupported identity type.",
+                          "Use a stored String or Int id", at: declaration)
+                }
                 return
             }
             itemTypes.append(ItemType(name: node.name.text, identity: identity, properties: properties,
@@ -34,14 +49,22 @@ extension Builder {
     }
 
     func dynamicList(_ call: FunctionCallExprSyntax) -> ViewNode? {
+        if call.arguments.count == 2, call.arguments[call.arguments.index(after: call.arguments.startIndex)].label?.text == "id" {
+            let argument = call.arguments[call.arguments.index(after: call.arguments.startIndex)]
+            error("RFLIST002", "An explicit List identity must use the item's stable stored id.",
+                  "Use `List(model.items)` with a stored String or Int id; never use `\\.self` or an array index",
+                  at: argument.expression)
+            return nil
+        }
         guard let collectionExpression = call.arguments.first?.expression,
-              let collection = modelProperty(collectionExpression),
+              let collection = modelCollectionProperty(collectionExpression),
               let member = collectionExpression.as(MemberAccessExprSyntax.self),
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let model = models.first(where: { $0.name == reference.protocolName }),
               let property = model.properties.first(where: { $0.name == member.declName.baseName.text }),
               let descriptor = property.collection,
+              let item = itemTypes.first(where: { $0.name == descriptor.itemType }),
               let closure = call.trailingClosure,
               let itemName = closureItemName(closure) else {
             error("RFLIST001", "A dynamic List needs a declared identifiable model collection and one item view.",
@@ -53,17 +76,37 @@ extension Builder {
                   "Use List(model.items) or ForEach(model.items) inside List", at: call)
             return nil
         }
+        let previousItem = currentListItem
+        let previousType = currentListItemType
         currentListItem = itemName
-        defer { currentListItem = nil }
-        let content = children(of: closure)?.first
-        guard let content else {
-            error("RFLIST001", "A dynamic List item requires one supported view.", at: closure)
+        currentListItemType = item
+        defer {
+            currentListItem = previousItem
+            currentListItemType = previousType
+        }
+        let row = children(of: closure)
+        guard let row else { return nil }
+        guard row.count == 1, let content = row.first else {
+            error("RFLIST003", "A dynamic List row must contain exactly one view.",
+                  "Wrap multiple row views in one supported container", at: closure)
             return nil
         }
         let items = ListItems(collection: collection, itemName: itemName, itemType: descriptor.itemType,
                               key: descriptor.key, keyType: descriptor.keyType, content: content,
                               location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [], location: location(of: call))
+    }
+
+    private func modelCollectionProperty(_ expression: ExprSyntax) -> Expression? {
+        guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+              let base = member.base?.as(DeclReferenceExprSyntax.self),
+              let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
+              let model = models.first(where: { $0.name == reference.protocolName }),
+              let property = model.properties.first(where: { $0.name == member.declName.baseName.text }),
+              property.collection != nil else { return nil }
+        return Expression(.valueProperty(.model(model: reference.propertyName,
+                                                property: member.declName.baseName.text)),
+                          location: location(of: expression))
     }
 
     private func closureItemName(_ closure: ClosureExprSyntax) -> String? {
