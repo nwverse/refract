@@ -10,12 +10,6 @@ public struct InteropResolver: Sendable {
         self.mapping = mapping
     }
 
-    public func validate() throws {
-        for declaration in module.nativeDeclarations {
-            _ = try targets(for: declaration)
-        }
-    }
-
     public func target(for component: NativeComponent, platform: Platform,
                        location: SourceLocation? = nil) throws -> NativeTarget {
         guard let declaration = module.nativeDeclarations.first(where: { $0.name == component.name }) else {
@@ -24,34 +18,35 @@ public struct InteropResolver: Sendable {
                 suggestion: "Declare `\(component.name): RefractNativeView` with typed stored properties.",
                 location: location)
         }
-        let targets = try targets(for: declaration, location: location)
-        return platform == .android ? targets.android : targets.harmonyOS
+        return try target(for: declaration, platform: platform, location: location)
+    }
+
+    public func nativeComponent(for component: NativeComponent, platform: Platform) -> Component? {
+        mapping.platform(platform).nativeComponents[component.name]
     }
 
     public func imports(for platform: Platform) -> [NativeImport] {
         mapping.platform(platform).imports
     }
 
-    private func targets(for declaration: NativeDeclaration,
-                         location: SourceLocation? = nil) throws -> (android: NativeTarget, harmonyOS: NativeTarget) {
-        let android = mapping.android.nativeComponents[declaration.name].map {
-            target($0, platform: .android, module: $0.module ?? "")
-        }
-        let harmony = mapping.harmonyOS.nativeComponents[declaration.name].map {
-            target($0, platform: .harmonyOS, module: $0.module ?? "")
-        }
-        return try InteropMapping.validate(declaration: declaration, android: android, harmonyOS: harmony,
-                                           location: location ?? declaration.location)
+    private func target(for declaration: NativeDeclaration, platform: Platform,
+                        location: SourceLocation?) throws -> NativeTarget {
+        let component = mapping.platform(platform).nativeComponents[declaration.name]
+        let target = component.map { target($0, platform: platform, module: $0.module ?? "") }
+        return try InteropMapping.validate(declaration: declaration, target: target,
+            platform: platform == .android ? .android : .harmonyOS,
+            location: location ?? declaration.location)
     }
 
     private func target(_ component: Component, platform: Platform, module: String) -> NativeTarget {
         NativeTarget(symbol: component.target, module: module,
-            kind: component.kind == "component" ? .component : .composable,
+            kind: component.kind.map { $0 == "component" ? NativeTarget.Kind.component : .composable }
+                ?? (platform == .android ? .composable : .component),
             argumentStyle: NativeTarget.ArgumentStyle(rawValue: component.argumentStyle.rawValue) ?? .named,
             parameters: component.parameters.map { parameter in
                 NativeTarget.Parameter(label: parameter.label,
                     type: ValueType(rawValue: parameter.type.rawValue) ?? .string,
-                    required: parameter.required)
+                    required: parameter.required, targetType: component.targetTypes?[parameter.label])
             },
             arguments: component.arguments.map { NativeTarget.Argument(source: $0.source, target: $0.target) })
     }

@@ -1,10 +1,5 @@
 import SwiftUI
 
-protocol SettingsModel: RefractModel {
-    var title: String { get }
-    func save()
-}
-
 final class AppSettingsModel: ObservableObject, SettingsModel {
     @Published var title: String
 
