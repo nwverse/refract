@@ -45,7 +45,7 @@ public struct ModifierValue {
         self.location = location
     }
 
-    public func number(allowInfinity: Bool = false) throws -> String {
+    public func number(allowInfinity: Bool = false, platform: Platform = .android) throws -> String {
         switch expression.value {
         case let .numberLiteral(value):
             guard let value = Double(value), value.isFinite else { throw invalid() }
@@ -53,8 +53,9 @@ public struct ModifierValue {
         case let .reference(name) where allowInfinity && name == ".infinity":
             return "infinity"
         case let .platformValue(alternatives):
-            return try ModifierValue(expression: alternatives.android, mapping: mapping, location: location)
-                .number(allowInfinity: allowInfinity)
+            let branch = platform == .android ? alternatives.android : alternatives.harmonyOS
+            return try ModifierValue(expression: branch, mapping: mapping, location: location)
+                .number(allowInfinity: allowInfinity, platform: platform)
         default:
             throw invalid()
         }

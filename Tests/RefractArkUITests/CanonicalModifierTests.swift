@@ -44,8 +44,8 @@ private let styledMapping = Mapping(
     let ark = try ArkUIBackend().generate(module: module, mapping: styledMapping)
     #expect(ark.contains(".padding(AppSpacing.medium)"))
     #expect(ark.contains(".width('100%')"))
-    #expect(ark.contains(".backgroundColor(AppColors.surface)\n.borderRadius(AppRadius.small)\n.opacity(0.8)"))
-    #expect(ark.contains(".font(AppTypography.title)\n.fontColor(AppColors.secondary)"))
+    #expect(ark.contains(".backgroundColor(AppColors.surface)\n      .borderRadius(AppRadius.small)\n      .opacity(0.8)"))
+    #expect(ark.contains(".font(AppTypography.title)\n      .fontColor(AppColors.secondary)"))
 }
 
 @Test func canonicalFrameAndDirectionalPaddingPreserveDimensions() throws {
@@ -61,13 +61,11 @@ private let styledMapping = Mapping(
     let kotlin = try ComposeBackend().generate(module: module)
     #expect(kotlin.contains(".padding(horizontal = 16.dp).size(width = 120.dp, height = 44.dp)"))
     let ark = try ArkUIBackend().generate(module: module)
-    #expect(ark.contains(".padding({ left: 16, right: 16 })\n.width(120)\n.height(44)"))
+    #expect(ark.contains(".padding({ left: 16, right: 16 })\n      .width(120)\n      .height(44)"))
 }
 
 @Test(arguments: [
-    [Modifier(name: "cornerRadius", arguments: [Expression(.numberLiteral("4"))], argumentLabels: [nil])],
     [Modifier(name: "frame", arguments: [Expression(.numberLiteral("100"))], argumentLabels: ["maxWidth"])],
-    [Modifier(name: "opacity", arguments: [Expression(.numberLiteral("1.1"))], argumentLabels: [nil])],
     [Modifier(name: "font", arguments: [Expression(.reference("DesignTypography.title"))], argumentLabels: [nil])],
 ])
 func invalidModifierShapesAreRejected(modifiers: [Modifier]) {

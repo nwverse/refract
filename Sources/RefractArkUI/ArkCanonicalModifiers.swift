@@ -37,7 +37,7 @@ extension ArkModifiers {
                 }
                 for key in ["maxWidth", "maxHeight"] where values[key] != nil {
                     guard try ModifierValue(expression: values[key]!, mapping: mapping, location: modifier.location)
-                        .number(allowInfinity: true) == "infinity" else {
+                        .number(allowInfinity: true, platform: .harmonyOS) == "infinity" else {
                         throw arguments.invalid("Only infinite maximum dimensions are supported.")
                     }
                 }
@@ -71,7 +71,7 @@ extension ArkModifiers {
                 parts.append(".borderRadius(\(try length(try arguments.one(), category: .radius, mapping: mapping)))")
             case "opacity":
                 let value = try ModifierValue(expression: try arguments.one(), mapping: mapping,
-                                              location: modifier.location).number()
+                                              location: modifier.location).number(platform: .harmonyOS)
                 guard let opacity = Double(value), (0...1).contains(opacity) else {
                     throw Diagnostic(code: "RFVIEW003", message: "Opacity must be between zero and one.",
                                      suggestion: "Use a finite opacity in the inclusive range 0...1.", location: modifier.location)

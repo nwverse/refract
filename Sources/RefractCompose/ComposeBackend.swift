@@ -197,15 +197,20 @@ public struct ComposeBackend: Sendable {
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, context: &context)
         let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
+        let styled = modifiers.contains { $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle" }
         if modifierChain != "Modifier" {
             if modifierChain.contains(".background(") {
-                arguments.append("modifier = \(modifierChain.replacingOccurrences(of: ").", with: ")\n."))")
+                arguments.append("modifier = \(modifierChain.replacingOccurrences(of: ").", with: ")\n        ."))")
             } else {
                 arguments.append("modifier = \(modifierChain)")
             }
         }
-        if textModifiers.contains(where: { $0.hasPrefix("style = ") }) {
-            arguments.append(contentsOf: textModifiers.sorted(by: { $0.hasPrefix("style = ") && !$1.hasPrefix("style = ") }))
+        if styled {
+            for modifier in modifiers where ["font", "foregroundStyle", "foregroundColor"].contains(modifier.name) {
+                let value = try composeToken(try ModifierArguments(modifier: modifier).one(),
+                    category: modifier.name == "font" ? .font : .color, context: &context)
+                arguments.append("\(modifier.name == "font" ? "style" : "color") = \(value)")
+            }
         } else {
             arguments.append(contentsOf: textModifiers)
         }

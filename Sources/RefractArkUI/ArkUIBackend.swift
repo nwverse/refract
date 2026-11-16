@@ -78,8 +78,7 @@ struct Generation {
             for child in children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .text(value, modifiers, _):
-            writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))")
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, isText: true), unlessEmpty: true)
+            writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, isText: true))")
         case let .button(label, action, modifiers, _):
             writer.open("Button()")
             try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver)
@@ -223,8 +222,12 @@ struct ArkWriter {
     mutating func line(_ value: String = "", unlessEmpty: Bool = false) {
         if value.isEmpty {
             if !unlessEmpty { text += "\n" }
-        } else {
-            text += String(repeating: "  ", count: depth) + value + "\n"
+            return
+        }
+        for line in value.split(separator: "\n", omittingEmptySubsequences: false) {
+            let continuation = line.hasPrefix("\u{1}")
+            let content = continuation ? line.dropFirst() : line
+            text += String(repeating: "  ", count: depth + (continuation ? 1 : 0)) + content + "\n"
         }
     }
 

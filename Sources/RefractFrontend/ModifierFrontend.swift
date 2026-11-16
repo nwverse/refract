@@ -13,14 +13,11 @@ extension Builder {
             return nil
         }
         var arguments: [Expression] = []
-        var labels: [String?] = []
+        var labels: [String?] = call.arguments.map(\.label?.text)
         let diagnosticCount = diagnostics.count
         for argument in call.arguments {
-            labels.append(argument.label?.text)
             guard let value = modifierValue(argument.expression) else {
-                if diagnostics.count > diagnosticCount {
-                    return Modifier(name: name, arguments: [], location: location(of: call))
-                }
+                if diagnostics.count > diagnosticCount { return nil }
                 return Modifier(name: name, arguments: [], location: location(of: call))
             }
             arguments.append(value)
@@ -62,7 +59,7 @@ extension Builder {
         let location = location(of: expression)
         if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
-            return platformValue(call)?.expression
+            return scalar(expression)?.expression
         }
         if let literal = expression.as(IntegerLiteralExprSyntax.self) {
             return Expression(.numberLiteral(literal.literal.text), location: location)

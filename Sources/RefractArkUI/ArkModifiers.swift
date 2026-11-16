@@ -30,12 +30,17 @@ enum ArkModifiers {
             }.joined()
         }
         let canonical = try emitCanonical(modifiers, mapping: mapping, isText: isText)
-        if canonical.contains("\n") { return "\n" + canonical }
+        if canonical.contains("\n") {
+            let continuation = canonical.split(separator: "\n", omittingEmptySubsequences: false)
+                .map { "\u{1}" + $0 }.joined(separator: "\n")
+            return "\n" + continuation
+        }
         return canonical
     }
 
     private static func usesCanonicalValues(_ modifiers: [Modifier], mapping: Mapping) -> Bool {
-        modifiers.contains { modifier in
+        if modifiers.contains(where: { ["font", "foregroundStyle", "frame"].contains($0.name) }) { return true }
+        return modifiers.contains { modifier in
             if modifier.argumentLabels.contains(where: { $0 != nil }) { return true }
             return modifier.arguments.contains { expression in
                 switch expression.value {

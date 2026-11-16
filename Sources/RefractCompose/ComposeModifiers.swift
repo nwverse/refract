@@ -23,9 +23,9 @@ extension ComposeBackend {
                     context.imports.insert("androidx.compose.ui.unit.dp")
                     parts.append(".padding(all = 16.dp)")
                 } else if modifier.arguments.count == 1 {
-                    let value = try composeLength(try ModifierArguments(modifier: modifier).one(),
-                                                  category: .spacing, context: &context)
-                    parts.append(".padding(all = \(value))")
+                    let rendered = try composeLength(try ModifierArguments(modifier: modifier).one(),
+                                                      category: .spacing, context: &context)
+                    parts.append(".padding(all = \(rendered))")
                 } else {
                     let arguments = try ModifierArguments(modifier: modifier).labeled()
                     guard arguments.count == 2, let axis = arguments["edges"] ?? arguments["horizontal"] ?? arguments["vertical"],
@@ -60,7 +60,7 @@ extension ComposeBackend {
                 }
                 for key in ["maxWidth", "maxHeight"] where arguments[key] != nil {
                     guard try ModifierValue(expression: arguments[key]!, mapping: context.mapping,
-                                            location: modifier.location).number(allowInfinity: true) == "infinity" else {
+                                            location: modifier.location).number(allowInfinity: true, platform: .android) == "infinity" else {
                         throw ModifierArguments(modifier: modifier).invalid("Only infinite maximum dimensions are supported.")
                     }
                 }
@@ -106,7 +106,7 @@ extension ComposeBackend {
                     location: modifier.location)
             case "opacity":
                 let value = try ModifierValue(expression: try ModifierArguments(modifier: modifier).one(),
-                                              mapping: context.mapping, location: modifier.location).number()
+                                              mapping: context.mapping, location: modifier.location).number(platform: .android)
                 guard let opacity = Double(value), (0...1).contains(opacity) else {
                     throw Diagnostic(code: "RFVIEW003", message: "Opacity must be between zero and one.",
                                      suggestion: "Use a finite opacity in the inclusive range 0...1.", location: modifier.location)
@@ -148,7 +148,7 @@ extension ComposeBackend {
         return value.isLiteral ? "\(value.value).dp" : value.value
     }
 
-    private func composeToken(_ expression: Expression, category: TokenCategory,
+    func composeToken(_ expression: Expression, category: TokenCategory,
                               context: inout Context) throws -> String {
         guard case let .reference(name) = expression.value, name.contains(".") else {
             throw Diagnostic(code: "RFVIEW003", message: "This modifier requires a declared design token.",
