@@ -1,0 +1,2 @@
+Input.swift:17:13: error [RFNAV001]: NavigationLink accepts one localized title and a static `.case` value. Suggestion: Use `NavigationLink("navigation.open", value: .detail)` at the root or `value: Route.detail` in a registered destination; dynamic strings and closure destinations are unsupported
+Input.swift:12:8: error [RFNAV003]: A destination NavigationLink must use the enclosing graph's finite enum. Suggestion: Use `NavigationLink("navigation.open", value: Route.case)` and register that destination in the same source file.

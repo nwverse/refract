@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "navigation_open_detail", "value": "Open detail" },
+    { "name": "navigation_open_editor", "value": "Open editor" }
+  ]
+}

@@ -21,13 +21,18 @@ public struct Frontend {
                             models: builder.models, itemTypes: builder.itemTypes,
                             enums: builder.enums)
         builder.validateChildViewGraph(module)
+        builder.bindNavigationDestinations(module)
         builder.validateNavigationDeclarations(module)
         builder.validateRowContentTypes(module)
+        let boundModule = Module(sourceFile: source.path, screens: builder.screens,
+                                 nativeDeclarations: builder.interop.declarations,
+                                 models: builder.models, itemTypes: builder.itemTypes,
+                                 enums: builder.enums)
         if builder.hasDuplicateGeneratedDeclaration {
             return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
                                    diagnostics: builder.diagnostics)
         }
-        return TranslationUnit(module: module,
+        return TranslationUnit(module: boundModule,
                                diagnostics: builder.diagnostics)
     }
 }
@@ -71,14 +76,7 @@ final class Builder: SyntaxVisitor {
         collectEnums(tree)
         collectItemTypes(tree)
         collectModels(tree)
-        for statement in tree.statements {
-            if let declaration = statement.item.as(StructDeclSyntax.self),
-               declaration.inheritanceClause?.inheritedTypes.contains(where: {
-                   $0.type.trimmedDescription == "View"
-               }) == true {
-                viewDeclarations[declaration.name.text] = declaration
-            }
-        }
+        collectDeclaredViews(tree)
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -207,11 +205,6 @@ final class Builder: SyntaxVisitor {
             }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
-                guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
-                    error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
-                          "Use `NavigationStack(path: $path)` and a no-payload Hashable destination enum", at: call)
-                    return nil
-                }
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }

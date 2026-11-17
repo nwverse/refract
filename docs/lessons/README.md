@@ -16,5 +16,6 @@ add to it when you hit something new: what happened, why, and what to do instead
 | Golden fixtures and cross-workstream contracts | `docs/lessons/fixtures.md` |
 | Repository checks and CI | `docs/lessons/repository-tooling.md` |
 | Generated-code semantic and native compile review | `docs/lessons/generated-code-review.md` |
+| Native navigation graph binding and restoration tests | `docs/lessons/navigation.md` |
 | Android benchmarking | `docs/lessons/android.md` |
 | SwiftPM consumer integration | `docs/lessons/swiftpm.md` |

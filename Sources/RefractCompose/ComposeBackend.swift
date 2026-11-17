@@ -124,6 +124,9 @@ public struct ComposeBackend: Sendable {
                 continue
             }
         }
+        if let navigation = screen.navigation {
+            parameters.append("on\(navigation.pathName.uppercasingFirst())Navigate: (\(navigation.enumName)) -> Unit")
+        }
         return parameters
     }
 

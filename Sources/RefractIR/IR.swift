@@ -171,14 +171,16 @@ public struct Screen: Codable, Equatable, Sendable {
     public let name: String
     public let parameters: [ScreenParameter]
     public let states: [StateDeclaration]
+    public let navigation: NavigationOperation?
     public let body: ViewNode
     public let location: SourceLocation?
 
     public init(name: String, parameters: [ScreenParameter] = [], states: [StateDeclaration] = [],
-                body: ViewNode, location: SourceLocation? = nil) {
+                navigation: NavigationOperation? = nil, body: ViewNode, location: SourceLocation? = nil) {
         self.name = name
         self.parameters = parameters
         self.states = states
+        self.navigation = navigation
         self.body = body
         self.location = location
     }
@@ -188,6 +190,7 @@ public struct Screen: Codable, Equatable, Sendable {
         name = try container.decode(String.self, forKey: .name)
         parameters = try container.decodeIfPresent([ScreenParameter].self, forKey: .parameters) ?? []
         states = try container.decode([StateDeclaration].self, forKey: .states)
+        navigation = try container.decodeIfPresent(NavigationOperation.self, forKey: .navigation)
         body = try container.decode(ViewNode.self, forKey: .body)
         location = try container.decodeIfPresent(SourceLocation.self, forKey: .location)
     }

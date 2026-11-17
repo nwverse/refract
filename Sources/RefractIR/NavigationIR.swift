@@ -1,4 +1,15 @@
 /// A finite, source-owned navigation destination identity.
+/// A host-owned push operation. Its finite enum is resolved in the source navigation graph.
+public struct NavigationOperation: Codable, Equatable, Sendable {
+    public let pathName: String
+    public let enumName: String
+
+    public init(pathName: String = "path", enumName: String) {
+        self.pathName = pathName
+        self.enumName = enumName
+    }
+}
+
 public struct NavigationDestination: Codable, Equatable, Sendable {
     public let caseName: String
     public let viewName: String
