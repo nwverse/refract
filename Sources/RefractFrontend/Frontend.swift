@@ -15,10 +15,6 @@ public struct Frontend {
         }
         let builder = Builder(file: source.path, tree: tree, mapping: mapping)
         builder.rejectDuplicateGeneratedDeclarations(tree)
-        guard builder.diagnostics.isEmpty else {
-            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
-                                   diagnostics: builder.diagnostics)
-        }
         builder.walk(tree)
         let module = Module(sourceFile: source.path, screens: builder.screens,
                             nativeDeclarations: builder.interop.declarations,
@@ -26,6 +22,10 @@ public struct Frontend {
                             enums: builder.enums)
         builder.validateChildViewGraph(module)
         builder.validateRowContentTypes(module)
+        if builder.hasDuplicateGeneratedDeclaration {
+            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
+                                   diagnostics: builder.diagnostics)
+        }
         return TranslationUnit(module: module,
                                diagnostics: builder.diagnostics)
     }
@@ -35,6 +35,7 @@ final class Builder: SyntaxVisitor {
     let file: String
     let converter: SourceLocationConverter
     var screens: [Screen] = []
+    var hasDuplicateGeneratedDeclaration = false
     var diagnostics: [Diagnostic] = []
     var interop: InteropFrontend
     var designSystem: DesignSystemFrontend?

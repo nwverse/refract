@@ -4,6 +4,8 @@ import SwiftSyntax
 extension Builder {
     /// Ambiguous generated declarations cannot be resolved by first- or last-wins rules.
     /// This pass owns only one source file; cross-file resolution is a separate input boundary.
+    /// Collect the diagnostic but finish the normal traversal so unrelated source errors are retained.
+    /// `Frontend.parse` discards partial IR after that traversal when this marker is present.
     func rejectDuplicateGeneratedDeclarations(_ tree: SourceFileSyntax) {
         var names: Set<String> = []
         for statement in tree.statements {
@@ -25,10 +27,9 @@ extension Builder {
             }
             guard generated else { continue }
             if !names.insert(name.text).inserted {
+                hasDuplicateGeneratedDeclaration = true
                 error("RFSYN004", "Generated declaration `\(name.text)` occurs more than once in this input file.",
                       "Give each generated View, model, item and enum a unique name.", at: name)
-            } else {
-                names.insert(name.text)
             }
         }
     }
