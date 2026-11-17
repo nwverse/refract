@@ -38,7 +38,7 @@ extension Builder {
         }
         guard currentStates.allSatisfy({ state in
             switch state {
-            case .model, .navigationPath: true
+            case .model, .navigationPath, .nativeHost: true
             case .state, .binding: false
             }
         }), currentStates.filter({ if case .navigationPath = $0 { true } else { false } }).count == 1 else {

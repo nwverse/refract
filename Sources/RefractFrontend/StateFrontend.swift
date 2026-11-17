@@ -37,6 +37,25 @@ extension Builder {
             guard let declaration = member.decl.as(VariableDeclSyntax.self),
                   declaration.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body"
             else { continue }
+            if let typeName = declaration.bindings.first?.typeAnnotation?.type.trimmedDescription,
+               let host = nativeHosts.first(where: { $0.name == typeName }) {
+                guard declaration.bindingSpecifier.tokenKind == .keyword(.let), declaration.attributes.isEmpty,
+                      declaration.modifiers.isEmpty, declaration.bindings.count == 1,
+                      let binding = declaration.bindings.first, binding.initializer == nil, binding.accessorBlock == nil,
+                      let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else {
+                    error("RFHOST001", "A native host input must be an immutable let with its exact typed role protocol.",
+                          "Use `let host: YourNotificationHost`; the app supplies the implementation", at: member)
+                    return nil
+                }
+                states.append(.nativeHost(NativeHostReference(propertyName: name, protocolName: typeName,
+                                                               capability: host.capability), location: location(of: declaration)))
+                continue
+            }
+            if declaration.attributes.contains(where: {
+                $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "RefractNativeValue"
+            }) {
+                continue
+            }
             if let annotation = declaration.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self) {
                 guard declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.attributes.count == 1,
                       declaration.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State",
@@ -113,7 +132,10 @@ extension Builder {
 
     func stateText(_ expression: ExprSyntax) -> Expression? {
         if let property = modelProperty(expression) { return property }
-        guard let literal = expression.as(StringLiteralExprSyntax.self) else { return nil }
+        if expression.as(MemberAccessExprSyntax.self) != nil {
+            return nativeValueProperty(expression)?.expression
+        }
+        guard let literal = expression.as(StringLiteralExprSyntax.self), literal.representedLiteralValue == nil else { return nil }
         if literal.segments.count == 1, case let .stringSegment(segment)? = literal.segments.first {
             return Expression(.stringLiteral(segment.content.text), location: location(of: expression))
         }
@@ -123,7 +145,21 @@ extension Builder {
             case let .stringSegment(text): segments.append(.literal(text.content.text))
             case let .expressionSegment(interpolation):
                 guard interpolation.expressions.count == 1, let argument = interpolation.expressions.first,
-                      argument.label == nil, let reference = argument.expression.as(DeclReferenceExprSyntax.self),
+                      argument.label == nil else {
+                    error("state.invalid_projection", "Text interpolation requires one typed scalar value.",
+                          "Use a scalar @State, @Binding, model or selected native correlation field", at: interpolation)
+                    return nil
+                }
+                if let native = nativeValueProperty(argument.expression) {
+                    guard native.type == .string || native.type == .int || native.type == .double else {
+                        error("RFHOST005", "A native event state cannot be formatted as a scalar.",
+                              "Use id or revision for native correlation interpolation", at: argument.expression)
+                        return nil
+                    }
+                    segments.append(.expression(native.expression))
+                    continue
+                }
+                guard let reference = argument.expression.as(DeclReferenceExprSyntax.self),
                       let property = valueProperty(named: reference.baseName.text) else {
                     error("state.invalid_projection", "Text interpolation requires a declared local state or binding value.",
                           "Use `\\(property)` with a scalar @State or @Binding property", at: interpolation)
@@ -139,6 +175,10 @@ extension Builder {
     func localStateAction(_ closure: ClosureExprSyntax?) -> StateAction? {
         guard let closure, !closure.statements.isEmpty else { return nil }
         if closure.statements.count == 1, let expression = closure.statements.first?.item.as(ExprSyntax.self),
+           let action = nativeHostAction(expression) {
+            return action
+        }
+        if closure.statements.count == 1, let expression = closure.statements.first?.item.as(ExprSyntax.self),
            let action = modelAction(expression) {
             return action
         }
@@ -146,7 +186,7 @@ extension Builder {
               let expression = statement.item.as(ExprSyntax.self),
               let sequence = expression.as(SequenceExprSyntax.self), sequence.elements.count == 3 else {
             error("state.invalid_declaration", "A Button action requires one local state assignment.",
-                  "Use `property = value` or `property += value`", at: closure)
+                  "Use `property = value`, `property += value`, or one typed native host request", at: closure)
             return nil
         }
         let elements = Array(sequence.elements)
@@ -230,5 +270,10 @@ extension Builder {
             }
             return nil
         }
+    }
+
+    func hostLiteral(_ expression: ExprSyntax, expected: ValueType) -> Expression? {
+        if let typed = scalar(expression) { return typed.type == expected ? typed.expression : nil }
+        return literal(expression, expected: expected)
     }
 }

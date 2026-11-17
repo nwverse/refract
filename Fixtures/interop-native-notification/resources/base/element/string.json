@@ -1,0 +1,8 @@
+{
+  "string": [
+    { "name": "synthetic_notification_id", "value": "Synthetic request: %1$s" },
+    { "name": "synthetic_notification_confirm", "value": "Confirm synthetic request" },
+    { "name": "synthetic_notification_present", "value": "Present synthetic request" },
+    { "name": "synthetic_notification_cancel", "value": "Cancel synthetic request" }
+  ]
+}

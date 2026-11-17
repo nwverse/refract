@@ -49,6 +49,7 @@ extension Generation {
                              suggestion: "Validate enum exhaustiveness in the frontend.")
         }
         let value = try emitLocalExpression(subject, mapping: mapping)
+        let eventValue = declaration.kind?.hasCorrelation == true ? "\(value).state" : value
         for (index, branch) in cases.enumerated() {
             guard ArkText.isIdentifier(branch.name), declaration.cases.contains(branch.name) else {
                 throw Diagnostic(code: "arkui.invalid_enum_case", message: "Unknown enum case `\(branch.name)`.")
@@ -59,13 +60,13 @@ extension Generation {
                       !module.screens.flatMap(\.parameters).contains(where: { $0.name == binding }) else {
                     throw Diagnostic(code: "arkui.invalid_enum_binding", message: "A payload switch needs a typed local binding.")
                 }
-                let test = "\(value) instanceof \(className)"
+                let test = "\(eventValue) instanceof \(className)"
                 if index == 0 {
                     writer.open("if (\(test))")
                 } else {
                     writer.closeBranch("else if (\(test))")
                 }
-                writer.line("const \(binding) = \(value).value;")
+                writer.line("const \(binding) = \(eventValue).value;")
                 for child in branch.children {
                     try emit(child, into: &writer, item: binding, mapping: mapping, resolver: resolver)
                 }
@@ -75,9 +76,9 @@ extension Generation {
                     throw Diagnostic(code: "arkui.invalid_enum_binding", message: "A no-payload case cannot bind a value.")
                 }
                 if index == 0 {
-                    writer.open("if (\(value) === \(enumName).\(branch.name))")
+                    writer.open("if (\(eventValue) === \(enumName).\(branch.name))")
                 } else {
-                    writer.closeBranch("else if (\(value) === \(enumName).\(branch.name))")
+                    writer.closeBranch("else if (\(eventValue) === \(enumName).\(branch.name))")
                 }
             }
             for child in branch.children {

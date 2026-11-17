@@ -48,8 +48,10 @@ struct Generation {
             }
         }
         for line in importLines { writer.line(line) }
-        try emitEnums(module.enums, into: &writer)
+        try emitEnums(module.enums.filter { $0.kind == nil }, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
+        emitArkNativeValueTypes(module.screens.flatMap(\.nativeValues), into: &writer)
+        try emitArkNativeHosts(module.nativeHosts, into: &writer)
         try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
             if case let .navigationStack(stack, _) = screen.body {
@@ -70,8 +72,10 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
-            // Local-state emission already supplies the separator before build().
+            emitArkNativeValues(screen.nativeValues, into: &writer)
+            // Local-state emission already supplies the separator before lifecycle/build().
             if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
+            try emitArkLifecycle(screen.lifecycle, into: &writer)
             writer.open("build()")
             let previousItemParameters = screenItemTypes
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
@@ -330,7 +334,7 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location): location
+             let .nativeHost(_, location), let .navigationPath(_, _, location): location
         }
     }
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="synthetic_work_id">Synthetic work: %1$s</string>
+    <string name="synthetic_work_confirm">Confirm synthetic work</string>
+    <string name="synthetic_work_schedule">Schedule synthetic work</string>
+    <string name="synthetic_work_cancel">Cancel synthetic work</string>
+</resources>

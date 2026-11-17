@@ -67,6 +67,18 @@
 - A row content type belongs to the generated child directly owned by either canonical dynamic List form. Preserve
   the declaration in the `ForEach` `ListItems` constructor as well as the shorthand constructor, and reject page-level
   or nested children before either backend emits. An invalid content type is never a retained-callback operation.
+- Native event switches need a discriminator, not the complete event object. A correlated `{id, revision, state}`
+  input lowers to `when (event.state)` in Kotlin and `event.state` comparisons in ArkTS; comparing the complete
+  class to its nested enum fails only at Kotlin compilation, not golden generation. Every new finite event type
+  therefore belongs in the real Kotlin fixture-compilation manifest and in a Native JVM event-injection test.
+- SwiftSyntax chained-call and implicit-member forms cannot be classified by assuming one `calledExpression`
+  shape. A reserved selector should use a syntax visitor over the actual call nodes and accept an explicit
+  `event.field` reference; guessing recursive bases can silently discard a required host/event binding.
+- Preserve the existing scalar/model/verbatim parsing order when adding a typed native string field. Do not use a
+  general scalar call as a gate for platform alternatives or existing local-state interpolation: it emits its own
+  diagnostics and changes valid behavior. Add a narrowly typed branch and keep the complete suite as the check.
+- Compose `DisposableEffect` disposal is observed after the runtime processes removal. Native JVM tests should
+  synchronize on the recorded callback with a bounded wait, not assume that a single idle pass implies disposal.
 - Hidden Toggle labels remove the visible title and its layout wrapper, not the title's typed getter/action checks,
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
