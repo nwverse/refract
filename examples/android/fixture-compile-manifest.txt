@@ -27,6 +27,8 @@ benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
 cross-file-child-view
+navigation-host
+navigation-native-destination
 accessibility-dynamic-type
 state-counter
 parent-binding

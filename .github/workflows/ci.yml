@@ -92,12 +92,18 @@ jobs:
           fi
       - name: Build the generator CLI with locked dependencies
         run: swift build --disable-automatic-resolution
-      - name: Regenerate examples and reject stale committed output
+      - name: Check committed native outputs without writing
         run: |
-          python3 scripts/check_examples.py
-          git diff --exit-code -- \
-            examples/android/app/src/main/java/refract/generated \
-            examples/harmony/entry/src/main/ets/generated
+          .build/debug/refract check \
+            --input examples/shared/Hello.swift \
+            --input examples/shared/NativeComponentScreen.swift \
+            --input examples/shared/IdentifiedList.swift \
+            --input examples/shared/SettingsScreen.swift \
+            --mapping examples/refract.json \
+            --android-out examples/android/app/src/main/java/refract/generated \
+            --harmony-out examples/harmony/entry/src/main/ets/generated
+      - name: Regenerate examples and verify resource catalogs
+        run: python3 scripts/check_examples.py
       - name: Select JDK 21 for the Android toolchain
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
@@ -153,6 +159,21 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ./gradlew --no-daemon :fixtures:compileDebugKotlin
+      - name: Render and test the generated settings screen on Native JVM Compose
+        working-directory: examples/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+      - name: Publish Native JVM Compose captures and test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-jvm-compose-settings
+          path: |
+            examples/android/app/build/reports/native-jvm-compose/
+            examples/android/app/build/reports/tests/
+          if-no-files-found: error
+          retention-days: 14
       - name: Reject unexpected files left in the checkout
         shell: bash
         run: |

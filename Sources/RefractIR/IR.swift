@@ -105,6 +105,8 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case stack(axis: StackAxis, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case text(Expression, modifiers: [Modifier], location: SourceLocation?)
     case button(label: ViewNode, action: StateAction?, modifiers: [Modifier], location: SourceLocation?)
+    case navigationLink(title: Expression, pathName: String, enumName: String, destination: String, location: SourceLocation?)
+    case navigationStack(NavigationStackNode, location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
     case nativeModifier(child: ViewNode, operations: [NativeModifier], location: SourceLocation?)
     case component(ComponentReference, location: SourceLocation?)
@@ -142,6 +144,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
 public enum StateDeclaration: Codable, Equatable, Sendable {
     case state(name: String, type: ValueType, initialValue: Expression?, location: SourceLocation?)
     case binding(name: String, type: ValueType, location: SourceLocation?)
+    case navigationPath(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
 }
 

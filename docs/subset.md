@@ -326,6 +326,9 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFCTRL005` | Matching-pattern condition or switch branch is unsupported | Use a declared Boolean property or explicit matching enum cases with distinct scalar bindings |
 | `RFCTRL006` | Enum has a raw value, unsupported payload shape, inheritance or unsupported declaration | Declare a finite local enum with no payload or exactly one scalar payload per case |
 | `RFCTRL007` | Enum switch has a missing or duplicate case | List every declared case exactly once |
+| `RFNAV001` | NavigationStack, NavigationLink or destination registration is outside the bounded host contract | Use the explicit forms in docs/navigation.md |
+| `RFNAV002` | Navigation path/identity has invalid ownership or payload values | Use an empty `[Route]` @State and no-payload Hashable enum |
+| `RFNAV003` | Destination coverage, identity or typed model/native view is invalid | Register every case with a same-file typed model destination or declared native component |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |

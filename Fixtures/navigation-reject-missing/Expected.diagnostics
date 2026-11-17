@@ -1,0 +1,1 @@
+Input.swift:25:9: error [RFNAV003]: Navigation destinations must cover every enum case exactly once. Suggestion: Declare one static case and typed destination view for every case of `Route`

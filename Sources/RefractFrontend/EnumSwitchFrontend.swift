@@ -5,7 +5,8 @@ extension Builder {
     func collectEnums(_ tree: SourceFileSyntax) {
         for statement in tree.statements {
             guard let declaration = statement.item.as(EnumDeclSyntax.self) else { continue }
-            guard declaration.inheritanceClause == nil, declaration.genericParameterClause == nil,
+            let inherited = declaration.inheritanceClause?.inheritedTypes.map(\.type.trimmedDescription) ?? []
+            guard inherited == [] || inherited == ["Hashable"], declaration.genericParameterClause == nil,
                   declaration.genericWhereClause == nil else {
                 error("RFCTRL006", "Only finite local enums without inheritance or generics can drive native switch branches.",
                       "Declare a no-payload enum without a raw-value type", at: declaration.name)
@@ -45,8 +46,14 @@ extension Builder {
                       "Use a separate no-payload enum or add a scalar payload to each case", at: declaration.name)
                 valid = false
             }
+            if valid, !names.isEmpty, inherited == ["Hashable"], !payloads.isEmpty {
+                error("RFNAV002", "A navigation destination enum cannot carry payload objects.",
+                      "Use no-payload Hashable cases and pass a declared typed model to the destination View", at: declaration.name)
+                valid = false
+            }
             if valid, !names.isEmpty {
                 enums.append(EnumDeclaration(name: declaration.name.text, cases: names, payloadTypes: payloads,
+                                             isNavigationDestination: inherited == ["Hashable"],
                                              location: location(of: declaration.name)))
             } else if valid {
                 error("RFCTRL006", "A switch-driving enum must declare at least one case.", at: declaration.name)

@@ -24,17 +24,22 @@ The self-instrumenting key is `android.experimental.self-instrumenting` (hyphen)
 latter silently leaves `targetPackage` pointing at the app and causes macro permission/process failures. Use
 `AndroidBenchmarkRunner` for benchmarks. Compose test rules need a host activity in the test package.
 
-A test module cannot import another module's Kotlin classes just because it has `targetProjectPath`. Share the exact
-source directory via `sourceSets.main.kotlin.srcDir`, rather than copying generated and reference implementations,
-and include the activity/Compose dependencies of that shared source.
+A test module cannot import another module's Kotlin classes just because it has `targetProjectPath`. Use a shared
+Android library with the real generated UI, its unchanged reference and model declarations. App and test modules then
+consume that library normally; sharing a Kotlin source directory across incompatible resource namespaces does not
+work. A macrobenchmark runner should check the actual CLI output before compiling the tested release artifacts.
 
 ## A running emulator is not a valid benchmark by itself
 
 Wait for `sys.boot_completed=1`, a readable `ro.build.version.sdk` (a transient 1 is not a real API level), and
-initial dex optimization/system load to settle before measuring. Check that external storage is writable before
-AndroidX starts shell scripts. Keep raw AndroidX JSON in a per-run output directory immediately after each test;
-later tests can clean the shared additional-output directory. Instrumentation failure and absence of JSON are
-errors, not empty passing reports. A headless emulator is always labelled as an emulator, never as a device.
+responsive package, mount and SurfaceFlinger services before measuring. Check that `sm list-volumes all` has a mounted
+emulated volume and that external storage is writable before AndroidX starts shell scripts. Bind every adb command to
+a timeout: a booted property alone is not readiness. Do not keep restarting a known-failed software image; preserve
+its blocker and provision a stable target instead. Keep raw AndroidX JSON and all Perfetto traces in a per-run output
+directory immediately after each test; later tests can clean the shared additional-output directory. A complete macro
+report must reject any missing scenario/variant, missing memory/frame samples, or missing trace even if another test
+passed. Checksums tie the report inputs to the retained files. Instrumentation failure and absence of JSON are errors,
+not empty passing reports. A headless emulator is always labelled as an emulator, never as a device.
 
 Macrobenchmark startup needs an actual first frame within the platform deadline. Software rendering can exceed it
 (`lastFrameNs=null`) even if the activity is resumable and later draws successfully. A `reportFullyDrawn()` marker

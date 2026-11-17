@@ -10,7 +10,16 @@ export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.local/share/refract-androi
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.local/share/refract-gradle}"
 export PATH="$JAVA_HOME/bin:$PATH"
 cli="$root/.build/debug/refract"
-[ -x "$cli" ] || { printf 'Build the real CLI with `swift build` first.\n' >&2; exit 2; }
+check_only=false
+if [ "${1:-}" = "--check" ]; then
+    check_only=true
+    shift
+fi
+[ -x "$cli" ] || [ "$check_only" = true ] || { printf 'Build the real CLI with `swift build` first.\n' >&2; exit 2; }
+if [ "$check_only" = true ]; then
+    command -v swift >/dev/null || { printf 'Swift is required to rebuild and check the real CLI.\n' >&2; exit 2; }
+    swift build --package-path "$root"
+fi
 out="${1:-$root/tmp/benchmark-generated}"
 [ "$out" = "$root/tmp/benchmark-generated" ] || {
     printf 'Generated staging is restricted to the repository-ignored %s directory.\n' "$root/tmp/benchmark-generated" >&2
@@ -27,8 +36,20 @@ mkdir -p "$out/android" "$out/harmony"
     printf 'The CLI did not produce both native outputs.\n' >&2
     exit 2
 }
-cp -- "$out/android/SettingsScreen.kt" "$here/screen/src/main/java/dev/refract/bench/SettingsScreen.kt"
-cmp -- "$out/android/SettingsScreen.kt" "$here/screen/src/main/java/dev/refract/bench/SettingsScreen.kt"
+if [ "$check_only" = true ]; then
+    cmp -- "$out/android/SettingsScreen.kt" "$here/screen/src/main/java/dev/refract/bench/SettingsScreen.kt"
+    cmp -- "$here/SettingsScreen.swift" "$root/Fixtures/benchmark-settings/Input.swift"
+    # The fixture keeps its own canonical Input.swift filename and Android
+    # package mapping; check its ArkTS from that exact source and mapping.
+    mkdir -p "$out/fixture"
+    "$cli" generate --input "$root/Fixtures/benchmark-settings/Input.swift" \
+        --mapping "$root/Fixtures/benchmark-settings/refract.json" \
+        --harmony-out "$out/fixture"
+    cmp -- "$out/fixture/Input.ets" "$root/Fixtures/benchmark-settings/Expected.ets"
+else
+    cp -- "$out/android/SettingsScreen.kt" "$here/screen/src/main/java/dev/refract/bench/SettingsScreen.kt"
+    cmp -- "$out/android/SettingsScreen.kt" "$here/screen/src/main/java/dev/refract/bench/SettingsScreen.kt"
+fi
 (
     cd "$here"
     ./gradlew --no-daemon --max-workers="${GRADLE_WORKERS:-2}" --console=plain \
