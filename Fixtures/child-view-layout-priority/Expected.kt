@@ -42,7 +42,7 @@ public fun ChildSettingRow(
     settings: ChildRowsModel,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = modifier.testTag("setting_row_${row.id}"), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(text = row.title)
             Text(text = row.subtitle)
@@ -58,7 +58,7 @@ public fun ChildSettingRow(
             Switch(
                 checked = row.enabled,
                 onCheckedChange = onCheckedChange,
-                modifier = Modifier.testTag("setting_toggle").semantics { contentDescription = row.title },
+                modifier = Modifier.testTag("setting_toggle_${row.id}").semantics { contentDescription = row.title },
             )
         }
     }

@@ -3,6 +3,7 @@ import Testing
 import RefractIR
 import RefractMapping
 import RefractFrontend
+import RefractGolden
 @testable import RefractCompose
 import RefractArkUI
 
@@ -141,6 +142,31 @@ private let measurementMapping = Mapping(
     struct Invalid: View { var body: some View { Text(verbatim: "Title").refractNativeModifier(.retainCallback(identity: "row")) } }
     """))
     #expect(text.diagnostics.map(\.code) == ["RFNATIVE004"])
+}
+
+@Test func measurementStringsPreserveTypedItemInterpolation() throws {
+    let fixture = try CorpusLoader.load(repository: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent())
+        .first { $0.name == "child-view-layout-priority" }
+    let result = try GoldenRunner.generate(try #require(fixture))
+    #expect(GoldenRunner.differences(for: try #require(fixture), result: result) == [])
+    #expect(result.kotlin?.contains("Row(modifier = modifier.testTag(\"setting_row_${row.id}\")") == true)
+    #expect(result.kotlin?.contains("Column(modifier = Modifier.weight(1f))") == true)
+    #expect(result.kotlin?.contains("Modifier.testTag(\"setting_toggle_${row.id}\")") == true)
+    #expect(result.arkTS?.contains(".id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)") == true)
+    #expect(result.arkTS?.contains(".alignItems(VerticalAlign.Center)\n    .id(`setting_row_${this.row.id}`)") == true)
+}
+
+@Test func measurementStringsRejectUntypedInterpolation() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Invalid: View {
+        var body: some View {
+            Text(verbatim: "Title").refractNativeModifier(.testTag("row_\\(unknown)"))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE004"])
+    #expect(unit.diagnostics[0].location != nil)
 }
 
 @Test func directionalPaddingAndTypographyKeepNativeRowShape() throws {

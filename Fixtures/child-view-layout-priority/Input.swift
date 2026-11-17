@@ -34,7 +34,7 @@ struct ChildSettingRow: View {
                         get: { row.enabled },
                         set: { value in settings.setEnabled(row.id, value: value) }
                     )).refractNativeModifier(
-                        .testTag("setting_toggle"),
+                        .testTag("setting_toggle_\(row.id)"),
                         .contentDescription(row.title),
                         .retainCallback(identity: "settings.setEnabled")
                     )
@@ -44,9 +44,12 @@ struct ChildSettingRow: View {
                         get: { row.enabled },
                         set: { value in settings.setEnabled(row.id, value: value) }
                     ))
+                    .accessibilityLabel(row.title)
+                    .refractNativeModifier(.testTag("setting_toggle_\(row.id)"))
                 }
             )
         }
+        .refractNativeModifier(.testTag("setting_row_\(row.id)"))
     }
 }
 

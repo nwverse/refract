@@ -276,6 +276,9 @@ Kotlin/ArkTS string or a general modifier language. The initial accepted operati
   until a native typed callback-identity contract is available; it is never silently discarded.
 
 Only values whose source type is statically known to be `String` are accepted for measurement/accessibility text.
+String interpolation may combine literal segments with typed scalar item/model values, for example
+`"setting_row_\(row.id)"`; Compose emits native Kotlin interpolation and ArkUI emits an ArkTS template literal.
+Unknown, untyped or non-scalar expressions remain `RFNATIVE004` build-time errors, not arbitrary string conversions.
 A list item uses the same typed item-property resolution as other supported expressions. The callback's model and
 current item identity are part of the `remember` key: a literal identity alone cannot retain a callback that captures
 an old model or a different row. Arbitrary captures, computed identities, unknown operations and duplicate operations
