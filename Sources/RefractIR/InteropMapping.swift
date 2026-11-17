@@ -135,7 +135,7 @@ public enum InteropMapping {
                     expected.type
                 }
                 let actualTargetType = actual.targetType ?? actual.type.rawValue
-                let typesMatch = actual.targetType == nil && actual.type == expectedType
+                let typesMatch = actual.targetType != nil || actual.type == expectedType
                 if actual.label != expected.label || !typesMatch || !actual.required {
                     diagnostics.append(Diagnostic(code: "RFMAP003",
                         message: "Native component `\(declaration.name)` expects Swift `\(expected.label): \(expected.type.rawValue)`, required; \(platform) mapping declares `\(actual.label): \(actualTargetType)`, required: \(actual.required).",

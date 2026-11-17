@@ -34,7 +34,6 @@ fun NativeTextInputHost(
     onCommit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val currentDraft by rememberUpdatedState(draft)
     val currentDraftChange by rememberUpdatedState(onDraftChange)
     val currentDraftCommit by rememberUpdatedState(onDraftCommit)
     val currentCommit by rememberUpdatedState(onCommit)
@@ -128,8 +127,9 @@ class NativeDraftEditor(
 
     fun performEditorAction(action: Int): Boolean {
         if (action != EditorInfo.IME_ACTION_DONE) return false
-        // Finish the platform preedit first. The app callback must not consume
-        // an uncommitted pinyin string as if it were a committed Chinese draft.
+        // Finish the platform preedit first. Do not translate or replace it
+        // with a synthetic candidate. Publish only what the native editor
+        // contains after its real IME has finished the composition.
         finishComposing()
         val committed = value.text?.toString().orEmpty()
         onDraftCommit(committed)

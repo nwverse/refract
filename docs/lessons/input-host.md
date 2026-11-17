@@ -25,3 +25,10 @@ draft, translate it to Chinese, or replace an active composing span during recom
 `finishComposingText` ends a composing region; it is not a pinyin-to-Hanzi conversion. A done action publishes the
 actual native editor content after finishing composition. Test that behavior directly with `InputConnection`, and
 label Robolectric as Native JVM rather than an emulator/device or third-party IME result.
+
+## Do not race fixture staging with Kotlin compilation
+
+The fixture staging script cleans and repopulates its ignored Kotlin source directory. Never launch it in parallel
+with Gradle: the compiler can observe a partial source set and report missing generated files. Finish staging, then
+run compilation and Native JVM tests sequentially. Set `REFRACT_CLI_PATH` explicitly for the app's opt-in Gradle
+source-generation task; a successful `:fixtures` build does not configure that application task.

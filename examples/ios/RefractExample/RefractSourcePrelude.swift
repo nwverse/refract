@@ -2,6 +2,7 @@ import SwiftUI
 
 public protocol RefractModel {}
 public protocol RefractNativeView: View {}
+public protocol RefractTextInputHost: View {}
 
 /// Typed design spacing for the shared source's named container-spacing values.
 public struct RefractSpacing: Sendable {

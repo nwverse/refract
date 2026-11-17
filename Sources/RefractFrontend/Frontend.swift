@@ -479,7 +479,8 @@ final class Builder: SyntaxVisitor {
                 parsed = nativeImageLoader(argument.expression, label: label)
             case .action, .actionString:
                 parsed = nil
-            case .string, .bool, .int, .double:                parsed = scalar(argument.expression).map {
+            case .string, .bool, .int, .double:
+                parsed = scalar(argument.expression).map {
                     NativeArgument(label: label, expression: $0.expression,
                                    type: $0.type.flatMap { NativeParameterType(rawValue: $0.rawValue) },
                                    location: location(of: argument))

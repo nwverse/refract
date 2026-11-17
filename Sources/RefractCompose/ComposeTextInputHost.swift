@@ -50,13 +50,14 @@ enum ComposeTextInputHost {
         _ = try InteropMapping.validate(declaration: declaration, target: target, platform: .android,
                                         location: location)
         context.imports.insert("com.example.refract.input.NativeTextInputHost")
+        let modifierArgument = isRoot ? "\(modifierParameter ?? "modifier") = modifier" : nil
         out.open("NativeTextInputHost(")
         out.line("draft = \(draft),")
         out.line("onDraftChange = \(draftWriter),")
         out.line("focusRequest = \(focusRequest),")
         out.line("onDraftCommit = { value -> \(onDraftCommit)(value) },")
         out.line("onCommit = { \(onCommit)() },")
-        if isRoot { out.line("\(modifierParameter ?? "modifier") = modifier,") }
+        if let modifierArgument { out.line("\(modifierArgument),") }
         out.depth -= 1
         out.line(")")
     }

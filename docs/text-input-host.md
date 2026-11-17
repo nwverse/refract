@@ -9,7 +9,7 @@ The accepted fixture is `Fixtures/interop-text-input-host/`. Both backends emit 
 
 ## Source and typed call contract
 
-The marker is an ordinary SwiftUI `View` on iOS. Its declaration has exactly four public inputs plus private native
+`RefractTextInputHost` is an ordinary SwiftUI `View` on iOS. Its declaration has exactly four public inputs plus private native
 focus state:
 
 ```swift
@@ -108,10 +108,12 @@ real window-manager behavior or device performance.
 ## iOS and HarmonyOS boundaries
 
 The iOS body above uses SwiftUI's native `TextField`, `@FocusState`, `.submitLabel(.done)` and `.onSubmit`. SwiftUI owns
-its marked text and IME interaction; no composition is read, reconstructed or synthesized by this source. The source
-contract and marker body are designed for the repository's iOS example, but Linux Swift tests cannot type-check SwiftUI.
-macOS/Xcode compilation and iOS simulator/device editing are separate evidence; they must not be inferred from the
-frontend accepting this source.
+its marked text and IME interaction; no composition is read, reconstructed or synthesized by this source. The example
+prelude declares `RefractTextInputHost: View` with no runtime implementation. The uniquely named
+`examples/shared/InteropTextInputHost.swift` is byte-identical to the canonical fixture and is compiled by the example
+Xcode project, so the macOS CI job can type-check the exact host body rather than only parse it with SwiftSyntax.
+Linux Swift tests cannot type-check SwiftUI. macOS/Xcode compilation is CI evidence, while iOS simulator/device
+editing remains a separate runtime check; neither is inferred from the frontend accepting this source.
 
 HarmonyOS receives a direct `NativeTextInputHost` object call with the committed draft, draft-change callback, focus
 request and typed commit callbacks. Its application component must own `TextInputController`, native focus, keyboard
@@ -153,8 +155,8 @@ export struct NativeTextInputHost {
 
 The concrete focus-token observation and exact `stopEditing`/submit behavior must be implemented and compiled against
 the chosen SDK. Do not copy this sketch into an app without that verification. The source-level host ABI deliberately
-omits native selection/composition objects, so none of these controls becomes a generated runtime adapter.
-Its application component must own native composition/editing behavior. A composed value must not be mirrored into a separate generated
+omits native selection/composition objects, so none of these controls becomes a generated runtime adapter. A composed
+value must not be mirrored into a separate generated
 composition string. Submit must finish/commit native editing before the app callback, and losing focus must preserve
 the committed draft. The mapping checks this host ABI at generation time; it does not prove an ArkUI SDK API.
 

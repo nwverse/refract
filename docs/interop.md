@@ -36,6 +36,7 @@ generated input file.
 import SwiftUI
 
 public protocol RefractNativeView: View {}
+public protocol RefractTextInputHost: View {}
 
 public struct RefractSpacing: Sendable {
     public let value: CGFloat
@@ -295,6 +296,15 @@ Compose on Robolectric: an ordinary transition runs and settles, identity replac
 the transition, exit removes content, zero duration scale skips enter/exit motion, and leaving composition disposes
 content. They do not exercise a device, emulator, physical animation-duration setting or performance benchmark.
 SwiftUI behavior also requires an Apple toolchain; generator tests do not establish that evidence.
+
+## Native text input hosts
+
+`docs/text-input-host.md` defines the dedicated `RefractTextInputHost` boundary for committed drafts, focus
+requests, return-key submission and native IME ownership. It is not an expansion of ordinary generated `TextField`
+or the generic scalar `RefractNativeView` ABI. Android uses a real `EditText`/`InputConnection`; preedit remains in
+that native editor, and no Chinese composition is synthesized. Golden Kotlin and ArkTS, compiled Kotlin and labelled
+Native JVM tests cover the contract. Apple/HarmonyOS toolchains, third-party IMEs and devices retain their explicit
+verification boundaries.
 
 ## Per-platform values, modifiers and animations
 
