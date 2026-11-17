@@ -360,11 +360,11 @@ def verify_checksums(output: Path, archives: list[Path], os_name: str) -> None:
 
 def create_package(commit: str, output: Path, reproducible: bool) -> Path:
     os_name, architecture, triple = host_target()
-    metadata = check_tools(triple)
+    # Validate every legal/build input before host-tool checks, extraction or compilation.
     _, notices = load_notices(commit)
-    # Every legal/build input is validated before source extraction or compilation.
     for path in ("LICENSE", "Package.swift", "Sources/RefractMapping/Resources/refract.schema.json"):
         committed_bytes(commit, path)
+    metadata = check_tools(triple)
     if output.exists():
         if not output.is_dir() or any(output.iterdir()):
             raise ValueError("--output must be a new or empty directory")
