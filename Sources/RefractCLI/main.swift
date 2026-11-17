@@ -33,6 +33,10 @@ struct RefractCommand {
     }
 
     static func run(arguments: [String]) throws {
+        if arguments == ["--version"] || arguments == ["version"] {
+            print("refract \(RefractVersion.current) (\(RefractVersion.sourceRevision))")
+            return
+        }
         guard let command = arguments.first, command == "generate" || command == "check" else {
             throw CLIError.message("usage: refract generate|check --input <file> [--input <file> ...] [--mapping <refract.json>] [--android-out <dir> --harmony-out <dir>]")
         }
