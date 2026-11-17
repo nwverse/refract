@@ -177,8 +177,14 @@ function or object method with explicit typed arguments. No Refract resolver, re
 dual-backend output, the app-owned resolver and light/night resources. Its font style uses `sp`, so font scaling is
 owned by the native style. `Fixtures/theme-reject-missing-state/` proves incomplete state mappings fail before output.
 Actual control interaction and large-font rendering require native tests; golden generation and Kotlin compilation
-alone do not establish them. iOS provides its own ordinary SwiftUI semantic-token resolver for the same source, and
-must not discard these arguments.
+alone do not establish them. `:theme-fixture:testDebugUnitTest` invokes the real generated component through the
+application host, using one `MutableInteractionSource` for the native clickable and its pressed/focused observations.
+Native JVM Compose tests verify actual press, focus, disabled precedence (including a held native press), night
+resource selection and enlarged text bounds. `LocalContext` supplies real Android resource qualifiers and
+`LocalDensity` supplies the platform font scale for this JVM rendering; neither is a device settings test. Labelled
+normal/pressed/focused/disabled, light/dark and default/large-font captures are published with the test report.
+iOS provides its own ordinary SwiftUI semantic-token resolver for the same source, and must not discard these
+arguments; this Native JVM evidence is not an iOS, HarmonyOS, screen-reader or device verification claim.
 
 ## Resources
 
