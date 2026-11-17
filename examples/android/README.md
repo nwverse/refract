@@ -137,6 +137,13 @@ cd examples/android
 ./gradlew :fixtures:testDebugUnitTest
 ```
 
+The separate `NativeSelectionEmphasis` fixture follows #159 without duplicating its visibility component. It uses
+an app-owned `Animatable` for a stateful value transition: target changes cancel and resume from the current
+progress, identity replacement disposes the old remembered animation, and zero `MotionDurationScale` snaps without
+intermediate progress. Six additional JVM tests exercise the unchanged CLI-generated caller, reversal, identity,
+reduced motion and disposal. `Fixtures/interop-native-state-transition/` supplies the independent dual-backend
+golden and is part of the real Kotlin fixture compile gate.
+
 Robolectric 4.18 executes Compose with a test-provided `MotionDurationScale` and deterministic clock. This is a local
 JVM behavior check, not a physical reduced-motion system-settings test, device/emulator run or timing benchmark. The
 Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches. The

@@ -51,6 +51,49 @@ func frontendResolvesNativeArgumentFromDeclaredState(_ declaration: String) thro
     #expect(component.arguments[1].expression.value == .stringLiteral("profile-save"))
 }
 
+@Test func frontendResolvesNativeArgumentFromDeclaredModel() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SelectionModel: RefractModel {
+        var identity: String { get }
+    }
+    struct Selection: RefractNativeView {
+        let emphasized: Bool
+        let identity: String
+        var body: some View { Text(verbatim: "Selection") }
+    }
+    struct Screen: View {
+        let model: SelectionModel
+        @Binding var emphasized: Bool
+        var body: some View { Selection(emphasized: emphasized, identity: model.identity) }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .native(component, _) = unit.module.screens[0].body else {
+        Issue.record("Expected a native reference")
+        return
+    }
+    #expect(component.arguments.map(\.type) == [.bool, .string])
+    #expect(component.arguments[1].expression.value == .valueProperty(.model(model: "model", property: "identity")))
+}
+
+@Test func frontendRejectsNativeArgumentWithMismatchedModelType() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SelectionModel: RefractModel {
+        var identity: String { get }
+    }
+    struct Selection: RefractNativeView {
+        let identity: String
+        var body: some View { Text(verbatim: "Selection") }
+    }
+    struct Screen: View {
+        let model: SelectionModel
+        var body: some View { Selection(identity: model.unknown) }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFSEM001"])
+    #expect(unit.diagnostics[0].message.contains("cannot infer the type of `identity`"))
+}
+
 @Test func frontendRejectsNativeArgumentWithMismatchedStateType() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Confirmation: RefractNativeView {

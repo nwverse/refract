@@ -106,6 +106,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-state-transition",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-undeclared",
       "implementationStatus": "ready"
     },
