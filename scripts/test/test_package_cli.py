@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -40,7 +41,29 @@ class PackagingUnitTests(unittest.TestCase):
             self.assertEqual(archive.getnames(), ["refract-test", "refract-test/bin", "refract-test/LICENSE",
                                                   "refract-test/bin/refract"])
 
+    def test_extraction_rejects_traversal_links_and_special_modes(self) -> None:
+        for name, kind, mode in (("root/../escape", tarfile.REGTYPE, 0o644),
+                                 ("root/link", tarfile.SYMTYPE, 0o777),
+                                 ("root/file", tarfile.REGTYPE, 0o4755)):
+            archive_path = self.root / f"{kind}-{mode}.tar.gz"
+            with tarfile.open(archive_path, "w:gz") as archive:
+                root = tarfile.TarInfo("root")
+                root.type = tarfile.DIRTYPE
+                archive.addfile(root)
+                member = tarfile.TarInfo(name)
+                member.type = kind
+                member.mode = mode
+                if kind == tarfile.REGTYPE:
+                    member.size = 1
+                    archive.addfile(member, io.BytesIO(b"x"))
+                else:
+                    member.linkname = "target"
+                    archive.addfile(member)
+            with self.assertRaises(ValueError):
+                package.extract_archive(archive_path, self.root / f"installed-{kind}-{mode}")
+
     def test_stamp_changes_revision_without_touching_version(self) -> None:
+        source = b'enum RefractVersion {\n    static let current = "0.1.0"\n    static let sourceRevision = "old"\n}\n'
         source = b'enum RefractVersion {\n    static let current = "0.1.0"\n    static let sourceRevision = "old"\n}\n'
         stamped = package.version_source(source, "a" * 40)
         self.assertIn(b'static let current = "0.1.0"', stamped)

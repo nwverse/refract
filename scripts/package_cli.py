@@ -159,6 +159,26 @@ def run_bytes(command: list[str], cwd: Path = ROOT) -> bytes:
     return result.stdout
 
 
+def extract_archive(archive: Path, destination: Path) -> None:
+    """Validate our canonical archive before extraction on stock Python 3.11 as well as newer releases."""
+    with tarfile.open(archive, "r:gz") as package:
+        members = package.getmembers()
+        if not members:
+            raise ValueError("archive is empty")
+        root = members[0].name.rstrip("/")
+        for member in members:
+            path = PurePosixPath(member.name)
+            if (not member.name.startswith(root + "/") and member.name != root) or path.is_absolute() or ".." in path.parts:
+                raise ValueError("archive contains an unsafe path outside its root")
+            if not (member.isfile() or member.isdir()):
+                raise ValueError("archive may contain only regular files and directories")
+            if member.mode & ~(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO):
+                raise ValueError("archive contains special permission bits")
+            if member.isfile() and not package.extractfile(member):
+                raise ValueError("archive contains an unreadable file")
+        package.extractall(destination)
+
+
 def deterministic_tar(prefix: str, entries: list[tuple[str, int, bytes]]) -> bytes:
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w", format=tarfile.USTAR_FORMAT) as archive:
@@ -235,15 +255,8 @@ def binary_entries(products: Path, commit: str, metadata: dict[str, str], notice
 
 
 def validate_package(archive: Path, parent: Path) -> None:
-    with tarfile.open(archive, "r:gz") as package:
-        members = package.getmembers()
-        if not members or any(not (member.isfile() or member.isdir()) for member in members):
-            raise ValueError("archive may contain only regular files and directories")
-        root = f"refract-{VERSION}-{host_target()[0]}-{host_target()[1]}"
-        for member in members:
-            if not PurePosixPath(member.name).is_relative_to(root):
-                raise ValueError("archive contains a path outside its package root")
-        package.extractall(parent, filter="data")
+    root = f"refract-{VERSION}-{host_target()[0]}-{host_target()[1]}"
+    extract_archive(archive, parent)
     extracted = parent / root
     executable = extracted / "bin" / "refract"
     # These tests created the package: only restore the known regular executable bit.
@@ -274,9 +287,8 @@ def package_once(commit: str, destination: Path, os_name: str, architecture: str
     source_archive(commit, source_tar)
     source = scratch / "source"
     source.mkdir()
-    with tarfile.open(source_tar, "r:gz") as archive:
-        archive.extractall(source, filter="tar")
     source_root = source / f"refract-source-{VERSION}"
+    extract_archive(source_tar, source)
     products = build(source_root, scratch / "swift-build")
     archive = destination / f"refract-{VERSION}-{os_name}-{architecture}.tar.gz"
     entries = binary_entries(products, commit, metadata, notices)
