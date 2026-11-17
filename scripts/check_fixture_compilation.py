@@ -167,9 +167,7 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
         relative_package = package_lines[0].removeprefix("package ").strip()
         if not relative_package or any(not segment.isidentifier() for segment in relative_package.split(".")):
             fail(f"{fixture}: {native_test.name} has an invalid test package")
-        target_directory = STAGING_TEST
-        for segment in relative_package.split("."):
-            target_directory /= segment
+        target_directory = STAGING_TEST / relative_package.replace(".", "/")
         target_directory.mkdir(parents=True, exist_ok=True)
         (target_directory / native_test.name).write_text(native_test.read_text(encoding="utf-8"), encoding="utf-8")
     STAGING_VALUES.mkdir(parents=True, exist_ok=True)
