@@ -2,7 +2,9 @@
 
 - **A host CLI needs its SwiftPM resource bundle.** An executable can start without the bundle and then fail to
   load `refract.schema.json`. Keep `lib/refract_RefractMapping.bundle` beside `bin/refract` and run generation
-  after relocation, not just `--version` next to the build products.
+  after relocation, not just `--version` next to the build products. Name the smoke-test input and outputs
+  explicitly: the CLI names generated files after the input filename, not the Swift view declaration, so
+  `Input.swift` produces `Input.kt` and `Input.ets`.
 - **Dynamic Swift linkage is not a distributable Linux package.** A development machine's toolchain can satisfy
   `libswiftCore.so` while a consumer's host cannot. Build the Linux CLI with `--static-swift-stdlib` and document
   the remaining system C/C++ library requirements. Do not describe this as a fully static or universal binary.

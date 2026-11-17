@@ -274,8 +274,12 @@ def validate_package(archive: Path, parent: Path, commit: str) -> None:
             encoding="utf-8")
         run([str(executable), "generate", "--input", str(smoke / "Input.swift"),
              "--android-out", str(smoke / "android"), "--harmony-out", str(smoke / "harmony")])
-        if not (smoke / "android/Smoke.kt").is_file() or not (smoke / "harmony/Smoke.ets").is_file():
+        kotlin = smoke / "android/Input.kt"
+        arkts = smoke / "harmony/Input.ets"
+        if not kotlin.is_file() or not arkts.is_file():
             raise ValueError("packaged CLI did not generate both native outputs")
+        if "Packaged" not in kotlin.read_text(encoding="utf-8") or "Packaged" not in arkts.read_text(encoding="utf-8"):
+            raise ValueError("packaged CLI generated incomplete native output")
         resource = extracted / "lib/refract_RefractMapping.bundle/refract.schema.json"
         if not resource.is_file():
             raise ValueError("installed package is missing its mapping schema")
