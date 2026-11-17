@@ -2,6 +2,7 @@ import SwiftUI
 
 enum Route: Hashable {
     case detail
+    case native
 }
 
 protocol DetailModel: RefractModel {
@@ -13,6 +14,12 @@ struct DetailScreen: View {
 
     var body: some View {
         Text(model.title)
+    }
+}
+
+struct NativeDetail: RefractNativeView {
+    var body: some View {
+        Text(verbatim: "Native iOS detail")
     }
 }
 
@@ -29,6 +36,8 @@ struct NavigationScreen: View {
                 switch route {
                 case .detail:
                     DetailScreen(model: model)
+                case .native:
+                    NativeDetail()
                 }
             }
         }

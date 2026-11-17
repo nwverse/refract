@@ -2,9 +2,19 @@
   "schemaVersion": 1,
   "android": {
     "output": { "directory": "generated", "packageName": "refract.generated" },
-    "imports": [],
+    "imports": ["example.native.NativeDetail"],
     "components": {},
-    "nativeComponents": {},
+    "nativeComponents": {
+      "NativeDetail": {
+        "parameters": [],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeDetail",
+        "argumentStyle": "named",
+        "arguments": [],
+        "attributes": {}
+      }
+    },
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
@@ -15,9 +25,21 @@
   },
   "harmonyOS": {
     "output": { "directory": "generated" },
-    "imports": [],
+    "imports": [
+      { "module": "example.native", "symbols": ["NativeDetail"] }
+    ],
     "components": {},
-    "nativeComponents": {},
+    "nativeComponents": {
+      "NativeDetail": {
+        "parameters": [],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeDetail",
+        "argumentStyle": "object",
+        "arguments": [],
+        "attributes": {}
+      }
+    },
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {

@@ -36,13 +36,11 @@ extension ComposeBackend {
                                     context: inout Context) throws {
         out.line()
         out.line("@Composable")
-        out.line("public fun NavigationDestinations(")
+        out.line("public fun \(stack.rootName)Destinations(")
         out.depth += 1
         out.line("destination: \(stack.enumName),")
-        for state in context.module.screens.flatMap(\.states) {
-            if case let .model(model, _) = state {
-                out.line("\(model.propertyName): \(model.protocolName),")
-            }
+        for model in stack.models {
+            out.line("\(model.propertyName): \(model.protocolName),")
         }
         out.line("modifier: Modifier = Modifier,")
         out.depth -= 1

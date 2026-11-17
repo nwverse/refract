@@ -27,12 +27,10 @@ extension Generation {
         }
         writer.line()
         writer.line("@ComponentV2")
-        writer.open("export struct NavigationDestinations")
+        writer.open("export struct \(stack.rootName)Destinations")
         writer.line("@Param @Require public var destination: \(stack.enumName)")
-        for state in module.screens.flatMap(\.states) {
-            if case let .model(model, _) = state {
-                writer.line("@Param @Require public var \(model.propertyName): \(model.protocolName)")
-            }
+        for model in stack.models {
+            writer.line("@Param @Require public var \(model.propertyName): \(model.protocolName)")
         }
         writer.line()
         writer.open("build()")

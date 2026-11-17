@@ -46,6 +46,11 @@ extension Builder {
                       "Use a separate no-payload enum or add a scalar payload to each case", at: declaration.name)
                 valid = false
             }
+            if valid, !names.isEmpty, inherited == ["Hashable"], !payloads.isEmpty {
+                error("RFNAV002", "A navigation destination enum cannot carry payload objects.",
+                      "Use no-payload Hashable cases and pass a declared typed model to the destination View", at: declaration.name)
+                valid = false
+            }
             if valid, !names.isEmpty {
                 enums.append(EnumDeclaration(name: declaration.name.text, cases: names, payloadTypes: payloads,
                                              isNavigationDestination: inherited == ["Hashable"],

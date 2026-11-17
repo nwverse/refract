@@ -26,3 +26,5 @@ interop-native-measurement
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
+navigation-host
+navigation-typed

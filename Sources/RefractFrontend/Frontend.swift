@@ -20,6 +20,7 @@ public struct Frontend {
                             models: builder.models, itemTypes: builder.itemTypes,
                             enums: builder.enums)
         builder.validateChildViewGraph(module)
+        builder.validateNavigationDeclarations(module)
         builder.validateRowContentTypes(module)
         return TranslationUnit(module: module,
                                diagnostics: builder.diagnostics)

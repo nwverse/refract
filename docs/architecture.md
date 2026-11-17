@@ -146,6 +146,12 @@ action. Other IR cases define the next typed boundaries and are not a claim that
 generate. New views and expressions extend these types with explicit ownership and source locations; no backend may
 introduce a second Swift parser.
 
+Typed navigation adds the bounded `NavigationStack(path:)`, no-payload `Hashable` destination enum and
+`navigationDestination` contract in `docs/navigation.md`. The source path belongs to SwiftUI on iOS. Generated
+Android/HarmonyOS roots expose a typed navigation callback and an ordinary destination component; the application's
+native host owns its controller/stack, back and lifecycle. No runtime router, destination registry or second stack
+is generated. Cross-file destination declarations remain separate from this same-file boundary.
+
 ## Open decisions
 
 1. **Resolved:** see "IR and generator boundaries" above.

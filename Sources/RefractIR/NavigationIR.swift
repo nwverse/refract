@@ -14,14 +14,19 @@ public struct NavigationDestination: Codable, Equatable, Sendable {
 /// A source NavigationStack declaration. Native hosts own the actual stack and push/pop callbacks.
 public struct NavigationStackNode: Codable, Equatable, Sendable {
     public let pathName: String
+    public let rootName: String
     public let enumName: String
     public let content: [ViewNode]
     public let destinations: [NavigationDestination]
+    public let models: [ModelReference]
 
-    public init(pathName: String, enumName: String, content: [ViewNode], destinations: [NavigationDestination]) {
+    public init(pathName: String, rootName: String = "", enumName: String, content: [ViewNode], destinations: [NavigationDestination],
+                models: [ModelReference] = []) {
         self.pathName = pathName
+        self.rootName = rootName
         self.enumName = enumName
         self.content = content
         self.destinations = destinations
+        self.models = models
     }
 }

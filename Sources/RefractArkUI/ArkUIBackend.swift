@@ -32,6 +32,9 @@ struct Generation {
         var emittedImports: Set<String> = []
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
+            if case let .navigationStack(stack, _) = screen.body {
+                try collectImports(stack, resolver: resolver, into: &emittedImports)
+            }
         }
         for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module })
             where declaration.symbols.contains(where: emittedImports.contains) {
@@ -241,6 +244,11 @@ struct Generation {
     private func usedNativeComponents(in bodies: [ViewNode]) -> [(component: NativeComponent, location: RefractIR.SourceLocation?)] {
         func collect(_ node: ViewNode, into result: inout [(component: NativeComponent, location: RefractIR.SourceLocation?)]) {
             if case let .native(component, location) = node { result.append((component, location)) }
+            if case let .navigationStack(stack, _) = node {
+                for destination in stack.destinations where destination.model == nil {
+                    result.append((NativeComponent(name: destination.viewName), node.sourceLocation))
+                }
+            }
             for child in node.children(for: .harmonyOS) { collect(child, into: &result) }
         }
         var result: [(component: NativeComponent, location: RefractIR.SourceLocation?)] = []
@@ -268,6 +276,14 @@ struct Generation {
                     }
                 }
             }
+        }
+    }
+
+    private func collectImports(_ stack: NavigationStackNode, resolver: InteropResolver,
+                                into emittedImports: inout Set<String>) throws {
+        for destination in stack.destinations where destination.model == nil {
+            emittedImports.insert(try resolver.target(for: NativeComponent(name: destination.viewName),
+                                                     platform: .harmonyOS, location: nil).symbol)
         }
     }
 

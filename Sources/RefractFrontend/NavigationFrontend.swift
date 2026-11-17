@@ -2,6 +2,22 @@ import RefractIR
 import SwiftSyntax
 
 extension Builder {
+    func validateNavigationDeclarations(_ module: Module) {
+        for screen in module.screens {
+            guard case let .navigationStack(stack, location) = screen.body else { continue }
+            if viewDeclarations[stack.rootName + "Destinations"] != nil {
+                diagnostics.append(Diagnostic(code: "RFNAV003",
+                    message: "Generated destination component `\(stack.rootName)Destinations` conflicts with a source View.",
+                    suggestion: "Rename the navigation root or the conflicting source View.", location: location))
+            }
+            if stack.models.isEmpty, stack.destinations.contains(where: { $0.model != nil }) {
+                diagnostics.append(Diagnostic(code: "RFNAV003",
+                    message: "A model destination requires the root's declared model input.",
+                    suggestion: "Pass the same declared model from the navigation root.", location: location))
+            }
+        }
+    }
+
     func navigationStack(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard call.arguments.count == 1, call.arguments.first?.label?.text == "path",
               let projection = call.arguments.first?.expression.as(DeclReferenceExprSyntax.self),
@@ -20,19 +36,32 @@ extension Builder {
                   "Use `@State private var path: [Route] = []`; the native host owns its contents", at: projection)
             return nil
         }
+        guard currentStates.allSatisfy({ state in
+            switch state {
+            case .model, .navigationPath: true
+            case .state, .binding: false
+            }
+        }), currentStates.filter({ if case .navigationPath = $0 { true } else { false } }).count == 1 else {
+            error("RFNAV002", "A navigation root accepts only declared model inputs and one destination path.",
+                  "Keep local controls and scalar state in a typed child screen; use one `[Route]` @State path", at: projection)
+            return nil
+        }
         guard let declaration = enums.first(where: { $0.name == path.1 }), declaration.isNavigationDestination,
               declaration.payloadTypes.isEmpty else {
             error("RFNAV002", "Navigation destinations need a local `Hashable` enum without payloads.",
                   "Use `enum Route: Hashable { case detail }` and pass typed data through a destination model", at: projection)
             return nil
         }
+        var content: [ViewNode] = []
         var destinations: [NavigationDestination] = []
         pendingNavigationDestinations = []
         for statement in call.trailingClosure!.statements {
             guard let child = viewStatement(statement) else {
                 pendingNavigationDestinations = []
-                error("RFNAV001", "NavigationStack accepts supported content with one navigationDestination registration.",
-                      "Use VStack { NavigationLink(...) }.navigationDestination(for: Route.self) { route in ... }", at: statement)
+                if diagnostics.isEmpty || diagnostics.last?.code.hasPrefix("RFNAV") != true {
+                    error("RFNAV001", "NavigationStack accepts supported content with one navigationDestination registration.",
+                          "Use VStack { NavigationLink(...) }.navigationDestination(for: Route.self) { route in ... }", at: statement)
+                }
                 return nil
             }
             content.append(child)
@@ -45,37 +74,36 @@ extension Builder {
                   "Declare one static case and typed destination view for every case of `\(declaration.name)`", at: call)
             return nil
         }
-        for link in content {
-            guard case let .navigationLink(_, value, _) = link, declaration.cases.contains(value) else {
-                error("RFNAV003", "A NavigationLink value must be a case of the stack's destination enum.",
-                      "Use a static case declared by `\(declaration.name)`", at: call)
-                return nil
+        func validateLinks(_ node: ViewNode) -> Bool {
+            if case let .navigationLink(_, value, _) = node {
+                guard declaration.cases.contains(value) else {
+                    error("RFNAV003", "A NavigationLink value must be a case of the stack's destination enum.",
+                          "Use a static case declared by `\(declaration.name)`", at: call)
+                    return false
+                }
             }
+            return node.children.allSatisfy(validateLinks)
         }
-        return .navigationStack(NavigationStackNode(pathName: pathName, enumName: declaration.name,
-                                                   content: content, destinations: destinations),
+        guard content.allSatisfy(validateLinks) else { return nil }
+        return .navigationStack(NavigationStackNode(pathName: pathName, rootName: currentViewName ?? "",
+                                                   enumName: declaration.name,
+                                                   content: content, destinations: destinations, models: currentModels),
                                 location: location(of: call))
     }
 
     func navigationLink(_ call: FunctionCallExprSyntax) -> ViewNode? {
-        guard call.arguments.count == 1, call.arguments[0].label == nil,
-              let member = call.arguments[0].expression.as(MemberAccessExprSyntax.self),
+        let arguments = Array(call.arguments)
+        guard arguments.count == 2, arguments[0].label == nil,
+              arguments[1].label?.text == "value",
+              let member = arguments[1].expression.as(MemberAccessExprSyntax.self),
               member.base == nil, member.declName.argumentNames == nil,
               call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty else {
-              member.base == nil, member.declName.argumentNames == nil else {
             error("RFNAV001", "NavigationLink accepts one localized title and a static `.case` value.",
                   "Use `NavigationLink(\"navigation.open\", value: .detail)`; dynamic strings and closure destinations are unsupported", at: call)
             return nil
         }
         let title: Expression
-        if let value = call.arguments.first(where: { $0.label?.text == "value" }) {
-            guard call.arguments.count == 2, call.arguments[0].label == nil,
-                  call.arguments[1].label?.text == "value",
-                  let member = value.expression.as(MemberAccessExprSyntax.self), member.base == nil,
-                  member.declName.argumentNames == nil else { return nil }
-            _ = member
-        }
-        if let key = stringLiteral(call.arguments[0].expression), LocalizationKey.isCanonical(key) {
+        if let key = stringLiteral(arguments[0].expression), LocalizationKey.isCanonical(key) {
             title = Expression(.localizedText(LocalizedText(key: key)), type: .string, location: location(of: call))
         } else {
             error("RFNAV001", "NavigationLink needs a canonical localized title.",
@@ -87,7 +115,7 @@ extension Builder {
     }
 
     func navigationDestination(_ call: FunctionCallExprSyntax, on node: ViewNode) -> ViewNode? {
-        guard case .stack = node else {
+        guard case let .stack(axis, _, _, _) = node, axis == .vertical else {
             error("RFNAV001", "navigationDestination must be attached to the NavigationStack's root VStack.",
                   "Use `VStack { NavigationLink(...) }.navigationDestination(for: Route.self) { route in ... }`", at: call)
             return nil
@@ -101,7 +129,6 @@ extension Builder {
             return nil
         }
         let cases = declaration.cases
-        guard call.arguments.count == 1,
         guard call.arguments.count == 1, call.arguments.first?.label?.text == "for",
               call.arguments.first?.expression.trimmedDescription == "\(enumName).self",
               let closure = call.trailingClosure, call.additionalTrailingClosures.isEmpty else {
@@ -110,10 +137,14 @@ extension Builder {
             return nil
         }
         guard let signature = closure.signature,
-              let parameter = signature.parameterClause?.as(ClosureShorthandParameterListSyntax.self),
-              parameter.count == 1, parameter.first?.name.text == "route",
+              let parameters = signature.parameterClause,
+              ((parameters.as(ClosureParameterClauseSyntax.self)?.parameters.count == 1 &&
+                parameters.as(ClosureParameterClauseSyntax.self)?.parameters.first?.firstName.text == "route") ||
+               (parameters.as(ClosureShorthandParameterListSyntax.self)?.count == 1 &&
+                parameters.as(ClosureShorthandParameterListSyntax.self)?.first?.name.text == "route")),
               closure.statements.count == 1,
-              let switchStatement = closure.statements.first?.item.as(SwitchExprSyntax.self),
+              let switchStatement = closure.statements.first?.item.as(ExpressionStmtSyntax.self)?
+                .expression.as(SwitchExprSyntax.self),
               switchStatement.subject.as(DeclReferenceExprSyntax.self)?.baseName.text == "route" else {
             error("RFNAV001", "Destination content must switch exhaustively over the `route` closure argument.",
                   "Use `{ route in switch route { case .detail: DetailScreen(model: model) } }`", at: closure)
