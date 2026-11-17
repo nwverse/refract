@@ -5,6 +5,11 @@ sources in memory before publishing any file. `refract check` uses the same in-m
 committed files; it never calls the output writer. See `docs/mapping.md` for the input contract and `docs/adoption.md`
 for the build integration.
 
+`refract --version` prints `refract source <full commit>` from the reviewed `SourceRevision.swift` constant. The
+constant is the complete source commit, including archive builds without `.git`; it does not invoke Git during a
+build, infer a moving branch or claim a supported release. Updating it is part of the source review. The version
+command writes no output files and does not change generation.
+
 ## Publishing and concurrent invocations
 
 A generate invocation publishes only the Kotlin and ArkTS files derived from its supplied inputs. It does not remove

@@ -106,6 +106,26 @@ import Testing
     #endif
 }
 
+@Test func cliVersionReportsTheReviewedSourceRevisionWithoutGenerating() throws {
+    #if os(Linux) || os(macOS)
+    let executable = try requireCLIExecutable()
+    let result = try runCLI(["--version"], executable: executable)
+    #expect(result.status == 0, Comment(rawValue: result.stderr))
+    #expect(result.stderr.isEmpty)
+    let process = Process()
+    process.executableURL = executable
+    process.arguments = ["--version"]
+    let stdout = Pipe()
+    process.standardOutput = stdout
+    process.standardError = Pipe()
+    try process.run()
+    process.waitUntilExit()
+    #expect(process.terminationStatus == 0)
+    #expect(String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        == "refract source c212ef7159e5a67216774ddc74c3844846fc2ebe\n")
+    #endif
+}
+
 @Test func cliReportsInputAndMappingFailuresWithNonzeroExit() throws {
     #if os(Linux) || os(macOS)
     let executable = try requireCLIExecutable()
