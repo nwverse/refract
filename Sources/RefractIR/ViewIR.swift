@@ -179,7 +179,7 @@ public extension ViewNode {
              let .image(_, _, location), let .toggle(_, _, _, _, _, location), let .textInput(_, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
              let .switchExpression(_, _, _, location), let .optionalBinding(_, _, _, _, location),
-             let .navigationLink(_, _, location), let .navigationStack(_, location): location
+             let .navigationLink(_, _, _, _, location), let .navigationStack(_, location): location
         }
     }
 }

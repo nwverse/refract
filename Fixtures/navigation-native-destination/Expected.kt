@@ -41,7 +41,7 @@ public fun EscapeScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        Button(onClick = { onPathNavigate(EscapeRoute.detail) }) {
+        Button(onClick = { onPathNavigate(EscapeRoute.detail) }, modifier = Modifier) {
             Text(text = stringResource(R.string.navigation_open))
         }
     }

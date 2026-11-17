@@ -70,7 +70,7 @@ public enum LocalizationResourceValidator {
                 return [title] + modifiers.flatMap(\.arguments)
             case let .divider(modifiers, _):
                 return modifiers.flatMap(\.arguments)
-            case let .navigationLink(title, _, _):
+            case let .navigationLink(title, _, _, _, _):
                 return [title]
             case let .navigationStack(stack, _):
                 return stack.content.flatMap(visit)

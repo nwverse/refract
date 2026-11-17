@@ -15,21 +15,19 @@ extension ComposeBackend {
         // The source NavigationStack is a host boundary, not a second native NavHost. Its root content
         // is emitted as an ordinary component and its destination registrations become a typed switch below.
         for child in stack.content {
-            try emit(child, isRoot: isRoot, into: &out, context: &context)
+            try emit(child, isRoot: true, into: &out, context: &context)
         }
     }
 
-    func emitNavigationLink(title: Expression, destination: String, location: SourceLocation?,
-                            into out: inout KotlinWriter, context: inout Context) throws {
-        guard let path = context.module.screens.flatMap(\.states).compactMap({ state -> (String, String)? in
-            guard case let .navigationPath(name, enumName, _) = state else { return nil }
-            return (name, enumName)
-        }).first, context.module.enums.first(where: { $0.name == path.1 })?.cases.contains(destination) == true else {
+    func emitNavigationLink(title: Expression, pathName: String, enumName: String, destination: String,
+                            location: SourceLocation?, into out: inout KotlinWriter,
+                            context: inout Context) throws {
+        guard context.module.enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
             throw Diagnostic(code: "RFNAV003", message: "A NavigationLink destination is not in the declared path enum.",
                              suggestion: "Use a static case of the source destination enum", location: location)
         }
         context.imports.insert("androidx.compose.material3.Button")
-        out.open("Button(onClick = { on\(path.0.uppercasingFirst())Navigate(\(path.1).\(destination)) })")
+        out.open("Button(onClick = { on\(pathName.uppercasingFirst())Navigate(\(enumName).\(destination)) }, modifier = Modifier)")
         try emit(.text(title, modifiers: [], location: location), into: &out, context: &context)
         out.close()
     }

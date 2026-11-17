@@ -40,7 +40,7 @@ public fun NavigationScreen(
 ) {
     Column(modifier = modifier) {
         Text(text = model.title.value)
-        Button(onClick = { onPathNavigate(Route.detail) }) {
+        Button(onClick = { onPathNavigate(Route.detail) }, modifier = Modifier) {
             Text(text = stringResource(R.string.navigation_open))
         }
     }

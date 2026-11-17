@@ -68,14 +68,15 @@ extension Builder {
         }
         destinations = pendingNavigationDestinations
         pendingNavigationDestinations = []
-        guard Set(destinations.map(\.caseName)).count == destinations.count,
+        guard content.count == 1, !destinations.isEmpty,
+              Set(destinations.map(\.caseName)).count == destinations.count,
               Set(destinations.map(\.caseName)) == Set(declaration.cases) else {
             error("RFNAV003", "Navigation destinations must cover every enum case exactly once.",
                   "Declare one static case and typed destination view for every case of `\(declaration.name)`", at: call)
             return nil
         }
         func validateLinks(_ node: ViewNode) -> Bool {
-            if case let .navigationLink(_, value, _) = node {
+            if case let .navigationLink(_, _, _, value, _) = node {
                 guard declaration.cases.contains(value) else {
                     error("RFNAV003", "A NavigationLink value must be a case of the stack's destination enum.",
                           "Use a static case declared by `\(declaration.name)`", at: call)
@@ -111,7 +112,16 @@ extension Builder {
             return nil
         }
         guard let member = call.arguments.last?.expression.as(MemberAccessExprSyntax.self) else { return nil }
-        return .navigationLink(title: title, destination: member.declName.baseName.text, location: location(of: call))
+        guard let path = currentStates.compactMap({ state -> (String, String)? in
+            guard case let .navigationPath(name, enumName, _) = state else { return nil }
+            return (name, enumName)
+        }).first else {
+            error("RFNAV001", "NavigationLink requires its enclosing NavigationStack path.",
+                  "Use `NavigationStack(path: $path)` with a typed destination enum", at: call)
+            return nil
+        }
+        return .navigationLink(title: title, pathName: path.0, enumName: path.1,
+                               destination: member.declName.baseName.text, location: location(of: call))
     }
 
     func navigationDestination(_ call: FunctionCallExprSyntax, on node: ViewNode) -> ViewNode? {

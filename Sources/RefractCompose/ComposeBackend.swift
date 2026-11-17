@@ -172,8 +172,9 @@ public struct ComposeBackend: Sendable {
                            location: location, into: &out, context: &context)
         case let .navigationStack(stack, location):
             try emitNavigationStack(stack, isRoot: isRoot, location: location, into: &out, context: &context)
-        case let .navigationLink(title, destination, location):
-            try emitNavigationLink(title: title, destination: destination, location: location, into: &out, context: &context)
+        case let .navigationLink(title, pathName, enumName, destination, location):
+            try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
+                                   destination: destination, location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .nativeModifier(child, operations, _):

@@ -156,8 +156,9 @@ struct Generation {
             for child in stack.content {
                 try emit(child, into: &writer, mapping: mapping, resolver: resolver)
             }
-        case let .navigationLink(title, destination, _):
-            try emitNavigationLink(title: title, destination: destination, into: &writer, mapping: mapping)
+        case let .navigationLink(title, pathName, enumName, destination, _):
+            try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
+                                   destination: destination, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):
             var modifiers: [Modifier] = []
             for operation in operations {
