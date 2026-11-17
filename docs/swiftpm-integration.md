@@ -39,8 +39,9 @@ has no file discovery, implicit target selection, recursive output deletion, app
 runtime, or configuration of the generator's Swift/IR semantics. Use the normal
 mapping schema for those generator settings.
 
-The consuming manifest adds the plugin to the native target and the package
-dependency used to resolve that plugin. It does not add a library dependency:
+The consuming manifest declares the same minimum macOS version as Refract (currently
+macOS 13) and adds the plugin to the native target. Its package dependency resolves
+the plugin; it does not add a library dependency:
 
 ```swift
 .target(

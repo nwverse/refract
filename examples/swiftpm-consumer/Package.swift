@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "RefractConsumer",
+    platforms: [.macOS(.v13)],
     products: [.library(name: "RefractConsumer", targets: ["RefractConsumer"])],
     dependencies: [.package(path: "../refract")],
     targets: [

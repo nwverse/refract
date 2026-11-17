@@ -40,6 +40,7 @@ import PackageDescription
 
 let package = Package(
     name: "RefractConsumer",
+    platforms: [.macOS(.v13)],
     products: [.library(name: "RefractConsumer", targets: ["RefractConsumer"])],
     dependencies: [.package(path: "../refract")],
     targets: [
@@ -124,6 +125,7 @@ def main() -> int:
     # it never links a Refract product or a generated native runtime.
     target_manifest = (ROOT / "examples/swiftpm-consumer/Package.swift").read_text()
     assert '.plugin(name: "RefractSwiftPMPlugin", package: "refract")' in target_manifest
+    assert "platforms: [.macOS(.v13)]" in target_manifest
     assert 'dependencies: [.package(path: "../refract")]' in target_manifest
     assert 'dependencies: ["Refract' not in target_manifest
     assert not (consumer / "Sources/RefractConsumer/Generated").exists()

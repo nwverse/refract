@@ -19,7 +19,8 @@ layout in a temporary directory so it does not write to the source checkout.
 
 ## Build on macOS
 
-Build the versioned CLI once, then select it explicitly for both generation commands
+Requirements: macOS 13 or later for the host package and the documented Apple
+SwiftUI toolchain. Build the versioned CLI once, then select it explicitly for both generation commands
 and normal builds. Alternatively put its executable on `PATH`; no executable is
 downloaded during an application build.
 
