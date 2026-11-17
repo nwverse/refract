@@ -1,0 +1,1 @@
+Child.swift:3:8: error [RFVIEW006]: Generated child View calls form a recursive cycle: Child -> Parent -> Child. Suggestion: Break the cycle and pass data through explicit child inputs.

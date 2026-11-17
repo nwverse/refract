@@ -1,0 +1,1 @@
+Input.swift:23:13: error [RFNATIVE002]: Native component argument `decoder` is not declared by `NativeDocumentPreview`. Suggestion: Use the memberwise SwiftUI initializer signature
