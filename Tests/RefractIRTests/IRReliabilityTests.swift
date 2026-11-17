@@ -185,13 +185,10 @@ struct IRReliabilityTests {
             encoder.outputFormatting = [.sortedKeys]
             let encoded = try encoder.encode(module)
             let decoded = try JSONDecoder().decode(Module.self, from: encoded)
-            // Synthesized equality recursively descends every nested view on a
-            // cooperative Testing thread. Byte equality is the stronger coding
-            // assertion and does not consume that bounded thread's stack.
+            #expect(decoded == module, "IR coding mismatch at fixed seed \(seed)")
             #expect(try encoder.encode(decoded) == encoded, "IR re-encoding differs at fixed seed \(seed)")
             var replay = IRCorpus(seed: seed)
-            #expect(try encoder.encode(replay.module()) == encoded,
-                    "The test generator itself is not reproducible at seed \(seed)")
+            #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
         #expect(seenViews.count == 23, "Visited view cases: \(seenViews.sorted())")
         #expect(seenExpressions.count == 12, "Visited expression cases: \(seenExpressions.sorted())")
