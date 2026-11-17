@@ -17,7 +17,6 @@ public struct Frontend {
         let duplicateDiagnostics = resolver.duplicateDiagnostics()
         var units: [TranslationUnit] = []
         for file in resolver.files {
-            var hasDuplicateGeneratedDeclaration = false
             guard file.parserDiagnostics.isEmpty else {
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
                                              diagnostics: file.parserDiagnostics))
@@ -27,7 +26,7 @@ public struct Frontend {
             let builder = Builder(file: file.source.path, tree: file.tree, mapping: mapping,
                                   compilationContext: context)
             builder.rejectDuplicateGeneratedDeclarations(file.tree)
-            hasDuplicateGeneratedDeclaration = builder.hasDuplicateGeneratedDeclaration
+            let hasDuplicateGeneratedDeclaration = builder.hasDuplicateGeneratedDeclaration
             builder.walk(file.tree)
             let module = Module(sourceFile: file.source.path, screens: builder.screens,
                                 nativeDeclarations: builder.interop.declarations,
@@ -37,7 +36,7 @@ public struct Frontend {
             if sources.count == 1 { builder.validateChildViewGraph(module) }
             builder.validateRowContentTypes(module)
             let diagnostics = duplicateDiagnostics[file.source.path, default: []] + builder.diagnostics
-            if hasDuplicateGeneratedDeclaration {
+            if hasDuplicateGeneratedDeclaration || duplicateDiagnostics[file.source.path]?.isEmpty == false {
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
                                              diagnostics: diagnostics))
                 continue
@@ -79,8 +78,7 @@ final class Builder: SyntaxVisitor {
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
 
-    init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil,
-         collectTopLevelDeclarations: Bool = true) {
+    init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
@@ -94,12 +92,10 @@ final class Builder: SyntaxVisitor {
                   }) == true else { return nil }
             return declaration.name.text
         }).union(compilationContext?.modelNames ?? [])
-        if collectTopLevelDeclarations || compilationContext != nil {
-            collectEnums(tree)
-            itemTypes = compilationContext?.allItemTypes ?? []
-            collectItemTypes(tree)
-            collectModels(tree)
-        }
+        collectEnums(tree)
+        itemTypes = compilationContext?.allItemTypes ?? []
+        collectItemTypes(tree)
+        collectModels(tree)
         for statement in tree.statements {
             if let declaration = statement.item.as(StructDeclSyntax.self),
                declaration.inheritanceClause?.inheritedTypes.contains(where: {
@@ -127,16 +123,6 @@ final class Builder: SyntaxVisitor {
         return "\(location.file):\(location.line):\(location.column):\(name)"
     }
 
-    func buildTopLevelDeclarations(_ tree: SourceFileSyntax) {
-        for statement in tree.statements {
-            if let node = statement.item.as(StructDeclSyntax.self) {
-                _ = visit(node)
-            } else if let node = statement.item.as(IfConfigDeclSyntax.self) {
-                _ = visit(node)
-            }
-        }
-    }
-
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
         if interop.declaration(node) {
             diagnostics.append(contentsOf: interop.takeDiagnostics())
@@ -144,12 +130,7 @@ final class Builder: SyntaxVisitor {
         }
         guard node.inheritanceClause?.inheritedTypes.contains(where: {
             $0.type.trimmedDescription == "View"
-        }) == true else {
-            // These top-level declarations were collected before the walk with
-            // their full explicit-input type environment; visiting them again
-            // would duplicate declarations and diagnose item fields as View inputs.
-            return .skipChildren
-        }
+        }) == true else { return .skipChildren }
         guard validateViewMembers(node) else { return .skipChildren }
 
         let savedParameters = parameters

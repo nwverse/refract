@@ -10,7 +10,6 @@ struct CompilationContext {
     let enums: [EnumDeclaration]
     let views: [String: StructDeclSyntax]
     let modelNames: Set<String>
-    let ambiguousNames: Set<String>
 }
 
 /// A per-invocation declaration table. Only explicitly supplied files participate;
@@ -63,8 +62,7 @@ struct CompilationInputResolver {
         self.modelNames = modelNames
         var parsedItems: [String: [ItemType]] = [:]
         for file in files.sorted(by: { $0.source.path < $1.source.path }) {
-            let builder = Builder(file: file.source.path, tree: file.tree, mapping: nil,
-                                  collectTopLevelDeclarations: false)
+            let builder = Builder(file: file.source.path, tree: file.tree, mapping: nil)
             builder.collectItemTypes(file.tree)
             parsedItems[file.source.path] = builder.itemTypes
         }
@@ -75,8 +73,7 @@ struct CompilationInputResolver {
             let builder = Builder(file: file.source.path, tree: file.tree, mapping: nil,
                                   compilationContext: CompilationContext(models: [], itemTypes: [], allItemTypes: allItems,
                                                                          enums: [], views: [:],
-                                                                         modelNames: modelNames, ambiguousNames: []),
-                                  collectTopLevelDeclarations: false)
+                                                                         modelNames: modelNames))
             parsedModels[file.source.path] = builder.models
         }
         self.parsedModels = parsedModels
@@ -90,13 +87,11 @@ struct CompilationInputResolver {
         let allItems = files.flatMap { parsedItems[$0.source.path, default: []] }
         var enums: [EnumDeclaration] = []
         var views: [String: StructDeclSyntax] = [:]
-        var ambiguousNames: Set<String> = []
         // Dependency order is independent of CLI argument order. Declarations in the
         // current file retain their original order and are appended by Builder.
         for candidate in files.sorted(by: { $0.source.path < $1.source.path })
         where candidate.source.path != file.source.path {
-            let builder = Builder(file: candidate.source.path, tree: candidate.tree, mapping: nil,
-                                  collectTopLevelDeclarations: false)
+            let builder = Builder(file: candidate.source.path, tree: candidate.tree, mapping: nil)
             builder.collectEnums(candidate.tree)
             enums.append(contentsOf: builder.enums)
             for declaration in candidate.declarations {
@@ -104,12 +99,9 @@ struct CompilationInputResolver {
                 views[declaration.name] = view
             }
         }
-        for (name, candidates) in declarations where candidates.count > 1 {
-            ambiguousNames.insert(name)
-        }
         return CompilationContext(models: models, itemTypes: items, allItemTypes: allItems,
                                   enums: enums, views: views,
-                                  modelNames: modelNames, ambiguousNames: ambiguousNames)
+                                  modelNames: modelNames)
     }
 
     func duplicateDiagnostics() -> [String: [Diagnostic]] {

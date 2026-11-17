@@ -91,11 +91,8 @@ public enum GoldenRunner {
         let sources = fixture.additionalInputs.keys.sorted().map {
             SourceFile(path: $0, contents: fixture.additionalInputs[$0] ?? "")
         }
-        var units = Frontend.parse(sources: sources, mapping: mapping)
+        let units = Frontend.parse(sources: sources, mapping: mapping)
         var diagnostics = units.flatMap(\.diagnostics)
-        // Diagnostics are attached to their source file and do not depend on input order.
-        units.sort { $0.module.sourceFile < $1.module.sourceFile }
-        diagnostics = units.flatMap(\.diagnostics)
         guard !units.contains(where: \.hasErrors) else {
             return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
         }
