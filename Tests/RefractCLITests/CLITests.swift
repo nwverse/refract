@@ -42,7 +42,9 @@ import Foundation
         .contains("stringResource(example.resources.R.string.hello_title)"))
     #expect(try String(contentsOf: temporary.appendingPathComponent("harmony/Input.ets"), encoding: .utf8)
         .contains("$r('app.string.hello_title')"))
-    #expect(try runCLI(["check", "--input", input.path, "--mapping", mapping.path], executable: executable).status == 0)
+    #expect(try runCLI(["check", "--input", input.path, "--mapping", mapping.path,
+                        "--android-out", temporary.appendingPathComponent("android").path,
+                        "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable).status == 0)
 
     let rejection = try runCLI(["generate", "--input",
                                 root.appendingPathComponent("Fixtures/rejected-image/Input.swift").path,
@@ -191,7 +193,8 @@ private func builtCLIExecutable() -> URL {
     #expect(!FileManager.default.fileExists(atPath: android.path))
     #expect(!FileManager.default.fileExists(atPath: harmony.path))
 
-    let checked = try runCLI(["check", "--input", malformed.path], executable: executable)
+    let checked = try runCLI(["check", "--input", malformed.path,
+                              "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
     #expect(checked.status != 0)
     #expect(checked.stderr.contains("[RFSYN001]"))
     #endif
@@ -225,7 +228,8 @@ private func builtCLIExecutable() -> URL {
     #endif
 }
 
-private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {    let process = Process()
+private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {
+    let process = Process()
     process.executableURL = executable
     process.arguments = arguments
     let stderr = Pipe()

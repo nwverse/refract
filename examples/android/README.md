@@ -94,6 +94,14 @@ fixture:
 
 ```sh
 swift build
+.build/debug/refract check \
+  --input examples/shared/Hello.swift \
+  --input examples/shared/NativeComponentScreen.swift \
+  --input examples/shared/IdentifiedList.swift \
+  --input examples/shared/SettingsScreen.swift \
+  --mapping examples/refract.json \
+  --android-out examples/android/app/src/main/java/refract/generated \
+  --harmony-out examples/harmony/entry/src/main/ets/generated
 python3 scripts/check_examples.py
 .build/debug/refract generate \
   --input examples/shared/Hello.swift \
@@ -108,6 +116,8 @@ diff <(tail -n +3 Fixtures/hello/Expected.ets) <(tail -n +3 examples/harmony/ent
 ```
 
 Changing the shared Swift input regenerates both platforms in place; do not edit either output independently.
+`refract check` performs the same generation in memory and fails on missing, stale or extra committed Kotlin/ArkTS
+without writing files. Supply the complete input set for both output directories.
 
 ## Adopt or roll back
 
