@@ -1,5 +1,10 @@
 # Native interop pitfalls
 
+- SwiftSyntax parsing does not prove SwiftUI type correctness. `Binding(get:set:)` is a real SwiftUI initializer, but
+  `.refractNativeModifier(...)` and `.padding(horizontal:vertical:)` require explicit iOS-only source declarations.
+  Keep the measurement fixture itself in the iOS target's Sources phase, including its application-owned design
+  tokens, so Xcode type-checks every platform branch instead of trusting a syntax-only fixture.
+
 - Keep IR independent of mapping and backends. Interop lowering helpers belong in `RefractMapping` or a backend;
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.
 - A native view argument needs its label and source type, not only an expression. Unknown reference types must not be
