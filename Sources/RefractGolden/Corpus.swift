@@ -32,23 +32,39 @@ public struct FixtureCorpus: Codable, Sendable {
 
 public struct FixtureCase: Sendable {
     public enum Status: Sendable { case ready, pending }
+    public struct Output: Sendable, Equatable {
+        public let source: String
+        public let kotlin: String
+        public let arkTS: String
+        public init(source: String, kotlin: String, arkTS: String) {
+            self.source = source
+            self.kotlin = kotlin
+            self.arkTS = arkTS
+        }
+    }
     public let name: String
     public let status: Status
     public let input: String
+    /// Sibling inputs use their Swift basename as the stable key, including `Input.swift`.
+    public let additionalInputs: [String: String]
     public let mapping: String?
     public let expectedKotlin: String?
     public let expectedArkTS: String?
     public let expectedDiagnostics: String?
+    public let additionalOutputs: [Output]
 
-    public init(name: String, status: Status, input: String, mapping: String?, expectedKotlin: String?,
-                expectedArkTS: String?, expectedDiagnostics: String?) {
+    public init(name: String, status: Status, input: String, additionalInputs: [String: String] = [:],
+                mapping: String?, expectedKotlin: String?, expectedArkTS: String?, expectedDiagnostics: String?,
+                additionalOutputs: [Output] = []) {
         self.name = name
         self.status = status
         self.input = input
+        self.additionalInputs = additionalInputs
         self.mapping = mapping
         self.expectedKotlin = expectedKotlin
         self.expectedArkTS = expectedArkTS
         self.expectedDiagnostics = expectedDiagnostics
+        self.additionalOutputs = additionalOutputs
     }
 }
 
@@ -127,13 +143,57 @@ public enum CorpusLoader {
         let kotlin = try read(directory, "Expected.kt", required: false)
         let ark = try read(directory, "Expected.ets", required: false)
         let diagnostics = try read(directory, "Expected.diagnostics", required: false)
-        guard (kotlin != nil && ark != nil && diagnostics == nil) || (kotlin == nil && ark == nil && diagnostics != nil) else {
-            throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) needs both Expected.kt/Expected.ets, or only Expected.diagnostics.")
+        let hasSiblingInputs = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .contains { $0.hasSuffix(".swift") && $0 != "Input.swift" }
+        let primaryShape = (kotlin != nil && ark != nil && diagnostics == nil) ||
+            (kotlin == nil && ark == nil && diagnostics != nil) ||
+            (hasSiblingInputs && kotlin == nil && ark == nil && diagnostics == nil)
+        guard primaryShape else {
+            throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) needs both Expected.kt/Expected.ets, or only Expected.diagnostics; a multi-file case needs per-file Expected.<name> outputs.")
+        }
+        var additionalInputs: [String: String] = [:]
+        var additionalOutputs: [FixtureCase.Output] = []
+        let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        for file in files where file.hasSuffix(".swift") && file != "Input.swift" {
+            guard let contents = try read(directory, file, required: false) else { continue }
+            additionalInputs[file] = contents
+        }
+        var expectedSources: Set<String> = []
+        for file in files where file != "Expected.kt" && file != "Expected.ets" {
+            if file.hasSuffix(".swift"), file != "Input.swift" {
+                guard let contents = try read(directory, file, required: false) else { continue }
+                additionalInputs[file] = contents
+                continue
+            }
+            guard file.hasPrefix("Expected."), file.hasSuffix(".kt") || file.hasSuffix(".ets") else { continue }
+            let suffix = file.hasSuffix(".kt") ? ".kt" : ".ets"
+            let source = String(file.dropFirst("Expected.".count).dropLast(suffix.count))
+            guard source != "Input", !source.isEmpty,
+                  source.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil else {
+                throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) has invalid per-file output \(file).")
+            }
+            guard expectedSources.insert(source).inserted else { continue }
+            guard additionalInputs[source + ".swift"] != nil else {
+                throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) output \(file) has no \(source).swift input.")
+            }
+            guard let kotlin = try read(directory, "Expected.\(source).kt", required: false),
+                  let ark = try read(directory, "Expected.\(source).ets", required: false) else {
+                throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) needs both per-file outputs for \(source).swift.")
+            }
+            additionalOutputs.append(FixtureCase.Output(source: source + ".swift", kotlin: kotlin, arkTS: ark))
+        }
+        if !additionalInputs.isEmpty {
+            guard kotlin == nil, ark == nil,
+                  diagnostics != nil || (additionalOutputs.count == additionalInputs.count &&
+                  Set(additionalOutputs.map(\.source)) == Set(additionalInputs.keys)) else {
+                throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) must have one Kotlin/ArkTS output for each named Swift input, with Input.swift reserved for diagnostics.")
+            }
         }
         return FixtureCase(name: entry.path,
                            status: entry.implementationStatus == .ready ? .ready : .pending,
-                           input: input!, mapping: mapping,
-                           expectedKotlin: kotlin, expectedArkTS: ark, expectedDiagnostics: diagnostics)
+                           input: input!, additionalInputs: additionalInputs, mapping: mapping,
+                           expectedKotlin: kotlin, expectedArkTS: ark, expectedDiagnostics: diagnostics,
+                           additionalOutputs: additionalOutputs)
     }
 
     private static func read(_ directory: URL, _ name: String, required: Bool) throws -> String? {

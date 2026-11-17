@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "example.generated" },
+    "imports": ["example.designsystem.ReadOnlyRow"],
+    "components": {
+      "ReadOnlyRow": {
+        "parameters": [{ "label": "value", "type": "string", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "ReadOnlyRow",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "value", "target": "value" }],
+        "attributes": {}
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "example.app.R", "strings": {} }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example/designsystem/ReadOnlyRow", "symbols": ["ReadOnlyRow"] }],
+    "components": {
+      "ReadOnlyRow": {
+        "parameters": [{ "label": "value", "type": "string", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "ReadOnlyRow",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "value", "target": "value" }],
+        "attributes": {}
+      }
+    },
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "strings": {} }
+  }
+}

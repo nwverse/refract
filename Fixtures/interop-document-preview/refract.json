@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {
+      "NativeDocumentPreview": {
+        "kind": "composable",
+        "module": "com.example.refract.document",
+        "target": "NativeDocumentPreview",
+        "content": "none",
+        "modifiers": [],
+        "argumentStyle": "named",
+        "attributes": {},
+        "parameters": [
+          { "label": "uri", "type": "string", "required": true },
+          { "label": "displayName", "type": "string", "required": true },
+          { "label": "mimeType", "type": "string", "required": true },
+          { "label": "byteCount", "type": "int", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onClose", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "uri", "target": "uri" },
+          { "source": "displayName", "target": "displayName" },
+          { "source": "mimeType", "target": "mimeType" },
+          { "source": "byteCount", "target": "byteCount" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onClose", "target": "onClose" }
+        ]
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "strings": {
+        "document.loading": "document_loading",
+        "document.close": "document_close",
+        "document.cancel": "document_cancel",
+        "document.missing": "document_missing",
+        "document.unsupported": "document_unsupported",
+        "document.cancelled": "document_cancelled",
+        "document.closed": "document_closed"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.documents", "symbols": ["NativeDocumentPreview"] }],
+    "components": {},
+    "nativeComponents": {
+      "NativeDocumentPreview": {
+        "kind": "component",
+        "module": "example.documents",
+        "target": "NativeDocumentPreview",
+        "content": "none",
+        "modifiers": [],
+        "argumentStyle": "object",
+        "attributes": {},
+        "parameters": [
+          { "label": "uri", "type": "string", "required": true },
+          { "label": "displayName", "type": "string", "required": true },
+          { "label": "mimeType", "type": "string", "required": true },
+          { "label": "byteCount", "type": "int", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onClose", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "uri", "target": "uri" },
+          { "source": "displayName", "target": "displayName" },
+          { "source": "mimeType", "target": "mimeType" },
+          { "source": "byteCount", "target": "byteCount" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onClose", "target": "onClose" }
+        ]
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": {
+        "document.loading": "document_loading",
+        "document.close": "document_close",
+        "document.cancel": "document_cancel",
+        "document.missing": "document_missing",
+        "document.unsupported": "document_unsupported",
+        "document.cancelled": "document_cancelled",
+        "document.closed": "document_closed"
+      }
+    }
+  }
+}

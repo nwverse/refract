@@ -36,8 +36,11 @@ ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "examples/android/fixture-compile-manifest.txt"
 FIXTURES_ROOT = ROOT / "Fixtures"
 STAGING_JAVA = ROOT / "examples/android/fixtures/src/main/java"
-STAGING_RES = ROOT / "examples/android/fixtures/src/main/res/values"
+STAGING_RES = ROOT / "examples/android/fixtures/src/main/res"
+STAGING_VALUES = STAGING_RES / "values"
 STAGING_TEST = ROOT / "examples/android/fixtures/src/test/java/example/native"
+APP_TEST_JAVA = ROOT / "examples/android/app/src/fixtureTest/java"
+APP_TEST_RES = ROOT / "examples/android/app/src/fixtureTest/res"
 
 
 def fail(message: str) -> None:
@@ -62,6 +65,11 @@ def regenerate_and_stage(fixture: str) -> None:
     if not fixture_dir.is_dir():
         fail(f"manifest entry is not a fixture directory: {fixture}")
     input_swift = fixture_dir / "Input.swift"
+    sibling_inputs = sorted(path for path in fixture_dir.glob("*.swift") if path.name != "Input.swift")
+    mapping_json = fixture_dir / "refract.json"
+    strings_xml = fixture_dir / "values/strings.xml"
+    if sibling_inputs:
+        return regenerate_and_stage_multiple(fixture, fixture_dir, sibling_inputs, mapping_json, strings_xml)
     expected_kt = fixture_dir / "Expected.kt"
     mapping_json = fixture_dir / "refract.json"
     strings_xml = fixture_dir / "values/strings.xml"
@@ -69,7 +77,9 @@ def regenerate_and_stage(fixture: str) -> None:
         if not path.is_file():
             fail(f"{fixture}: missing required file {path.relative_to(ROOT)}")
 
-    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture}-") as tmp:
+    # A corpus subdirectory is not a single path component; TemporaryDirectory creates its parents and returns
+    # only the leaf. Use a flat, unique label so nested fixtures use the same lifecycle as top-level ones.
+    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture.replace('/', '-')}-") as tmp:
         out = Path(tmp)
         subprocess.run(
             [
@@ -91,7 +101,39 @@ def regenerate_and_stage(fixture: str) -> None:
                 f"{fixture}: regenerated Kotlin differs from {expected_kt.relative_to(ROOT)}; "
                 "regenerate and review it"
             )
+    stage_generated(expected_kt, fixture, fixture.replace("/", "-"))
 
+
+def regenerate_and_stage_multiple(fixture: str, fixture_dir: Path, inputs: list[Path],
+                                  mapping_json: Path, strings_xml: Path) -> None:
+    """Compile every sibling output, not only the parent that references them."""
+    for path in (fixture_dir / "Input.swift", mapping_json, strings_xml):
+        if not path.is_file():
+            fail(f"{fixture}: missing required file {path.relative_to(ROOT)}")
+    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture}-") as tmp:
+        out = Path(tmp)
+        arguments = [str(ROOT / ".build/debug/refract"), "generate"]
+        for input_path in inputs:
+            arguments += ["--input", str(input_path)]
+        arguments += ["--mapping", str(mapping_json), "--android-out", str(out / "android"),
+                      "--harmony-out", str(out / "harmony")]
+        subprocess.run(arguments, cwd=ROOT, check=True)
+        for input_path in inputs:
+            name = input_path.stem
+            regenerated = out / "android" / f"{name}.kt"
+            expected = fixture_dir / f"Expected.{name}.kt"
+            if not regenerated.is_file() or not expected.is_file():
+                fail(f"{fixture}: missing generated or expected Kotlin for {input_path.name}")
+            if regenerated.read_bytes() != expected.read_bytes():
+                fail(f"{fixture}: {name}.kt differs from {expected.relative_to(ROOT)}")
+            stage_generated(expected, fixture, f"{name}-{fixture}")
+    merge_strings(strings_xml, STAGING_VALUES / "strings.xml", fixture)
+
+
+def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
+    fixture_dir = expected_kt.parent
+    mapping_json = fixture_dir / "refract.json"
+    strings_xml = fixture_dir / "values/strings.xml"
     # Preserve the CLI's default or explicitly declared package while sharing the fixture module's R class.
     # Android library R classes are generated in the Gradle namespace, not each Kotlin subpackage.
     mapping = json.loads(mapping_json.read_text(encoding="utf-8"))
@@ -106,10 +148,11 @@ def regenerate_and_stage(fixture: str) -> None:
         generated = generated.replace(
             f"package {package}\n", f"package {package}\n\nimport {namespace}.R\n", 1
         )
-    target = package_directory / f"{fixture}.kt"
+    # Every output is a direct child of its Kotlin package, including nested corpus paths.
+    target = package_directory / f"{output_name}.kt"
     target.write_text(generated, encoding="utf-8")
     for name in ("NativeHost.kt", "NativeComponent.kt"):
-        native_source = fixture_dir / name
+        native_source = expected_kt.parent / name
         if native_source.is_file():
             native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-{name}"
             native_target.parent.mkdir(parents=True, exist_ok=True)
@@ -125,15 +168,49 @@ def regenerate_and_stage(fixture: str) -> None:
         if not relative_package or any(not segment.isidentifier() for segment in relative_package.split(".")):
             fail(f"{fixture}: {native_test.name} has an invalid test package")
         target_directory = STAGING_TEST
-        for segment in ("example", "native", *relative_package.split(".")):
+        for segment in relative_package.split("."):
             target_directory /= segment
         target_directory.mkdir(parents=True, exist_ok=True)
         (target_directory / native_test.name).write_text(native_test.read_text(encoding="utf-8"), encoding="utf-8")
-    STAGING_RES.mkdir(parents=True, exist_ok=True)
+    STAGING_VALUES.mkdir(parents=True, exist_ok=True)
     # Each fixture brings its own values/strings.xml. Concatenate the entries
     # into a single staged strings.xml so that resources with the same name do
     # not silently override each other.
-    merge_strings(strings_xml, STAGING_RES / "strings.xml", fixture)
+    merge_strings(strings_xml, STAGING_VALUES / "strings.xml", fixture)
+    resources = fixture_dir / "res"
+    if resources.is_dir():
+        for source in sorted(resources.rglob("*")):
+            if not source.is_file():
+                continue
+            relative = source.relative_to(resources)
+            destination = (STAGING_RES / relative).resolve()
+            if not destination.is_relative_to(STAGING_RES.resolve()) or destination.exists():
+                fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+    if fixture == "interop-remote-image":
+        # Native JVM tests need the app's real resource table, not a library's
+        # isolated test APK. Stage the exact generated call and its resources.
+        for base in (APP_TEST_JAVA, APP_TEST_RES):
+            if base.exists():
+                shutil.rmtree(base)
+        target_package = APP_TEST_JAVA.joinpath(*package.split("."))
+        target_package.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(target, target_package / f"{fixture}.kt")
+        generated_test = target_package / f"{fixture}.kt"
+        generated_test.write_text(
+            generated_test.read_text(encoding="utf-8").replace("refract.generated.R", "com.example.refract.R"),
+            encoding="utf-8",
+        )
+        for source in sorted(resources.rglob("*")):
+            if source.is_file():
+                relative = source.relative_to(resources)
+                destination = APP_TEST_RES / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+        destination = APP_TEST_RES / "values/strings.xml"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(strings_xml, destination)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:

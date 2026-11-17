@@ -20,6 +20,19 @@ there is no Refract runtime, base view, interpreter or lookup registry in a gene
   import in v0. A screen name and its item/protocol names are valid ASCII Swift identifiers beginning with an
   uppercase letter. File order determines declaration output order. A generated View, model, item, enum or native
   declaration name must be unique within one input; repeated names are rejected with `RFSYN004` before IR construction.
+- Multiple `--input` files form one explicit same-module declaration set. A child `View`, model protocol,
+  `Identifiable` item or switch enum may be declared in a different supplied file; no directory is searched and no
+  process-global registry is used. Each file still emits only its own declarations. Duplicate names across files are
+  rejected with `RFVIEW007`; missing types, mismatched child inputs and direct/indirect recursion remain errors.
+  Child arguments retain the existing model/item contract. Cross-file Kotlin references use the configured package;
+  ArkUI imports the sibling output by basename (`./ChildRow`). Inputs and generated outputs must therefore retain
+  unique flat basenames, otherwise `RFVIEW008` rejects an ambiguous import path. A future nested-output layout needs
+  an explicit path-mapping contract rather than guessed relative imports. Type resolution is independent of input
+  order. Recursion diagnostics, however, start from the first input View that reaches a cycle, so the reported
+  rotation of that cycle and its declaration location follow the explicit input order; this is not a claim of
+  order-independent diagnostics. A lazy-list IR node binds its owning model protocol explicitly. Shared catalogs
+  deduplicate only the same declaration identity (source file, source position and name); a same-named declaration
+  at another location is an ambiguity error, never a first-wins fallback.
 - Stored properties are restricted to `let` item fields, the state and model forms in section 5, and computed `body`.
   Initializers, methods, nested functions, property observers and arbitrary computed properties are outside v0.
 - Source expressions are references, literals, list element access, typed construction, comparisons and boolean
@@ -198,6 +211,14 @@ each row has a `ListItem`. For API 18 and newer, a repeated child may use `@Reus
 row shapes, `.reuse({ reuseId: () => "setting" })`. API 12–17 keep V2 observation without this reuse capability;
 there is no V1 fallback. Fine-grained `@ObservedV2`/`@Trace` item properties are native optimizations, not a Refract
 cache or runtime. A list cannot be represented by eagerly mapping all rows.
+
+A paged searchable list uses the same `List(model.items)` contract; it does not introduce a paging collection adapter.
+The model exposes typed String search text, loading/error/empty Booleans and `loadNextPage`/`retry` actions. Search
+editing accepts the explicit `Binding(get: { model.searchText }, set: { model.setSearchText($0) })` form, with matching
+model, String type, `set<Property>` action and setter label checked at build time.
+`Fixtures/list-paged-search/` covers the complete source
+and both native outputs. Page acceptance, cancellation and replacement are app-owned semantics documented in
+`docs/state-and-models.md`; generation never performs requests, invents page identity or accepts index-keyed rows.
 
 The first implemented conditional slice accepts `if`/`else if`/`else` with declared Boolean model, `@State`
 or `@Binding` properties. Each condition is emitted directly into the native builder; inactive branches are not

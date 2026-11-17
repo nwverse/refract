@@ -84,7 +84,7 @@ struct ComposeNativeModifier {
                                  suggestion: "Capture the model and a declared item identity, not a computed or literal value.",
                                  location: value.location)
             }
-            if let item = context.retainedItem, let itemType = context.module.itemTypes.first(where: {
+            if let item = context.retainedItem, let itemType = context.itemTypes.first(where: {
                 $0.name == item.type
             }) {
                 let parts = reference.split(separator: ".")
