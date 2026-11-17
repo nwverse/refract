@@ -6,7 +6,9 @@ struct Counter: View {
     var body: some View {
         VStack {
             Text(verbatim: "Count: \(count)")
-            Button(verbatim: "Increment") { count += 1 }
+            Button { count += 1 } label: {
+                Text(verbatim: "Increment")
+            }
         }
     }
 }

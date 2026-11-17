@@ -318,18 +318,18 @@ final class Builder: SyntaxVisitor {
                let action = localStateAction(call.trailingClosure) {
                 let children = children(of: labelClosure)
                 guard children?.count == 1, let child = children?.first else {
-                    error("unsupportedButton", "A custom Button label must contain one Label view.",
-                          "Use Button { model.save() } label: { Label(...) }", at: labelClosure)
+                    error("unsupportedButton", "Button requires an action and one verbatim Text label or a supported Label view.",
+                          "Use `Button { model.save() } label: { Text(verbatim: \"...\") }`", at: labelClosure)
                     return nil
                 }
                 return .button(label: child, action: action, modifiers: [], location: nodeLocation)
             }
             guard call.arguments.count == 1,
                   let argument = call.arguments.first,
-                  argument.label == nil || argument.label?.text == "verbatim",
+                  argument.label == nil,
                   call.additionalTrailingClosures.isEmpty else {
-                error("unsupportedButton", "Button requires one localized string title and an empty action.",
-                      "Use Button(\"key\") { } or a literal text label with explicit provenance", at: call)
+                error("unsupportedButton", "Button requires one localized title or a real SwiftUI action/label pair.",
+                      "Use `Button(\"key\") { ... }` or `Button { ... } label: { Text(verbatim: \"...\") }`", at: call)
                 return nil
             }
             let action = localStateAction(call.trailingClosure)
