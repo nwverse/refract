@@ -238,6 +238,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "mapping/model-scalars",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "modal-native-host",
       "implementationStatus": "ready"
     },
@@ -255,10 +259,6 @@
     },
     {
       "path": "modal-sheet-state",
-      "implementationStatus": "ready"
-    },
-    {
-      "path": "mapping/model-scalars",
       "implementationStatus": "ready"
     },
     {
