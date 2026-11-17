@@ -69,7 +69,7 @@ struct RefractCommand {
         }
 
         var hasErrors = false
-        var units: [TranslationUnit] = []
+        var sources: [SourceFile] = []
         var names = Set<String>()
         for input in inputs {
             let url = URL(fileURLWithPath: input)
@@ -83,10 +83,12 @@ struct RefractCommand {
             } catch {
                 throw CLIError.message("cannot read Swift input `\(url.path)` as UTF-8: \(error.localizedDescription) Provide a readable UTF-8 source file; no outputs were written.")
             }
-            let unit = Frontend.parse(SourceFile(path: url.lastPathComponent, contents: source), mapping: mapping)
+            sources.append(SourceFile(path: url.lastPathComponent, contents: source))
+        }
+        let units = Frontend.parse(sources: sources, mapping: mapping)
+        for unit in units {
             hasErrors = hasErrors || unit.hasErrors
             unit.diagnostics.forEach { writeError($0.rendered) }
-            units.append(unit)
         }
         guard !hasErrors else { throw CLIError.message("validation stopped because the input has errors") }
         for unit in units {
@@ -94,13 +96,18 @@ struct RefractCommand {
         }
 
         var outputs: [(directory: String, filename: String, contents: String)] = []
+        let nativeSources = NativeSourceSet(modules: units.map(\.module),
+                                           models: units.flatMap(\.resolvedModels),
+                                           itemTypes: units.flatMap(\.resolvedItemTypes))
         for unit in units {
             let name = URL(fileURLWithPath: unit.module.sourceFile).deletingPathExtension().lastPathComponent
             var compose: String?
             var ark: String?
-            do { compose = try ComposeBackend().generate(module: unit.module, mapping: mapping) }
+            do { compose = try ComposeBackend().generate(module: unit.module, mapping: mapping,
+                                                        sources: nativeSources) }
             catch { hasErrors = true; reportGeneration(error) }
-            do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
+            do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping,
+                                                  sources: nativeSources) }
             catch { hasErrors = true; reportGeneration(error) }
             guard let compose, let ark else { continue }
             outputs.append((options["--android-out"] ?? mapping.android.output.directory, name + ".kt", compose))
