@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated.accessibility" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "minimumAPI": 26,
+    "resources": {
+      "className": "refract.generated.accessibility.R",
+      "catalog": "values/strings.xml",
+      "strings": {
+        "accessibility.sync.title": "accessibility_sync_title",
+        "accessibility.sync.status": "accessibility_sync_status",
+        "accessibility.sync.now": "accessibility_sync_now",
+        "accessibility.sync.label": "accessibility_sync_label",
+        "accessibility.sync.hint": "accessibility_sync_hint",
+        "accessibility.sync.action": "accessibility_sync_action",
+        "accessibility.sync.details": "accessibility_sync_details"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "minimumAPI": 26,
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": {
+        "accessibility.sync.title": "accessibility_sync_title",
+        "accessibility.sync.status": "accessibility_sync_status",
+        "accessibility.sync.now": "accessibility_sync_now",
+        "accessibility.sync.label": "accessibility_sync_label",
+        "accessibility.sync.hint": "accessibility_sync_hint",
+        "accessibility.sync.action": "accessibility_sync_action",
+        "accessibility.sync.details": "accessibility_sync_details"
+      }
+    }
+  }
+}

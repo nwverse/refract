@@ -18,8 +18,8 @@ extension ComposeBackend {
         if retained {
             try emitRetainedToggle(value, into: &out, context: &context)
         }
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
-        if labelsHidden, !modifiers.isEmpty {
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
+        if labelsHidden, !modifiers.filter({ !["accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction", "accessibilityIdentifier"].contains($0.name) }).isEmpty {
             throw Diagnostic(code: "RFVIEW003",
                 message: "A hidden-label Toggle has no label row to receive these modifiers.",
                 suggestion: "Apply layout modifiers to the enclosing stack and native measurement directly to the control.",
@@ -76,7 +76,7 @@ extension ComposeBackend {
             case let .contentDescription(value):
                 context.imports.insert("androidx.compose.ui.semantics.contentDescription")
                 context.imports.insert("androidx.compose.ui.semantics.semantics")
-                return Modifier(name: "nativeContentDescription", arguments: [value], argumentLabels: [nil], location: operation.location)
+                return Modifier(name: "accessibilityLabel", arguments: [value], argumentLabels: [nil], location: operation.location)
             case .contentType:
                 throw Diagnostic(code: "RFNATIVE004",
                     message: "Row content type belongs on a generated child row, not its Toggle.",
@@ -86,7 +86,7 @@ extension ComposeBackend {
                 return Modifier(name: "retainCallback", location: operation.location)
             }
         }
-        let switchChain = try self.modifierChain(switchModifiers, isRoot: false, context: &context)
+        let switchChain = try self.modifierChain(switchModifiers, isRoot: false, into: &out, context: &context)
         out.line("Switch(")
         out.depth += 1
         out.line("checked = \(checked),")
@@ -135,7 +135,7 @@ extension ComposeBackend {
                              message: "A text field needs a String local state or parent binding.",
                              suggestion: "Use `text: $name` with String ownership.", location: value.location)
         }
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         context.imports.insert("androidx.compose.material3.Text")
         context.imports.insert("androidx.compose.material3.TextField")
         context.imports.insert("androidx.compose.ui.res.stringResource")

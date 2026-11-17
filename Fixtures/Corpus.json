@@ -2,6 +2,10 @@
   "schemaVersion": 1,
   "cases": [
     {
+      "path": "accessibility-actions-traversal",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "accessibility-dynamic-type",
       "implementationStatus": "ready"
     },

@@ -89,6 +89,22 @@ them and the JUnit HTML reports as `native-jvm-compose-settings`. Tests and thei
 application's test source set and add no runtime library to the example APK, generated code or consuming apps.
 Large-text behavior is tracked separately by the accessibility workstream and is not claimed by this check.
 
+### Accessibility actions, traversal, localization and large text
+
+`GeneratedAccessibilitySemanticsTest` invokes the exact CLI-generated `accessibility-actions-traversal` fixture,
+staged by `scripts/check_fixture_compilation.py` into the real app resource namespace (with the same app-package R
+reference used by the fixture compiler). It checks localized label/hint/value text, custom-action invocation,
+ordinary click alternatives, direct-child traversal metadata, and merged/unmerged semantics. The Spanish test uses
+the committed `res/values-es/` catalog; the large-text test sets `fontScale = 2.0`, verifies a visible native control
+and writes a nonempty capture. **All of these are Native JVM Compose checks, not emulator/device or screen-reader
+results.** They do not establish TalkBack, VoiceOver or ArkUI spoken/focus behavior. The source/API contract is in
+`../../docs/accessibility.md`.
+
+The large-text capture was inspected locally: text grows, wraps and remains visible in the Native JVM capture; that
+is not a device or universal-layout claim. The golden includes the matching ArkTS lowering, but HarmonyOS compilation
+and device behavior are not available on this host. iOS uses ordinary SwiftUI in the explicit platform branch and is
+not compiled on this Linux host.
+
 ## CI compile gate
 
 `.github/workflows/ci.yml` runs an `android-compile` job on every pull request and on every push to `main`. The job

@@ -3,7 +3,8 @@ import RefractMapping
 
 extension ComposeBackend {
     func modifierChain(_ modifiers: [Modifier], isRoot: Bool, isText: Bool = false,
-                       parentAxis: ViewNode.StackAxis? = nil, context: inout Context) throws -> String {
+                       parentAxis: ViewNode.StackAxis? = nil, into out: inout KotlinWriter,
+                       context: inout Context) throws -> String {
         var parts: [String] = []
         var sawLayoutPriority = false
         var index = 0
@@ -158,11 +159,10 @@ extension ComposeBackend {
             case "retainCallback":
                 index += 1
                 continue
-            case "accessibilityLabel":
-                throw Diagnostic(code: "RFNATIVE004",
-                    message: "An iOS SwiftUI accessibility modifier cannot be emitted as an Android measurement hook.",
-                    suggestion: "Use `.contentDescription` in the Android branch of the explicit platform alternative.",
-                    location: modifier.location)
+            case "accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction",
+                 "accessibilityTraversal", "accessibilityIdentifier":
+                index += 1
+                continue
             default:
                 throw Diagnostic(code: "RFVIEW003", message: "Modifier `\(modifier.name)` has no Compose mapping.",
                                  suggestion: "Use a supported modifier or a typed native component.", location: modifier.location)
@@ -170,7 +170,7 @@ extension ComposeBackend {
             index += 1
         }
         let base = isRoot ? "modifier" : "Modifier"
-        return base + parts.joined()
+        return base + parts.joined() + (try composeAccessibilitySemantics(modifiers, isRoot: isRoot, into: &out, context: &context))
     }
 
     func textSpecificModifiers(_ modifiers: [Modifier], context: inout Context) throws -> [String] {

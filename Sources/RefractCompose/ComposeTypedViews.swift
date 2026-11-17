@@ -34,7 +34,7 @@ extension ComposeBackend {
             let horizontal = parentAxis != .horizontal
             context.imports.insert(horizontal ? "androidx.compose.material3.HorizontalDivider"
                                                : "androidx.compose.material3.VerticalDivider")
-            let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+            let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
             out.line("\(horizontal ? "HorizontalDivider" : "VerticalDivider")(modifier = \(chain))")
         case .spacer:
             // weight is a RowScope/ColumnScope extension. No foundation.layout.weight import exists publicly.
@@ -70,7 +70,7 @@ extension ComposeBackend {
                              suggestion: "Use one lazy list, or put fixed-size non-scrolling content inside the ScrollView.",
                              location: listLocation ?? location)
         }
-        let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         if axis == .vertical {
             context.imports.insert("androidx.compose.foundation.rememberScrollState")
             context.imports.insert("androidx.compose.foundation.verticalScroll")
@@ -88,7 +88,7 @@ extension ComposeBackend {
                                 into out: inout KotlinWriter, context: inout Context) throws {
         context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
         context.imports.insert("androidx.compose.foundation.lazy.items")
-        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
+        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)))")
         try emitDynamicListItems(items, into: &out, context: &context)
         out.close()
     }
@@ -104,7 +104,7 @@ extension ComposeBackend {
                              suggestion: "Use a model-backed list with a stable item identity.", location: location)
         }
         context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
-        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
+        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)))")
         var keys = Set<String>()
         var keyIndex = 0
         for child in children {
@@ -279,7 +279,7 @@ extension ComposeBackend {
         context.imports.insert("androidx.compose.foundation.Image")
         context.imports.insert("androidx.compose.ui.res.painterResource")
         context.imports.insert(resourceClass)
-        let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         out.line("Image(painter = painterResource(R.drawable.\(source.name)), contentDescription = null, modifier = \(chain))")
     }
 

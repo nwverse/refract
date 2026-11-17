@@ -62,7 +62,7 @@ extension Generation {
             }
             for modifier in modifiers {
                 switch modifier.name {
-                case "accessibilityLabel", "nativeTestTag":
+                case "accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction", "accessibilityIdentifier", "nativeTestTag":
                     switchModifiers.append(modifier)
                 default:
                     rowModifiers.append(modifier)
@@ -98,7 +98,7 @@ extension Generation {
                                  suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)
             }
             writer.close(suffix: ")")
-            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping, traversal: accessibilityTraversal), unlessEmpty: true)
             writer.depth -= 1
             if !labelsHidden {
                 writer.close()

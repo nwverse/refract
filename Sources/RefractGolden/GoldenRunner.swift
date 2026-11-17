@@ -54,7 +54,7 @@ public enum GoldenRunner {
         do {
             // Resolve every localized value before either backend emits. This catches a missing second-platform
             // resource instead of returning one successful output followed by a late backend error.
-            try LocalizationResourceValidator.validate(module: unit.module, mapping: mapping)
+            try LocalizationResourceValidator.validate(module: unit.module, mapping: mapping, platform: .harmonyOS)
         } catch let diagnostic as Diagnostic {
             diagnostics.append(diagnostic)
             return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)

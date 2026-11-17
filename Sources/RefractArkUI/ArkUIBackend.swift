@@ -6,18 +6,24 @@ public struct ArkUIBackend: Sendable {
     public init() {}
 
     public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        var generation = Generation(module: module, mapping: mapping)
+        let generation = Generation(module: module, mapping: mapping)
         return try generation.generate()
     }
 }
 
-struct Generation {
+final class Generation {
     let module: Module
     let mapping: Mapping
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
+    var accessibilityTraversal: AccessibilityTraversal?
 
-    mutating func generate() throws -> String {
+    init(module: Module, mapping: Mapping) {
+        self.module = module
+        self.mapping = mapping
+    }
+
+    func generate() throws -> String {
         guard mapping.schemaVersion == 1 else {
             throw Diagnostic(code: "arkui.unsupported_mapping_version",
                              message: "ArkUI output supports mapping schema version 1, not \(mapping.schemaVersion).",
@@ -108,8 +114,12 @@ struct Generation {
         switch node {
         case let .stack(axis, children, modifiers, _):
             let children = try stackChildren(children, parentAxis: axis)
+            let traversal = try ArkModifiers.validateAccessibilityTraversal(modifiers, children: children, mapping: mapping)
             writer.open("\(containerName(axis))()")
             for child in children {
+                let saved = accessibilityTraversal
+                accessibilityTraversal = traversal
+                defer { accessibilityTraversal = saved }
                 try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
                          parentAxis: axis, itemTypeName: itemTypeName)
             }
@@ -130,7 +140,7 @@ struct Generation {
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, traversal: accessibilityTraversal), unlessEmpty: true)
         case let .conditional(branches, location):
             guard !branches.isEmpty, branches[0].condition != nil,
                   branches.dropFirst().allSatisfy({ $0.condition != nil }) || branches.last?.condition == nil else {

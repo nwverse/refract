@@ -117,7 +117,27 @@ A modifier combination that cannot preserve the source semantics is diagnosed.
 | `.font(.title)` | `style = AppTheme.typography.title` at `Text` | `.font(AppTheme.typography.title)` | A declared typography token. Compose text parameters are direct; no new typography object in composition. |
 | `.cornerRadius(.small)` | `Modifier.clip(RoundedCornerShape(4.dp))` | `.borderRadius(4)` | Clipping follows the documented native semantics. Shape instances are not cached in a Refract runtime. |
 | `.disabled(model.isLocked)` | `enabled = !model.isLocked.value` at the control | `.enabled(!this.model.isLocked)` | This is a view/control property, not a blanket hit-test filter that changes child behavior. |
-| `.accessibilityLabel("settings.icon.hint")` | `Modifier.semantics { contentDescription = ... }` with resource text resolved appropriately | `.accessibilityText($r('app.string.settings_icon_hint'))` | Accessibility labels are localized resources and must not be silently dropped. |
+| `.accessibilityLabel(Text("accessibility.icon.label"))` | `Modifier.semantics { contentDescription = ... }` with resource text read in composition | `.accessibilityText($r('app.string.accessibility_icon_label'))` | Localized accessibility text, never an unlocalized literal. The existing statically typed model-String label overload is preserved. |
+| `.accessibilityHint(Text("accessibility.hint"))` | Supplementary `contentDescription` joined after the label | `.accessibilityDescription(...)` | Platform-specific supplementary descriptions, not editable `hintText` or ArkUI's vehicle-oriented `accessibilityTextHint`; see `docs/accessibility.md`. |
+| `.accessibilityValue(Text("accessibility.state\(model.value)"))` | `stateDescription` | `.accessibilityStateDescription(...)`, API 23+ | Localized current state, retaining the native control and ordinary activation. |
+| `.accessibilityAction(named: Text("accessibility.action")) { model.sync() }` | `customActions = listOf(CustomAccessibilityAction(...))` | `.accessibilityCustomActions([...])`, API 26+ | One typed synchronous model action or scalar local-state action; an ordinary Button remains an accessible alternative. |
+| `.accessibilityIdentifier("sync_now")` on an actionable direct child | `testTag` plus a sibling `traversalIndex` when ordered | `id` where the traversal contract requires it | The ordinary iOS identifier is retained on iOS; names are unique within a declared traversal. |
+| `.accessibilityTraversal([.accessibility("sync_now"), .accessibility("details", after: "sync_now")])` on a direct stack | Parent/merging actionable-child `isTraversalGroup` and zero-based `traversalIndex` | Predecessor `.accessibilityNextFocusId("details")`, API 18+ | Only in the declared Android/HarmonyOS `refractView` branches. The iOS branch uses ordinary `.accessibilitySortPriority`; no cross-platform numeric-priority equivalence is claimed. See `docs/accessibility.md`. |
+
+### Accessibility actions and traversal
+
+All source-provided accessibility text is a localized `Text` resource or an existing typed model-backed String label.
+Verbatim text, unknown resource keys, untyped callbacks and non-native hint substitutions are errors. Custom actions
+reuse the normal synchronous Button action contract and do not introduce a runtime action registry. Compose reads
+localized semantics strings in composition through `rememberUpdatedState`, never by calling `stringResource` from a
+non-composable semantics/action lambda.
+
+Traversal is deliberately bounded: only direct actionable/image children of a stack can be named, every named child
+must appear once, and `after` must name an earlier entry. Decorative text and non-merging containers cannot be used
+as fake traversal anchors. This sequence affects accessibility metadata, not drawing order. Prefer natural source
+order when it already matches reading order. `harmonyOS.minimumAPI` must meet each native API requirement (18 for
+traversal links, 23 for state descriptions, 26 for custom actions); otherwise `RFACCESS005` fails generation instead
+of dropping semantics. Full source/platform contracts and Native JVM evidence limits are in `docs/accessibility.md`.
 
 ### Dynamic type and native control semantics
 
@@ -329,6 +349,10 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |
 | `RFVIEW003` | Modifier argument or axis is unsupported | Use a documented token, scalar dimension or alignment |
+| `RFACCESS001` | Accessibility label/hint/value is not localized typed Text | Use a canonical Text resource or a declared model String label |
+| `RFACCESS002` | Custom accessibility action name or callback is unsupported | Use localized Text and one typed synchronous action |
+| `RFACCESS003` | Traversal identifiers, completeness or predecessor order is invalid | Name unique direct actionable children and use an acyclic source-order sequence |
+| `RFACCESS005` | HarmonyOS minimumAPI is missing or too low for a gated native semantic | Declare the consumer's supported API level or remove the operation; no silent fallback |
 | `RFVIEW004` | Container children or label shape is invalid | Use the documented child and label forms |
 | `RFVIEW005` | Per-platform variation is hidden in free-form `#if` | Use the declared, type-checked platform-value construct |
 | `RFLIST001` | Collection lacks a stable, typed identity | Use `Identifiable` with a stored String or Int id |

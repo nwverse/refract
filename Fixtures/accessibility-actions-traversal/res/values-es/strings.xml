@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_sync_title">Sincronización</string>
+    <string name="accessibility_sync_status">Estado actual: %1$s</string>
+    <string name="accessibility_sync_now">Sincronizar ahora</string>
+    <string name="accessibility_sync_label">Sincronizar ajustes</string>
+    <string name="accessibility_sync_hint">Actualiza los ajustes desde el servidor</string>
+    <string name="accessibility_sync_action">Iniciar sincronización</string>
+    <string name="accessibility_sync_details">Mostrar detalles de sincronización</string>
+</resources>

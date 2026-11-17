@@ -17,8 +17,12 @@ extension Generation {
         case .depth: "Stack"
         }
         let children = try stackChildren(children, parentAxis: layout.axis)
+        let traversal = try ArkModifiers.validateAccessibilityTraversal(modifiers, children: children, mapping: mapping)
         writer.open("\(container)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
         for child in children {
+            let saved = accessibilityTraversal
+            accessibilityTraversal = traversal
+            defer { accessibilityTraversal = saved }
             try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
         }
         writer.close()
