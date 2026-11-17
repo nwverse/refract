@@ -262,6 +262,7 @@ def validate_package(archive: Path, parent: Path) -> None:
     # These tests created the package: only restore the known regular executable bit.
     executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
     output = run([str(executable), "--version"])
+    info = json.loads((extracted / "BUILD-INFO.json").read_text(encoding="utf-8"))
     if output != f"refract {VERSION} ({info['sourceRevision']})":
         raise ValueError(f"packaged CLI version mismatch: {output}")
     with tempfile.TemporaryDirectory(prefix="refract-package-smoke.", dir=parent) as directory:

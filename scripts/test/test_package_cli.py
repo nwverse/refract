@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import time
 import unittest
 from unittest import mock
 
@@ -63,7 +62,6 @@ class PackagingUnitTests(unittest.TestCase):
                 package.extract_archive(archive_path, self.root / f"installed-{kind}-{mode}")
 
     def test_stamp_changes_revision_without_touching_version(self) -> None:
-        source = b'enum RefractVersion {\n    static let current = "0.1.0"\n    static let sourceRevision = "old"\n}\n'
         source = b'enum RefractVersion {\n    static let current = "0.1.0"\n    static let sourceRevision = "old"\n}\n'
         stamped = package.version_source(source, "a" * 40)
         self.assertIn(b'static let current = "0.1.0"', stamped)
