@@ -1,0 +1,1 @@
+Input.swift:7:9: error [RFSECURE001]: `.secureReveal` takes exactly one projected Bool @State or @Binding (`$isRevealed`). Suggestion: Declare `@State private var isRevealed: Bool = false` and pass `.secureReveal($isRevealed)`

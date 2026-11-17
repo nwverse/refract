@@ -149,6 +149,7 @@ public enum InteropMapping {
             case .int, .double, .image: "number"
             case .rawAsset: "Resource"
             case .remoteImageLoader: "RemoteImageLoader"
+            case .action: "() => void"
             }
         }
         return switch type {
@@ -157,6 +158,7 @@ public enum InteropMapping {
         case .int, .image, .rawAsset: "Int"
         case .double: "Double"
         case .remoteImageLoader: "RemoteImageLoader"
+        case .action: "() -> Unit"
         }
     }
 

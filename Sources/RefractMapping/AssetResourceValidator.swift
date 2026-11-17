@@ -20,7 +20,7 @@ public enum AssetResourceValidator {
             }
         case let .native(component, _):
             for argument in component.arguments {
-                switch (argument.type, argument.expression.value) {
+                switch (argument.type, argument.expression?.value) {
                 case let (.rawAsset?, .rawAssetResource(name)):
                     _ = try AssetCatalog.resolveBoth(name, kind: .raw, mapping: mapping, location: argument.location)
                 default: break

@@ -123,7 +123,7 @@ Declare `document` as `rawAsset` in both native-component mappings. Android emit
 `$rawfile('privacy_policy.json')` as the native `Resource` input; the app owns its resource-manager read and parser.
 The source-side `RawAsset` declaration and ordinary SwiftUI implementation are supplied by the consuming app on iOS;
 Refract does not generate that type or turn the marker body into Android/ArkTS code. The fixture includes
-`IOSRawAsset.swift` as a minimal consumer-owned declaration and packaging example; it is not part of the generator
+`consumer/IOSRawAsset.swift` as a minimal consumer-owned declaration and packaging example; it is not part of the generator
 or a library linked by native applications.
 
 Use one unqualified base file with the same lowercase name and extension on both platforms. Android accepts a flat
