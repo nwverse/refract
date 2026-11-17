@@ -10,9 +10,9 @@ paired release benchmarks measure the result.
 - Each normative rule has a hand-written expected pattern in `Fixtures/performance/`. The shared generator and
   backends must make those cases pass as they implement the corresponding subset; placeholders do not count as
   generated-code coverage.
-- `bench/android/` compiles the Compose settings pattern next to a hand-written reference. Its `Generated*`
-  functions are explicitly labelled contract stand-ins until the generator exists. Replacing them with actual
-  generator output is required before claiming end-to-end generation evidence.
+- `bench/android/` compiles the actual CLI-generated Compose settings screen next to its unchanged hand-written
+  reference. The generated `GeneratedSettingRow` remains directly callable by the microbenchmark; there is no
+  labelled stand-in or hand-edited generated Kotlin. Structural equivalence and compilation are not measurements.
 - No benchmark-only optimization is added to a generated screen. Both variants use the same models, data, theme,
   controls, accessibility nodes and native lifecycle. Test tags are instrumentation, not a runtime view abstraction.
 - A measured regression beyond the documented noise gate blocks the generated pattern. Baselines are not raised to

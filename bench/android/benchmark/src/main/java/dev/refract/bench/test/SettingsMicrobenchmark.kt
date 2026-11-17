@@ -29,7 +29,7 @@ class SettingsMicrobenchmark {
 
     @Test
     fun generatedRowRecomposition() = rowRecomposition { model, row ->
-        GeneratedSettingRow(model, row)
+        GeneratedSettingRow(row = row, model = model)
     }
 
     @Test
