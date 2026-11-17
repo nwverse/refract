@@ -124,7 +124,10 @@ platform-view contracts, together with these declarations and the application-ow
 check requires those files to remain byte-identical to their canonical fixtures: unique basenames are necessary
 because Xcode otherwise merges several `Input.swift` inputs into one `Input.stringsdata` output. This covers the real
 `Binding(get:set:)` initializer, both typed platform-selection helpers, native measurement spellings and directional
-padding with SwiftUI's semantic type checker. Generator parsing alone is not evidence that these constructs compile.
+padding with SwiftUI's semantic type checker. The canonical platform-value fixture uses
+`Text(verbatim: refractValue(ios:android:harmonyOS:))` so the iOS-selected `String` flows through SwiftUI's
+`Text(verbatim:)` initializer — matching the verbatim literal emitted by both native backends. Generator parsing
+alone is not evidence that these constructs compile.
 
 ## Native components inside Refract
 
@@ -260,6 +263,26 @@ Text("Status")
 ```
 
 Compose receives `.padding(12.dp)` and ArkUI receives `.padding(12)`; no iOS branch appears in either output.
+
+For per-platform **literal text**, use `Text(verbatim: refractValue(ios:android:harmonyOS:))` with a string
+literal in every branch:
+
+```swift
+Text(verbatim: refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS"))
+```
+
+The generated Android call is `Text(text = "Android")` and the ArkUI call is `Text('HarmonyOS')`. On iOS the
+ordinary `refractValue<Value>` helper returns its `String` argument, which feeds SwiftUI's `Text(verbatim:)`
+initializer — the same verbatim, non-localized semantics as the two native backends. No runtime adapter or
+text-selection layer is involved.
+
+The unlabeled localized form `Text(refractValue(ios:android:harmonyOS:))` is **not** accepted: on iOS it would
+select SwiftUI's `Text(_: LocalizedStringKey)` initializer and reinterpret the iOS branch as a localization key,
+while the native backends already emit their branch as a verbatim literal. That source produces a build-time
+`R.string.unsupported_expression` diagnostic, names the divergence and points to the `Text(verbatim:)` form. A
+per-platform **localized** string is not a supported v0 contract; if a project genuinely needs different localized
+text per platform, use a single canonical key resolved through each platform's ordinary resource catalogs (see
+`docs/localization.md`).
 
 Use `refractView` when a view, modifier chain or animation differs. Each branch is a supported view subtree for the
 selected backend, while the iOS branch can use the ordinary SwiftUI subset accepted by that source file:

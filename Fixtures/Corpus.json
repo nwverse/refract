@@ -106,6 +106,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-platform-text-localized-rejected",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-platform-value",
       "implementationStatus": "ready"
     },
