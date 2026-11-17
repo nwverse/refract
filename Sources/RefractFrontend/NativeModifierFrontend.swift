@@ -33,10 +33,9 @@ extension Builder {
             case "testTag", "contentDescription":
                 guard operationCall.arguments.count == 1, operationCall.arguments.first?.label == nil,
                       operationCall.trailingClosure == nil,
-                      let value = modelTypedProperty(operationCall.arguments.first!.expression) ?? scalar(operationCall.arguments.first!.expression),
-                      value.type == .string else {
-                    error("RFNATIVE004", "`\(name)` requires one statically typed String value.",
-                              "Use a literal, declared String input, or typed item/model String property", at: operationCall)
+                      let value = measurementString(operationCall.arguments.first!.expression) else {
+                    error("RFNATIVE004", "`\(name)` requires one statically typed String value or typed scalar interpolation.",
+                              "Use a literal, declared item/model property, or interpolation of typed scalar values", at: operationCall)
                     return nil
                 }
                 operation = name == "testTag" ? .testTag(value.expression) : .contentDescription(value.expression)
@@ -87,6 +86,41 @@ extension Builder {
                                operations: zip(operations, locations).map {
                                    NativeModifier(operation: $0.0, location: $0.1)
                                }, location: location(of: call))
+    }
+
+    private func measurementString(_ expression: ExprSyntax) -> TypedExpression? {
+        let diagnosticCount = diagnostics.count
+        defer { diagnostics.removeSubrange(diagnosticCount...) }
+        if let value = modelTypedProperty(expression) {
+            if value.type == .string { return value }
+        } else if let value = scalar(expression), value.type == .string {
+            return value
+        }
+        guard let literal = expression.as(StringLiteralExprSyntax.self) else { return nil }
+        var segments: [StringInterpolationSegment] = []
+        for segment in literal.segments {
+            switch segment {
+            case let .stringSegment(text):
+                segments.append(.literal(text.content.text))
+            case let .expressionSegment(interpolation):
+                guard interpolation.expressions.count == 1,
+                      let argument = interpolation.expressions.first, argument.label == nil,
+                      let value = modelTypedProperty(argument.expression) ?? measurementScalar(argument.expression),
+                      value.type != nil else { return nil }
+                segments.append(.expression(value.expression))
+            }
+        }
+        return TypedExpression(Expression(.interpolatedString(segments), type: .string,
+                                          location: location(of: expression)), .string)
+    }
+
+    private func measurementScalar(_ expression: ExprSyntax) -> TypedExpression? {
+        let previousCount = diagnostics.count
+        guard let value = scalar(expression), value.type != nil else {
+            diagnostics.removeSubrange(previousCount...)
+            return nil
+        }
+        return value
     }
 
     func accessibilityLabel(_ call: FunctionCallExprSyntax, on node: ViewNode) -> ViewNode? {

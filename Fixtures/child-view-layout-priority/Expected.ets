@@ -38,10 +38,12 @@ export struct ChildSettingRow {
           .onChange((enabled: boolean) => {
             this.settings.setEnabled(row.id, enabled);
           })
+          .id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)
       }
       .justifyContent(FlexAlign.SpaceBetween)
     }
     .alignItems(VerticalAlign.Center)
+    .id(`setting_row_${this.row.id}`)
   }
 }
 

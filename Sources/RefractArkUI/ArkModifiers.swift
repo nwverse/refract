@@ -13,9 +13,9 @@ enum ArkModifiers {
             return try modifiers.map { modifier in
                 switch modifier.name {
                 case "nativeTestTag":
-                    return ".id(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
+                    return ".id(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
                 case "accessibilityLabel":
-                    return ".accessibilityText(\(try ArkExpression.emit(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
+                    return ".accessibilityText(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
                 default:
                     throw Diagnostic(code: "RFNATIVE004",
                         message: "Modifier `\(modifier.name)` is not supported on an ArkUI toggle.",
