@@ -1,0 +1,2 @@
+Input.swift:3:6: error [RFNAV002]: A navigation destination enum cannot carry payload objects. Suggestion: Use no-payload Hashable cases and pass a declared typed model to the destination View
+Input.swift:13:5: error [RFNAV002]: A navigation path must be `@State private var path: [Route] = []`. Suggestion: Use a local no-payload Hashable destination enum and an empty path owned by the native host

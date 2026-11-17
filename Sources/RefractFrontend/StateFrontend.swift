@@ -37,6 +37,21 @@ extension Builder {
             guard let declaration = member.decl.as(VariableDeclSyntax.self),
                   declaration.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body"
             else { continue }
+            if let annotation = declaration.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self) {
+                guard declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.attributes.count == 1,
+                      declaration.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State",
+                      declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }),
+                      declaration.bindings.count == 1, let binding = declaration.bindings.first,
+                      let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
+                      let enumName = enums.first(where: { $0.name == annotation.element.trimmedDescription })?.name,
+                      binding.initializer?.value.as(ArrayExprSyntax.self)?.elements.isEmpty == true else {
+                    error("RFNAV002", "A navigation path must be `@State private var path: [Route] = []`.",
+                          "Use a local no-payload Hashable destination enum and an empty path owned by the native host", at: member)
+                    return nil
+                }
+                states.append(.navigationPath(name: name, enumName: enumName, location: location(of: declaration)))
+                continue
+            }
             if declaration.bindingSpecifier.tokenKind == .keyword(.let) {
                 let binding = declaration.bindings.first
                 if declaration.attributes.isEmpty,

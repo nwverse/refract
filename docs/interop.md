@@ -456,6 +456,14 @@ A signature-affecting change is visible in the golden Kotlin and ArkTS files. Th
 contains hand-written callers for both platforms. Platform example builds are the eventual compile check for these
 imports and calls; text goldens alone do not claim toolchain validation.
 
+## Typed navigation hosts
+
+`docs/navigation.md` defines the bounded `NavigationStack(path:)` contract. Generated root screens accept a typed
+navigation callback; a separate destination component calls same-file typed model screens or zero-argument
+`RefractNativeView` implementations. The native host owns `NavController`, `NavPathStack`, back and lifecycle, so no
+second navigation stack, runtime registry or untyped destination object is generated. Android generated output and
+its real native host compile together; iOS/ArkTS compilation and device lifecycle remain explicitly unverified here.
+
 ## Verification and trade-offs
 
 Golden fixtures cover a native call, native callers of a generated component, scalar selection, view/modifier

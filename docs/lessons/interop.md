@@ -38,6 +38,15 @@
 - Retained callback keys include every captured stable value. A source action name is a discriminator, not a
   substitute for the current model or the list item's declared `Identifiable` id.
 - A generated child call needs an ordered typed argument list with the child's label and the caller's expression.
+- Typed navigation must not synthesize a second back stack. `@State [Route]` owns the iOS path, while generated
+  Android/HarmonyOS roots expose a finite-enum navigation callback and the host owns its controller/stack. Compile a
+  real `NavHost` host alongside the generated two-screen components; merely finding `NavController` in documentation
+  proves nothing. A generated link is a child of its root container: forward the host modifier only to that container,
+  not to every nested Button/Text, and scope each link callback to its own path rather than the first navigation
+  screen in the module. Keep the destination component's model parameters in the root screen's scope, not all module screens.
+  When native destinations live in IR rather than ordinary `.native` nodes, collect their typed imports before the
+  ArkUI header is emitted, and include them in the platform compiler's fixture manifest.
+- A generated child call needs an ordered typed argument list with the child's label and the caller's expression.
   Kotlin named arguments use `label = value`, not Swift's `label: value`; ArkTS uses `label: value` in its object
   literal. Golden text alone does not catch that distinction, so compile a child call whose model label differs
   from the caller's model name. Resolve each View's immutable inputs in local scope and restore the caller's
