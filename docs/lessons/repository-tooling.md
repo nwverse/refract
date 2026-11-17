@@ -40,11 +40,11 @@
   `NO-SOURCE` even though `sourceSets.main.java.srcDirs` shows the new directory. Writing the staged files under
   `src/main/java/<package>/` and `src/main/res/values/` and adding those paths to `.gitignore` is deterministic,
   requires no source set surgery, and keeps the regenerate-and-diff step in one script.
-- **Resolve directory symlinks before formatting path diagnostics.** macOS directory enumeration can resolve `/var`
-  to `/private/var`, while `standardizedFileURL` alone does not resolve that symlink. Reuse one standardized,
-  symlink-resolved directory URL for both output-file diagnostics and enumerated entries; do not mix a raw input
-  path with Foundation's normalized child URL in byte-for-byte comparisons. Sort enumerated files explicitly rather
-  than relying on filesystem order.
+- **Keep diagnostic path construction consistent across directory enumeration.** macOS can return `/private/var`
+  from URL-based directory enumeration for a `/var` input, while `resolvingSymlinksInPath` may leave a not-yet-created
+  path unchanged. Use a standardized directory URL for expected outputs and append names from
+  `contentsOfDirectory(atPath:)` to that same URL. Compare the normalized path in tests without weakening the
+  unexpected-output assertion, and sort enumerated names explicitly.
 - **Merge per-fixture Android resources with a duplicate-name guard.** When each fixture brings its own
   `values/strings.xml`, concatenating them blindly produces duplicate `<string name="...">` declarations and the
   build fails with `Error: Duplicate resources`. The merge script must deduplicate entries with identical values
