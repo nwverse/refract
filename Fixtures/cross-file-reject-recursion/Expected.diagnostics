@@ -1,1 +1,1 @@
-Child.swift:4:9: error [RFVIEW006]: Generated child View calls form a recursive cycle: Parent -> Child -> Parent. Suggestion: Break the cycle and pass data through explicit child inputs.
+Parent.swift:3:8: error [RFVIEW006]: Generated child View calls form a recursive cycle: Parent -> Child -> Parent. Suggestion: Break the cycle and pass data through explicit child inputs.

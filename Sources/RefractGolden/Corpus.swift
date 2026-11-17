@@ -153,8 +153,13 @@ public enum CorpusLoader {
         }
         var additionalInputs: [String: String] = [:]
         var additionalOutputs: [FixtureCase.Output] = []
-        for file in try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
-        where file != "Expected.kt" && file != "Expected.ets" {
+        let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        for file in files where file.hasSuffix(".swift") && file != "Input.swift" {
+            guard let contents = try read(directory, file, required: false) else { continue }
+            additionalInputs[file] = contents
+        }
+        var expectedSources: Set<String> = []
+        for file in files where file != "Expected.kt" && file != "Expected.ets" {
             if file.hasSuffix(".swift"), file != "Input.swift" {
                 guard let contents = try read(directory, file, required: false) else { continue }
                 additionalInputs[file] = contents
@@ -167,6 +172,7 @@ public enum CorpusLoader {
                   source.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil else {
                 throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) has invalid per-file output \(file).")
             }
+            guard expectedSources.insert(source).inserted else { continue }
             guard additionalInputs[source + ".swift"] != nil else {
                 throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) output \(file) has no \(source).swift input.")
             }
@@ -177,8 +183,9 @@ public enum CorpusLoader {
             additionalOutputs.append(FixtureCase.Output(source: source + ".swift", kotlin: kotlin, arkTS: ark))
         }
         if !additionalInputs.isEmpty {
-            guard kotlin == nil, ark == nil, additionalOutputs.count == additionalInputs.count,
-                  Set(additionalOutputs.map(\.source)) == Set(additionalInputs.keys) else {
+            guard kotlin == nil, ark == nil,
+                  diagnostics != nil || (additionalOutputs.count == additionalInputs.count &&
+                  Set(additionalOutputs.map(\.source)) == Set(additionalInputs.keys)) else {
                 throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) must have one Kotlin/ArkTS output for each named Swift input, with Input.swift reserved for diagnostics.")
             }
         }
