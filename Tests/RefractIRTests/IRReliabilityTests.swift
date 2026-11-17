@@ -171,13 +171,16 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // 128 bounded trees exercise all 22 ViewNode cases and all 12 Expression.Value cases.
+        // All 23 public ViewNode cases and all 12 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
+        var seenViews = Set<String>()
+        var seenExpressions = Set<String>()
         for seed in 0..<UInt64(128) {
             var corpus = IRCorpus(seed: seed)
             let module = corpus.module()
             #expect(viewCount(in: module.screens[0].body) <= 397)
+            collectCases(in: module.screens[0].body, views: &seenViews, expressions: &seenExpressions)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             let encoded = try encoder.encode(module)
@@ -187,6 +190,16 @@ struct IRReliabilityTests {
             var replay = IRCorpus(seed: seed)
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
+        #expect(seenViews.count == 23, "Visited view cases: \(seenViews.sorted())")
+        #expect(seenExpressions.count == 12, "Visited expression cases: \(seenExpressions.sorted())")
+    }
+
+    private func collectCases(in node: ViewNode, views: inout Set<String>, expressions: inout Set<String>) {
+        views.insert(String(describing: node).split(separator: "(").first.map(String.init) ?? "")
+        if case let .text(expression, _, _) = node {
+            expressions.insert(String(describing: expression.value).split(separator: "(").first.map(String.init) ?? "")
+        }
+        for child in node.children { collectCases(in: child, views: &views, expressions: &expressions) }
     }
 
     private func viewCount(in node: ViewNode) -> Int {
