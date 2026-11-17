@@ -82,6 +82,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "cross-file-enum-switch",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "cross-file-reject-duplicate",
       "implementationStatus": "ready"
     },

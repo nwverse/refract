@@ -9,7 +9,8 @@ public struct ArkUIBackend: Sendable {
         let dependencies = sources ?? NativeSourceSet(modules: [module])
         let nativeSource = try dependencies.source(for: module)
         var generation = Generation(module: module, mapping: mapping, nativeSource: nativeSource,
-                                    models: dependencies.models, itemTypes: dependencies.itemTypes)
+                                    models: dependencies.models, itemTypes: dependencies.itemTypes,
+                                    enums: dependencies.enums)
         return try generation.generate()
     }
 }
@@ -20,6 +21,7 @@ struct Generation {
     let nativeSource: NativeSource
     let models: [ModelProtocol]
     let itemTypes: [ItemType]
+    let enums: [EnumDeclaration]
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
 

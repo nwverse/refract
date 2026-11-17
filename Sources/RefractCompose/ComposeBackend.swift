@@ -13,7 +13,8 @@ public struct ComposeBackend: Sendable {
     public func generate(module: Module, mapping: Mapping = .empty, sources: NativeSourceSet? = nil) throws -> String {
         let dependencies = sources ?? NativeSourceSet(modules: [module])
         var context = Context(module: module, mapping: mapping,
-                              models: dependencies.models, itemTypes: dependencies.itemTypes)
+                              models: dependencies.models, itemTypes: dependencies.itemTypes,
+                              enums: dependencies.enums)
         // Native references validate both target signatures at each call site below.
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
@@ -398,14 +399,17 @@ public struct ComposeBackend: Sendable {
         let module: Module
         let models: [ModelProtocol]
         let itemTypes: [ItemType]
+        let enums: [EnumDeclaration]
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
 
-        init(module: Module, mapping: Mapping, models: [ModelProtocol]? = nil, itemTypes: [ItemType]? = nil) {
+        init(module: Module, mapping: Mapping, models: [ModelProtocol]? = nil, itemTypes: [ItemType]? = nil,
+             enums: [EnumDeclaration]? = nil) {
             self.mapping = mapping
             self.module = module
             self.models = models ?? module.models
             self.itemTypes = itemTypes ?? module.itemTypes
+            self.enums = enums ?? module.enums
             self.androidResourceClass = mapping.android.resources.className
             if let packageName = mapping.android.output.packageName {
                 self.packageName = packageName

@@ -6,19 +6,23 @@ public struct NativeSourceSet: Sendable {
     public let modules: [Module]
     public let models: [ModelProtocol]
     public let itemTypes: [ItemType]
+    public let enums: [EnumDeclaration]
     private let screens: [String: String]
     private let items: [String: String]
     private let modelFiles: [String: String]
-    private let enums: [String: String]
+    private let enumFiles: [String: String]
 
     public init(modules: [Module]) {
-        self.init(modules: modules, models: modules.flatMap(\.models), itemTypes: modules.flatMap(\.itemTypes))
+        self.init(modules: modules, models: modules.flatMap(\.models), itemTypes: modules.flatMap(\.itemTypes),
+                  enums: modules.flatMap(\.enums))
     }
 
-    public init(modules: [Module], models: [ModelProtocol], itemTypes: [ItemType]) {
+    public init(modules: [Module], models: [ModelProtocol], itemTypes: [ItemType],
+                enums: [EnumDeclaration]? = nil) {
         self.modules = modules
         self.models = models
         self.itemTypes = itemTypes
+        self.enums = enums ?? modules.flatMap(\.enums)
         var screens: [String: String] = [:]
         var items: [String: String] = [:]
         var models: [String: String] = [:]
@@ -32,7 +36,7 @@ public struct NativeSourceSet: Sendable {
         self.screens = screens
         self.items = items
         self.modelFiles = models
-        self.enums = enums
+        self.enumFiles = enums
     }
 
     public func source(for module: Module) throws -> NativeSource {
@@ -73,7 +77,7 @@ public struct NativeSourceSet: Sendable {
         }
         var references: [String: String] = [:]
         for (name, location) in names {
-            if let file = screens[name] ?? items[name] ?? modelFiles[name] ?? enums[name],
+            if let file = screens[name] ?? items[name] ?? modelFiles[name] ?? enumFiles[name],
                file != module.sourceFile {
                 references[name] = file
                 continue

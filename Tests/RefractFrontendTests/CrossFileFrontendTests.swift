@@ -121,6 +121,34 @@ struct Parent: View {
     #expect(diagnostics[0].message.contains("Parent -> Child -> Parent"))
 }
 
+@Test func crossFileEnumSwitchUsesSharedCatalogWithoutDuplicateDeclaration() throws {
+    let units = Frontend.parse(sources: [
+        SourceFile(path: "Tab.swift", contents: "enum Tab { case home; case settings }"),
+        SourceFile(path: "TabContent.swift", contents: """
+        struct TabContent: View {
+            let tab: Tab
+            var body: some View {
+                switch tab {
+                case .home: Text(verbatim: "Home")
+                case .settings: Text(verbatim: "Settings")
+                }
+            }
+        }
+        """),
+    ])
+    #expect(units.allSatisfy { !$0.hasErrors })
+    #expect(units.map { $0.module.enums.count } == [1, 0])
+    let sources = NativeSourceSet(modules: units.map(\.module))
+    let kotlin = try ComposeBackend().generate(module: units[1].module, sources: sources)
+    #expect(kotlin.contains("when (tab)"))
+    #expect(kotlin.contains("Tab.home ->"))
+    #expect(!kotlin.contains("enum class Tab"))
+    let ark = try ArkUIBackend().generate(module: units[1].module, sources: sources)
+    #expect(ark.contains("import { Tab } from './Tab';"))
+    #expect(ark.contains("this.tab === Tab.home"))
+    #expect(!ark.contains("export enum Tab"))
+}
+
 @Test func arkCrossFileImportsRequireFlatExplicitSiblingPaths() throws {
     let module = Module(sourceFile: "Folder/Parent.swift", screens: [
         Screen(name: "Parent", body: .child(ChildView(name: "Child"), location: nil)),
