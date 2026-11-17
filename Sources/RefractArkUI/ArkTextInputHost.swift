@@ -24,19 +24,23 @@ enum ArkTextInputHost {
         for argument in component.arguments {
             switch argument.label {
             case "draft", "focusRequest":
-                guard let expression = argument.type else {
-                    throw invalid(argument.location, "A host value needs a resolved scalar type.")
-                }
-                guard case let .valueProperty(.binding(name)) = argument.expression.value,
+                guard let expression = argument.type,
+                      let bindingExpression = argument.expression,
+                      case let .valueProperty(.binding(name)) = bindingExpression.value,
                       expression.scalar == (argument.label == "draft" ? .string : .int) else {
                     throw invalid(argument.location, "The draft and focus request must be parent bindings.")
                 }
                 values[argument.label] = "this.\(name)"
-            case "onDraftCommit", "onCommit":
-                guard case let .reference(name) = argument.expression.value else {
-                    throw invalid(argument.location, "A host callback needs a declared model action.")
+            case "onDraftCommit":
+                guard case let .modelMethod(model, name, arguments)? = argument.action, arguments.isEmpty else {
+                    throw invalid(argument.location, "The draft callback needs a typed String model action.")
                 }
-                callbacks[argument.label] = name
+                callbacks[argument.label] = "\(model).\(name)"
+            case "onCommit":
+                guard let action = argument.action else {
+                    throw invalid(argument.location, "The commit callback needs a declared model action.")
+                }
+                callbacks[argument.label] = try emitLocalAction(action)
             default:
                 throw invalid(argument.location, "Unknown text-input host argument.")
             }
@@ -51,8 +55,9 @@ enum ArkTextInputHost {
         writer.line("onDraftChange: (value: string): void => { this.onDraftChange(value); },")
         writer.line("focusRequest: \(focusRequest),")
         writer.line("onDraftCommit: (value: string): void => { this.\(onDraftCommit)(value); },")
-        writer.line("onCommit: (): void => { this.\(onCommit)(); },")
-        writer.close(suffix: ")")
+        writer.line("onCommit: (): void => { \(onCommit) },")
+        writer.depth -= 1
+        writer.line("})")
     }
 
     private static func invalid(_ location: SourceLocation?, _ message: String) -> Diagnostic {

@@ -21,7 +21,7 @@ enum ComposeTextInputHost {
     static func emit(_ component: NativeComponent, declaration: NativeDeclaration,
                      target: NativeTarget, location: SourceLocation?, isRoot: Bool,
                      modifierParameter: String?, into out: inout KotlinWriter,
-                     context: inout ComposeBackend.Context) throws {
+                     context: inout ComposeBackend.Context, backend: ComposeBackend) throws {
         var values: [String: String] = [:]
         var callbacks: [String: String] = [:]
         var writers: [String: String] = [:]
@@ -35,8 +35,16 @@ enum ComposeTextInputHost {
             case "focusRequest":
                 values[argument.label] = try binding(argument.expression, type: .int, nativeType: argument.type,
                                                       location: argument.location)
-            case "onDraftCommit", "onCommit":
-                callbacks[argument.label] = try action(argument.expression, location: argument.location)
+            case "onDraftCommit":
+                guard case let .modelMethod(model, name, arguments)? = argument.action, arguments.isEmpty else {
+                    throw unsupported(argument, message: "The draft callback needs a typed String model action.")
+                }
+                callbacks[argument.label] = "\(model).\(name)"
+            case "onCommit":
+                guard let action = argument.action else {
+                    throw unsupported(argument, message: "The commit callback needs a typed model action.")
+                }
+                callbacks[argument.label] = try backend.renderAction(action, context: &context)
             default:
                 throw unsupported(argument, message: "Unknown text-input host argument.")
             }
@@ -51,20 +59,27 @@ enum ComposeTextInputHost {
                                         location: location)
         context.imports.insert("com.example.refract.input.NativeTextInputHost")
         let modifierArgument = isRoot ? "\(modifierParameter ?? "modifier") = modifier" : nil
+        var labels: [String: String] = [:]
+        for binding in target.arguments {
+            guard let label = binding.target else {
+                throw unsupported(binding, message: "Every host mapping needs an explicit target label.")
+            }
+            labels[binding.source] = label
+        }
         out.open("NativeTextInputHost(")
-        out.line("draft = \(draft),")
+        out.line("\(try label("draft", labels)) = \(draft),")
         out.line("onDraftChange = \(draftWriter),")
-        out.line("focusRequest = \(focusRequest),")
-        out.line("onDraftCommit = { value -> \(onDraftCommit)(value) },")
-        out.line("onCommit = { \(onCommit)() },")
+        out.line("\(try label("focusRequest", labels)) = \(focusRequest),")
+        out.line("\(try label("onDraftCommit", labels)) = { value -> \(onDraftCommit)(value) },")
+        out.line("\(try label("onCommit", labels)) = { \(onCommit) },")
         if let modifierArgument { out.line("\(modifierArgument),") }
         out.depth -= 1
         out.line(")")
     }
 
-    private static func binding(_ expression: Expression, type: ValueType, nativeType: NativeParameterType?,
+    private static func binding(_ expression: Expression?, type: ValueType, nativeType: NativeParameterType?,
                                 location: SourceLocation?) throws -> String {
-        guard case let .valueProperty(.binding(name)) = expression.value, nativeType?.scalar == type else {
+        guard let expression, case let .valueProperty(.binding(name)) = expression.value, nativeType?.scalar == type else {
             throw Diagnostic(code: "RFINPUT002",
                 message: "The text-input host requires a parent-owned String draft and Int focus request.",
                 suggestion: "Pass @Binding values from the generated screen.", location: location)
@@ -72,11 +87,12 @@ enum ComposeTextInputHost {
         return name
     }
 
-    private static func action(_ expression: Expression, location: SourceLocation?) throws -> String {
-        guard case let .reference(name) = expression.value else {
-            throw unsupported(expression, message: "A text-input callback must be a declared model action.")
+    private static func label(_ source: String, _ labels: [String: String]) throws -> String {
+        guard let label = labels[source] else {
+            throw Diagnostic(code: "RFINPUT002", message: "The host mapping has no target label for `\(source)`.",
+                           suggestion: "Bind every source-owned host parameter explicitly.")
         }
-        return name
+        return label
     }
 
     private static func unsupported(_ value: Any, message: String) -> Diagnostic {

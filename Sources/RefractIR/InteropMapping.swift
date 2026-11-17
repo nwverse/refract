@@ -178,8 +178,8 @@ public enum InteropMapping {
             case .bool: "boolean"
             case .int, .double, .image: "number"
             case .remoteImageLoader: "RemoteImageLoader"
-            case .action: "() -> Void"
-            case .actionString: "(string) -> void"
+            case .action: "() => void"
+            case .actionString: "(string) => void"
             }
         }
         return switch type {

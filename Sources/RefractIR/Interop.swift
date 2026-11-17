@@ -1,7 +1,6 @@
 /// A native-only extension of the scalar value boundary; it never enters models or local state.
 public enum NativeParameterType: String, Codable, Sendable {
-    case string, bool, double, int, image, stringKey, remoteImageLoader
-    case action, actionString
+    case string, bool, double, int, image, stringKey, remoteImageLoader, action, actionString
 
     public var scalar: ValueType? {
         switch self {
@@ -69,23 +68,29 @@ public struct NativeDeclaration: Codable, Equatable, Sendable {
 
 public struct NativeArgument: Codable, Equatable, Sendable {
     public let label: String
-    public let expression: Expression
+    public let expression: Expression?
+    public let action: StateAction?
     public let type: NativeParameterType?
     public let location: SourceLocation?
 
-    public init(label: String, expression: Expression, type: NativeParameterType?, location: SourceLocation? = nil) {
+    private enum CodingKeys: String, CodingKey { case label, expression, action, type, location }
+
+    public init(label: String, expression: Expression? = nil, action: StateAction? = nil,
+                type: NativeParameterType?, location: SourceLocation? = nil) {
         self.label = label
         self.expression = expression
+        self.action = action
         self.type = type
         self.location = location
     }
 
-    public init(label: String, expression: Expression, parameterType: NativeParameterType,
-                location: SourceLocation? = nil) {
-        self.label = label
-        self.expression = expression
-        self.type = parameterType
-        self.location = location
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        label = try values.decode(String.self, forKey: .label)
+        expression = try values.decodeIfPresent(Expression.self, forKey: .expression)
+        action = try values.decodeIfPresent(StateAction.self, forKey: .action)
+        type = try values.decodeIfPresent(NativeParameterType.self, forKey: .type)
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 

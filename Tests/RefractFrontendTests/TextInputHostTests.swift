@@ -13,8 +13,8 @@ import RefractIR
         return
     }
     #expect(component.arguments.map(\.type) == [.string, .int, .actionString, .action])
-    #expect(component.arguments[2].expression.value == .reference("model.commitDraft"))
-    #expect(component.arguments[3].expression.value == .reference("model.commit"))
+    #expect(component.arguments[2].action == .modelMethod(model: "model", name: "commitDraft", arguments: []))
+    #expect(component.arguments[3].action == .modelMethod(model: "model", name: "commit", arguments: []))
 }
 
 @Test func textInputHostRejectsLocalDraftAndArbitraryCallbacks() {
@@ -40,17 +40,33 @@ func textInputHostRejectsIncompleteSignature(_ properties: String) {
     #expect(unit.diagnostics.map(\.code) == ["RFINPUT001"])
 }
 
-@Test func ordinaryNativeViewDoesNotAcquireInputHostCallbacks() {
+@Test func ordinaryNativeViewKeepsGenericNoArgumentActionOnly() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SaveModel: RefractModel { func save() }
     struct ArbitraryEditor: RefractNativeView {
         let onCommit: () -> Void
         var body: some View { Text(verbatim: "iOS") }
     }
     struct Screen: View {
-        var body: some View { ArbitraryEditor(onCommit: {}) }
+        let model: SaveModel
+        var body: some View { ArbitraryEditor(onCommit: { model.save() }) }
     }
     """))
-    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
+    #expect(unit.diagnostics.isEmpty)
+}
+
+@Test func ordinaryNativeViewRejectsHostStringCallback() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct ArbitraryEditor: RefractNativeView {
+        let onDraftCommit: (String) -> Void
+        var body: some View { Text(verbatim: "iOS") }
+    }
+    struct Screen: View {
+        var body: some View { ArbitraryEditor(onDraftCommit: { _ in }) }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.diagnostics.contains { $0.code == "RFNATIVE001" })
 }
 
 private let hostSource = """

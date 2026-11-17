@@ -227,7 +227,12 @@ must be literal `Image("lowercase_resource_name")` expressions; string keys must
 A `RemoteImageLoader` must be injected as an explicitly typed screen input and cannot be constructed in the view.
 These native-only parameter types are not model, state, binding or arbitrary object values. The bounded remote-image
 lifecycle, URL policy and platform verification limits are specified in `docs/remote-images.md`.
-Closures and arbitrary Swift objects are otherwise rejected until their typed native representation is specified;
+A native component can declare a zero-argument `() -> Void` callback. Its only accepted closure body is one checked
+no-argument model method such as `{ model.closePreview() }`; Compose emits a `() -> Unit` lambda and ArkTS emits a
+`() => void` lambda. Arbitrary closures, function values and parameterized callbacks remain diagnostics. The typed
+document preview boundary, its app-owned URI/permission/decode/lifecycle ownership, and synthetic Native JVM evidence
+are specified in `docs/document-preview.md`.
+Other closures and arbitrary Swift objects are otherwise rejected until their typed native representation is specified;
 they are never converted to untyped target expressions.
 
 The accepted target-type mappings are:
@@ -238,6 +243,7 @@ The accepted target-type mappings are:
 | `Bool` | `Boolean` | `boolean` |
 | `Int` | `Int` | `number` |
 | `Double` | `Double` | `number` |
+| `() -> Void` (one checked model action) | `() -> Unit` | `() => void` |
 
 `Int` values must be integral when emitted for ArkTS. The generator does not silently round, coerce or add a cast.
 
@@ -301,7 +307,7 @@ SwiftUI behavior also requires an Apple toolchain; generator tests do not establ
 
 `docs/text-input-host.md` defines the dedicated `RefractTextInputHost` boundary for committed drafts, focus
 requests, return-key submission and native IME ownership. It is not an expansion of ordinary generated `TextField`
-or the generic scalar `RefractNativeView` ABI. Android uses a real `EditText`/`InputConnection`; preedit remains in
+or the generic scalar/no-argument-action `RefractNativeView` ABI. Android uses a real `EditText`/`InputConnection`; preedit remains in
 that native editor, and no Chinese composition is synthesized. Golden Kotlin and ArkTS, compiled Kotlin and labelled
 Native JVM tests cover the contract. Apple/HarmonyOS toolchains, third-party IMEs and devices retain their explicit
 verification boundaries.

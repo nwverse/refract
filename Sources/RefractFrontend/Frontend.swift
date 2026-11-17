@@ -453,7 +453,7 @@ final class Builder: SyntaxVisitor {
         let before = diagnostics.count
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
             guard let label = argument.label?.text else {
-                error("RFNATIVE002", "Native component arguments require explicit labels and supported scalar values.",
+                error("RFNATIVE002", "Native component arguments require explicit labels and supported values.",
                       "Use the memberwise SwiftUI initializer signature", at: argument)
                 return nil
             }
@@ -477,7 +477,9 @@ final class Builder: SyntaxVisitor {
                 }
             case .remoteImageLoader:
                 parsed = nativeImageLoader(argument.expression, label: label)
-            case .action, .actionString:
+            case .action:
+                parsed = nativeAction(argument.expression, label: label)
+            case .actionString:
                 parsed = nil
             case .string, .bool, .int, .double:
                 parsed = scalar(argument.expression).map {
@@ -536,6 +538,23 @@ final class Builder: SyntaxVisitor {
         diagnostics.append(contentsOf: parser.diagnostics)
         guard let localized else { return nil }
         return TypedExpression(localized, .string)
+    }
+
+    private func nativeAction(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let closure = expression.as(ClosureExprSyntax.self),
+              closure.signature == nil, closure.statements.count == 1,
+              let body = closure.statements.first?.item.as(ExprSyntax.self),
+              let action = modelAction(body) else {
+            error("RFNATIVE002", "A native action requires one checked no-argument model action.",
+                  "Use `onEvent: { model.event() }`; arbitrary closures, function values and arguments are not translated", at: expression)
+            return nil
+        }
+        guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
+            error("RFNATIVE002", "Only a no-argument model action matches this native `() -> Void` parameter.",
+                  "Declare a separate no-argument model method", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, action: action, type: .action, location: location(of: expression))
     }
 
     private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {

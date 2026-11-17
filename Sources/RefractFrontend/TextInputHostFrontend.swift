@@ -100,16 +100,17 @@ struct TextInputHostFrontend {
                   let action = actionReference(closure, takesDraft: label == "onDraftCommit", builder: builder) else {
                 return nil
             }
-            return NativeArgument(label: label,
-                expression: Expression(.reference(action), location: at),
-                parameterType: label == "onDraftCommit" ? .actionString : .action, location: at)
+            if label == "onCommit" {
+                return NativeArgument(label: label, action: action, type: .action, location: at)
+            }
+            return NativeArgument(label: label, action: action, type: .actionString, location: at)
         default:
             return nil
         }
     }
 
     private func actionReference(_ closure: ClosureExprSyntax, takesDraft: Bool,
-                                 builder: Builder) -> String? {
+                                 builder: Builder) -> StateAction? {
         guard closure.statements.count == 1,
               let call = closure.statements.first?.item.as(ExprSyntax.self)?.as(FunctionCallExprSyntax.self),
               call.trailingClosure == nil,
@@ -134,7 +135,7 @@ struct TextInputHostFrontend {
         } else if closure.signature?.parameterClause != nil {
             return nil
         }
-        return "\(model).\(action.name)"
+        return .modelMethod(model: model, name: action.name, arguments: [])
     }
 
     private func closureParameter(_ closure: ClosureExprSyntax) -> String? {

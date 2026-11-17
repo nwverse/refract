@@ -13,7 +13,8 @@ at both frontend and backend boundaries.
 `action` and `actionString` describe callback shapes. They cannot be decoded by `ValueType(rawValue:)`, and an Optional
 `flatMap` cannot flatten a `ValueType?` returned by that failable initializer. Validate callback shape separately from
 its payload type. Generic scalar interop must remain unchanged; do not give every `RefractNativeView` an arbitrary
-closure ABI just to support one bounded host.
+String-consuming closure ABI just to support one bounded host. A separately supported generic no-argument model action
+keeps its own typed `StateAction` path and is not the host's String callback.
 
 ## Compose text callbacks do not establish IME ownership
 

@@ -1,7 +1,7 @@
-/// The bounded callback types of the native text-input host. These are declarations,
-/// never target-source templates or runtime-dispatched closures.
+/// A String-consuming callback is restricted to the bounded host. The generic
+/// no-argument action retains its separately defined upstream semantics.
 extension NativeParameterType {
-    public var isAction: Bool { self == .action || self == .actionString }
+    public var isAction: Bool { self == .actionString }
 }
 
 extension NativeDeclaration {

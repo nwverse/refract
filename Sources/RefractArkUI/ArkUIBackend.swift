@@ -212,13 +212,19 @@ struct Generation {
                 let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
                 try ArkTextInputHost.emit(component, target: target, module: module, mapping: mapping,
                                           location: location, into: &writer)
-                return
+            } else {
+                let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
+                let arguments = try InteropEmission.arguments(for: component, target: target) {
+                    try ArkExpression.emit($0, item: item, mapping: mapping)
+                } renderAction: { action in
+                    guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
+                        throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
+                                         location: location)
+                    }
+                    return "() => { \(try emitLocalAction(action)) }"
+                }
+                writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
             }
-            let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
-            let arguments = try InteropEmission.arguments(for: component, target: target) {
-                try ArkExpression.emit($0, item: item, mapping: mapping)
-            }
-            writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):
             try ArkDesignSystem().emit(component, location: location, mapping: mapping, writer: &writer)
         case let .child(child, _):

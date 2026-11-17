@@ -292,12 +292,18 @@ public struct ComposeBackend: Sendable {
             try ComposeTextInputHost.emit(component, declaration: declaration, target: target,
                 location: location, isRoot: isRoot,
                 modifierParameter: resolver.nativeComponent(for: component, platform: .android)?.modifierParameter,
-                into: &out, context: &context)
+                into: &out, context: &context, backend: self)
             return
         }
         let target = try resolver.target(for: component, platform: .android, location: location)
         var arguments = try InteropEmission.arguments(for: component, target: target) {
             try renderExpression($0, context: &context)
+        } renderAction: { action in
+            guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
+                throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
+                                 location: location)
+            }
+            return "{ \(try renderAction(action, context: &context)) }"
         }
         if isRoot, let modifier = resolver.nativeComponent(for: component, platform: .android)?.modifierParameter {
             arguments.append("\(modifier) = modifier")
