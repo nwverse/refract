@@ -128,10 +128,3 @@ extension ComposeBackend {
         out.close()
     }
 }
-
-private extension KotlinWriter {
-    mutating func close(suffix: String) {
-        depth -= 1
-        line("}" + suffix)
-    }
-}

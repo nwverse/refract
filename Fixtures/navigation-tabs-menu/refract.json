@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "symbols": {
+      "gear": { "kind": "materialIcon", "name": "Settings" },
+      "person": { "kind": "materialIcon", "name": "Person" },
+      "checkmark": { "kind": "materialIcon", "name": "Check" }
+    },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "strings": {
+        "tab.overview": "tab_overview",
+        "tab.overview.body": "tab_overview_body",
+        "tab.activity": "tab_activity",
+        "tab.activity.body": "tab_activity_body",
+        "menu.refresh": "menu_refresh",
+        "menu.reset": "menu_reset",
+        "menu.more": "menu_more"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "symbols": {
+      "gear": { "kind": "media", "name": "settings" },
+      "person": { "kind": "media", "name": "profile" },
+      "checkmark": { "kind": "media", "name": "confirm" }
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": {
+        "tab.overview": "tab_overview",
+        "tab.overview.body": "tab_overview_body",
+        "tab.activity": "tab_activity",
+        "tab.activity.body": "tab_activity_body",
+        "menu.refresh": "menu_refresh",
+        "menu.reset": "menu_reset",
+        "menu.more": "menu_more"
+      }
+    }
+  }
+}

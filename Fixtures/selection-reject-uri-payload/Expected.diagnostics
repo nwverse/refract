@@ -1,0 +1,1 @@
+Input.swift:8:63: error [RFNATIVE005]: Drag payload `value` must be a typed String expression. Suggestion: Use a String literal or a declared String state/model property; arbitrary URI/Any/clipboard reads are not supported

@@ -32,6 +32,9 @@ public extension ViewNode {
             return .toggle(title: title, value: value, modifiers: modifiers + [modifier], nativeModifiers: nativeModifiers, labelsHidden: labelsHidden, location: location)
         case let .textInput(placeholder, value, modifiers, location):
             return .textInput(placeholder: placeholder, value: value, modifiers: modifiers + [modifier], location: location)
+        case let .secureInput(placeholder, value, reveal, modifiers, location):
+            return .secureInput(placeholder: placeholder, value: value, reveal: reveal,
+                                modifiers: modifiers + [modifier], location: location)
         case let .label(title, image, modifiers, location):
             return .label(title: title, image: image, modifiers: modifiers + [modifier], location: location)
         case let .divider(modifiers, location):
@@ -40,7 +43,7 @@ public extension ViewNode {
             return .component(ComponentReference(name: component.name, arguments: component.arguments,
                 children: component.children, modifiers: component.modifiers + [modifier]), location: location)
         case .native, .nativeModifier, .child, .platformView, .conditional, .optionalBinding, .switchExpression,
-             .navigationLink, .navigationStack, .section, .listItem, .forEach, .spacer:
+             .navigationLink, .navigationStack, .tabView, .section, .listItem, .forEach, .spacer:
             return nil
         }
     }
