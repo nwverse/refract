@@ -124,12 +124,15 @@ These references establish the documented syntax and decorator constraints only.
 
 ## Toolchain verification
 
-No HarmonyOS SDK or hvigor command-line toolchain is installed at the time of writing. Public documentation pages
-were reachable as web application shells, not compiler artifacts. An unauthenticated, license-compatible Linux SDK
-and build-tool distribution has not yet been established. This issue will record the exact download or access
-requirement; no account will be created or terms accepted on a user's behalf. Until then, `swift build`, `swift test`
-and golden diffs verify generation, but ArkTS compilation remains explicitly unverified. Simulator or emulator
-results, if later available, will be labelled and never presented as device performance results.
+No HarmonyOS SDK or DevEco command-line compiler was found in the investigated local environments. Read-only review
+of a separate application's `devecocli` workflow found the application and `entry@ohosTest` command pattern, but no
+compiler or native build output; that is source evidence only. Public documentation pages were reachable as web
+application shells, not compiler artifacts. An unauthenticated, license-compatible Linux SDK and build-tool
+distribution has not been established. `docs/harmony-toolchain.md` records the precise authorization blocker and
+post-acquisition commands; no account was created or terms accepted on a user's behalf. Until an authorized compiler
+runs, `swift build`, `swift test`, golden diffs and the prepared native test target verify preparation or generation,
+not ArkTS compilation. Simulator or emulator results, if later available, will be labelled and never presented as
+device performance results.
 
 ## Current scope and dependencies
 

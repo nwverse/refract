@@ -8,11 +8,16 @@ application entry point, runtime registry or observation adapter.
 hand-written `AppSettingsModel` is `@ObservedV2` with `@Trace title`; the page owns model, binding and
 `useGeneratedSettings`. `HandWrittenSettingsScreen` uses the same `@Param`/`@Event` contract for rollback.
 
-## Toolchain: use official Command Line Tools
+## Toolchain: authorized SDK acquisition is still a blocker
 
-**This project has not been compiled: the HarmonyOS SDK and command-line tools are not installed in this
-environment.** The required acquisition and build steps below resolve which toolchain to use, not the compilation
-itself. No account was created and no download agreement was accepted by an Agent.
+**This project has not been compiled: no authorized HarmonyOS SDK or command-line compiler was found in the
+investigated local environments.** A read-only review of a separate application's `devecocli` workflow established
+the command pattern, not a passing compiler or usable local installation. No account was created, no download
+agreement was accepted, and no credentials or signing files were read or copied; the other application's environment
+was not changed.
+
+Read [the toolchain investigation and exact blocker](../../docs/harmony-toolchain.md) before building. It separates
+source review from native compiler evidence and includes the non-installing preflight, app and native-test commands.
 
 Use Huawei's official **Command Line Tools**, not an OpenHarmony source-tree build or a hand-invoked packing JAR.
 The official CI guide supports CLI application builds on Linux and macOS. Linux must be 64-bit with glibc 2.28 or
@@ -59,9 +64,32 @@ Official documentation:
    ohpm config set registry https://ohpm.openharmony.cn/ohpm/
    ```
 
-### Build
+### Build after the authorized toolchain is available
 
-From this directory:
+The checked-in native `ohosTest` target imports the real generated `SettingsModel` and tests a typed native model
+implementation. **The target and its Hypium dependency are source-prepared only, not compiled or executed.** The
+source-reviewed dependency record pins Hypium 1.0.25 with its public package URL and SHA-512 integrity. It is not an
+OHPM-generated lockfile; authorized `ohpm install --all` must regenerate and verify it.
+
+From the repository root:
+
+```sh
+swift build
+python3 scripts/check_examples.py
+python3 scripts/check_harmony_toolchain.py --check-only
+python3 scripts/check_harmony_toolchain.py
+python3 scripts/check_harmony_toolchain.py --native-test-target
+```
+
+The preflight exits nonzero with the explicit blocker if no authorized tools are installed. It does not install
+packages, change configuration or accept terms. Its two build invocations select `devecocli build` and
+`devecocli build --modules entry@ohosTest`, respectively, with `examples/harmony/` as the working directory.
+
+If dependency installation is needed, follow the toolchain guide before running `ohpm install --all` from this
+directory. Do not present a successful OHPM resolution, JSON validation or TypeScript syntax check as ArkTS
+compilation.
+
+The documented hvigor application-build alternative is:
 
 ```sh
 ohpm install --all
@@ -70,7 +98,8 @@ hvigorw assembleHap --mode module \
   -p product=default -p buildMode=debug --no-daemon
 ```
 
-The documented output pattern is `entry/build/default/outputs/default/*.hap`. With no signing configuration, the
+The native test's Stage runner and its unexecuted command are recorded in the toolchain guide. The documented output
+pattern is `entry/build/default/outputs/default/*.hap`. With no signing configuration, the
 expected artifact is an unsigned HAP, but **that packaging has not been run here**. This repository intentionally
 contains no signing certificate, profile, key or password.
 
