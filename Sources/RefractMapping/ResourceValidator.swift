@@ -46,9 +46,9 @@ public enum LocalizationResourceValidator {
                     }
                 }
             case let .native(component, _):
-                return component.arguments.map(\.expression)
+                return component.arguments.compactMap(\.expression)
             case let .component(component, _):
-                return component.arguments.map(\.expression) + component.children.flatMap(visit)
+                return component.arguments.compactMap(\.expression) + component.children.flatMap(visit)
                     + component.modifiers.flatMap(\.arguments)
             case .child:
                 return []

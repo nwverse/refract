@@ -5,8 +5,12 @@ import RefractMapping
 public struct ArkUIBackend: Sendable {
     public init() {}
 
-    public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        var generation = Generation(module: module, mapping: mapping)
+    public func generate(module: Module, mapping: Mapping = .empty, sources: NativeSourceSet? = nil) throws -> String {
+        let dependencies = sources ?? NativeSourceSet(modules: [module])
+        let nativeSource = try dependencies.source(for: module)
+        var generation = Generation(module: module, mapping: mapping, nativeSource: nativeSource,
+                                    models: dependencies.models, itemTypes: dependencies.itemTypes,
+                                    enums: dependencies.enums)
         return try generation.generate()
     }
 }
@@ -14,6 +18,10 @@ public struct ArkUIBackend: Sendable {
 struct Generation {
     let module: Module
     let mapping: Mapping
+    let nativeSource: NativeSource
+    let models: [ModelProtocol]
+    let itemTypes: [ItemType]
+    let enums: [EnumDeclaration]
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
 
@@ -32,6 +40,9 @@ struct Generation {
         var emittedImports: Set<String> = []
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
+            for parameter in screen.parameters where parameter.itemType == "RemoteImageLoader" {
+                emittedImports.insert("RemoteImageLoader")
+            }
             if case let .navigationStack(stack, _) = screen.body {
                 try collectImports(stack, resolver: resolver, into: &emittedImports)
             }
@@ -47,6 +58,7 @@ struct Generation {
                 importLines.append("import { \(target.symbol) } from '\(target.module)';")
             }
         }
+        for line in try ArkNativeImports.emit(module: module, nativeSource: nativeSource) { writer.line(line) }
         for line in importLines { writer.line(line) }
         try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
@@ -80,7 +92,7 @@ struct Generation {
             listItemTypes = [:]
             for state in screen.states {
                 if case let .model(reference, _) = state,
-                   let model = module.models.first(where: { $0.name == reference.protocolName }) {
+                   let model = models.first(where: { $0.name == reference.protocolName }) {
                     for property in model.properties {
                         if let collection = property.collection {
                             screenItemTypes[reference.propertyName] = collection.itemType
@@ -201,6 +213,12 @@ struct Generation {
             let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
             let arguments = try InteropEmission.arguments(for: component, target: target) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
+            } renderAction: { action in
+                guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
+                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
+                                     location: location)
+                }
+                return "() => { \(try emitLocalAction(action)) }"
             }
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):

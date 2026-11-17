@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "nativeComponents": [
+    {
+      "swift": "NativeDocumentPreview",
+      "android": {
+        "kind": "composable",
+        "symbol": "NativeDocumentPreview",
+        "module": "example.documents",
+        "parameters": [
+          { "swift": "uri", "name": "uri", "type": "String" },
+          { "swift": "displayName", "name": "displayName", "type": "String" },
+          { "swift": "mimeType", "name": "mimeType", "type": "String" },
+          { "swift": "byteCount", "name": "byteCount", "type": "Int" },
+          { "swift": "revision", "name": "revision", "type": "Int" }
+        ]
+      },
+      "harmonyOS": {
+        "kind": "component",
+        "symbol": "NativeDocumentPreview",
+        "module": "example.documents",
+        "parameters": [
+          { "swift": "uri", "name": "uri", "type": "string" },
+          { "swift": "displayName", "name": "displayName", "type": "string" },
+          { "swift": "mimeType", "name": "mimeType", "type": "string" },
+          { "swift": "byteCount", "name": "byteCount", "type": "number" },
+          { "swift": "revision", "name": "revision", "type": "number" }
+        ]
+      }
+    }
+  ]
+}

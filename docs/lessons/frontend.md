@@ -31,3 +31,11 @@
 - Repeated generated View, model, item or enum names are ambiguous even in one file. Diagnose them before walking
   the tree, but finish the ordinary traversal so independent source errors are retained. Discard partial IR afterward
   rather than returning early, which would suppress valid model-input diagnostics. Keep cross-file resolution separate.
+- Resolve multi-file declarations from an explicit input set, not from a global cache or directory scan. Keep the
+  complete type catalog separate from each file's emitted declarations: a model may reference an item from another
+  file without emitting a duplicate class. When adding a multi-input overload, label the parameter (`parse(sources:)`)
+  so an array literal cannot silently select the existing single-file overload.
+- A model-backed text `Binding` must tie the getter and setter to the same logical property, not merely to any String
+  action on the model. Otherwise `get: { model.otherText }` can silently write `searchText`. The closed
+  `set<Property>` convention, owner/type/label checks and a mismatched-property negative test keep this source path
+  faithful without inventing a writable projection on a get-only protocol.

@@ -142,11 +142,41 @@ JVM behavior check, not a physical reduced-motion system-settings test, device/e
 Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches. The
 fixture module resolves the same pinned Android-all runtime as the app tests and runs Robolectric offline.
 
+### Bounded typed Markdown tests
+
 The fixture module also compiles the bounded typed Markdown conversation and runs
 `GeneratedConversationMarkdownTest` on Native JVM Compose. It checks the generated paragraph, native link annotation
 and typed model callback, and code-block accessibility label. This is source compilation and JVM semantics evidence,
 not a device/emulator, browser-opening, screen-reader or performance result. See `../../docs/markdown.md` for the
 source AST, limits and unverified iOS/HarmonyOS toolchains.
+### Synthetic document preview lifecycle tests
+
+`interop-document-preview` exercises typed document metadata, exhaustive loading/missing/unsupported/cancelled/closed
+states and a checked native close action on both generated backends. Its app-owned native implementation is confined
+to the fixture module's `src/native` source set. `SyntheticDocumentController` reads only the committed synthetic
+plain-text resource, checks its bytes and owns cancellation, decoded-content cleanup and close. No URI permission or
+decoder is supplied by Refract, and no private document, WebView or remote fetch is involved. PDF/image metadata is
+not a claim of a working renderer. See `../../docs/document-preview.md` for the ownership and verification limits.
+
+The same staging and `:fixtures:testDebugUnitTest` commands above compile the real CLI-generated Kotlin and run three
+Native JVM Compose document tests: ready/close/disposal, missing/unsupported and cancellation with no stale ready
+result. These are source and Native JVM results only, not emulator, device, iOS or HarmonyOS verification.
+
+### Incremental search model tests
+
+`list-paged-search` compiles the actual dual-backend fixture output and the app-owned
+`IncrementalSearchResultsModel` together. The model is application code, not generated output or a Refract runtime.
+Its JUnit tests run on the host JVM with a scripted in-memory transport and cover append/replacement identity,
+duplicate/out-of-order response rejection, cancellation, loading/empty state and error retry. Run them with the same
+fixture staging step followed by:
+
+```sh
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.search.IncrementalSearchResultsModelTest
+```
+
+This is native model JVM evidence only. It performs no network request, renders no UI and supplies no emulator,
+device, ArkTS compiler, runtime observation or performance evidence. A HarmonyOS implementation must provide the
+corresponding app-owned data-source notifications and lifecycle cancellation described in `docs/state-and-models.md`.
 
 ## Opt-in Gradle generation
 

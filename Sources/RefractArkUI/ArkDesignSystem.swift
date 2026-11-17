@@ -14,11 +14,12 @@ struct ArkDesignSystem {
         var arguments: [String] = []
         for binding in declaration.arguments {
             guard let parameter = declaration.parameters.first(where: { $0.label == binding.source }),
-                  let argument = supplied[binding.source], let target = binding.target else {
+                  let argument = supplied[binding.source], let target = binding.target,
+                  let expression = argument.expression else {
                 throw Diagnostic(code: "componentArgument", message: "Component `\(component.name)` has an unbound argument.",
                                  suggestion: "Bind every required source argument in refract.json.", location: location)
             }
-            arguments.append("\(target): \(try MappedExpression.arkUI(argument.expression, mapping: mapping, expected: parameter.type))")
+            arguments.append("\(target): \(try MappedExpression.arkUI(expression, mapping: mapping, expected: parameter.type))")
         }
         let call = arguments.isEmpty ? declaration.target : "\(declaration.target)({ \(arguments.joined(separator: ", ")) })"
         if declaration.hasContent {
