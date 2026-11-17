@@ -164,6 +164,7 @@ public extension ViewNode {
         case let .optionalBinding(_, _, children, otherwise, _): children + otherwise
         case let .switchExpression(_, _, cases, _): cases.flatMap(\.children)
         case let .navigationStack(stack, _): stack.content
+        case .tabView: []
         case let .platformView(alternatives, _): alternatives.ios + alternatives.android + alternatives.harmonyOS
         default: []
         }
@@ -179,7 +180,7 @@ public extension ViewNode {
              let .image(_, _, location), let .toggle(_, _, _, _, _, location), let .textInput(_, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
              let .switchExpression(_, _, _, location), let .optionalBinding(_, _, _, _, location),
-             let .navigationLink(_, _, _, _, location), let .navigationStack(_, location): location
+             let .navigationLink(_, _, _, _, location), let .navigationStack(_, location), let .tabView(_, location): location
         }
     }
 }

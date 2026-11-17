@@ -325,6 +325,10 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNAV001` | NavigationStack, NavigationLink or destination registration is outside the bounded host contract | Use the explicit forms in docs/navigation.md |
 | `RFNAV002` | Navigation path/identity has invalid ownership or payload values | Use an empty `[Route]` @State and no-payload Hashable enum |
 | `RFNAV003` | Destination coverage, identity or typed model/native view is invalid | Register every case with a same-file typed model destination or declared native component |
+| `RFNAV401` | TabView, tab item, tag or tab modifier is outside the bounded tab contract | Use `TabView(selection:)` with `.tabItem { Label(...) }` and `.tag(.case)` per docs/navigation.md |
+| `RFNAV402` | Tab selection has invalid ownership, scalar/payload or non-Hashable identity | Use `@State private var tab: Tab = .case` over a no-payload Hashable enum |
+| `RFNAV403` | Tab destination is non-exhaustive, out of order, duplicated or carries stored inputs | Cover every case once, in order, with a zero-argument generated View |
+| `RFNAV404` | Toolbar/overflow menu shape is unsupported or a menu action is not a typed model call | Use one `ToolbarItem`/`Menu` with localized model-action `Button`s |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |

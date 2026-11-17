@@ -40,3 +40,19 @@ Compose examples, and add to it when something surprises you.
 - **Closing delimiters are part of golden correctness.** A composable call and a trailing closure have different
   closing shapes. Do not use a generic writer close for a plain `TextField(...)` call; validate actual generated
   syntax and compare both native goldens. Formatting-only changes must be reviewed in every affected fixture.
+- **Parenthesized calls close with `)`, not `}`.** `NavigationBarItem(...)`, `DropdownMenuItem(...)` and similar
+  composables take their content as named lambda arguments inside parentheses. A generic writer `close()` emits `}`,
+  which is a syntax error ("Expecting ')'"). Use a dedicated `closeParen()` for `open("Name(")` calls, and never put
+  a trailing comma after the last named lambda argument before `)`. Compile generated Kotlin through
+  `:fixtures:compileDebugKotlin` rather than trusting a source read; a hand-written probe file is easy to typo and
+  can send you chasing the wrong bug.
+- **Non-composable lambdas cannot call composable functions.** `Modifier.semantics { contentDescription = ... }`
+  runs outside composition, so `stringResource(...)` must be read into a local `val` in composable scope first and
+  captured. The Kotlin compiler reports "@Composable invocations can only happen from the context of a @Composable
+  function".
+- **Material icon symbols need an explicit dependency.** `Icons.Default.*` lives in
+  `androidx.compose.material:material-icons-core`, which is not pulled in by `material3` alone in this build. A
+  `symbols` mapping of kind `materialIcon` must be matched by the consuming module's dependency.
+- **Icon-only buttons need an accessibility label.** A generated `IconButton` with only an icon has no text for
+  screen readers or for `onNodeWithText` lookups. Put the localized label on the button as `contentDescription`
+  (see above), which also gives native tests a stable selector.

@@ -74,6 +74,9 @@ public enum LocalizationResourceValidator {
                 return [title]
             case let .navigationStack(stack, _):
                 return stack.content.flatMap(visit)
+            case let .tabView(tabs, _):
+                return tabs.destinations.map(\.title) + tabs.menuActions.map(\.title)
+                    + (tabs.menuTitle.map { [$0] } ?? [])
             case .spacer:
                 return []
             }

@@ -30,6 +30,9 @@ public struct ComposeBackend: Sendable {
                 }
                 try emitNavigationDestinations(stack, into: &bodyWriter, context: &context)
             }
+            if case let .tabView(tabs, _) = screen.body {
+                try emitTabDestinations(tabs, into: &bodyWriter, context: &context)
+            }
         }
 
         var out = KotlinWriter()
@@ -112,6 +115,9 @@ public struct ComposeBackend: Sendable {
                 parameters.append("on\(name.uppercasingFirst())Change: (\(kotlinType(type))) -> Unit")
             case let .navigationPath(name, enumName, _):
                 parameters.append("on\(name.uppercasingFirst())Navigate: (\(enumName)) -> Unit")
+            case let .tabSelection(name, enumName, _):
+                parameters.append("\(name): \(enumName)")
+                parameters.append("on\(name.uppercasingFirst())Change: (\(enumName)) -> Unit")
             case let .model(reference, _):
                 if context.module.models.contains(where: {
                     $0.name == reference.protocolName && !$0.properties.isEmpty
@@ -175,6 +181,8 @@ public struct ComposeBackend: Sendable {
         case let .navigationLink(title, pathName, enumName, destination, location):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
                                    destination: destination, location: location, into: &out, context: &context)
+        case let .tabView(tabs, location):
+            try emitTabView(tabs, isRoot: isRoot, location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .nativeModifier(child, operations, _):
@@ -432,9 +440,15 @@ struct KotlinWriter {
         }
     }
 
-    mutating func close() {
+    mutating func close(suffix: String = "") {
         depth -= 1
-        line("}")
+        line("}" + suffix)
+    }
+
+    /// Closes a parenthesized argument list opened with `open("Name(")`.
+    mutating func closeParen(suffix: String = "") {
+        depth -= 1
+        line(")" + suffix)
     }
 
     mutating func append(_ other: String) {

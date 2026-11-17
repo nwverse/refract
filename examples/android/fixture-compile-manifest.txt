@@ -29,6 +29,7 @@ child-view-layout-priority
 child-view-foreach-content-type
 navigation-host
 navigation-native-destination
+navigation-tabs-menu
 accessibility-dynamic-type
 state-counter
 parent-binding
