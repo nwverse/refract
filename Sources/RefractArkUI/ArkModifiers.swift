@@ -4,28 +4,35 @@ import RefractMapping
 enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty,
                      isText: Bool = false) throws -> String {
-        if modifiers.contains(where: {
-            switch $0.name {
-            case "nativeTestTag", "accessibilityLabel": true
-            default: false
-            }
-        }) {
-            return try modifiers.map { modifier in
+        let measurement = modifiers.filter { ["nativeTestTag", "accessibilityLabel", "retainCallback"].contains($0.name) }
+        let layout = modifiers.filter { !["nativeTestTag", "accessibilityLabel", "retainCallback"].contains($0.name) }
+        if !measurement.isEmpty {
+            let native = try measurement.map { modifier in
                 switch modifier.name {
                 case "nativeTestTag":
                     return ".id(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
                 case "accessibilityLabel":
                     return ".accessibilityText(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
                 default:
+                    if modifier.name == "retainCallback" {
+                        throw Diagnostic(code: "RFNATIVE004",
+                            message: "HarmonyOS callback retention requires a typed callback-identity representation.",
+                            suggestion: "Use a direct typed callback; do not discard the retention operation or add a runtime cache.",
+                            location: modifier.location)
+                    }
                     throw Diagnostic(code: "RFNATIVE004",
                         message: "Modifier `\(modifier.name)` is not supported on an ArkUI toggle.",
                         suggestion: "Keep native measurement operations on the selected toggle control.",
                         location: modifier.location)
                 }
             }.joined()
+            guard !layout.isEmpty else { return native }
+            let remainder = try emit(layout, item: item, mapping: mapping, isText: isText)
+            if remainder.hasPrefix("\n") { return native + remainder }
+            return native + "\n" + remainder
         }
-        guard usesCanonicalValues(modifiers, mapping: mapping) else {
-            return try modifiers.map { modifier in
+        guard usesCanonicalValues(layout, mapping: mapping) else {
+            return try layout.map { modifier in
                 let arguments = modifier.arguments
                 switch (modifier.name, arguments.count) {
                 case ("padding", 0):
@@ -49,7 +56,7 @@ enum ArkModifiers {
                 }
             }.joined()
         }
-        let canonical = try emitCanonical(modifiers, mapping: mapping, item: item, isText: isText)
+        let canonical = try emitCanonical(layout, mapping: mapping, item: item, isText: isText)
         if canonical.contains("\n") {
             let continuation = canonical.split(separator: "\n", omittingEmptySubsequences: false)
                 .map { "\u{1}" + $0 }.joined(separator: "\n")

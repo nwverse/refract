@@ -150,7 +150,7 @@ private let measurementMapping = Mapping(
         .first { $0.name == "child-view-layout-priority" }
     let result = try GoldenRunner.generate(try #require(fixture))
     #expect(GoldenRunner.differences(for: try #require(fixture), result: result) == [])
-    #expect(result.kotlin?.contains("Row(modifier = modifier.testTag(\"setting_row_${row.id}\")") == true)
+    #expect(result.kotlin?.contains("modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag(\"setting_row_${row.id}\")") == true)
     #expect(result.kotlin?.contains("Column(modifier = Modifier.weight(1f))") == true)
     #expect(result.kotlin?.contains("Modifier.testTag(\"setting_toggle_${row.id}\")") == true)
     #expect(result.arkTS?.contains(".id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)") == true)

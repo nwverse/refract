@@ -49,6 +49,8 @@ struct ChildSettingRow: View {
                 }
             )
         }
+        .frame(maxWidth: .infinity)
+        .padding(horizontal: 16, vertical: 8)
         .refractNativeModifier(.testTag("setting_row_\(row.id)"))
     }
 }
