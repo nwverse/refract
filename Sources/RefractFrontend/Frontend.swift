@@ -14,6 +14,11 @@ public struct Frontend {
                                    diagnostics: parserDiagnostics)
         }
         let builder = Builder(file: source.path, tree: tree, mapping: mapping)
+        builder.rejectDuplicateGeneratedDeclarations(tree)
+        guard builder.diagnostics.isEmpty else {
+            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
+                                   diagnostics: builder.diagnostics)
+        }
         builder.walk(tree)
         let module = Module(sourceFile: source.path, screens: builder.screens,
                             nativeDeclarations: builder.interop.declarations,

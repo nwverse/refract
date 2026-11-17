@@ -28,3 +28,6 @@
   parsing path, reject methods, initializers, nested types and arbitrary computed/observed properties with `RFSYN004`.
   Let the specialized parsers retain their diagnostics for malformed `@State`, `@Binding` and model inputs rather than
   replacing those codes with a generic declaration error.
+- Repeated generated View, model, item or enum names are ambiguous even in one file. Reject them before walking the
+  tree so neither first-wins nor last-wins collection can select an unintended declaration. Keep this source-file
+  guard separate from the CLI's cross-file resolver.
