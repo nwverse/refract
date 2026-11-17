@@ -18,7 +18,8 @@ there is no Refract runtime, base view, interpreter or lookup registry in a gene
   protocol or `RefractNativeView` declaration that it needs. The native marker and interop helpers are ordinary
   SwiftUI source declarations specified by `docs/interop.md`, not a linked library. `import SwiftUI` is the only
   import in v0. A screen name and its item/protocol names are valid ASCII Swift identifiers beginning with an
-  uppercase letter. File order determines declaration output order.
+  uppercase letter. File order determines declaration output order. A generated View, model, item, enum or native
+  declaration name must be unique within one input; repeated names are rejected with `RFSYN004` before IR construction.
 - Stored properties are restricted to `let` item fields, the state and model forms in section 5, and computed `body`.
   Initializers, methods, nested functions, property observers and arbitrary computed properties are outside v0.
 - Source expressions are references, literals, list element access, typed construction, comparisons and boolean
