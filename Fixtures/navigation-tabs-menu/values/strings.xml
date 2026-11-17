@@ -1,0 +1,9 @@
+<resources>
+    <string name="tab_overview">Overview</string>
+    <string name="tab_overview_body">Overview body</string>
+    <string name="tab_activity">Activity</string>
+    <string name="tab_activity_body">Activity body</string>
+    <string name="menu_refresh">Refresh</string>
+    <string name="menu_reset">Reset</string>
+    <string name="menu_more">More actions</string>
+</resources>

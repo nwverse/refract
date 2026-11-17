@@ -250,6 +250,7 @@ final class Builder: SyntaxVisitor {
                 return extendedView(call)
             }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
+            if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
                 guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
                     error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
@@ -259,6 +260,10 @@ final class Builder: SyntaxVisitor {
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }
+            // Toggle/TextField/SecureField were recognized above. If their guard failed they have
+            // already emitted a typed diagnostic; do not fall through to the component-mapping path.
+            if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text,
+               name == "Toggle" || name == "TextField" || name == "SecureField" { return nil }
             return view(call)
         }
         if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
@@ -273,6 +278,7 @@ final class Builder: SyntaxVisitor {
         if name == "navigationDestination" { return navigationDestination(call, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
+        if name == "secureReveal" { return secureReveal(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
@@ -436,7 +442,7 @@ final class Builder: SyntaxVisitor {
         let before = diagnostics.count
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
             guard let label = argument.label?.text else {
-                error("RFNATIVE002", "Native component arguments require explicit labels and supported scalar values.",
+                error("RFNATIVE002", "Native component arguments require explicit labels and supported values.",
                       "Use the memberwise SwiftUI initializer signature", at: argument)
                 return nil
             }
@@ -460,6 +466,8 @@ final class Builder: SyntaxVisitor {
                 }
             case .remoteImageLoader:
                 parsed = nativeImageLoader(argument.expression, label: label)
+            case .action:
+                parsed = nativeAction(argument.expression, label: label)
             case .string, .bool, .int, .double:
                 parsed = scalar(argument.expression).map {
                     NativeArgument(label: label, expression: $0.expression,
@@ -519,6 +527,23 @@ final class Builder: SyntaxVisitor {
         return TypedExpression(localized, .string)
     }
 
+    private func nativeAction(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let closure = expression.as(ClosureExprSyntax.self),
+              closure.signature == nil, closure.statements.count == 1,
+              let body = closure.statements.first?.item.as(ExprSyntax.self),
+              let action = modelAction(body) else {
+            error("RFNATIVE002", "A native action requires one checked no-argument model action.",
+                  "Use `onEvent: { model.event() }`; arbitrary closures, function values and arguments are not translated", at: expression)
+            return nil
+        }
+        guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
+            error("RFNATIVE002", "Only a no-argument model action matches this native `() -> Void` parameter.",
+                  "Declare a separate no-argument model method", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, action: action, type: .action, location: location(of: expression))
+    }
+
     private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractView` requires exactly `ios`, `android`, and `harmonyOS` view-builder closures.",
@@ -555,6 +580,12 @@ final class Builder: SyntaxVisitor {
         if let literal = expression.as(FloatLiteralExprSyntax.self) {
             return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .double,
                                              location: location(of: expression)), .double)
+        }
+        if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self),
+           currentModels.contains(where: { $0.propertyName == base.baseName.text }),
+           let model = modelTypedProperty(expression) {
+            return model
         }
         if expression.as(MemberAccessExprSyntax.self) != nil {
             return TypedExpression(Expression(.reference(expression.trimmedDescription),

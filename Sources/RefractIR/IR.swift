@@ -109,6 +109,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case button(label: ViewNode, action: StateAction?, modifiers: [Modifier], location: SourceLocation?)
     case navigationLink(title: Expression, pathName: String, enumName: String, destination: String, location: SourceLocation?)
     case navigationStack(NavigationStackNode, location: SourceLocation?)
+    case tabView(TabViewNode, location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
     case nativeModifier(child: ViewNode, operations: [NativeModifier], location: SourceLocation?)
     case component(ComponentReference, location: SourceLocation?)
@@ -127,6 +128,11 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case toggle(title: Expression, value: Expression, modifiers: [Modifier], nativeModifiers: [NativeModifier] = [], labelsHidden: Bool = false, location: SourceLocation?)
     case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    /// Secure text entry (SwiftUI `SecureField`). Always obscured unless `reveal` is a projected Bool
+    /// state/binding selecting plain display. Backends must use native secure-input components and never
+    /// emit secret literals or log the bound value. See docs/subset.md "Sensitive text entry".
+    case secureInput(placeholder: Expression?, value: Expression, reveal: Expression?,
+                     modifiers: [Modifier], location: SourceLocation?)
     case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case divider(modifiers: [Modifier], location: SourceLocation?)
     case spacer(location: SourceLocation?)
@@ -147,6 +153,7 @@ public enum StateDeclaration: Codable, Equatable, Sendable {
     case state(name: String, type: ValueType, initialValue: Expression?, location: SourceLocation?)
     case binding(name: String, type: ValueType, location: SourceLocation?)
     case navigationPath(name: String, enumName: String, location: SourceLocation?)
+    case tabSelection(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
 }
 

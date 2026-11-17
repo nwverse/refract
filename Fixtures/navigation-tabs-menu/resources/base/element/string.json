@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "tab_overview", "value": "Overview" },
+    { "name": "tab_overview_body", "value": "Overview body" },
+    { "name": "tab_activity", "value": "Activity" },
+    { "name": "tab_activity_body", "value": "Activity body" },
+    { "name": "menu_refresh", "value": "Refresh" },
+    { "name": "menu_reset", "value": "Reset" },
+    { "name": "menu_more", "value": "More actions" }
+  ]
+}

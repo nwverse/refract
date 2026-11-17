@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "settings_password", "value": "Password" },
+    { "name": "settings_token", "value": "Access token" }
+  ]
+}
