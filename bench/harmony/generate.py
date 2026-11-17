@@ -22,9 +22,12 @@ def main():
         output = Path(temporary)
         subprocess.run([
             str(cli), "generate", "--input", str(root / "bench/android/SettingsScreen.swift"),
-            "--mapping", str(here / "refract.json"), "--harmony-out", str(output),
+            "--mapping", str(here / "refract.json"),
+            # Generation always evaluates both backends. Keep the Android
+            # output out of the mapping's relative default directory too.
+            "--android-out", str(output / "android"), "--harmony-out", str(output / "harmony"),
         ], cwd=root, check=True)
-        actual = output / "SettingsScreen.ets"
+        actual = output / "harmony/SettingsScreen.ets"
         if not actual.is_file():
             raise SystemExit("The CLI did not produce the expected ArkTS output.")
         if args.check:
