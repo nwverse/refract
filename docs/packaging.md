@@ -90,7 +90,9 @@ REFRACT_PACKAGE_E2E=1 python3 -I scripts/test/test_package_cli.py
 ```
 
 The offline tests cover canonical tar metadata, version stamping, source selection and dependency/license pinning.
-The opt-in end-to-end test invokes two real clean builds. On every supported CI host, the release job performs the
-same archive creation, checksum verification, relocated `--version` invocation and generation smoke test. Android,
-HarmonyOS and iOS applications still require their existing toolchain verification; this CLI package is not device,
-rendering or performance evidence.
+The opt-in end-to-end test invokes two real clean builds. `REFRACT_PACKAGE_OUTPUT` can name a persistent artifact
+directory outside the checkout for later checksum and extraction inspection; by default the test uses a temporary
+directory. On every supported CI host, the release job performs the same archive creation, checksum verification,
+relocated `--version` invocation and generation smoke test. Linux and macOS each test only their own native package;
+neither job claims to validate the other operating system. Android, HarmonyOS and iOS applications still require
+their existing toolchain verification; this CLI package is not device, rendering or performance evidence.
