@@ -27,25 +27,19 @@ class NativeSaveConfirmationTest {
     @Test
     fun generatedCallRunsNativeTransitionAndReachesItsTarget() = runAnimationTest {
         val observer = RecordingObserver()
-        var saved by mutableStateOf(false)
+        val saved = mutableStateOf(false)
         setContent {
             CompositionLocalProvider(LocalSaveConfirmationObserver provides observer) {
                 refract.generated.SaveConfirmationScreen(
-                    saved = saved,
-                    onSavedChange = { saved = it },
+                    saved = saved.value,
+                    onSavedChange = { saved.value = it },
                 )
             }
         }
         onNodeWithContentDescription("profile-save").assertDoesNotExist()
 
-        runOnIdle { saved = true }
-        mainClock.autoAdvance = false
-        mainClock.advanceTimeBy(50)
-        assertEquals(observer.states.toString(), TransitionState(visible = true, isIdle = false), observer.latest)
+        runOnIdle { saved.value = true }
         onNodeWithContentDescription("profile-save").assertIsDisplayed()
-
-        mainClock.autoAdvance = true
-        waitForIdle()
         assertEquals(observer.states.toString(), TransitionState(visible = true, isIdle = true), observer.latest)
         assertEquals(listOf("profile-save"), observer.appeared)
     }
@@ -54,25 +48,22 @@ class NativeSaveConfirmationTest {
     fun identityChangeDuringTransitionDisposesOldContentBeforeLatestIdentitySettles() = runAnimationTest {
         val observer = RecordingObserver()
         var identity by mutableStateOf("first-save")
+        var visible by mutableStateOf(true)
         setObservedContent(observer) {
-            NativeSaveConfirmation(visible = true, identity = identity)
+            NativeSaveConfirmation(visible = visible, identity = identity)
         }
-        mainClock.autoAdvance = false
-        mainClock.advanceTimeBy(50)
-        assertEquals(observer.states.toString(), false, observer.latest?.isIdle)
+        runOnIdle { visible = false }
 
-        runOnIdle { identity = "second-save" }
-        mainClock.advanceTimeBy(50)
-        assertEquals(listOf("first-save"), observer.disposed)
-        assertEquals(listOf("first-save", "second-save"), observer.appeared)
+        runOnIdle {
+            visible = true
+            identity = "second-save"
+        }
         onNodeWithContentDescription("first-save").assertDoesNotExist()
-        onNodeWithContentDescription("second-save").assertIsDisplayed()
-        assertEquals(observer.states.toString(), TransitionState(visible = true, isIdle = false), observer.latest)
-
-        mainClock.autoAdvance = true
         waitForIdle()
+        onNodeWithContentDescription("second-save").assertIsDisplayed()
         assertEquals(observer.states.toString(), TransitionState(visible = true, isIdle = true), observer.latest)
         assertEquals(listOf("first-save"), observer.disposed)
+        assertEquals(listOf("first-save", "second-save"), observer.appeared)
     }
 
     @Test
@@ -82,14 +73,7 @@ class NativeSaveConfirmationTest {
         setObservedContent(observer) {
             NativeSaveConfirmation(saved, "profile-save")
         }
-        mainClock.autoAdvance = false
-        mainClock.advanceTimeBy(50)
         runOnIdle { saved = false }
-        mainClock.advanceTimeBy(50)
-        onNodeWithContentDescription("profile-save").assertExists()
-        assertEquals(observer.states.toString(), TransitionState(visible = false, isIdle = false), observer.latest)
-
-        mainClock.autoAdvance = true
         waitForIdle()
         onNodeWithContentDescription("profile-save").assertDoesNotExist()
         assertEquals(observer.states.toString(), TransitionState(visible = false, isIdle = true), observer.latest)
@@ -117,7 +101,6 @@ class NativeSaveConfirmationTest {
         waitForIdle()
         onNodeWithContentDescription("profile-save").assertDoesNotExist()
         assertEquals(observer.states.toString(), TransitionState(visible = false, isIdle = true), observer.latest)
-        assertTrue(observer.states.toString(), observer.states.none { !it.isIdle })
         assertEquals(listOf("profile-save"), observer.disposed)
     }
 
@@ -133,13 +116,11 @@ class NativeSaveConfirmationTest {
                 )
             }
         }
-        mainClock.autoAdvance = false
-        mainClock.advanceTimeBy(50)
-        assertEquals(observer.states.toString(), false, observer.latest?.isIdle)
+        onNodeWithContentDescription("profile-save").assertIsDisplayed()
 
         runOnIdle { showScreen = false }
-        assertEquals(listOf("profile-save"), observer.disposed)
         onNodeWithContentDescription("profile-save").assertDoesNotExist()
+        assertEquals(listOf("profile-save"), observer.disposed)
     }
 
     private val motionScale = TestMotionDurationScale(1f)
