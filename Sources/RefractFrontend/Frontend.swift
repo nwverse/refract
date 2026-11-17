@@ -522,6 +522,18 @@ final class Builder: SyntaxVisitor {
                 return TypedExpression(Expression(.reference(name), type: binding,
                                                  location: location(of: expression)), binding)
             }
+            for declaration in currentStates {
+                switch declaration {
+                case let .state(declared, type, _, _) where declared == name:
+                    return TypedExpression(Expression(.valueProperty(.state(name)), type: type,
+                                                     location: location(of: expression)), type)
+                case let .binding(declared, type, _) where declared == name:
+                    return TypedExpression(Expression(.valueProperty(.binding(name)), type: type,
+                                                     location: location(of: expression)), type)
+                default: continue
+                }
+            }
+            if let model = modelTypedProperty(expression) { return model }
             // An enum is a finite control-flow subject, not a scalar text or formatting value.
             guard !parameters.contains(where: { $0.name == reference.baseName.text && $0.enumName != nil }) else {
                 error("RFSEM002", "An enum input cannot be used as a scalar expression.",

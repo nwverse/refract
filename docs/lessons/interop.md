@@ -5,12 +5,23 @@
   Compile uniquely named source-only inputs for the measurement contract, with byte-identity checks against the
   canonical fixtures and their application-owned design tokens. Several `Input.swift` file references collide on
   Xcode's `Input.stringsdata` even when their display names differ; real Xcode builds catch this before type checking.
-
 - Prefer correcting pseudo-SwiftUI over adding a compatibility shim for it. `Button(verbatim:)` is not SwiftUI;
   use the ordinary action/label pair with `Text(verbatim:)` and reject the invalid initializer with a source-located
   diagnostic. The typed interop helpers above are different: they carry declared platform-only semantics while
   preserving the receiver's native iOS view behavior.
-
+- An iOS-only native body may read accessibility preferences without adding them to the generated interface. The
+  narrowly accepted `accessibilityReduceMotion` environment property is not an argument; do not turn it into a shared
+  animation flag or allow arbitrary property wrappers to bypass native-signature validation.
+- Test observation must not alter the generated interface. A host `CompositionLocal` around the unmodified generated
+  caller can supply an app-owned observer; rewriting generated Kotlin to add a test callback would no longer test the
+  actual contract. Compose transition assertions should inspect public transition/idle state, not an invented
+  semantics-alpha property.
+- AGP 9's built-in Kotlin support does not automatically consume a custom `sourceSets.main.java` directory. Register
+  an application-owned Kotlin implementation through `sourceSets.main.kotlin.directories` when compiling a fixture
+  import; adding only a dependency or generated import does not put its source on the compiler input list.
+- A mapping may use the normalized native-only compatibility form. The fixture compilation script must use the same
+  `refract.generated` default package as the Compose backend rather than indexing a full mapping's `android.output`
+  unconditionally.
 - Keep IR independent of mapping and backends. Interop lowering helpers belong in `RefractMapping` or a backend;
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.
 - A native view argument needs its label and source type, not only an expression. Unknown reference types must not be
@@ -26,6 +37,13 @@
 - Keep hand-written native caller files in the fixture, but test their imports and invocations explicitly. Their mere
   presence does not establish goal 5 coverage. Platform compiler builds are separate evidence and must not be claimed
   from text comparisons.
+- Platform-selected strings need explicit provenance. A bare `Text(refractValue(ios:android:harmonyOS:))` would
+  feed SwiftUI's `Text(_: LocalizedStringKey)` initializer on iOS, silently treating the iOS branch as a localization
+  key while the native backends emit their branch as a verbatim literal. The accepted form is
+  `Text(verbatim: refractValue(...))`: every branch is a string literal and iOS selects `Text(verbatim:)`, so all
+  three platforms agree on verbatim semantics with no runtime adapter. Reject the bare localized form with a
+  source-located `R.string.unsupported_expression` diagnostic that names the divergence and points to the verbatim
+  form, rather than silently emitting per-platform localization keys or unverified resource lookups.
 - Native measurement operations belong on the measured native control, not an enclosing layout Row. Keep toggle
   native metadata typed until its emitter can place the modifier on Switch/Toggle itself.
 - Retained callback keys include every captured stable value. A source action name is a discriminator, not a

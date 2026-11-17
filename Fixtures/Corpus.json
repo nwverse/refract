@@ -82,6 +82,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-animation",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-callers",
       "implementationStatus": "ready"
     },
@@ -103,6 +107,10 @@
     },
     {
       "path": "interop-native-undeclared",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-platform-text-localized-rejected",
       "implementationStatus": "ready"
     },
     {

@@ -94,9 +94,10 @@ def regenerate_and_stage(fixture: str) -> None:
                 "regenerate and review it"
             )
 
-    # Preserve each fixture's declared package while sharing the fixture module's R class.
+    # Preserve the CLI's default or explicitly declared package while sharing the fixture module's R class.
     # Android library R classes are generated in the Gradle namespace, not each Kotlin subpackage.
-    package = json.loads(mapping_json.read_text(encoding="utf-8"))["android"]["output"]["packageName"]
+    mapping = json.loads(mapping_json.read_text(encoding="utf-8"))
+    package = mapping.get("android", {}).get("output", {}).get("packageName", "refract.generated")
     namespace = "refract.generated"
     package_directory = STAGING_JAVA.joinpath(*package.split("."))
     package_directory.mkdir(parents=True, exist_ok=True)

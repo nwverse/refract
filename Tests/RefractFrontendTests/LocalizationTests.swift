@@ -84,7 +84,7 @@ import RefractIR
 @Test func platformTextIsVerbatimAndKeepsTargetBranches() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct PlatformText: View {
-        var body: some View { Text(refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS")) }
+        var body: some View { Text(verbatim: refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS")) }
     }
     """))
     #expect(unit.diagnostics.isEmpty)
@@ -93,8 +93,22 @@ import RefractIR
         Issue.record("Expected typed platform text")
         return
     }
+    #expect(values.ios.value == .verbatimText("iOS"))
     #expect(values.android.value == .verbatimText("Android"))
     #expect(values.harmonyOS.value == .verbatimText("HarmonyOS"))
+}
+
+@Test func barePlatformTextInLocalizedPositionIsRejected() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct PlatformText: View {
+        var body: some View { Text(refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS")) }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.diagnostics.contains {
+        $0.code == "R.string.unsupported_expression" && $0.suggestion?.contains("Text(verbatim: refractValue(") == true
+    })
+    #expect(unit.module.screens.isEmpty)
 }
 
 @Test func accidentalLiteralSuggestsVerbatimText() {

@@ -218,10 +218,14 @@ struct LocalizationFrontend {
             if let value = stateText(argument.expression) {
                 return value
             }
+            if let call = argument.expression.as(FunctionCallExprSyntax.self),
+               call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
+                return verbatimPlatformText(call)
+            }
             guard let literal = argument.expression.as(StringLiteralExprSyntax.self),
                   let value = literal.representedLiteralValue else {
-                error("R.string.literal", "Verbatim text must be a literal without interpolation.",
-                      "Use Text(verbatim: \"literal\") for intentional non-localized text", at: argument.expression)
+                error("R.string.literal", "Verbatim text must be a literal without interpolation or a typed `refractValue(ios:android:harmonyOS:)` of literals.",
+                      "Use Text(verbatim: \"literal\") or Text(verbatim: refractValue(ios: \"iOS\", android: \"Android\", harmonyOS: \"HarmonyOS\")) for intentional non-localized text", at: argument.expression)
                 return nil
             }
             return Expression(.verbatimText(value), type: .string, location: location(of: argument.expression))
@@ -237,7 +241,10 @@ struct LocalizationFrontend {
     mutating func localized(_ expression: ExprSyntax) -> Expression? {
         if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
-            return platformText(call)
+            error("R.string.unsupported_expression",
+                  "Platform-selected text passed to Text(_:) would be treated as a localization key on iOS, diverging from the verbatim native output.",
+                  "Use Text(verbatim: refractValue(ios: \"...\", android: \"...\", harmonyOS: \"...\")) for per-platform literal text, or Text(\"key\") with a canonical localization key.", at: call)
+            return nil
         }
         if let literal = expression.as(StringLiteralExprSyntax.self) {
             if let typedScalar, literal.segments.contains(where: {
@@ -281,8 +288,13 @@ struct LocalizationFrontend {
         }
         if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
-            return Expression(.stringLiteral(call.arguments.first?.expression.trimmedDescription ?? ""),
-                              type: .string, location: location(of: expression))
+            // The early `localized(_:)` branch above already emitted the verbatim/localized
+            // diagnostic for `Text(refractValue(...))`. Reaching this branch from a nested
+            // helper (for example `String(localized: refractValue(...))`) is unsupported too.
+            error("R.string.unsupported_expression",
+                  "Platform-selected text is not a static localization key.",
+                  "Use Text(verbatim: refractValue(ios: \"...\", android: \"...\", harmonyOS: \"...\")) for per-platform literal text, or String(localized: \"key\") with a canonical key.", at: call)
+            return nil
         }
         guard let value = scalar(expression), value.type == .string else {
             if diagnostics.last?.code == "RFSEM002" { return nil }
@@ -295,7 +307,7 @@ struct LocalizationFrontend {
         return value.expression
     }
 
-    private mutating func platformText(_ call: FunctionCallExprSyntax) -> Expression? {
+    private mutating func verbatimPlatformText(_ call: FunctionCallExprSyntax) -> Expression? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractValue` requires exactly `ios`, `android`, and `harmonyOS` arguments with compatible types.",
                   "Supply all three typed platform values", at: call)
@@ -305,8 +317,8 @@ struct LocalizationFrontend {
         for argument in call.arguments {
             guard let literal = argument.expression.as(StringLiteralExprSyntax.self),
                   let text = literal.representedLiteralValue else {
-                error("RFNATIVE003", "Platform text alternatives must all be string literals without interpolation.",
-                      "Use a nonlocalized literal string in every platform branch", at: argument)
+                error("RFNATIVE003", "Platform verbatim text alternatives must all be string literals without interpolation.",
+                      "Use a nonlocalized literal string in every platform branch of Text(verbatim: refractValue(...))", at: argument)
                 return nil
             }
             values.append(Expression(.verbatimText(text), type: .string, location: location(of: argument.expression)))
