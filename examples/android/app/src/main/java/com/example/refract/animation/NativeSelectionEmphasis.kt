@@ -7,13 +7,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
@@ -33,11 +30,11 @@ fun NativeSelectionEmphasis(
     modifier: Modifier = Modifier,
 ) {
     // Read the recomposer's native motion policy. No duration or animation spec crosses the source boundary.
-    var scale by remember { mutableFloatStateOf(1f) }
-    val motionEnabled = scale > 0f
+    val scale = remember { mutableFloatStateOf(1f) }
+    val motionEnabled = scale.floatValue > 0f
     LaunchedEffect(Unit) {
         val motion = currentCoroutineContext()[MotionDurationScale] ?: return@LaunchedEffect
-        snapshotFlow { motion.scaleFactor }.collect { scale = it }
+        snapshotFlow { motion.scaleFactor }.collect { scale.floatValue = it }
     }
     key(identity) {
         val emphasis = remember { Animatable(0f) }
@@ -54,9 +51,6 @@ fun NativeSelectionEmphasis(
             }
         }
         if (observer != null) {
-            SideEffect {
-                observer.onStateChanged(identity, emphasis.value, emphasis.isRunning)
-            }
             LaunchedEffect(emphasis, observer) {
                 snapshotFlow { Triple(identity, emphasis.value, emphasis.isRunning) }
                     .distinctUntilChanged()
@@ -73,7 +67,10 @@ fun NativeSelectionEmphasis(
             text = "Selection",
             color = Color.Black,
             modifier = modifier
-                .graphicsLayer { alpha = 0.5f + emphasis.value * 0.5f }
+                .graphicsLayer {
+                    alpha = 0.5f + emphasis.value * 0.5f
+                    observer?.onStateChanged(identity, emphasis.value, emphasis.isRunning)
+                }
                 .semantics { contentDescription = identity }
                 .testTag("selection_emphasis"),
         )

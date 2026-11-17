@@ -299,10 +299,11 @@ SwiftUI behavior also requires an Apple toolchain; generator tests do not establ
 ### Stateful value transitions, interruption and replacement
 
 `Fixtures/interop-native-state-transition/` is a separate stateful case, not a duplicate of the save-confirmation
-visibility component. Its `NativeSelectionEmphasis` declaration accepts only `emphasized: Bool` and `identity:
-String`. The generated screen resolves the identity through the declared `SelectionEmphasisModel` and the Boolean
-through a typed binding. On iOS the declaration is an ordinary SwiftUI `Text` with `.id(identity)`, an emphasized
-opacity and `.animation(reduceMotion ? nil : .easeInOut, value: emphasized)`. Duration and animation objects do not
+visibility component. Its `NativeSelectionEmphasis` declaration accepts only `emphasized: Bool` and
+`identity: String`. The generated screen resolves the identity through the declared `SelectionEmphasisModel` and
+the Boolean through a typed binding. On iOS the declaration is an ordinary SwiftUI `Text` with `.id(identity)`, an
+emphasized opacity and `.animation(reduceMotion ? nil : .easeInOut, value: emphasized)`. Duration and animation
+objects do not
 cross the native interface. No Apple-toolchain compilation of this particular source was available in this change.
 
 On Android the separate application-owned `NativeSelectionEmphasis` uses `Animatable<Float>` and a native tween.
@@ -322,8 +323,9 @@ leaving composition. Frame advancement and observation are controlled by the tes
 performance measurement. This is **Native JVM evidence**, not an emulator, device, physical reduced-motion setting,
 or iOS test.
 
-On HarmonyOS, `Expected.ets` proves the typed object-literal call `NativeSelectionEmphasis({ emphasized:
-this.emphasized, identity: this.model.identity })`. An app-owned implementation must provide the equivalent
+On HarmonyOS, `Expected.ets` proves the typed object-literal call
+`NativeSelectionEmphasis({ emphasized: this.emphasized, identity: this.model.identity })`. An app-owned
+implementation must provide the equivalent
 native value transition, accessibility preference, target interruption, identity-scoped state and disposal. This
 change supplies no ArkTS implementation or compiler evidence; those remain unverified.
 
