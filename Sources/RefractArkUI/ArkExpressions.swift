@@ -39,6 +39,10 @@ enum ArkExpression {
                              location: expression.location)
         case let .platformValue(alternatives):
             return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
+        case let .interactionColor(value):
+            return try MappedExpression.interactionColor(value, mapping: mapping, platform: .harmonyOS,
+                renderState: { try emitLocalExpression($0, item: item, mapping: mapping) },
+                location: expression.location)
         case let .valueProperty(.model(model, property)):
             return "this.\(try referenceName(model, location: expression.location)).\(try referenceName(property, location: expression.location))"
         case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):

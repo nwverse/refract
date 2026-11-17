@@ -73,7 +73,7 @@ enum ArkModifiers {
                 switch expression.value {
                 case let .reference(name):
                     return TokenCategory.allCases.contains { mapping.harmonyOS.tokens[$0][name] != nil }
-                case .platformValue:
+                case .platformValue, .interactionColor:
                     return true
                 default:
                     return false

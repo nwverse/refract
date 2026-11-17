@@ -128,7 +128,14 @@ extension ComposeBackend {
                     let radius = try composeLength(try ModifierArguments(modifier: modifiers[index + 1]).one(),
                                                    category: .radius, context: &context)
                     context.imports.insert("androidx.compose.foundation.shape.RoundedCornerShape")
-                    parts.append(".background(\(color), RoundedCornerShape(\(radius)))")
+                    let backgroundCall: String
+                    if case .interactionColor = modifier.arguments.first?.value {
+                        let arguments = [color, "RoundedCornerShape(\(radius))"]
+                        backgroundCall = ".background(\n            \(arguments.joined(separator: ",\n            "))\n        )"
+                    } else {
+                        backgroundCall = ".background(\(color), RoundedCornerShape(\(radius)))"
+                    }
+                    parts.append(backgroundCall)
                     index += 1
                 } else {
                     context.imports.insert("androidx.compose.foundation.background")
@@ -200,11 +207,22 @@ extension ComposeBackend {
 
     func composeToken(_ expression: Expression, category: TokenCategory,
                               context: inout Context) throws -> String {
+        if case let .interactionColor(value) = expression.value {
+            guard category == .color else {
+                throw Diagnostic(code: "interactionToken",
+                    message: "An interaction token can only be used as a color.",
+                    suggestion: "Use a static spacing, radius or font token for this modifier.", location: expression.location)
+            }
+            return try MappedExpression.interactionColor(value, mapping: context.mapping, platform: .android,
+                renderState: { try renderExpression($0, context: &context) },
+                addImport: { context.imports.insert($0) }, location: expression.location)
+        }
         guard case let .reference(name) = expression.value, name.contains(".") else {
             throw Diagnostic(code: "RFVIEW003", message: "This modifier requires a declared design token.",
                              suggestion: "Use a token in the mapping's \(category.rawValue) category.", location: expression.location)
         }
         let token = try context.mapping.token(name, category: category, platform: .android, location: expression.location)
+            .compose(location: expression.location)
         if token.hasPrefix("androidx.compose.material3.MaterialTheme.") {
             context.imports.insert("androidx.compose.material3.MaterialTheme")
             return String(token.dropFirst("androidx.compose.material3.".count))

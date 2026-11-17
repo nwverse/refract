@@ -55,6 +55,7 @@ public struct Expression: Codable, Equatable, Sendable {
         case valueProperty(ValueProperty)
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
+        case interactionColor(InteractionColorValue)
     }
 
     public let value: Value

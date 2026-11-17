@@ -28,6 +28,7 @@ public struct MappedExpression {
                 let category = try category(for: reference, mapping: mapping, expected: expected,
                                             location: expression.location)
                 return try mapping.token(reference, category: category, platform: .android, location: expression.location)
+                    .compose(location: expression.location)
             }
             guard isIdentifierPath(reference) else {
                 throw Diagnostic(code: "componentArgument", message: "`\(reference)` is not a supported mapped value.",
@@ -71,6 +72,7 @@ public struct MappedExpression {
                 let category = try category(for: reference, mapping: mapping, expected: expected,
                                             location: expression.location)
                 return try mapping.token(reference, category: category, platform: .harmonyOS, location: expression.location)
+                    .compose(location: expression.location)
             }
             guard isIdentifierPath(reference) else {
                 throw Diagnostic(code: "componentArgument", message: "`\(reference)` is not a supported mapped value.",
@@ -82,6 +84,24 @@ public struct MappedExpression {
         default:
             throw Diagnostic(code: "componentArgument", message: "This expression is not supported as a mapped value.",
                              suggestion: "Use a scalar, resource key or declared token.", location: expression.location)
+        }
+    }
+
+    public static func interactionColor(_ value: InteractionColorValue, mapping: Mapping, platform: Platform,
+                                        renderState: (Expression) throws -> String,
+                                        addImport: (String) -> Void = { _ in },
+                                        location: SourceLocation?) throws -> String {
+        let token = try mapping.token(value.token, category: .color, platform: platform, location: location)
+        let imports = try token.interactionImports(mapping: mapping, platform: platform)
+        if let resourceClass = imports.resourceClass { addImport(resourceClass) }
+        let enabled = try renderState(value.enabled)
+        let pressed = try renderState(value.pressed)
+        let focused = try renderState(value.focused)
+        switch platform {
+        case .android:
+            return try token.compose(enabled: enabled, pressed: pressed, focused: focused, mapping: mapping, location: location)
+        case .harmonyOS:
+            return try token.arkUI(enabled: enabled, pressed: pressed, focused: focused, mapping: mapping, location: location)
         }
     }
 

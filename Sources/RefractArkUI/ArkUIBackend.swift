@@ -30,15 +30,18 @@ struct Generation {
         let resolver = InteropResolver(module: module, mapping: mapping)
         var importLines: [String] = []
         var emittedImports: Set<String> = []
+        let usedTokenOwners = try usedTokenImports(in: module.screens.map(\.body))
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
             if case let .navigationStack(stack, _) = screen.body {
                 try collectImports(stack, resolver: resolver, into: &emittedImports)
             }
         }
-        for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module })
-            where declaration.symbols.contains(where: emittedImports.contains) {
-            importLines.append("import { \(declaration.symbols.filter(emittedImports.contains).joined(separator: ", ")) } from '\(declaration.module)';")
+        for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module }) {
+            let selected = declaration.symbols.filter { emittedImports.contains($0) || usedTokenOwners.contains($0) }
+            if !selected.isEmpty {
+                importLines.append("import { \(selected.joined(separator: ", ")) } from '\(declaration.module)';")
+            }
         }
         for native in usedNativeComponents(in: module.screens.map(\.body)) {
             let target = try resolver.target(for: native.component, platform: .harmonyOS, location: native.location)
@@ -257,6 +260,48 @@ struct Generation {
         return result
     }
 
+    private func usedTokenImports(in bodies: [ViewNode]) throws -> Set<String> {
+        var result: Set<String> = []
+        func collect(_ expression: Expression) throws {
+            switch expression.value {
+            case let .reference(name):
+                for category in TokenCategory.allCases {
+                    if let token = mapping.harmonyOS.tokens[category][name], let owner = token.importSymbol {
+                        result.insert(owner)
+                    }
+                }
+            case let .platformValue(alternatives):
+                try collect(alternatives.android)
+                try collect(alternatives.harmonyOS)
+            case let .interactionColor(value):
+                let token = try mapping.token(value.token, category: .color,
+                    platform: .harmonyOS, location: expression.location)
+                result.insert(try token.interactionImports(mapping: mapping, platform: .harmonyOS).resolver)
+            default: break
+            }
+        }
+        func collect(_ node: ViewNode) throws {
+            if case let .component(component, _) = node {
+                for modifier in component.modifiers {
+                    for argument in modifier.arguments { try collect(argument) }
+                }
+            }
+            switch node {
+            case let .stack(_, _, modifiers, _), let .layout(_, _, modifiers, _), let .scroll(_, _, modifiers, _),
+                 let .list(_, modifiers, _), let .text(_, modifiers, _), let .button(_, _, modifiers, _),
+                 let .image(_, modifiers, _), let .toggle(_, _, modifiers, _, _, _), let .textInput(_, _, modifiers, _),
+                 let .label(_, _, modifiers, _), let .divider(modifiers, _):
+                for modifier in modifiers {
+                    for argument in modifier.arguments { try collect(argument) }
+                }
+            default: break
+            }
+            for child in node.children(for: .harmonyOS) { try collect(child) }
+        }
+        for body in bodies { try collect(body) }
+        return result
+    }
+
     private func collectImports(_ node: ViewNode, resolver: InteropResolver, into emittedImports: inout Set<String>) throws {
         for child in node.children(for: .harmonyOS) { try collectImports(child, resolver: resolver, into: &emittedImports) }
         if case let .native(component, location) = node {
@@ -270,8 +315,8 @@ struct Generation {
                 for argument in modifier.arguments {
                     if case let .reference(reference) = argument.value {
                         for category in TokenCategory.allCases {
-                            if let target = mapping.harmonyOS.tokens[category][reference] {
-                                emittedImports.insert(target.split(separator: ".").first.map(String.init) ?? target)
+                            if let target = mapping.harmonyOS.tokens[category][reference], let owner = target.importSymbol {
+                                emittedImports.insert(owner)
                             }
                         }
                     }
@@ -304,8 +349,8 @@ struct Generation {
                 for expression in [argument] + platformBranches(argument) {
                     guard case let .reference(name) = expression.value, name.contains(".") else { continue }
                     for category in TokenCategory.allCases {
-                        guard let target = mapping.harmonyOS.tokens[category][name] else { continue }
-                        emittedImports.insert(target.split(separator: ".").first.map(String.init) ?? target)
+                        guard let target = mapping.harmonyOS.tokens[category][name], let owner = target.importSymbol else { continue }
+                        emittedImports.insert(owner)
                     }
                 }
             }

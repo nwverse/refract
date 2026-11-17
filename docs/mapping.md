@@ -119,6 +119,61 @@ cannot occur in two categories. Spacing and radius produce `length`, font produc
 or other token is substituted. The iOS SwiftUI target supplies ordinary native definitions for the same source
 names, while Android and HarmonyOS supply definitions of their respective native value types.
 
+### Theme and interaction-state resources
+
+A color token may instead name an application-owned resolver and all four explicit interaction resources. Static
+spacing, radius and font tokens retain their string form and cannot use this object form:
+
+```json
+"color": {
+  "DesignColors.content": "AppColors.content",
+  "DesignColors.action": {
+    "resolver": "AppInteractionColors.resolve",
+    "normal": { "resource": "theme_action_normal" },
+    "disabled": { "resource": "theme_action_disabled" },
+    "pressed": { "resource": "theme_action_pressed" },
+    "focused": { "resource": "theme_action_focused" }
+  }
+}
+```
+
+A state value is either a qualified application symbol or an object containing exactly one lower-case native color
+`resource` name. The mapping must contain `normal`, `disabled`, `pressed` and `focused`; a missing state is a
+source-located `mappingRequired` error. There is no normal-color or enabled-state fallback. Android emits `R.color`
+with the configured application `R` class, importing it when it belongs to the generated package and retaining its
+qualifier otherwise. HarmonyOS emits `$r('<declared-namespace>.color.<resource>')`; resource identifiers are never
+copied from JSON as arbitrary source fragments. The app owns `values`/`values-night` resources, equivalent HarmonyOS
+resources and its theme selection. Refract does not read colors, invent a theme or add a per-screen RGB literal.
+
+Use a stateful token only through the typed modifier expression:
+
+```swift
+.background(refractInteractionColor(
+    DesignColors.action,
+    enabled: isEnabled,
+    pressed: isPressed,
+    focused: isFocused
+))
+```
+
+The token and the three named arguments are mandatory. Each state argument must be a statically declared `Bool`
+state, binding or model property, not an arbitrary expression or a detached interaction source. The emitted Compose
+call passes those three values, followed by the four native color arguments, to the declared resolver; the ArkUI
+call has the same explicit contract. `refractInteractionColor` supplies no gesture/focus ownership, no state
+precedence, and no implicit enabled value. A native app component must pass observations from its actual control's
+single interaction source (or its equivalent explicit HarmonyOS state). Static use of an interaction token is an
+`interactionToken` diagnostic, as is applying the expression to a non-color token.
+
+The resolver and its resource-owning symbols must be explicitly imported by the application mapping. On Android the
+resolver may be an application `@Composable` function that calls `colorResource`; on ArkUI it is an application
+function or object method with explicit typed arguments. No Refract resolver, registry or runtime object is emitted.
+`Fixtures/theme-interaction-states/` demonstrates one source component, all five token categories, explicit states,
+dual-backend output, the app-owned resolver and light/night resources. Its font style uses `sp`, so font scaling is
+owned by the native style. `Fixtures/theme-reject-missing-state/` proves incomplete state mappings fail before output.
+Actual control interaction and large-font rendering require native tests; golden generation and Kotlin compilation
+alone do not establish them. iOS provides its own ordinary SwiftUI semantic-token resolver for the same source, and
+must not discard these arguments.
+
 ## Resources
 
 Android resources declare `className` (the application's fully qualified `R` class). HarmonyOS resources declare
@@ -172,7 +227,8 @@ value responsible, with one-based coordinates. Source-use errors point to the Sw
 | `mappingContent` | Content is dropped or its parameter declaration is inconsistent. |
 | `mappingModifier` | A modifier declaration or attribute binding is inconsistent. |
 | `mappingPlatformMismatch` | The two platform interfaces or resource key sets differ. |
-| `mappingToken` | A token key is duplicated across categories or has an invalid target. |
+| `mappingToken` | A token key is duplicated across categories, has an invalid target, or declares an incomplete/invalid interaction state contract. |
+| `interactionToken` | An interaction token is used statically, with missing/non-Boolean state values, or in a non-color position. |
 | `mappingResource` | A resource declaration is incomplete or malformed. |
 | `missingComponentMapping` | A source component has no mapping on the selected platform. |
 | `missingNativeMapping` | A native source declaration has no native implementation mapping. |

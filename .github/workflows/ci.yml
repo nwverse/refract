@@ -144,7 +144,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: refract-android-${{ runner.os }}-${{ hashFiles('examples/android/gradle/wrapper/gradle-wrapper.properties', 'examples/android/build.gradle.kts', 'examples/android/app/build.gradle.kts', 'examples/android/fixtures/build.gradle.kts', 'examples/android/settings.gradle.kts', 'tools/gradle/build.gradle.kts', 'tools/gradle/src/**') }}
+          key: refract-android-${{ runner.os }}-${{ hashFiles('examples/android/gradle/wrapper/gradle-wrapper.properties', 'examples/android/build.gradle.kts', 'examples/android/app/build.gradle.kts', 'examples/android/fixtures/build.gradle.kts', 'examples/android/theme-fixture/build.gradle.kts', 'examples/android/settings.gradle.kts', 'tools/gradle/build.gradle.kts', 'tools/gradle/src/**') }}
           restore-keys: |
             refract-android-${{ runner.os }}-
       - name: Show the Gradle executable contract
@@ -167,7 +167,7 @@ jobs:
         working-directory: examples/android
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
-        run: ./gradlew --no-daemon :fixtures:compileDebugKotlin
+        run: ./gradlew --no-daemon :fixtures:compileDebugKotlin :theme-fixture:compileDebugKotlin
       - name: Run native animation lifecycle tests on the JVM
         working-directory: examples/android
         env:

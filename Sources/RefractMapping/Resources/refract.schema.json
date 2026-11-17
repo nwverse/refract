@@ -150,10 +150,38 @@
       },
       "maxProperties": 256
     },
+    "interactionValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/qualifiedReference" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resource"],
+          "properties": { "resource": { "$ref": "#/$defs/resourceName" } }
+        }
+      ]
+    },
+    "interactionToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolver", "normal", "disabled", "pressed", "focused"],
+      "properties": {
+        "resolver": { "$ref": "#/$defs/qualifiedReference" },
+        "normal": { "$ref": "#/$defs/interactionValue" },
+        "disabled": { "$ref": "#/$defs/interactionValue" },
+        "pressed": { "$ref": "#/$defs/interactionValue" },
+        "focused": { "$ref": "#/$defs/interactionValue" }
+      }
+    },
     "tokenValues": {
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/tokenKey" },
-      "additionalProperties": { "$ref": "#/$defs/qualifiedReference" },
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/$defs/qualifiedReference" },
+          { "$ref": "#/$defs/interactionToken" }
+        ]
+      },
       "maxProperties": 1024
     },
     "tokens": {

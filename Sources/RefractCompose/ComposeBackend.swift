@@ -234,7 +234,12 @@ public struct ComposeBackend: Sendable {
         var arguments = ["text = \(text)"]
         let styled = modifiers.contains { $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle" }
         if modifierChain != "Modifier" {
-            if modifierChain.contains(".background(") {
+            if modifiers.contains(where: { $0.arguments.contains(where: {
+                if case .interactionColor = $0.value { return true }
+                return false
+            }) }) {
+                arguments.append("modifier = \(modifierChain)")
+            } else if modifierChain.contains(".background(") {
                 arguments.append("modifier = \(modifierChain.replacingOccurrences(of: ").", with: ")\n        ."))")
             } else {
                 arguments.append("modifier = \(modifierChain)")
@@ -353,6 +358,10 @@ public struct ComposeBackend: Sendable {
             return result + "\""
         case let .platformValue(alternatives):
             return try renderExpression(alternatives.android, context: &context)
+        case let .interactionColor(value):
+            return try MappedExpression.interactionColor(value, mapping: context.mapping, platform: .android,
+                renderState: { try renderExpression($0, context: &context) },
+                addImport: { context.imports.insert($0) }, location: expression.location)
         }
     }
 
