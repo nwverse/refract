@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "settings_section",
+      "value": "Accessibility"
+    },
+    {
+      "name": "settings_display_name",
+      "value": "Display name"
+    },
+    {
+      "name": "settings_notifications",
+      "value": "Notifications"
+    },
+    {
+      "name": "settings_quiet_hours",
+      "value": "Quiet hours"
+    },
+    {
+      "name": "settings_save",
+      "value": "Save"
+    }
+  ]
+}
