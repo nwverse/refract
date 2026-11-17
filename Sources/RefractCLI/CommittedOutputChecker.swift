@@ -11,7 +11,8 @@ struct CommittedOutputChecker {
         var differences = 0
         var expectedFiles: [URL: Set<String>] = [:]
         for output in outputs {
-            let directory = URL(fileURLWithPath: output.directory, isDirectory: true).standardizedFileURL
+            let directory = URL(fileURLWithPath: output.directory, isDirectory: true)
+                .standardizedFileURL.resolvingSymlinksInPath()
             let file = directory.appendingPathComponent(output.filename)
             expectedFiles[directory, default: []].insert(output.filename)
             let expected = Data(output.contents.utf8)
