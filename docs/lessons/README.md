@@ -17,5 +17,6 @@ add to it when you hit something new: what happened, why, and what to do instead
 | Repository checks and CI | `docs/lessons/repository-tooling.md` |
 | Generated-code semantic and native compile review | `docs/lessons/generated-code-review.md` |
 | Android benchmarking | `docs/lessons/android.md` |
+| Local CLI packaging | `docs/lessons/packaging.md` |
 | SwiftPM consumer integration | `docs/lessons/swiftpm.md` |
 | Paired native performance evidence | `docs/lessons/performance.md` |

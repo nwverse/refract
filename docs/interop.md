@@ -302,6 +302,43 @@ the transition, exit removes content, zero duration scale skips enter/exit motio
 content. They do not exercise a device, emulator, physical animation-duration setting or performance benchmark.
 SwiftUI behavior also requires an Apple toolchain; generator tests do not establish that evidence.
 
+### Stateful value transitions, interruption and replacement
+
+`Fixtures/interop-native-state-transition/` is a separate stateful case, not a duplicate of the save-confirmation
+visibility component. Its `NativeSelectionEmphasis` declaration accepts only `emphasized: Bool` and
+`identity: String`. The generated screen resolves the identity through the declared `SelectionEmphasisModel` and
+the Boolean through a typed binding. On iOS the declaration is an ordinary SwiftUI `Text` with `.id(identity)`, an
+emphasized opacity and `.animation(reduceMotion ? nil : .easeInOut, value: emphasized)`. Duration and animation
+objects do not cross the native interface. No Apple-toolchain compilation of this particular source was available in
+this change.
+
+On Android the separate application-owned `NativeSelectionEmphasis` uses `Animatable<Float>` and a native tween.
+The `LaunchedEffect` keyed by the remembered animation, target and native motion policy cancels the old animation
+when a target changes; `animateTo` then continues from its current value and velocity. `key(identity)` scopes the
+remembered animation and its effects, so replacement cannot inherit the old identity's progress or running job.
+`MotionDurationScale == 0` uses `snapTo`, including when the preference changes during an animation, so there is no
+intermediate progress on that path. Leaving composition cancels effects and disposes the identity. Per-frame alpha
+is read in `graphicsLayer`, rather than invalidating the parent composition on every frame. No timer, animation
+interpreter or shared target-language animation description is generated.
+
+`NativeSelectionEmphasisTest` runs the unmodified generated caller and the app-owned implementation on real
+Compose/Robolectric. Its six tests cover generated-call progress, a target reversal that stops at an intermediate
+value and resumes downwards from that value, identity replacement with old-content disposal and independent new
+progress, reducing motion during an animation, zero-scale targets without intermediate progress, and disposal when
+leaving composition. Frame advancement and observation are controlled by the test host; they are not a wall-clock
+performance measurement. This is **Native JVM evidence**, not an emulator, device, physical reduced-motion setting,
+or iOS test.
+
+On HarmonyOS, `Expected.ets` proves the typed object-literal call
+`NativeSelectionEmphasis({ emphasized: this.emphasized, identity: this.model.identity })`. An app-owned
+implementation must provide the equivalent native value transition, accessibility preference, target interruption,
+identity-scoped state and disposal. This
+change supplies no ArkTS implementation or compiler evidence; those remain unverified.
+
+The generated scalar argument path now preserves the declared type of a model property such as `model.identity`,
+using the same typed expression as existing model-backed views. Unknown model or item members remain `RFSEM001`
+diagnostics; no unknown type is silently inferred as `String`.
+
 ## Per-platform values, modifiers and animations
 
 Use `refractValue` for scalar values and tokens whose source types agree:

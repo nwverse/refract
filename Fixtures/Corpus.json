@@ -134,6 +134,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-state-transition",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-undeclared",
       "implementationStatus": "ready"
     },
@@ -323,6 +327,14 @@
     },
     {
       "path": "rejected-view-declaration",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-dragdrop",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-reject-uri-payload",
       "implementationStatus": "ready"
     },
     {
