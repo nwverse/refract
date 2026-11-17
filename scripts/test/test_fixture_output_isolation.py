@@ -21,7 +21,6 @@ class FixtureOutputIsolationTest(unittest.TestCase):
 
         def stage_expected(_fixture):
             return None
-
         def generate(arguments, cwd, check):
             observed["cwd"] = cwd
             observed["android"] = arguments[arguments.index("--android-out") + 1]
@@ -35,11 +34,16 @@ class FixtureOutputIsolationTest(unittest.TestCase):
             self.assertFalse((module.ROOT / "generated").exists())
             return subprocess.CompletedProcess(arguments, 0)
 
-        with mock.patch.object(module, "stage_resources", create=True, side_effect=stage_expected), \
-             mock.patch.object(module.subprocess, "run", side_effect=generate):
-            module.regenerate_and_stage("benchmark-settings")
-        self.assertIsNotNone(observed.get("cwd"))
-        self.assertFalse((module.ROOT / "generated").exists())
+        with tempfile.TemporaryDirectory(prefix="refract-fixture-isolation-test-") as temporary:
+            checkout = Path(temporary)
+            module.ROOT = checkout
+            with mock.patch.object(module, "stage_resources", create=True, side_effect=stage_expected), \
+                 mock.patch.object(module.subprocess, "run", side_effect=generate):
+                module.regenerate_and_stage("benchmark-settings")
+            self.assertIsNotNone(observed.get("cwd"))
+            self.assertEqual(Path(observed["cwd"]), Path(observed["android"]).parent)
+            self.assertEqual(Path(observed["cwd"]), Path(observed["harmony"]).parent)
+            self.assertFalse((checkout / "generated").exists())
 
 
 if __name__ == "__main__":
