@@ -39,9 +39,6 @@ public struct ComposeBackend: Sendable {
         out.line()
         out.line("package \(context.packageName)")
         out.line()
-        for item in mapping.android.imports.map(\.module) {
-            context.imports.insert(item)
-        }
         for item in InteropResolver(module: module, mapping: mapping).imports(for: .android) {
             context.imports.insert(item.module)
         }

@@ -121,6 +121,18 @@ import RefractMapping
     }
 }
 
+@Test func composeDoesNotDuplicateMappedNativeImports() throws {
+    let android = PlatformMapping(
+        imports: [NativeImport(module: "example.components.MapView", symbols: ["MapView"])]
+    )
+    let mapping = Mapping(android: android)
+    let plain = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "Plain", body: .text(Expression(.stringLiteral("Hello")), modifiers: [], location: nil)),
+    ])
+    let output = try ComposeBackend().generate(module: plain, mapping: mapping)
+    #expect(output.components(separatedBy: "import example.components.MapView\n").count == 2)
+}
+
 @Test func composeRejectsNativeWithoutMapping() throws {
     let module = Module(sourceFile: "Input.swift", screens: [
         Screen(name: "Screen", body: .native(NativeComponent(name: "MapView"), location: nil)),
