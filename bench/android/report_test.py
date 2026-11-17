@@ -206,6 +206,7 @@ class ReportTest(unittest.TestCase):
             ):
                 value = benchmark(variant, scenario, metrics)
                 value["repeatIterations"] = 10
+                value["profilerOutputs"] = [{"type": "PerfettoTrace", "filename": "synthetic.perfetto-trace"}]
                 values.append(value)
         path.write_text(json.dumps(values))
         trace_coverage = [
@@ -229,6 +230,12 @@ class ReportTest(unittest.TestCase):
         with self.assertRaisesRegex(report.ReportError, "Perfetto evidence is missing reference.stateUpdate"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
                                evidence={"traces": trace_coverage[:-1]})
+        for value in values:
+            value["profilerOutputs"] = []
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "AndroidX JSON has no Perfetto filename"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence={"traces": trace_coverage})
 
     def test_macro_rejects_short_or_aggregate_runs_and_missing_memory(self):
         path = Path(self.directory.name) / "input.json"
@@ -251,6 +258,7 @@ class ReportTest(unittest.TestCase):
                     )
                     value = benchmark(variant, current, metrics if current == scenario else current_metrics)
                     value["repeatIterations"] = 10
+                    value["profilerOutputs"] = [{"type": "PerfettoTrace", "filename": "synthetic.perfetto-trace"}]
                     values.append(value)
             path.write_text(json.dumps(values))
             with self.subTest(scenario=scenario), self.assertRaisesRegex(report.ReportError, error):

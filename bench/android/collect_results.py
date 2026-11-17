@@ -45,6 +45,55 @@ def copy_artifact(source: Path, raw: Path, index: int) -> dict[str, object]:
     return {"path": f"raw/{destination.name}", "bytes": destination.stat().st_size, "sha256": digest(destination)}
 
 
+def trace_filename(variant: str, scenario: str, iteration: int = 0) -> str:
+    method = {"startup": "Startup", "scroll": "Macrobenchmark[scroll]", "stateUpdate": "StateUpdate"}[scenario]
+    return f"dev.refract.bench.test.SettingsMacrobenchmark_{variant}{method}_iter{iteration:03d}.perfetto-trace"
+
+
+def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
+                traces: list[dict[str, object]]) -> None:
+    """Bind AndroidX profilerOutputs to copied files; fail on missing or ambiguous traces."""
+    referenced = set()
+    for source, copied in zip(json_sources, copied_json):
+        try:
+            payload = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise EvidenceError(f"Cannot parse AndroidX JSON {source.name}: {error}") from error
+        benchmarks = payload if isinstance(payload, list) else payload.get("benchmarks") if isinstance(payload, dict) else None
+        if not isinstance(benchmarks, list):
+            raise EvidenceError("AndroidX JSON has no benchmarks array")
+        for benchmark in benchmarks:
+            if not isinstance(benchmark, dict) or benchmark.get("className") != "dev.refract.bench.test.SettingsMacrobenchmark":
+                continue
+            name = benchmark.get("name")
+            if not isinstance(name, str):
+                raise EvidenceError("Macro benchmark has no name")
+            variant, scenario = trace_identity(name)
+            if not variant or not scenario:
+                raise EvidenceError(f"Cannot identify macro benchmark from its AndroidX name: {name}")
+            outputs = benchmark.get("profilerOutputs")
+            if not isinstance(outputs, list) or not outputs:
+                raise EvidenceError(f"AndroidX JSON has no profilerOutputs for {name}")
+            for output in outputs:
+                if not isinstance(output, dict) or output.get("type") != "PerfettoTrace":
+                    continue
+                filename = output.get("filename")
+                if not isinstance(filename, str) or not filename:
+                    raise EvidenceError(f"Invalid Perfetto filename for {name}")
+                matches = [trace for trace in traces if Path(trace["source_name"]).name == Path(filename).name]
+                if len(matches) != 1:
+                    raise EvidenceError(f"Perfetto file is missing or ambiguous for {name}: {Path(filename).name}")
+                trace = matches[0]
+                if (trace["variant"], trace["scenario"]) != (variant, scenario):
+                    raise EvidenceError(f"Perfetto filename does not match its AndroidX benchmark identity: {name}")
+                trace["androidx_benchmark"] = name
+                trace["androidx_json"] = copied["path"]
+                referenced.add(trace["source_name"])
+    unreferenced = [trace["source_name"] for trace in traces if trace["source_name"] not in referenced]
+    if unreferenced:
+        raise EvidenceError("Perfetto trace is not referenced by AndroidX JSON; refusing to infer ownership")
+
+
 def collect(input_directory: Path, output: Path) -> dict[str, object]:
     if not input_directory.is_dir():
         raise EvidenceError("AndroidX additional-output directory is absent; instrumentation did not produce evidence.")
@@ -61,8 +110,9 @@ def collect(input_directory: Path, output: Path) -> dict[str, object]:
     for index, path in enumerate(trace_sources, len(benchmark_json) + 1):
         item = copy_artifact(path, raw, index)
         variant, scenario = trace_identity(path.name)
-        item.update({"variant": variant, "scenario": scenario})
+        item.update({"variant": variant, "scenario": scenario, "source_name": path.name})
         traces.append(item)
+    bind_traces(json_sources, benchmark_json, traces)
     manifest = {"schema": 1, "benchmark_json": benchmark_json, "traces": traces}
     (output / "evidence-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
                                                    encoding="utf-8")

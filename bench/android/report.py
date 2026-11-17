@@ -44,6 +44,7 @@ class Measurement:
     sample_count: int
     repeat_iterations: int
     context: dict[str, Any]
+    profiler_outputs: Any
 
 
 def canonical(value: Any) -> str:
@@ -133,10 +134,11 @@ def extract(payload: Any, source: Path) -> list[Measurement]:
             raise ReportError(f"Unexpected macrobenchmark variant in {name!r}")
         key = (kind, variant.lower(), scenario, variant)
         iterations = benchmark.get("repeatIterations", benchmark.get("iterations"))
-        if not isinstance(iterations, int) or iterations < 1:
+        if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 1:
             raise ReportError(f"{source} has no valid iteration count for {name!r}")
         for metric, unit, values, sample_count in samples(metrics, iterations):
-            output.append(Measurement(key, metric, unit, values, "runs" if unit == "native" else "aggregate", sample_count, iterations, context))
+            output.append(Measurement(key, metric, unit, values, "runs" if unit == "native" else "aggregate",
+                                      sample_count, iterations, context, benchmark.get("profilerOutputs")))
     if not output:
         raise ReportError(f"{source} has no benchmark metrics")
     return output
@@ -269,10 +271,23 @@ def markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def validate_macro(rows: list[dict[str, Any]], traces: list[dict[str, Any]] | None) -> None:
+def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
+                   traces: list[dict[str, Any]] | None) -> None:
     """Reject partial macro evidence instead of passing whichever tests survived."""
     if traces is None:
         raise ReportError("Complete macro evidence requires a verified Perfetto trace manifest")
+    for measurement in measurements:
+        if measurement.key[0] != "Macro":
+            continue
+        outputs = measurement.profiler_outputs
+        # Bind AndroidX's own profiler metadata to the retained trace, rather
+        # than inferring evidence ownership from a filename alone.
+        if not isinstance(outputs, list) or not any(
+            isinstance(output, dict) and output.get("type") == "PerfettoTrace" and
+            isinstance(output.get("filename"), str)
+            for output in outputs
+        ):
+            raise ReportError(f"AndroidX JSON has no Perfetto filename for {measurement.key[3]}.{measurement.key[2]}")
     for scenario in MACRO_SCENARIOS:
         for variant in ("generated", "reference"):
             selected = [row for row in rows if row["benchmark_kind"] == "Macro"
@@ -357,7 +372,7 @@ def make_report(inputs: list[Path], percent: float, absolute_ms: float,
         raise ReportError("Refusing to compare different devices or build contexts")
     rows = [normalize(measurement) for measurement in measurements]
     if require_macro:
-        validate_macro(rows, evidence.get("traces") if evidence else None)
+        validate_macro(measurements, rows, evidence.get("traces") if evidence else None)
     comparisons = compare_pairs(rows, percent, absolute_ms)
     failures = [comparison for comparison in comparisons if any(
         comparison.get(quantile, {}).get("regressed", False) for quantile in ("p50", "p99")

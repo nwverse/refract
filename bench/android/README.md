@@ -64,10 +64,11 @@ before instrumentation so historical JSON/traces cannot be mistaken for this run
 installing changes, then compiles the release artifacts. After instrumentation it preserves every AndroidX JSON and
 `.perfetto-trace` file with SHA-256 checksums in a new per-run directory. `report.py --require-macro` requires both
 variants of startup, scroll and state update, at least ten iterations, raw startup/frame/memory samples, matching
-metric sets and trace coverage for every variant/scenario. Missing pairs, JSON, traces, mismatched checksums or
-incomplete traces fail rather than becoming a partial PASS. AOSP images without Google services need the same
-startup/rendering stability checks; slow first frames are not accepted as passing startup measurements. The existing
-frame deadline and 5% AND 0.1 ms latency gate are unchanged.
+metric sets and trace coverage for every variant/scenario. Each macro record's AndroidX `profilerOutputs` must
+reference a retained trace with the matching variant/scenario; unreferenced or ambiguous traces fail closed. Missing
+pairs, JSON, traces, mismatched checksums or incomplete traces fail rather than becoming a partial PASS. AOSP images
+without Google services need the same startup/rendering stability checks; slow first frames are not accepted as
+passing startup measurements. The existing frame deadline and 5% AND 0.1 ms latency gate are unchanged.
 
 The Gradle wrapper bootstrap and distribution have pinned versions. On a new machine the wrapper downloads its
 distribution from the public Gradle service; no local proxy or internal mirror is configured in this project.

@@ -107,15 +107,28 @@ class EvidenceCollectionTest(unittest.TestCase):
         self.output = self.root / "run"
         self.inputs.mkdir()
 
-    def add_json(self, name="benchmarkData.json"):
+    def add_json(self, name="benchmarkData.json", benchmarks=None):
         path = self.inputs / name
-        path.write_text(json.dumps([]))
+        if benchmarks is None:
+            benchmarks = []
+            for variant in ("generated", "reference"):
+                for scenario in ("startup", "scroll", "stateUpdate"):
+                    benchmarks.append({
+                        "name": f"dev.refract.bench.test.SettingsMacrobenchmark.{variant}{scenario}",
+                        "className": "dev.refract.bench.test.SettingsMacrobenchmark",
+                        "profilerOutputs": [{
+                            "type": "PerfettoTrace", "label": "Trace Iteration 0",
+                            "filename": collect_results.trace_filename(variant, scenario),
+                        }],
+                    })
+        path.write_text(json.dumps(benchmarks))
         return path
 
     def add_traces(self):
         for variant in ("generated", "reference"):
-            for method in ("Startup", "Macrobenchmark_scroll", "StateUpdate"):
-                (self.inputs / f"SettingsMacrobenchmark_{variant}{method}_iter000.perfetto-trace").write_bytes(b"trace")
+            for scenario in ("startup", "scroll", "stateUpdate"):
+                filename = collect_results.trace_filename(variant, scenario)
+                (self.inputs / filename).write_bytes(b"trace")
 
     def test_copies_json_and_all_six_perfetto_scenarios(self):
         self.add_json()
@@ -124,6 +137,8 @@ class EvidenceCollectionTest(unittest.TestCase):
         self.assertEqual(len(manifest["benchmark_json"]), 1)
         self.assertEqual(len(manifest["traces"]), 6)
         self.assertTrue(all(item["variant"] and item["scenario"] for item in manifest["traces"]))
+        self.assertTrue(all(item["androidx_benchmark"] for item in manifest["traces"]))
+        self.assertEqual(collect_results.trace_identity("Class_generatedMacrobenchmark[scroll]"), ("generated", "scroll"))
         for item in manifest["traces"]:
             self.assertEqual((self.output / item["path"]).read_bytes(), b"trace")
         verified = report.verify_evidence(manifest, self.output, [self.output / "raw/001-benchmarkData.json"])
@@ -131,6 +146,24 @@ class EvidenceCollectionTest(unittest.TestCase):
 
     def test_json_is_required(self):
         with self.assertRaisesRegex(collect_results.EvidenceError, "No AndroidX"):
+            collect_results.collect(self.inputs, self.output)
+
+    def test_missing_or_unreferenced_trace_is_rejected(self):
+        payload = json.loads(self.add_json().read_text())
+        payload[0]["profilerOutputs"][0]["filename"] = "missing.perfetto-trace"
+        source = self.inputs / "benchmarkData.json"
+        source.write_text(json.dumps(payload))
+        self.add_traces()
+        with self.assertRaisesRegex(collect_results.EvidenceError, "missing or ambiguous"):
+            collect_results.collect(self.inputs, self.output)
+
+    def test_macro_without_profiler_outputs_cannot_pass(self):
+        payload = json.loads(self.add_json().read_text())
+        payload[0]["profilerOutputs"] = []
+        source = self.inputs / "benchmarkData.json"
+        source.write_text(json.dumps(payload))
+        self.add_traces()
+        with self.assertRaisesRegex(collect_results.EvidenceError, "no profilerOutputs"):
             collect_results.collect(self.inputs, self.output)
 
     def test_checksum_mismatch_and_wrong_input_are_rejected(self):
@@ -167,6 +200,10 @@ class EvidenceCollectionTest(unittest.TestCase):
             ):
                 value = report_test.benchmark(variant, scenario, metrics)
                 value["repeatIterations"] = 10
+                value["profilerOutputs"] = [{
+                    "type": "PerfettoTrace",
+                    "filename": collect_results.trace_filename(variant.lower(), scenario),
+                }]
                 values.append(value)
         source = self.add_json()
         source.write_text(json.dumps(values))
