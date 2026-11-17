@@ -11,6 +11,7 @@ DerivedData/
 Package.resolved.orig
 # Gradle / Android / Kotlin
 .gradle/
+.kotlin/
 build/
 local.properties
 *.iml

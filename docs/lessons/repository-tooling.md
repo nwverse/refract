@@ -6,6 +6,12 @@
   until every replacement succeeds, but never remove a path that this invocation has not replaced: an already
   rejected directory must survive rollback with its contents. Test a directory whose name ends in `.kt` or `.ets`
   and construct test paths without URL directory-type propagation masking the fixture.
+- **Drain child-process pipes independently of exit notification.** Linux Foundation can delay or miss process
+  lifecycle callbacks under concurrent invocation. Do not resume an async test continuation from
+  `terminationHandler` and only then read a pipe to EOF: that can leave the child and test runner waiting on each
+  other. Start a dedicated stderr reader, synchronously wait for process exit on another thread, and await EOF before
+  completing the result. Keep the real concurrent invocation in the test; this changes test process lifetime
+  management, not the generator's locking or failure-safe publication behavior.
 - **Test a repository scanner in temporary git repositories.** Replace its home, private-word configuration and git
   configuration, and use synthetic values. Running tests directly on a public checkout can read machine-specific
   rules and accidentally print a value in a test failure.

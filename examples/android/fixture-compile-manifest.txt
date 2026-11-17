@@ -23,6 +23,7 @@ list-foreach-explicit-id
 v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
+interop-native-animation
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type

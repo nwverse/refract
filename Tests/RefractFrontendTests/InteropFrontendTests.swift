@@ -24,6 +24,78 @@ import RefractIR
     #expect(component.arguments.map(\.type) == [.double, .bool])
 }
 
+@Test(arguments: [
+    "@State private var saved: Bool = false",
+    "@Binding var saved: Bool",
+])
+func frontendResolvesNativeArgumentFromDeclaredState(_ declaration: String) throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Confirmation: RefractNativeView {
+        let visible: Bool
+        let identity: String
+        var body: some View { Text(verbatim: "Saved") }
+    }
+    struct Screen: View {
+        \(declaration)
+        var body: some View { Confirmation(visible: saved, identity: "profile-save") }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .native(component, _) = unit.module.screens[0].body else {
+        Issue.record("Expected a native reference")
+        return
+    }
+    #expect(component.arguments.map(\.type) == [.bool, .string])
+    #expect(component.arguments[0].expression.value == (declaration.hasPrefix("@State")
+        ? .valueProperty(.state("saved")) : .valueProperty(.binding("saved"))))
+    #expect(component.arguments[1].expression.value == .stringLiteral("profile-save"))
+}
+
+@Test func frontendRejectsNativeArgumentWithMismatchedStateType() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Confirmation: RefractNativeView {
+        let visible: Bool
+        var body: some View { Text(verbatim: "Saved") }
+    }
+    struct Screen: View {
+        @State private var identity: String = "save"
+        var body: some View { Confirmation(visible: identity) }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE002"])
+    #expect(unit.diagnostics[0].rendered.contains("expects `visible: bool` but receives string"))
+}
+
+@Test func reduceMotionIsAnIOSPreferenceNotANativeArgument() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Confirmation: RefractNativeView {
+        let visible: Bool
+        @Environment(\\.accessibilityReduceMotion) private var reduceMotion
+        var body: some View { Text(verbatim: "Saved") }
+    }
+    struct Screen: View {
+        @State private var saved: Bool = false
+        var body: some View { Confirmation(visible: saved) }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    #expect(unit.module.nativeDeclarations[0].parameters.map(\.label) == ["visible"])
+}
+
+@Test func unrelatedNativePropertyWrapperIsRejected() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Confirmation: RefractNativeView {
+        let visible: Bool
+        @Environment(\\.colorScheme) private var colorScheme
+        var body: some View { Text(verbatim: "Saved") }
+    }
+    struct Screen: View {
+        var body: some View { Confirmation(visible: true) }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
+}
+
 @Test func frontendRejectsMismatchedNativeArgumentType() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct RoutePreview: RefractNativeView {
