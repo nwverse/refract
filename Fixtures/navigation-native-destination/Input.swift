@@ -1,16 +1,16 @@
 import SwiftUI
 
-enum Route: Hashable {
+enum EscapeRoute: Hashable {
     case detail
     case native
 }
 
-protocol DetailModel: RefractModel {
+protocol EscapeDetailModel: RefractModel {
     var title: String { get }
 }
 
-struct DetailScreen: View {
-    let model: DetailModel
+struct EscapeDetailScreen: View {
+    let model: EscapeDetailModel
 
     var body: some View {
         Text(model.title)
@@ -23,19 +23,19 @@ struct NativeDetail: RefractNativeView {
     }
 }
 
-struct NavigationScreen: View {
-    let model: DetailModel
-    @State private var path: [Route] = []
+struct EscapeScreen: View {
+    let model: EscapeDetailModel
+    @State private var path: [EscapeRoute] = []
 
     var body: some View {
         NavigationStack(path: $path) {
             VStack {
                 NavigationLink("navigation.open", value: .detail)
             }
-            .navigationDestination(for: Route.self) { route in
+            .navigationDestination(for: EscapeRoute.self) { route in
                 switch route {
                 case .detail:
-                    DetailScreen(model: model)
+                    EscapeDetailScreen(model: model)
                 case .native:
                     NativeDetail()
                 }

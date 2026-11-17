@@ -4,7 +4,7 @@ import SwiftSyntax
 extension Builder {
     func validateNavigationDeclarations(_ module: Module) {
         for screen in module.screens {
-            guard case let .navigationStack(stack, location) = screen.body else { continue }
+            guard case let .navigationStack(stack, location) = screen.body, stack.rootName == screen.name else { continue }
             if viewDeclarations[stack.rootName + "Destinations"] != nil {
                 diagnostics.append(Diagnostic(code: "RFNAV003",
                     message: "Generated destination component `\(stack.rootName)Destinations` conflicts with a source View.",

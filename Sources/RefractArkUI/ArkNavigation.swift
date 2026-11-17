@@ -20,9 +20,11 @@ extension Generation {
     }
 
     func emitNavigationDestinations(_ stack: NavigationStackNode, into writer: inout ArkWriter) throws {
-        guard let declaration = module.enums.first(where: { $0.name == stack.enumName }),
+        guard !stack.rootName.isEmpty, !stack.pathName.isEmpty,
+              let declaration = module.enums.first(where: { $0.name == stack.enumName }),
               declaration.isNavigationDestination, declaration.payloadTypes.isEmpty,
-              Set(stack.destinations.map(\.caseName)) == Set(declaration.cases) else {
+              Set(stack.destinations.map(\.caseName)) == Set(declaration.cases),
+              Set(stack.destinations.map(\.caseName)).count == stack.destinations.count else {
             throw Diagnostic(code: "RFNAV003", message: "A native navigation stack needs exhaustive finite destinations.")
         }
         writer.line()
@@ -42,6 +44,16 @@ extension Generation {
                 writer.closeBranch("else if (\(condition))")
             }
             if let model = destination.model {
+                let targetModel = module.screens.first(where: { $0.name == destination.viewName })?.states
+                    .compactMap { state -> ModelReference? in
+                        guard case let .model(reference, _) = state else { return nil }
+                        return reference
+                    }.first(where: { $0.propertyName == model.label })
+                guard let targetModel, targetModel.protocolName == stack.models.first(where: {
+                    $0.propertyName == model.expression
+                })?.protocolName else {
+                    throw Diagnostic(code: "RFNAV003", message: "A destination model must match its root and target declarations.")
+                }
                 writer.line("\(destination.viewName)({ \(model.label): this.\(model.expression) })")
             } else {
                 guard module.nativeDeclarations.contains(where: { $0.name == destination.viewName && $0.parameters.isEmpty }) else {

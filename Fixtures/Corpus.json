@@ -198,11 +198,7 @@
       "implementationStatus": "ready"
     },
     {
-      "path": "navigation-typed",
-      "implementationStatus": "ready"
-    },
-    {
-      "path": "navigation-reject-payload",
+      "path": "navigation-native-destination",
       "implementationStatus": "ready"
     },
     {
@@ -211,6 +207,14 @@
     },
     {
       "path": "navigation-reject-missing",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-reject-native-mapping",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-reject-payload",
       "implementationStatus": "ready"
     },
     {

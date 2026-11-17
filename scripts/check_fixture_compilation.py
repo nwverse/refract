@@ -106,11 +106,12 @@ def regenerate_and_stage(fixture: str) -> None:
         )
     target = package_directory / f"{fixture}.kt"
     target.write_text(generated, encoding="utf-8")
-    native_host = fixture_dir / "NativeHost.kt"
-    if native_host.is_file():
-        host_target = STAGING_JAVA / "example" / "native" / f"{fixture}-host.kt"
-        host_target.parent.mkdir(parents=True, exist_ok=True)
-        host_target.write_text(native_host.read_text(encoding="utf-8"), encoding="utf-8")
+    for name in ("NativeHost.kt", "NativeComponent.kt"):
+        native_source = fixture_dir / name
+        if native_source.is_file():
+            native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-{name}"
+            native_target.parent.mkdir(parents=True, exist_ok=True)
+            native_target.write_text(native_source.read_text(encoding="utf-8"), encoding="utf-8")
     STAGING_RES.mkdir(parents=True, exist_ok=True)
     # Each fixture brings its own values/strings.xml. Concatenate the entries
     # into a single staged strings.xml so that resources with the same name do

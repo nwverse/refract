@@ -10,7 +10,7 @@ private let repository = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
 @Test func typedNavigationUsesNativeHostCallbacksAndDestinations() throws {
-    let fixture = repository.appendingPathComponent("Fixtures/navigation-typed")
+    let fixture = repository.appendingPathComponent("Fixtures/navigation-native-destination")
     let input = try String(contentsOf: fixture.appendingPathComponent("Input.swift"), encoding: .utf8)
     let mapping = try Mapping.load(data: Data(try String(contentsOf: fixture.appendingPathComponent("refract.json"), encoding: .utf8).utf8),
                                   file: "refract.json", resourceBaseURL: fixture)
@@ -21,23 +21,23 @@ private let repository = URL(fileURLWithPath: #filePath)
         Issue.record("Expected the source NavigationStack")
         return
     }
-    #expect(stack.rootName == "NavigationScreen")
+    #expect(stack.rootName == "EscapeScreen")
     #expect(stack.models.map(\.propertyName) == ["model"])
     #expect(stack.destinations.map(\.caseName) == ["detail", "native"])
 
     let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
-    #expect(kotlin.contains("onPathNavigate: (Route) -> Unit"))
-    #expect(kotlin.contains("public fun NavigationScreenDestinations("))
-    #expect(kotlin.contains("DetailScreen(model = model, modifier = modifier)"))
+    #expect(kotlin.contains("onPathNavigate: (EscapeRoute) -> Unit"))
+    #expect(kotlin.contains("public fun EscapeScreenDestinations("))
+    #expect(kotlin.contains("EscapeDetailScreen(model = model, modifier = modifier)"))
     #expect(kotlin.contains("NativeDetail()"))
     #expect(!kotlin.contains("NavHost("))
     #expect(!kotlin.contains("NavController"))
     #expect(!kotlin.contains("Map<String"))
 
     let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
-    #expect(ark.contains("@Event onPathNavigate: (destination: Route) => void"))
-    #expect(ark.contains("export struct NavigationScreenDestinations"))
-    #expect(ark.contains("DetailScreen({ model: this.model })"))
+    #expect(ark.contains("@Event onPathNavigate: (destination: EscapeRoute) => void"))
+    #expect(ark.contains("export struct EscapeScreenDestinations"))
+    #expect(ark.contains("EscapeDetailScreen({ model: this.model })"))
     #expect(!ark.contains("NavPathStack"))
     #expect(!ark.contains("@Entry"))
 }
@@ -87,6 +87,21 @@ func navigationRejectsUntypedDestinationValues(_ declaration: String, _ code: St
     """))
     #expect(unit.diagnostics.map(\.code).contains("RFNAV003"))
     #expect(unit.module.screens.isEmpty)
+}
+
+@Test func manuallyConstructedNavigationCannotEmitAnInvalidDestinationModel() {
+    let model = ModelReference(propertyName: "model", protocolName: "DetailModel")
+    let destination = NavigationDestination(caseName: "detail", viewName: "MissingScreen",
+                                            model: .init(label: "model", expression: "model"))
+    let stack = NavigationStackNode(pathName: "path", rootName: "Root", enumName: "Route", content: [],
+                                    destinations: [destination], models: [model])
+    let screen = Screen(name: "Root", states: [.model(model, location: nil), .navigationPath(name: "path", enumName: "Route", location: nil)],
+                        body: .navigationStack(stack, location: nil))
+    let module = Module(sourceFile: "Input.swift", screens: [screen],
+                        models: [ModelProtocol(name: "DetailModel")],
+                        enums: [EnumDeclaration(name: "Route", cases: ["detail"], isNavigationDestination: true)])
+    #expect(throws: Diagnostic.self) { _ = try ComposeBackend().generate(module: module) }
+    #expect(throws: Diagnostic.self) { _ = try ArkUIBackend().generate(module: module) }
 }
 
 @Test func navigationRejectsDynamicLinksAndUnknownDestinations() {

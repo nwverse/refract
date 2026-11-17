@@ -23,6 +23,7 @@ struct NavigationScreen: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack {
+                Text(model.title)
                 NavigationLink("navigation.open", value: .detail)
             }
             .navigationDestination(for: Route.self) { route in

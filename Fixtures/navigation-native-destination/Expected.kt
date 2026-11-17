@@ -14,18 +14,18 @@ import androidx.compose.ui.res.stringResource
 import example.native.NativeDetail
 import refract.generated.R
 
-public enum class Route {
+public enum class EscapeRoute {
     detail,
     native,
 }
 
-public interface DetailModel {
+public interface EscapeDetailModel {
     public val title: State<String>
 }
 
 @Composable
-public fun DetailScreen(
-    model: DetailModel,
+public fun EscapeDetailScreen(
+    model: EscapeDetailModel,
     modifier: Modifier = Modifier,
 ) {
     Text(
@@ -35,29 +35,29 @@ public fun DetailScreen(
 }
 
 @Composable
-public fun NavigationScreen(
-    model: DetailModel,
-    onPathNavigate: (Route) -> Unit,
+public fun EscapeScreen(
+    model: EscapeDetailModel,
+    onPathNavigate: (EscapeRoute) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        Button(onClick = { onPathNavigate(Route.detail) }) {
+        Button(onClick = { onPathNavigate(EscapeRoute.detail) }) {
             Text(text = stringResource(R.string.navigation_open))
         }
     }
 }
 
 @Composable
-public fun NavigationScreenDestinations(
-    destination: Route,
-    model: DetailModel,
+public fun EscapeScreenDestinations(
+    destination: EscapeRoute,
+    model: EscapeDetailModel,
     modifier: Modifier = Modifier,
 ) {
     when (destination) {
-        Route.detail -> {
-            DetailScreen(model = model, modifier = modifier)
+        EscapeRoute.detail -> {
+            EscapeDetailScreen(model = model, modifier = modifier)
         }
-        Route.native -> {
+        EscapeRoute.native -> {
             NativeDetail()
         }
     }

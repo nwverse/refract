@@ -85,7 +85,9 @@ public fun NavigationScreenDestinations(
 The root calls `onPathNavigate(Route.detail)` from a normal Material 3 button. The destination component has a
 complete `when` over the enum and calls `DetailScreen` or the mapped native component directly. ArkTS emits the
 corresponding enum, `@Event` callback and `if`/`else if` destination component. There is no dynamic map, `Any`,
-reflection, target-language template or generated `NavController`/`NavPathStack`.
+reflection, target-language template or generated `NavController`/`NavPathStack`. Generated code never intercepts
+back, mutates the path, adds a lifecycle observer or introduces a host/transition wrapper: its components retain the
+same surrounding native lifecycle as directly hand-written composables/components.
 
 ### Android host: controller and back stack stay native
 
@@ -112,7 +114,7 @@ push, pop, Android system back, saved state and destination lifecycle. No back i
 generated. The host chooses the existing native transition policy; this contract does not claim a shared animation
 mapping.
 
-`Fixtures/navigation-typed/NativeHost.kt` also compiles the mapped zero-argument `NativeDetail()` escape hatch. A
+`Fixtures/navigation-native-destination/NativeHost.kt` also compiles the mapped zero-argument `NativeDetail()` escape hatch. A
 project can instead register an entirely hand-written composable for that enum case; it need not call the generated
 destination switch for a screen that has no shared implementation.
 
@@ -129,7 +131,7 @@ actual back/lifecycle behavior remain unverified here and must not be inferred f
 
 ### HarmonyOS host: `NavPathStack` stays native
 
-`Fixtures/navigation-typed/NativeHost.ets` is the corresponding native host shape: an application-owned `NavPathStack`
+`Fixtures/navigation-native-destination/NativeHost.ets` is the corresponding native host shape: an application-owned `NavPathStack`
 receives `pushPath` from the generated callback, and its `navDestination` builder calls the generated destination
 component for the finite case names. The host owns pop, system back and page lifecycle. This source is reviewed as a
 contract example, **not** as verified ArkTS compilation. No HarmonyOS command-line toolchain is installed in the
@@ -144,9 +146,10 @@ before production use. An unsupported host integration must remain native rather
 | `RFNAV002` | Invalid path ownership, non-Hashable identity or payload destination | Use an empty `[Route]` @State and no-payload `Hashable` enum; pass data through a model |
 | `RFNAV003` | Unknown, duplicate, missing or untyped destination/view/link | Register every case with a same-file typed model destination or declared native component |
 
-The golden corpus includes `navigation-typed` and `navigation-host`; focused frontend tests cover dynamic links,
+The golden corpus includes `navigation-native-destination` and `navigation-host`; focused frontend tests cover dynamic links,
 payload identity, missing registrations and both native outputs. `scripts/check_fixture_compilation.py` stages
-optional `NativeHost.kt` files, so `examples/android/fixtures` compiles the host with the real navigation library.
+optional `NativeHost.kt` and `NativeComponent.kt` files, so `examples/android/fixtures` compiles the host and the
+application-owned native escape view with the real navigation library.
 
 What that proves: deterministic dual-backend source generation, typed public entry points, rejected unsupported
 input, and Kotlin type checking of the generated components plus the native host. What it does not prove: SwiftUI or

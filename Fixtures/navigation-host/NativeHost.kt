@@ -2,6 +2,7 @@ package example.native
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -11,8 +12,7 @@ import refract.generated.NavigationScreen
 import refract.generated.Route
 
 private class HostModel : DetailModel {
-    override val title: State<String>
-        get() = error("Compile-only host model")
+    override val title: State<String> = mutableStateOf("Shared title")
 }
 
 /** The native host owns the only controller, back stack and destination lifecycle. */

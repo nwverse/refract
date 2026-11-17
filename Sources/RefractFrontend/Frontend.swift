@@ -120,7 +120,13 @@ final class Builder: SyntaxVisitor {
                 .trimmedDescription else { return false }
             return itemTypes.contains(where: { $0.name == type })
         }
-        if hasItemInputs {
+        let isNavigationRoot = members.contains { member in
+            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
+                .as(ArrayTypeSyntax.self) != nil
+        }
+        if isNavigationRoot {
+            // The navigation parser below validates the path and model inputs together.
+        } else if hasItemInputs {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
             screens.append(body)
             return .skipChildren
@@ -200,7 +206,14 @@ final class Builder: SyntaxVisitor {
                 return extendedView(call)
             }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
-            if call.calledExpression.trimmedDescription == "NavigationLink" { return navigationLink(call) }
+            if call.calledExpression.trimmedDescription == "NavigationLink" {
+                guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
+                    error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
+                          "Use `NavigationStack(path: $path)` and a no-payload Hashable destination enum", at: call)
+                    return nil
+                }
+                return navigationLink(call)
+            }
             if let control = stateControl(call) { return control }
             return view(call)
         }

@@ -36,6 +36,7 @@ export struct NavigationScreen {
 
   build() {
     Column() {
+      Text(this.model.title)
       Button($r('app.string.navigation_open'))
         .onClick(() => {
           this.onPathNavigate(Route.detail);
