@@ -380,25 +380,99 @@ final class Builder: SyntaxVisitor {
                 return nil
             }
             guard !interop.invalidDeclarations.contains(name) else { return nil }
-            let component = nativeComponent(call)
+            guard let component = nativeComponent(call) else { return nil }
             guard let declaration = interop.declarations.first(where: { $0.name == name }) else { return nil }
             diagnostics.append(contentsOf: interop.validate(component, declaration: declaration, location: nodeLocation))
             return .native(component, location: nodeLocation)
         }
     }
 
-    private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
+    private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent? {
         let name = call.calledExpression.trimmedDescription
+        let before = diagnostics.count
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
-            guard let label = argument.label?.text, let value = scalar(argument.expression) else {
+            guard let label = argument.label?.text else {
                 error("RFNATIVE002", "Native component arguments require explicit labels and supported scalar values.",
                       "Use the memberwise SwiftUI initializer signature", at: argument)
                 return nil
             }
-            return NativeArgument(label: label, expression: value.expression, type: value.type,
-                                  location: location(of: argument))
+            guard let declaration = interop.declarations.first(where: { $0.name == name }),
+                  let parameter = declaration.parameters.first(where: { $0.label == label }) else {
+                error("RFNATIVE002", "Native component argument `\(label)` is not declared by `\(name)`.",
+                      "Use the memberwise SwiftUI initializer signature", at: argument)
+                return nil
+            }
+            let parsed: NativeArgument?
+            switch parameter.type {
+            case .image:
+                parsed = nativeImageResource(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression, type: .image,
+                                   location: location(of: argument))
+                }
+            case .stringKey:
+                parsed = nativeLocalizedText(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression, type: .stringKey,
+                                   location: location(of: argument))
+                }
+            case .remoteImageLoader:
+                parsed = nativeImageLoader(argument.expression, label: label)
+            case .string, .bool, .int, .double:
+                parsed = scalar(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression,
+                                   type: $0.type.flatMap { NativeParameterType(rawValue: $0.rawValue) },
+                                   location: location(of: argument))
+                }
+            }
+            guard let parsed else { return nil }
+            return parsed
         }
-        return NativeComponent(name: name, arguments: arguments)
+        return diagnostics.count == before ? NativeComponent(name: name, arguments: arguments) : nil
+    }
+
+    private func nativeImageLoader(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let reference = expression.as(DeclReferenceExprSyntax.self),
+              parameters.contains(where: {
+                  $0.name == reference.baseName.text && $0.itemType == "RemoteImageLoader"
+              }) else {
+            error("RFNATIVE002", "A RemoteImageLoader argument must be an explicitly declared screen input.",
+                  "Inject the app-owned RemoteImageLoader into this screen", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, expression: Expression(.reference(reference.baseName.text)),
+                              type: .remoteImageLoader, location: location(of: expression))
+    }
+
+    private func nativeImageResource(_ expression: ExprSyntax) -> TypedExpression? {
+        guard let call = expression.as(FunctionCallExprSyntax.self),
+              call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Image",
+              call.arguments.count == 1, call.arguments.first?.label == nil,
+              call.trailingClosure == nil,
+              let name = stringLiteral(call.arguments.first!.expression) else {
+            error("RFNATIVE002", "A native image argument requires `Image(\"resource_name\")` with one application resource literal.",
+                  "Use Image(\"asset_name\") for placeholder and failure resources", at: expression)
+            return nil
+        }
+        guard !name.isEmpty, name.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }) else {
+            error("RFNATIVE002", "Native image resource `\(name)` is not a lowercase ASCII resource identifier.",
+                  "Use the same app-owned lowercase resource name on Android and HarmonyOS", at: expression)
+            return nil
+        }
+        return TypedExpression(Expression(.imageResource(name), type: .string,
+                                         location: location(of: expression)), .string)
+    }
+
+    private func nativeLocalizedText(_ expression: ExprSyntax) -> TypedExpression? {
+        guard stringLiteral(expression) != nil else {
+            error("RFNATIVE002", "A native LocalizedStringKey argument requires a literal localization key.",
+                  "Use a canonical lowercase dot-separated key declared in both string catalogs", at: expression)
+            return nil
+        }
+        var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
+                                         typedScalar: modelTypedProperty, stateText: stateText)
+        let localized = parser.localized(expression)
+        diagnostics.append(contentsOf: parser.diagnostics)
+        guard let localized else { return nil }
+        return TypedExpression(localized, .string)
     }
 
     private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
@@ -448,6 +522,18 @@ final class Builder: SyntaxVisitor {
                 return TypedExpression(Expression(.reference(name), type: binding,
                                                  location: location(of: expression)), binding)
             }
+            for declaration in currentStates {
+                switch declaration {
+                case let .state(declared, type, _, _) where declared == name:
+                    return TypedExpression(Expression(.valueProperty(.state(name)), type: type,
+                                                     location: location(of: expression)), type)
+                case let .binding(declared, type, _) where declared == name:
+                    return TypedExpression(Expression(.valueProperty(.binding(name)), type: type,
+                                                     location: location(of: expression)), type)
+                default: continue
+                }
+            }
+            if let model = modelTypedProperty(expression) { return model }
             // An enum is a finite control-flow subject, not a scalar text or formatting value.
             guard !parameters.contains(where: { $0.name == reference.baseName.text && $0.enumName != nil }) else {
                 error("RFSEM002", "An enum input cannot be used as a scalar expression.",

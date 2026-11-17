@@ -62,6 +62,11 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // The fixture compiler stages the exact remote-image CLI output and its
+    // app-owned resources here for Native JVM tests in the real R namespace.
+    sourceSets.getByName("test").kotlin.srcDir("src/fixtureTest/java")
+    sourceSets.getByName("main").res.srcDir("src/fixtureTest/res")
 }
 
 configure<KotlinAndroidProjectExtension> {
@@ -74,6 +79,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
@@ -82,6 +88,9 @@ dependencies {
     // Native JVM test-only dependencies. They never enter the app's runtime
     // classpath or the generated screen, and the source set contains no
     // substitute for the CLI-generated SettingsScreen under test.
+    // Native JVM tests consume the app-owned implementation in the fixture
+    // library; the fixture itself contains no JVM runtime or test dependency.
+    testImplementation(project(":fixtures"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.18")
     robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-14663667-2-i7")

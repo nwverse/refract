@@ -103,6 +103,12 @@ pattern is `entry/build/default/outputs/default/*.hap`. With no signing configur
 expected artifact is an unsigned HAP, but **that packaging has not been run here**. This repository intentionally
 contains no signing certificate, profile, key or password.
 
+A separate [native rendering host and verification scaffold](verification/README.md) now selects only the unchanged
+generated settings component, native model/binding, real UI Test interactions and light/dark captures. It is
+**source-prepared only**: no authorized SDK, signing or owned target has compiled or executed it. Its runner requires
+complete native test results, retrieved layout/captures and subsequent human inspection; it makes no rendering,
+accessibility-service or performance claim.
+
 Unsigned HAPs are for compile/package verification, not installation. To install on a device, use the official signing
 workflow to obtain your `.p12`, `.cer` and `.p7b` materials and configure signing locally. Automatic signing and
 debug-profile setup may require login and device registration; never commit those materials. Device screenshots and

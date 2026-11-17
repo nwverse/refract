@@ -122,6 +122,11 @@ No device, emulator, `hdc`, rendering or performance result was obtained. Do not
 without ownership coordination. Keep signing secrets and device captures out of the repository; record separately
 whether the evidence is compile-only, an emulator run or a physical-device run.
 
+Issue #166's [native rendering host and runner](../examples/harmony/verification/README.md) uses this preflight and
+build path, then adds explicit target selection, native UI behavior, theme capture and evidence checks. It is also
+source-prepared only. The runner requires an already allocated target and authorized signing; it does not expand
+this document's acquisition permissions or close the rendering blocker.
+
 Once the missing authorized SDK is supplied, issue #151's remaining verification steps are to run the two builds,
 resolve any actual ArkTS diagnostics, and only then enable a self-hosted or otherwise licensed CI gate. A hosted
 compile job without a documented licensed tool distribution is not a substitute.
