@@ -575,6 +575,12 @@ final class Builder: SyntaxVisitor {
             return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .double,
                                              location: location(of: expression)), .double)
         }
+        if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self),
+           currentModels.contains(where: { $0.propertyName == base.baseName.text }),
+           let model = modelTypedProperty(expression) {
+            return model
+        }
         if expression.as(MemberAccessExprSyntax.self) != nil {
             return TypedExpression(Expression(.reference(expression.trimmedDescription),
                                              location: location(of: expression)), nil)

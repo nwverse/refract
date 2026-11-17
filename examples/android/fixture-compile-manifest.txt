@@ -25,6 +25,7 @@ v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
 interop-native-animation
+interop-native-state-transition
 interop-document-preview
 benchmark-settings
 child-view-layout-priority
