@@ -71,8 +71,9 @@ def regenerate_and_stage(fixture: str) -> None:
         if not path.is_file():
             fail(f"{fixture}: missing required file {path.relative_to(ROOT)}")
 
-    # A corpus subdirectory is not a single path component; TemporaryDirectory creates its parents and returns
-    # only the leaf. Use a flat, unique label so nested fixtures use the same lifecycle as top-level ones.
+    # Mapping output directories are relative to the invocation's working
+    # directory, not to refract.json. Never let a fixture's `generated` path
+    # escape into the checkout: use an isolated cwd and explicit staged outputs.
     with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture.replace('/', '-')}-") as tmp:
         out = Path(tmp)
         subprocess.run(
@@ -84,7 +85,7 @@ def regenerate_and_stage(fixture: str) -> None:
                 "--android-out", str(out / "android"),
                 "--harmony-out", str(out / "harmony"),
             ],
-            cwd=ROOT,
+            cwd=out,
             check=True,
         )
         regenerated = out / "android/Input.kt"
