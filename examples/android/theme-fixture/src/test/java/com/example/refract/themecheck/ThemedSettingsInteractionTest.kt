@@ -1,20 +1,14 @@
 package com.example.refract.themecheck
 
 import android.app.Application
-import android.content.res.Configuration
 import android.graphics.Bitmap
-import android.view.ContextThemeWrapper
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -25,14 +19,11 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.requestFocus
-import androidx.compose.ui.unit.Density
 import example.design.ThemedSettingsAction
 import java.io.File
 import java.io.FileOutputStream
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -45,10 +36,10 @@ import org.robolectric.annotation.GraphicsMode
 import refract.generated.R
 
 /**
- * Native JVM Compose evidence for the real app-owned host and generated control.
+ * Native JVM Compose evidence for the actual generated component, not only its resolver.
  *
- * These are Robolectric rendering and interaction tests, never emulator/device
- * screenshots, screen-reader evidence, cross-platform parity or performance data.
+ * These are Robolectric touch/focus/rendering results, never emulator/device,
+ * screen-reader, cross-platform parity or performance evidence.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w400dp-h800dp-xxhdpi", application = Application::class)
@@ -70,11 +61,9 @@ class ThemedSettingsInteractionTest {
     )
 
     private var enabled by mutableStateOf(true)
-    private var fontScale by mutableStateOf(1.0f)
-    private var nightMode by mutableStateOf(false)
 
     @Test
-    fun realPressAndFocusReachGeneratedColorArgumentsWithDisabledPrecedence() {
+    fun actualTouchAndFocusChangeGeneratedPixelsAndDisabledWins() {
         val source = MutableInteractionSource()
         render(source)
         assertBackgroundColor(R.color.theme_action_normal, "normal")
@@ -103,8 +92,8 @@ class ThemedSettingsInteractionTest {
         assertBackgroundColor(R.color.theme_action_disabled, "disabled while focused")
         capture("disabled")
 
-        // Keep the same native source in a genuine pressed interaction when
-        // the caller disables the control. Disabled must not become pressed.
+        // Drive the exact source consumed by the native clickable. A held
+        // native press must not outrank disabled, even before cancellation.
         val press = PressInteraction.Press(Offset.Zero)
         compose.activity.runOnUiThread {
             source.tryEmit(press)
@@ -124,101 +113,24 @@ class ThemedSettingsInteractionTest {
         compose.onNodeWithTag(ACTION).performTouchInput { up() }
     }
 
-    @Test
-    fun generatedControlKeepsApplicationNightResources() {
-        val source = MutableInteractionSource()
-        render(source)
-        val light = capture("light")
-        assertBackgroundColor(R.color.theme_action_normal, "light normal")
-
-        compose.activity.runOnUiThread { nightMode = true }
-        compose.waitForIdle()
-        assertBackgroundColor(R.color.theme_action_normal, "dark normal")
-        val dark = capture("dark")
-        assertNotEquals("Night resources must change the actual rendered pixels", light.pixels, dark.pixels)
-        assertTrue("Both captures must contain native rendering", light.file.length() > 1_000 && dark.file.length() > 1_000)
-    }
-
-    @Test
-    fun enlargedFontScaleChangesGeneratedTextLayout() {
-        val source = MutableInteractionSource()
-        render(source)
-        val ordinary = textBounds()
-        capture("font-default")
-
-        compose.activity.runOnUiThread { fontScale = 2.0f }
-        compose.waitForIdle()
-        val enlarged = textBounds()
-        capture("font-large")
-
-        assertTrue(
-            "Enlarged native fontScale must change the generated text bounds, not only declare sp: $ordinary -> $enlarged",
-            enlarged.height() > ordinary.height() && enlarged.width() > ordinary.width(),
-        )
-        assertTrue("The generated text remains visible at enlarged type", enlarged.height() > 0)
-        compose.onNodeWithText(LABEL).assertIsDisplayed()
-    }
-
     private fun render(source: MutableInteractionSource) {
         enabled = true
-        fontScale = 1.0f
-        nightMode = false
         compose.setContent {
-            // A real Android ContextThemeWrapper supplies the app's resource
-            // qualifiers. This is configuration-driven JVM rendering, not a
-            // replacement resource resolver or a physical-device settings test.
-            val configuration = Configuration(compose.activity.resources.configuration).apply {
-                this.fontScale = fontScale
-                uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
-                    if (nightMode) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
-            }
-            val themedContext = ContextThemeWrapper(compose.activity, 0).apply {
-                applyOverrideConfiguration(configuration)
-            }
-            CompositionLocalProvider(
-                LocalContext provides themedContext,
-                // Android supplies this density/fontScale pair to Compose on a
-                // real configuration change. Replacing only LocalContext does
-                // not itself change Compose's LocalDensity.
-                LocalDensity provides Density(
-                    density = LocalDensity.current.density,
-                    fontScale = fontScale,
-                ),
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    ThemedSettingsAction(
-                        interactionSource = source,
-                        enabled = enabled,
-                        onClick = {},
-                        modifier = Modifier.testTag(ACTION),
-                    )
-                }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ThemedSettingsAction(
+                    interactionSource = source,
+                    enabled = enabled,
+                    onClick = {},
+                    modifier = Modifier.testTag(ACTION),
+                )
             }
         }
         compose.waitForIdle()
         compose.onNodeWithTag(ACTION).assertIsDisplayed()
     }
 
-    private fun textBounds(): android.graphics.Rect {
-        val bounds = android.graphics.Rect()
-        // Read the actual generated Text's semantics bounds. No replacement
-        // text measurement or screen-specific expected size is introduced.
-        val rect = compose.onNodeWithText(LABEL).fetchSemanticsNode().boundsInRoot
-        bounds.set(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
-        return bounds
-    }
-
     private fun assertBackgroundColor(resource: Int, state: String) {
-        val context = compose.activity.let { activity ->
-            ContextThemeWrapper(activity, 0).apply {
-                applyOverrideConfiguration(Configuration(activity.resources.configuration).apply {
-                    this.fontScale = fontScale
-                    uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
-                        if (nightMode) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
-                })
-            }
-        }
-        val expected = context.getColor(resource)
+        val expected = compose.activity.getColor(resource)
         val bitmap = compose.onNodeWithTag(ACTION).captureToImage().asAndroidBitmap()
         val colors = linkedSetOf<Int>()
         for (y in 0 until bitmap.height) {
@@ -233,15 +145,13 @@ class ThemedSettingsInteractionTest {
         )
     }
 
-    private fun capture(name: String): Capture {
+    private fun capture(name: String) {
         val output = File(outputDirectory(), "native-jvm-theme-$name.png")
         val bitmap = compose.onNodeWithTag(ACTION).captureToImage().asAndroidBitmap()
         FileOutputStream(output).use { stream ->
             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
         }
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        return Capture(output, pixels)
+        check(output.isFile && output.length() > 1_000) { "Empty Native JVM theme capture: $name" }
     }
 
     private fun outputDirectory(): File {
@@ -250,11 +160,8 @@ class ThemedSettingsInteractionTest {
         return directory
     }
 
-    private data class Capture(val file: File, val pixels: IntArray)
-
     private companion object {
         const val ACTION = "theme-action"
-        const val LABEL = "Appearance and notifications"
     }
 }
 

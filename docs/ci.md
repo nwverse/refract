@@ -126,16 +126,18 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
     and the observed dark-mode semantics tree. This is rendering and interaction evidence only: **it is not an
     emulator, a device screenshot, a cross-platform visual-parity result or a performance measurement.** The captures
     must be inspected rather than inferred from a green test. Tests and their dependencies are confined to the app's
-    test source set and add no runtime dependency to generated code or consumers.
+    test source set and add no runtime dependency to generated code or consumers. The `native-jvm-compose-theme`
+    artifact also contains the fixture's dark/light and enlarged-font captures and test reports.
 11. Run `./gradlew --no-daemon :theme-fixture:testDebugUnitTest`. The independent theme module invokes the actual
     generated `ThemedSettingsControl` through the app-owned `ThemedSettingsAction`. One mutable interaction source
     supplies the native clickable and its pressed/focused observations. Tests drive real touch/focus changes and
-    assert normal, pressed, focused and disabled colors, including disabled taking precedence over a held native
-    press. Real Android configuration contexts select `values`/`values-night`; Compose's corresponding native
-    density/font-scale setting drives enlarged text. Assertions compare rendered resource colors and text bounds,
-    not only the presence of `sp` or golden text. The `native-jvm-compose-theme` artifact contains labelled captures
-    for every interaction state, light/dark and default/large font, plus the JUnit reports. These are Native JVM
-    Compose results, not physical configuration changes, screen-reader traversal, device or performance evidence.
+    assert the generated component's normal, pressed, focused and disabled rendered colors, including disabled
+    taking precedence over a held native press. `:fixtures` separately selects `values`/`values-night` with real
+    Android configuration contexts and drives enlarged text with Compose's corresponding native density/font-scale
+    setting. Assertions compare rendered resource colors and text bounds, not only resolver outputs, `sp` or golden
+    text. The `native-jvm-compose-theme` artifact includes the independent interaction-state captures as well as the
+    dark/light and default/large-font captures and JUnit reports. These are Native JVM Compose results, not physical
+    configuration changes, screen-reader traversal, device or performance evidence.
 12. Reject any untracked files left in the checkout after compilation and tests.
 
 The `:app:compileDebugKotlin` and `:fixtures:compileDebugKotlin` gates are compile-only. They produce no APK, no
