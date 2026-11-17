@@ -89,10 +89,10 @@ not a linked runtime or a reason to import Refract into an iOS target. The reser
 generated targets; a project keeps the reference declarations in its own iOS source. A conflicting local overload
 with the reserved names is a diagnostic, not a way to change selection semantics.
 
-The iOS example compiles `Fixtures/interop-native-measurement/Input.swift` itself, together with these declarations
-and its application-owned typography token. This covers the real `Binding(get:set:)` initializer, platform-view
-branches, native measurement spellings and directional padding with SwiftUI's semantic type checker. Generator
-parsing alone is not evidence that these constructs compile.
+The iOS example compiles the canonical native-measurement, platform-value and platform-view fixtures themselves,
+together with these declarations and the application-owned typography token. This covers the real
+`Binding(get:set:)` initializer, both typed platform-selection helpers, native measurement spellings and directional
+padding with SwiftUI's semantic type checker. Generator parsing alone is not evidence that these constructs compile.
 
 ## Native components inside Refract
 
