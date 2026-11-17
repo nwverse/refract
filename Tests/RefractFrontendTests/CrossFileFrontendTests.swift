@@ -67,7 +67,7 @@ struct Parent: View {
     #expect(modelArk.contains("rows: BasicDataSource<RowItem>;"))
 }
 
-@Test func crossFileResolutionIsIndependentOfInputOrder() throws {
+@Test func crossFileTypeResolutionIsIndependentOfInputOrderButRecursionStartsAtFirstInput() throws {
     let sources = [crossFileModel, crossFileItem, crossFileChild, crossFileParent]
     let first = Frontend.parse(sources: sources)
     let second = Frontend.parse(sources: Array(sources.reversed()))
@@ -119,6 +119,12 @@ struct Parent: View {
     let diagnostics = units.flatMap(\.diagnostics).filter { $0.code == "RFVIEW006" }
     #expect(diagnostics.count == 1)
     #expect(diagnostics[0].message.contains("Parent -> Child -> Parent"))
+    let reversed = Frontend.parse(sources: [
+        SourceFile(path: "Child.swift", contents: "struct Child: View { var body: some View { Parent() } }"),
+        SourceFile(path: "Parent.swift", contents: "struct Parent: View { var body: some View { Child() } }"),
+    ])
+    #expect(reversed.flatMap(\.diagnostics).first { $0.code == "RFVIEW006" }?.message
+        .contains("Child -> Parent -> Child") == true)
 }
 
 @Test func crossFileEnumSwitchUsesSharedCatalogWithoutDuplicateDeclaration() throws {
@@ -147,6 +153,45 @@ struct Parent: View {
     #expect(ark.contains("import { Tab } from './Tab';"))
     #expect(ark.contains("this.tab === Tab.home"))
     #expect(!ark.contains("export enum Tab"))
+}
+
+@Test func crossFileListsBindOwningProtocolAndDeduplicateCatalogs() throws {
+    let model = SourceFile(path: "IntRowsModel.swift", contents: """
+    protocol IntRowsModel: RefractModel { var rows: [IntRow] { get } }
+    struct IntRow: Identifiable { let id: Int; let title: String }
+    """)
+    let other = SourceFile(path: "StringRowsModel.swift", contents: """
+    protocol StringRowsModel: RefractModel { var rows: [StringRow] { get } }
+    struct StringRow: Identifiable { let id: String; let title: String }
+    """)
+    let screens = SourceFile(path: "Screens.swift", contents: """
+    struct IntRowsScreen: View {
+        let model: IntRowsModel
+        var body: some View { List(model.rows) { row in Text(row.title) } }
+    }
+    struct StringRowsScreen: View {
+        let model: StringRowsModel
+        var body: some View { List { ForEach(model.rows) { row in Text(row.title) } } }
+    }
+    """)
+    let units = Frontend.parse(sources: [screens, other, model])
+    #expect(units.allSatisfy { !$0.hasErrors })
+    let owners = units[0].module.screens.map { screen -> String? in
+        guard case let .list(children, _, _) = screen.body,
+              case let .forEach(items, _) = children[0] else { return nil }
+        return items.modelType
+    }
+    #expect(owners == ["IntRowsModel", "StringRowsModel"])
+    let catalog = NativeSourceSet(modules: units.map(\.module), models: units.flatMap(\.resolvedModels),
+                                  itemTypes: units.flatMap(\.resolvedItemTypes))
+    #expect(catalog.models.map(\.name).sorted() == ["IntRowsModel", "StringRowsModel"])
+    #expect(catalog.itemTypes.map(\.name).sorted() == ["IntRow", "StringRow"])
+    let kotlin = try ComposeBackend().generate(module: units[0].module, sources: catalog)
+    #expect(kotlin.contains("public fun IntRowsScreen(\n    model: IntRowsModel,"))
+    #expect(kotlin.contains("public fun StringRowsScreen(\n    model: StringRowsModel,"))
+    let ark = try ArkUIBackend().generate(module: units[0].module, sources: catalog)
+    #expect(ark.contains("(row: IntRow)"))
+    #expect(ark.contains("(row: StringRow)"))
 }
 
 @Test func arkCrossFileImportsRequireFlatExplicitSiblingPaths() throws {

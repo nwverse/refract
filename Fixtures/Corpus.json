@@ -94,6 +94,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "cross-file-two-models",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
       "implementationStatus": "ready"
     },

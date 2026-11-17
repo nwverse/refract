@@ -20,9 +20,9 @@ public struct NativeSourceSet: Sendable {
     public init(modules: [Module], models: [ModelProtocol], itemTypes: [ItemType],
                 enums: [EnumDeclaration]? = nil) {
         self.modules = modules
-        self.models = models
-        self.itemTypes = itemTypes
-        self.enums = enums ?? modules.flatMap(\.enums)
+        self.models = Self.uniqueDeclarations(models, name: \.name, location: \.location)
+        self.itemTypes = Self.uniqueDeclarations(itemTypes, name: \.name, location: \.location)
+        self.enums = Self.uniqueDeclarations(enums ?? modules.flatMap(\.enums), name: \.name, location: \.location)
         var screens: [String: String] = [:]
         var items: [String: String] = [:]
         var models: [String: String] = [:]
@@ -37,6 +37,15 @@ public struct NativeSourceSet: Sendable {
         self.items = items
         self.modelFiles = models
         self.enumFiles = enums
+    }
+
+    private static func uniqueDeclarations<T>(_ declarations: [T], name: (T) -> String,
+                                              location: (T) -> SourceLocation?) -> [T] {
+        var keys: Set<String> = []
+        return declarations.filter { declaration in
+            guard let location = location(declaration) else { return true }
+            return keys.insert("\(location.file):\(location.line):\(location.column):\(name(declaration))").inserted
+        }
     }
 
     public func source(for module: Module) throws -> NativeSource {
