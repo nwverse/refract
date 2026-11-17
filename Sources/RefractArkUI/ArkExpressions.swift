@@ -12,6 +12,13 @@ enum ArkExpression {
             return try LocalizedTextEmitter.arkUI(expression, mapping: mapping) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
             }
+        case let .imageResource(name):
+            guard ArkText.isResourceName(name) else {
+                throw Diagnostic(code: "RFMAP003", message: "Native image resource `\(name)` is not a valid resource identifier.",
+                                 suggestion: "Use the same lowercase app-owned resource name on both platforms.",
+                                 location: expression.location)
+            }
+            return "$r('app.media.\(name)')"
         case let .stringKey(key):
             let resource = try mapping.stringResource(key, platform: .harmonyOS, location: expression.location)
             return "$r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)')"
