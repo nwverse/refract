@@ -49,7 +49,7 @@ private struct IRCorpus {
 
     private mutating func view(depth: Int) -> ViewNode {
         let leafCount = 12
-        let selection = Int.random(in: 0..<(depth < 3 ? 22 : leafCount), using: &random)
+        let selection = Int.random(in: 0..<(depth < 3 ? 23 : leafCount), using: &random)
         switch selection {
         case 0: return .stack(axis: axis(), children: children(depth: depth), modifiers: modifiers(), location: location())
         case 1: return .text(expression(), modifiers: modifiers(), location: location())
@@ -92,6 +92,8 @@ private struct IRCorpus {
         case 18: return .toggle(title: expression(), value: expression(), modifiers: modifiers(),
                                 nativeModifiers: nativeOperations(), labelsHidden: Bool.random(using: &random), location: location())
         case 19: return .textInput(placeholder: expression(), value: expression(), modifiers: modifiers(), location: location())
+        case 22: return .secureInput(placeholder: expression(), value: expression(), reveal: nil,
+                                     modifiers: modifiers(), location: location())
         case 20: return .label(title: expression(), image: ImageSource(kind: .application, name: "logo", location: location()),
                                modifiers: modifiers(), location: location())
         case 21: return Bool.random(using: &random) ? .divider(modifiers: modifiers(), location: location()) : .spacer(location: location())
@@ -171,7 +173,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 23 public ViewNode cases and all 12 Expression.Value cases must actually occur.
+        // All 24 public ViewNode cases and all 12 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -190,7 +192,7 @@ struct IRReliabilityTests {
             var replay = IRCorpus(seed: seed)
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
-        #expect(seenViews.count == 23, "Visited view cases: \(seenViews.sorted())")
+        #expect(seenViews.count == 24, "Visited view cases: \(seenViews.sorted())")
         #expect(seenExpressions.count == 12, "Visited expression cases: \(seenExpressions.sorted())")
     }
 

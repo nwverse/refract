@@ -183,6 +183,7 @@ public extension ViewNode {
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
              let .image(_, _, location), let .toggle(_, _, _, _, _, location), let .textInput(_, _, _, location),
+             let .secureInput(_, _, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
              let .switchExpression(_, _, _, location), let .optionalBinding(_, _, _, _, location),
              let .navigationLink(_, _, _, _, location), let .navigationStack(_, location): location

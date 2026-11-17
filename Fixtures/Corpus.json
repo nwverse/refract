@@ -434,6 +434,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "v0-reject-secure-input-literal",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-secure-reveal-literal",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "v0-reject-state-wrapper",
       "implementationStatus": "ready"
     },
@@ -451,6 +459,10 @@
     },
     {
       "path": "v0-scroll-content",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-secure-input",
       "implementationStatus": "ready"
     },
     {
