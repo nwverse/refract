@@ -48,6 +48,8 @@ enum ArkExpression {
             return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
         case let .valueProperty(.model(model, property)):
             return "this.\(try referenceName(model, location: expression.location)).\(try referenceName(property, location: expression.location))"
+        case let .valueProperty(.modelScalarBinding(binding)):
+            return "this.\(try referenceName(binding.model, location: expression.location)).\(try referenceName(binding.property, location: expression.location))"
         case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
             return "this.\(try referenceName(name, location: expression.location))"
         case .valueProperty, .interpolatedString, .formField, .presence, .formValid:

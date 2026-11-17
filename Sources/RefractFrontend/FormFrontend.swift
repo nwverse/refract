@@ -86,6 +86,7 @@ extension Builder {
             case let .navigationPath(other, _, _): collides = other == name
             case let .model(reference, _): collides = reference.propertyName == name
             case let .form(_, other, _): collides = other.name == name
+            case .tabSelection: collides = false
             }
             if collides {
                 error("RFFORM001", "Form field `\(name)` collides with another declared property of this view.",
