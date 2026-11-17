@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Build, measure and report. No device result is inferred from an emulator run.
+# Probe, verify generated sources, measure and preserve complete macro evidence.
 set -euo pipefail
 
 here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd -- "$here/../.." && pwd)"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/.local/opt/android-sdk}"
 export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.local/share/refract-android}"
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.local/share/refract-gradle}"
@@ -10,51 +11,76 @@ export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.local/share/refract-gradle}"
 export PATH="$JAVA_HOME/bin:$PATH"
 adb="$ANDROID_HOME/platform-tools/adb"
 [ -x "$adb" ] || { printf 'Missing adb; install Android platform-tools.\n' >&2; exit 2; }
-[ -n "${ANDROID_SERIAL:-}" ] || {
-    devices="$($adb devices | python3 -I -c 'import sys; print(sum(line.endswith("\tdevice\n") for line in sys.stdin))')"
-    [ "$devices" = 1 ] || { printf 'Set ANDROID_SERIAL when zero or multiple devices are attached.\n' >&2; exit 2; }
-}
-model="$($adb shell getprop ro.product.model | tr -d '\r')"
-qemu="$($adb shell getprop ro.kernel.qemu | tr -d '\r')"
-sdk="$($adb shell getprop ro.build.version.sdk | tr -d '\r')"
-boot="$($adb shell getprop sys.boot_completed | tr -d '\r')"
-[ "$boot" = 1 ] || { printf 'Android system has not finished booting.\n' >&2; exit 2; }
-[ "$qemu" = 1 ] || { printf 'Physical-device runs require a device-labelled report; this harness currently supports emulators.\n' >&2; exit 2; }
-printf 'Environment: EMULATOR (%s), not a physical device.\n' "$model"
-output_root=/sdcard/Android/media/dev.refract.bench.test
-$adb shell "mkdir -p '$output_root' && test -w '$output_root'" || {
-    printf 'External storage transport is not ready for benchmark output.\n' >&2
-    exit 2
-}
-$adb shell settings put global window_animation_scale 0
-$adb shell settings put global transition_animation_scale 0
-$adb shell settings put global animator_duration_scale 0
 
-out="${1:-$here/results/emulator-01}"
+out="${1:-$root/tmp/macro-emulator-01}"
 if [ -e "$out" ]; then
     printf 'Choose a new output directory; existing results are never overwritten.\n' >&2
     exit 2
 fi
+revision="$(git -C "$here" rev-parse --verify HEAD)"
+if [ -n "$(git -C "$here" status --porcelain --untracked-files=normal)" ]; then
+    printf 'Commit benchmark/generator changes before measuring an exact source revision.\n' >&2
+    exit 2
+fi
 mkdir -p "$out/raw"
-python3 -I -c 'import json,sys; json.dump({"emulator":True,"source":"adb ro.kernel.qemu","model":sys.argv[1],"sdk":int(sys.argv[2])},open(sys.argv[3],"w"),indent=2)' "$model" "$sdk" "$out/environment.json"
+python3 -I "$here/probe_target.py" --adb "$adb" --source-revision "$revision" \
+    --timeout "${TARGET_PROBE_TIMEOUT_SECONDS:-15}" --output "$out/environment.json"
+
+export ANDROID_SERIAL="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["android_serial"])' "$out/environment.json")"
+
+# This checks that the actual CLI output is committed before compiling it. It
+# never changes generated Kotlin/ArkTS or the hand-written reference.
+"$here/generate-and-compile.sh" --check
+
+# These are harness settings, not emulator boot/root/restart operations.
+adb_target=("$adb")
+if [ -n "${ANDROID_SERIAL:-}" ]; then
+    adb_target+=(-s "$ANDROID_SERIAL")
+fi
+for setting in window_animation_scale transition_animation_scale animator_duration_scale; do
+    timeout "${TARGET_PROBE_TIMEOUT_SECONDS:-15}" "${adb_target[@]}" shell settings put global "$setting" 0
+done
+python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["animation_scales"]="disabled"; json.dump(d,open(p,"w"),indent=2,sort_keys=True)' "$out/environment.json"
+
+# Never mix artifacts from an earlier connected-test invocation with this run.
+additional_output="$here/benchmark/build/outputs/connected_android_test_additional_output"
+if [ -e "$additional_output" ]; then
+    [ -d "$additional_output" ] || { printf 'Unexpected additional-output path; preserve it manually.\n' >&2; exit 2; }
+    mv -- "$additional_output" "$out/pre-existing-additional-output"
+fi
+python3 -I -c 'import pathlib,sys; pathlib.Path(sys.argv[1]).mkdir(exist_ok=False)' "$additional_output"
+
+set +e
 (
-    cd "$here"
-    ./gradlew --no-daemon --max-workers="${GRADLE_WORKERS:-2}" --console=plain \
-        :app:assembleRelease :benchmark:assembleRelease || exit 1
+    cd "$here" || exit 1
     timeout "${BENCHMARK_TIMEOUT_SECONDS:-3600}" \
         ./gradlew --no-daemon --max-workers="${GRADLE_WORKERS:-2}" --console=plain \
-        :benchmark:connectedReleaseAndroidTest || {
-            printf 'Instrumentation failed or timed out; no benchmark pass is claimed.\n' >&2
-            exit 1
-        }
+        :benchmark:connectedReleaseAndroidTest \
+        -Pandroid.testInstrumentationRunnerArguments.class=dev.refract.bench.test.SettingsMacrobenchmark \
+        -Pandroid.test.devices="$ANDROID_SERIAL"
 )
-find "$here/benchmark/build/outputs/connected_android_test_additional_output" \
-    -type f -name '*benchmarkData.json' 2>/dev/null | sort -u > "$out/json-files.txt"
-[ -s "$out/json-files.txt" ] || { printf 'No AndroidX JSON results: benchmark did not run or failed.\n' >&2; exit 2; }
+instrumentation_status=$?
+set -e
+python3 -I -c 'import json,sys; json.dump({"status":"completed" if sys.argv[1]=="0" else "failed","exit_code":int(sys.argv[1])},open(sys.argv[2],"w"),indent=2)' \
+    "$instrumentation_status" "$out/instrumentation-status.json"
+set +e
+python3 -I "$here/collect_results.py" \
+    --input-directory "$here/benchmark/build/outputs/connected_android_test_additional_output" \
+    --output "$out"
+evidence_status=$?
+set -e
+if [ "$instrumentation_status" -ne 0 ]; then
+    printf 'Instrumentation failed or timed out; any partial evidence is retained and no pass is claimed: %s\n' "$out" >&2
+    exit 1
+fi
+if [ "$evidence_status" -ne 0 ]; then
+    printf 'Required evidence was not preserved; no benchmark pass is claimed: %s\n' "$out" >&2
+    exit 2
+fi
 inputs=()
 while IFS= read -r file; do
-    cp -- "$file" "$out/raw/$(basename -- "$file")"
-    inputs+=("$out/raw/$(basename -- "$file")")
+    inputs+=("$out/$file")
 done < "$out/json-files.txt"
-python3 -I "$here/report.py" "${inputs[@]}" --output "$out" --environment "$out/environment.json"
-printf 'Report written to %s. Raw results are in %s/raw.\n' "$out" "$out"
+python3 -I "$here/report.py" "${inputs[@]}" --output "$out" --environment "$out/environment.json" \
+    --require-macro --evidence-manifest "$out/evidence-manifest.json"
+printf 'Verified macro report and preserved evidence written to %s.\n' "$out"

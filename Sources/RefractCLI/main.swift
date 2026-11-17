@@ -4,6 +4,7 @@ import RefractCompose
 import RefractFrontend
 import RefractIR
 import RefractMapping
+import RefractOutput
 
 enum CLIError: Error, CustomStringConvertible {
     case message(String)
@@ -80,8 +81,13 @@ struct RefractCommand {
             guard !name.isEmpty, name != ".", name != "..", names.insert(name).inserted else {
                 throw CLIError.message("input base filenames must be nonempty and unique: \(input)")
             }
-            let unit = Frontend.parse(SourceFile(path: url.lastPathComponent,
-                                                  contents: try String(contentsOf: url, encoding: .utf8)), mapping: mapping)
+            let source: String
+            do {
+                source = try String(contentsOf: url, encoding: .utf8)
+            } catch {
+                throw CLIError.message("cannot read Swift input `\(url.path)` as UTF-8: \(error.localizedDescription) Provide a readable UTF-8 source file; no outputs were written.")
+            }
+            let unit = Frontend.parse(SourceFile(path: url.lastPathComponent, contents: source), mapping: mapping)
             hasErrors = hasErrors || unit.hasErrors
             unit.diagnostics.forEach { writeError($0.rendered) }
             units.append(unit)
@@ -109,10 +115,18 @@ struct RefractCommand {
             try CommittedOutputChecker(writeError: writeError).check(outputs: outputs)
             return
         }
-        for output in outputs {
-            let folder = URL(fileURLWithPath: output.directory, isDirectory: true)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try Data(output.contents.utf8).write(to: folder.appendingPathComponent(output.filename), options: .atomic)
+        do {
+            try GeneratedOutputWriter.commit(outputs.map {
+                GeneratedOutput(directory: $0.directory, filename: $0.filename, contents: $0.contents)
+            })
+        } catch let error as GeneratedOutputError {
+            switch error {
+            case let .cleanup(message), let .rollback(message): throw CLIError.message(message)
+            case let .message(message):
+                throw CLIError.message("\(message) No committed generated outputs were changed.")
+            }
+        } catch {
+            throw CLIError.message("Could not publish generated outputs: \(error.localizedDescription) The previous committed outputs were restored and newly created outputs were removed.")
         }
     }
 
