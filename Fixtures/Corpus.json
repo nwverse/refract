@@ -78,7 +78,35 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "cross-file-child-view",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-enum-switch",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-reject-duplicate",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-reject-recursion",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-two-models",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-document-preview",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-document-preview-reject",
       "implementationStatus": "ready"
     },
     {
@@ -143,6 +171,10 @@
     },
     {
       "path": "list-foreach-explicit-id",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-paged-search",
       "implementationStatus": "ready"
     },
     {
@@ -291,6 +323,14 @@
     },
     {
       "path": "rejected-view-declaration",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-dragdrop",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-reject-uri-payload",
       "implementationStatus": "ready"
     },
     {

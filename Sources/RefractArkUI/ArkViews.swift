@@ -58,6 +58,11 @@ extension Generation {
                         message: "Row content type `\(value)` belongs on the generated child row, not its Toggle.",
                         suggestion: "Apply `.contentType` directly to the generated child inside a dynamic List",
                         location: operation.location)
+                case .textSelection, .dragPayload, .dropTarget:
+                    throw Diagnostic(code: "RFNATIVE005",
+                        message: "Selection and drag/drop operations do not apply to a Toggle receiver.",
+                        suggestion: "Use a TextField for text selection and a Stack-style wrapper for drag/drop.",
+                        location: operation.location)
                 }
             }
             for modifier in modifiers {
@@ -122,8 +127,10 @@ extension Generation {
                 writer.line("this.\(name) = value;")
             case let .valueProperty(.binding(name)):
                 writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            case let .valueProperty(.modelScalarBinding(binding)):
+                writer.line("this.\(binding.model).\(binding.action)(value);")
             default:
-                throw Diagnostic(code: "state.invalid_projection", message: "A text input needs a String local state or parent binding.",
+                throw Diagnostic(code: "state.invalid_projection", message: "A text input needs a String local state, parent binding or explicit model setter.",
                                  suggestion: "Use `text: $name` with String @State or @Binding ownership.", location: value.location)
             }
             writer.close(suffix: ")")
