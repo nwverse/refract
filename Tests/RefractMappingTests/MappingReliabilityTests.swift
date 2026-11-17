@@ -41,7 +41,7 @@ struct MappingMutationReliabilityTests {
         #expect(try encoder.encode(decoded) == encoded)
     }
 
-    @Test func malformedMappingAlwaysFailsWithCoordinatesAndNeverDecodes() {
+    @Test func malformedMappingAlwaysFailsWithCoordinatesAndNeverDecodes() throws {
         var random = FixedSeedGenerator(seed: 0x160_160)
         let characters = Array(completeMapping)
         let replacements: [Character] = ["{", "}", "[", "]", "\"", ",", ":", "0", "\\", "\n", "x"]
@@ -62,9 +62,15 @@ struct MappingMutationReliabilityTests {
                         "Mapping validation differs at iteration \(iteration)")
             }
             switch reference {
-            case .success:
-                // Any surviving mutation must satisfy the same published schema as the original.
-                #expect(Bool(true))
+            case let .success(mapping):
+                // A mutation can legitimately change a path or native identifier. A successfully
+                // validated mapping must retain semantic equality through a stable coding round trip.
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                let encoded = try encoder.encode(mapping)
+                let decoded = try JSONDecoder().decode(Mapping.self, from: encoded)
+                #expect(decoded == mapping)
+                #expect(try encoder.encode(decoded) == encoded)
             case let .failure(error):
                 #expect(!error.diagnostics.isEmpty)
                 #expect(error.diagnostics.allSatisfy {
