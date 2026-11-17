@@ -1,6 +1,6 @@
 /// A native-only extension of the scalar value boundary; it never enters models or local state.
 public enum NativeParameterType: String, Codable, Sendable {
-    case string, bool, double, int, image, stringKey, remoteImageLoader, linkDestination, linkPolicy, linkHandoff
+    case string, bool, double, int, image, stringKey, remoteImageLoader, action, linkDestination, linkPolicy, linkHandoff
 
     public var scalar: ValueType? {
         switch self {
@@ -8,7 +8,7 @@ public enum NativeParameterType: String, Codable, Sendable {
         case .bool: .bool
         case .double: .double
         case .int: .int
-        case .image, .stringKey, .remoteImageLoader, .linkDestination, .linkPolicy, .linkHandoff: nil
+        case .image, .stringKey, .remoteImageLoader, .action, .linkDestination, .linkPolicy, .linkHandoff: nil
         }
     }
 
@@ -24,6 +24,7 @@ public enum NativeParameterType: String, Codable, Sendable {
         case .linkDestination: "RefractLinkDestination"
         case .linkPolicy: "RefractLinkPolicy"
         case .linkHandoff: "RefractLinkHandoff"
+        case .action: "() -> Void"
         }
     }
 }
@@ -56,15 +57,29 @@ public struct NativeDeclaration: Codable, Equatable, Sendable {
 
 public struct NativeArgument: Codable, Equatable, Sendable {
     public let label: String
-    public let expression: Expression
+    public let expression: Expression?
+    public let action: StateAction?
     public let type: NativeParameterType?
     public let location: SourceLocation?
 
-    public init(label: String, expression: Expression, type: NativeParameterType?, location: SourceLocation? = nil) {
+    private enum CodingKeys: String, CodingKey { case label, expression, action, type, location }
+
+    public init(label: String, expression: Expression? = nil, action: StateAction? = nil,
+                type: NativeParameterType?, location: SourceLocation? = nil) {
         self.label = label
         self.expression = expression
+        self.action = action
         self.type = type
         self.location = location
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        label = try values.decode(String.self, forKey: .label)
+        expression = try values.decodeIfPresent(Expression.self, forKey: .expression)
+        action = try values.decodeIfPresent(StateAction.self, forKey: .action)
+        type = try values.decodeIfPresent(NativeParameterType.self, forKey: .type)
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 
@@ -75,6 +90,20 @@ public struct NativeModifier: Codable, Equatable, Sendable {
         case contentDescription(Expression)
         case retainCallback(identity: String)
         case contentType(String)
+        /// Bounded text selection editing on a text input.
+        /// `start`/`end` are typed Int expressions describing the current selection; `action`
+        /// names a synchronous model method with signature `(start: Int, end: Int, replacement: String)`
+        /// that the platform invokes after a native selection edit. Cancellation (no edit) does not call it.
+        case textSelection(start: Expression, end: Expression, action: String)
+        /// Marks the receiver as a drag source. `kind` is a closed ASCII identifier (lowercase letters,
+        /// digits and `_`, starting with a letter); `value` is a typed String expression owned by app
+        /// state or model. No URI, no object reference, no clipboard read.
+        case dragPayload(kind: String, value: Expression)
+        /// Marks the receiver as a drop target for the named kind. `action` names a synchronous model
+        /// method with signature `(kind: String, payload: String)`. The platform calls it only when a
+        /// non-empty payload of the matching kind is dropped; empty payloads and foreign kinds are
+        /// rejected by the generated wrapper without invoking the action.
+        case dropTarget(kind: String, action: String)
     }
 
     public let operation: Operation

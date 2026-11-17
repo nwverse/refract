@@ -155,6 +155,7 @@ public enum InteropMapping {
             case .linkDestination: "LinkDestination"
             case .linkPolicy: "LinkPolicy"
             case .linkHandoff: "LinkHandoff"
+            case .action: "() => void"
             }
         }
         return switch type {
@@ -166,6 +167,7 @@ public enum InteropMapping {
         case .linkDestination: "LinkDestination"
         case .linkPolicy: "LinkPolicy"
         case .linkHandoff: "LinkHandoff"
+        case .action: "() -> Unit"
         }
     }
 

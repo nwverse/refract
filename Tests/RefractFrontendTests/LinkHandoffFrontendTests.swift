@@ -30,8 +30,8 @@ private func linkSource(destination: String, policy: String = #"RefractLinkPolic
             policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "docs.example.test"), (scheme: "app+test", host: "router.example.test")])"#)))
         #expect(unit.diagnostics == [])
         guard case let .native(component, _) = unit.module.screens.first?.body,
-              case let .linkDestination(value) = component.arguments.first?.expression.value,
-              case let .linkPolicy(policy) = component.arguments[1].expression.value else {
+              case let .linkDestination(value) = component.arguments.first?.expression?.value,
+              case let .linkPolicy(policy) = component.arguments[1].expression?.value else {
             Issue.record("Expected typed link arguments")
             return
         }

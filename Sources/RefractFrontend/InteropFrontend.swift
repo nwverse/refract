@@ -51,7 +51,7 @@ struct InteropFrontend {
                       let annotation = binding.typeAnnotation,
                       let type = Self.scalarType(annotation.type.trimmedDescription) else {
                     diagnostics.append(error("RFNATIVE001", "Native component `\(node.name.text)` has an unsupported stored property.",
-                          "Use `let` with an explicit supported scalar, Image, LocalizedStringKey or RemoteImageLoader type", at: binding))
+                          "Use `let` with an explicit supported scalar, Image, LocalizedStringKey, RemoteImageLoader or `() -> Void` type", at: binding))
                     invalidDeclarations.insert(node.name.text)
                     continue
                 }
@@ -114,6 +114,7 @@ struct InteropFrontend {
         case "RefractLinkDestination": .linkDestination
         case "RefractLinkPolicy": .linkPolicy
         case "RefractLinkHandoff": .linkHandoff
+        case "() -> Void": .action
         default: nil
         }
     }

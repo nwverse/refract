@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "nativeComponents": [
+    {
+      "swift": "NativeSelectionEmphasis",
+      "android": {
+        "kind": "composable",
+        "symbol": "NativeSelectionEmphasis",
+        "module": "com.example.refract.animation",
+        "parameters": [
+          { "swift": "emphasized", "name": "emphasized", "type": "Boolean" },
+          { "swift": "identity", "name": "identity", "type": "String" }
+        ]
+      },
+      "harmonyOS": {
+        "kind": "component",
+        "symbol": "NativeSelectionEmphasis",
+        "module": "com.example.refract.animation",
+        "parameters": [
+          { "swift": "emphasized", "name": "emphasized", "type": "boolean" },
+          { "swift": "identity", "name": "identity", "type": "string" }
+        ]
+      }
+    }
+  ]
+}

@@ -22,6 +22,17 @@
   caller can supply an app-owned observer; rewriting generated Kotlin to add a test callback would no longer test the
   actual contract. Compose transition assertions should inspect public transition/idle state, not an invented
   semantics-alpha property.
+- Resolve a native scalar member argument against declared models before leaving its type unknown. `model.identity`
+  is a typed model value on both backends; an undeclared item/model member must still produce only its original
+  diagnostic, not a second inferred-type error.
+- Stateful native transitions belong in app-owned native implementations. A Compose `Animatable` retains its current
+  value when the keyed effect cancels and starts a new target; `key(identity)` must scope the animation and effects,
+  and reduced motion must snap rather than adding a parallel duration policy. Read frame progress in a native draw
+  lambda, not a parent-composition state read.
+- Compose UI tests with a manual clock must distinguish starting an animation from advancing its progress, and must
+  apply composition frames explicitly after input changes. Do not assume `runOnIdle` creates a frame when no
+  animation is awaiting one. Observe actual `Animatable.value`/`isRunning` and identity disposal, not an invented
+  cross-platform cancellation event or wall-clock timing.
 - AGP 9's built-in Kotlin support does not automatically consume a custom `sourceSets.main.java` directory. Register
   an application-owned Kotlin implementation through `sourceSets.main.kotlin.directories` when compiling a fixture
   import; adding only a dependency or generated import does not put its source on the compiler input list.
@@ -76,3 +87,15 @@
 - Hidden Toggle labels remove the visible title and its layout wrapper, not the title's typed getter/action checks,
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
+- Selection editing and drag/drop payloads on a `TextField`/view go through the closed `NativeModifier.Operation`
+  set, not through a generic native component. The Compose drag-and-drop API lives in
+  `androidx.compose.foundation.draganddrop` for the `Modifier` extensions but in
+  `androidx.compose.ui.draganddrop` for the `DragAndDropEvent`/`DragAndDropTarget`/`DragAndDropTransferData`
+  types — importing them from `foundation.draganddrop` produces "Unresolved reference" at Kotlin compile
+  time even though the golden fixture text looks right. Always compile the new fixture before declaring
+  the operation ready, and opt in via `@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)`
+  on the generated file. Drop-target cancellation is gated on the payload string, not on the event: the
+  generated wrapper checks `payload.isEmpty()` and returns `false` before the model action is invoked,
+  so a cancelled drop never reaches the model. Unicode (non-BMP emoji + CJK) round-trips through
+  `ClipData.newPlainText` unchanged; do not introduce a "safe ASCII" encoding — the typed String payload
+  is the contract.

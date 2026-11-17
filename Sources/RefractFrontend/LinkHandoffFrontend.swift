@@ -99,9 +99,9 @@ struct LinkHandoffFrontend {
                 location: declaration.location)]
         }
         guard let destination = component.arguments.first,
-              case let .linkDestination(value) = destination.expression.value,
+              case let .linkDestination(value) = destination.expression?.value,
               let policyArgument = component.arguments.last(where: { $0.type == .linkPolicy }),
-              case let .linkPolicy(policy) = policyArgument.expression.value,
+              case let .linkPolicy(policy) = policyArgument.expression?.value,
               policy.permits(value) else {
             return [Diagnostic(code: "RFLINK002",
                 message: "Link handoff `\(declaration.name)` has a destination outside its exact scheme/host allowlist.",
