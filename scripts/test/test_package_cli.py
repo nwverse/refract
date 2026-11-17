@@ -109,17 +109,21 @@ class PackagingUnitTests(unittest.TestCase):
 class PackagingEndToEndTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("REFRACT_PACKAGE_E2E") == "1", "opt in to two real clean Swift builds")
     def test_real_archive_from_two_clean_checkouts(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="refract-package-e2e.") as temporary:
-            output = Path(temporary) / "artifacts"
-            completed = subprocess.run([sys.executable, str(ROOT / "scripts/package_cli.py"),
-                                        "--output", str(output), "--verify-reproducible"],
-                                       cwd=ROOT, text=True, capture_output=True, timeout=1800)
-            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
-            archives = list(output.glob("refract-*-*.tar.gz"))
-            self.assertEqual(len(archives), 2, completed.stdout)
-            for archive in archives:
-                self.assertTrue(archive.with_suffix(archive.suffix + ".sha256").is_file())
-            self.assertIn("byte-identical", completed.stdout)
+        temporary = tempfile.TemporaryDirectory(prefix="refract-package-e2e.")
+        self.addCleanup(temporary.cleanup)
+        if os.environ.get("REFRACT_PACKAGE_OUTPUT"):
+            output = Path(os.environ["REFRACT_PACKAGE_OUTPUT"]).resolve()
+        else:
+            output = Path(temporary.name) / "artifacts"
+        completed = subprocess.run([sys.executable, str(ROOT / "scripts/package_cli.py"),
+                                    "--output", str(output), "--verify-reproducible"],
+                                   cwd=ROOT, text=True, capture_output=True, timeout=1800)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        archives = list(output.glob("refract-*-*.tar.gz"))
+        self.assertEqual(len(archives), 2, completed.stdout)
+        for archive in archives:
+            self.assertTrue(archive.with_suffix(archive.suffix + ".sha256").is_file())
+        self.assertIn("byte-identical", completed.stdout)
 
 
 if __name__ == "__main__":

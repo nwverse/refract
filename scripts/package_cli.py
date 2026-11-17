@@ -106,7 +106,7 @@ def host_target() -> tuple[str, str, str]:
     return os_name, architecture, triple
 
 
-def check_tools(triple: str) -> dict[str, str]:
+def check_tools(triple: str) -> dict[str, object]:
     swift = shutil.which("swift")
     git = shutil.which("git")
     if not swift or not git or not shutil.which("strip"):
@@ -116,7 +116,9 @@ def check_tools(triple: str) -> dict[str, str]:
     selected = run(["swift", "--version"])
     if not selected.startswith(f"Apple Swift version {TOOLCHAIN} ") and not selected.startswith(f"Swift version {TOOLCHAIN} "):
         raise ValueError(f"Swift {TOOLCHAIN} is required; `swift --version` returned: {selected.splitlines()[0]}")
-    return {"swiftVersion": TOOLCHAIN, "hostTriple": triple, "buildConfiguration": "release", "buildOptions": SWIFT_FLAGS[1:]}
+    return {"swiftVersion": TOOLCHAIN, "hostTriple": triple, "buildConfiguration": "release",
+            "buildOptions": [flag for flag in SWIFT_FLAGS[1:] if flag != "--static-swift-stdlib" or host_target()[0] == "linux"],
+            "staticSwiftRuntime": host_target()[0] == "linux"}
 
 
 def source_files(commit: str) -> list[str]:
@@ -224,7 +226,7 @@ def build(source: Path, scratch: Path) -> Path:
     return products
 
 
-def binary_entries(products: Path, commit: str, metadata: dict[str, str], notices: bytes) -> list[tuple[str, int, bytes]]:
+def binary_entries(products: Path, commit: str, metadata: dict[str, object], notices: bytes) -> list[tuple[str, int, bytes]]:
     resource = (products / "refract_RefractMapping.bundle/refract.schema.json").read_bytes()
     expected = run_bytes(["git", "show", f"{commit}:Sources/RefractMapping/Resources/refract.schema.json"])
     if resource != expected:
@@ -254,7 +256,7 @@ def binary_entries(products: Path, commit: str, metadata: dict[str, str], notice
     return entries
 
 
-def validate_package(archive: Path, parent: Path) -> None:
+def validate_package(archive: Path, parent: Path, commit: str) -> None:
     root = f"refract-{VERSION}-{host_target()[0]}-{host_target()[1]}"
     extract_archive(archive, parent)
     extracted = parent / root
@@ -277,12 +279,12 @@ def validate_package(archive: Path, parent: Path) -> None:
         resource = extracted / "lib/refract_RefractMapping.bundle/refract.schema.json"
         if not resource.is_file():
             raise ValueError("installed package is missing its mapping schema")
-        if resource.read_bytes() != (ROOT / "Sources/RefractMapping/Resources/refract.schema.json").read_bytes():
+        if resource.read_bytes() != run_bytes(["git", "show", f"{commit}:Sources/RefractMapping/Resources/refract.schema.json"]):
             raise ValueError("installed mapping schema differs from the source revision")
 
 
 def package_once(commit: str, destination: Path, os_name: str, architecture: str,
-                 metadata: dict[str, str], notices: bytes, scratch: Path) -> Path:
+                 metadata: dict[str, object], notices: bytes, scratch: Path) -> Path:
     scratch.mkdir()
     source_tar = scratch / "source.tar.gz"
     source_archive(commit, source_tar)
@@ -297,7 +299,7 @@ def package_once(commit: str, destination: Path, os_name: str, architecture: str
                                        compresslevel=9, mtime=ARCHIVE_EPOCH))
     installed = scratch / "installed"
     installed.mkdir()
-    validate_package(archive, installed)
+    validate_package(archive, installed, commit)
     return archive
 
 
