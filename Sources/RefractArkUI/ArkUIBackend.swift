@@ -85,6 +85,9 @@ struct Generation {
             if let navigation = screen.navigation {
                 try emitNavigationOperation(navigation, into: &writer)
             }
+            if case let .tabView(tabs, _) = screen.body {
+                try emitTabHelpers(tabs, into: &writer)
+            }
             // Local-state emission already supplies the separator before build().
             if screen.states.isEmpty, screen.navigation == nil, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
@@ -174,6 +177,8 @@ struct Generation {
         case let .navigationLink(title, pathName, enumName, destination, _):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
                                    destination: destination, into: &writer, mapping: mapping)
+        case let .tabView(tabs, _):
+            try emitTabView(tabs, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):
             // Selection editing, drag and drop wrap the child in dedicated constructs.
             if let selection = operations.first(where: { if case .textSelection = $0.operation { true } else { false } }),
@@ -334,6 +339,7 @@ struct Generation {
         case let .stack(_, _, values, _), let .layout(_, _, values, _), let .scroll(_, _, values, _),
              let .list(_, values, _), let .text(_, values, _), let .button(_, _, values, _),
              let .image(_, values, _), let .toggle(_, _, values, _, _, _), let .textInput(_, _, values, _),
+             let .secureInput(_, _, _, values, _),
              let .label(_, _, values, _), let .divider(values, _):
             modifiers = values
         default:
@@ -492,7 +498,7 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location): location
+             let .navigationPath(_, _, location), let .tabSelection(_, _, location): location
         }
     }
 }

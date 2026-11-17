@@ -37,6 +37,7 @@ interop-remote-image
 navigation-host
 navigation-deep-restoration
 navigation-native-destination
+navigation-tabs-menu
 accessibility-dynamic-type
 state-counter
 parent-binding
@@ -44,3 +45,5 @@ model-interface
 v0-stack-layout
 selection-dragdrop
 mapping/model-scalars
+v0-text-input
+v0-secure-input

@@ -17,6 +17,13 @@ func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWrite
         writer.line()
         return
     }
+    if case let .tabSelection(name, enumName, _) = declaration {
+        // The native host owns the selected tab; the generated component is controlled, never a second owner.
+        writer.line("@Require @Param \(name): \(enumName);")
+        writer.line("@Event on\(name.prefix(1).uppercased())\(name.dropFirst())Change: (value: \(enumName)) => void = (value: \(enumName)): void => {};")
+        writer.line()
+        return
+    }
     if case let .binding(name, type, _) = declaration {
         let type = try stateType(type)
         writer.line("@Require @Param \(name): \(type);")

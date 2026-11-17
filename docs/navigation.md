@@ -1,8 +1,14 @@
 # Typed navigation with native hosts
 
-This is the bounded navigation contract introduced for issue #157 and extended by #221. It covers a root screen and typed destinations,
-not a general navigation framework. The same Swift source is ordinary SwiftUI on iOS; generated Android and HarmonyOS
-components do not contain a Refract router, registry or navigation runtime.
+This document covers two bounded navigation contracts:
+
+1. **Typed stack destinations** (`NavigationStack(path:)` + `navigationDestination`), introduced for issue #157 and
+   extended to three-level host-owned back/restoration by #221.
+2. **Typed tabs and overflow menu actions** (`TabView(selection:)` + `.tabItem`/`.tag` + one `.toolbar` `Menu`),
+   implemented for issue #204. See "Typed tabs and overflow menu" below.
+
+Both are root-screen contracts, not a general navigation framework. The same Swift source is ordinary SwiftUI on
+iOS; generated Android and HarmonyOS components do not contain a Refract router, registry or navigation runtime.
 
 ## Source contract
 
@@ -202,3 +208,137 @@ three-level back order, Activity recreation and explicit controller state restor
 does not prove: SwiftUI or ArkTS compilation, HarmonyOS saved-state behavior, physical-device process death or
 transitions, or measured performance. Those remain explicitly separate verification work, not silent claims of this
 contract.
+
+## Typed tabs and overflow menu
+
+The tab contract is deliberately narrower than SwiftUI's `TabView`. It covers a finite, statically typed tab
+container with an optional bounded overflow menu. It does **not** cover arbitrary navigation graphs, adaptive or
+sidebar tab styles, drawers, per-tab navigation stacks or payload selections; those remain build-time diagnostics
+(`RFNAV401`–`RFNAV404`), never a silent approximation. An iOS tab is not an Android drawer, and generated code
+never substitutes one container for another.
+
+### Source contract
+
+```swift
+enum HomeTab: Hashable {
+    case overview
+    case activity
+}
+
+struct OverviewScreen: View {
+    var body: some View { Text("tab.overview.body") }
+}
+
+struct ActivityScreen: View {
+    var body: some View { Text("tab.activity.body") }
+}
+
+struct HomeTabsScreen: View {
+    let model: OverviewModel
+    @State private var tab: HomeTab = .overview
+
+    var body: some View {
+        TabView(selection: $tab) {
+            OverviewScreen()
+                .tabItem { Label("tab.overview", systemImage: "gear") }
+                .tag(.overview)
+            ActivityScreen()
+                .tabItem { Label("tab.activity", systemImage: "person") }
+                .tag(.activity)
+                .toolbar {
+                    ToolbarItem {
+                        Menu {
+                            Button("menu.refresh") { model.refresh() }
+                            Button("menu.reset") { model.reset() }
+                        } label: {
+                            Label("menu.more", systemImage: "checkmark")
+                        }
+                    }
+                }
+        }
+    }
+}
+```
+
+Rules:
+
+- The selection is exactly one `@State private var tab: HomeTab = .overview` over a local no-payload `Hashable`
+  enum. Scalar or `@Binding` selections, payload enums and non-`Hashable` enums are `RFNAV402`.
+- Each direct child is a **zero-argument same-file generated View** with `.tabItem { Label("key", systemImage:) }`
+  and `.tag(.case)`. Destinations must cover every enum case exactly once, in declaration order (`RFNAV403`).
+  A tab with stored inputs is rejected in this slice: a tab screen that needs data should read it from its own
+  environment/model in a future, separately typed expansion, not from an untyped closure.
+- Tab icons reuse the typed `symbols` mapping (`materialIcon`/`drawable` on Android, `media` on HarmonyOS), exactly
+  like `Image(systemName:)`. An unmapped symbol is a build-time diagnostic, never a guessed drawable.
+- At most one `.toolbar { ToolbarItem { Menu { ... } label: { Label(...) } } }` is accepted, on any one tab child.
+  Menu actions are localized `Button`s whose bodies call **one declared model method** (`RFNAV404`); local state
+  mutations, closures and arbitrary handlers are not menu actions.
+- `sidebarAdaptable` tab styles, `Drawer`, `NavigationSplitView`, nested `NavigationStack` inside tabs and other
+  container styles are unsupported and diagnosed.
+
+### Generated native entry points
+
+The source `@State` selection declares iOS ownership and is **not** translated into a second Android or HarmonyOS
+selection owner. The generated component is a controlled component:
+
+```kotlin
+@Composable
+public fun HomeTabsScreen(
+    model: OverviewModel,
+    tab: HomeTab,
+    onTabChange: (HomeTab) -> Unit,
+    modifier: Modifier = Modifier,
+)
+
+@Composable
+public fun HomeTabsScreenDestinations(tab: HomeTab, modifier: Modifier = Modifier)
+```
+
+Android lowers the tab bar to Material 3 `NavigationBar`/`NavigationBarItem`, whose `selected` parameter carries the
+native selected/role accessibility semantics, and the overflow menu to `IconButton` + `DropdownMenu`/
+`DropdownMenuItem`. The icon-only overflow button keeps the localized `menu.more` title as its
+`contentDescription`, so the affordance is announced by screen readers. `HomeTabsScreenDestinations` is a complete
+`when` over the enum calling each zero-argument generated screen. The host owns the selected tab, back behavior and
+per-tab lifecycle; there is no generated router, `NavController`, drawer or second selection `remember`.
+
+ArkTS emits `@Require @Param tab: HomeTab` and `@Event onTabChange`, a `Tabs`/`TabContent` container whose `index`
+is derived from the host selection through a typed getter (no parallel `@Local` index), a typed `@Builder` tab bar
+carrying the selected state, and a `bindMenu` overflow whose items call the same typed model actions. There is no
+`NavPathStack`, `SideBarContainer` or runtime dispatch.
+
+### Android host and verification
+
+`Fixtures/navigation-tabs-menu/` is the golden case. Its regenerated Kotlin is staged and compiled by
+`scripts/check_fixture_compilation.py` + `:fixtures:compileDebugKotlin`, like every manifest fixture.
+
+Real Android behavior is verified by
+`examples/android/fixtures/src/test/java/com/example/refract/tabs/GeneratedTabsMenuTest.kt`, which runs the
+**actual CLI-generated** `HomeTabsScreen` on **Native JVM (Robolectric)** with a host-owned `selectedTab`:
+
+- selected tab drives `assertIsSelected`/`assertIsNotSelected` and the visible destination;
+- a tab click reaches `onTabChange` and switches the typed destination;
+- a host-driven selection change updates the generated screen;
+- the overflow affordance (found by its generated content description) opens the menu and each item calls the
+  typed model method exactly once.
+
+These are Native JVM results, not emulator or device results, and make no visual-parity or performance claim.
+
+### iOS and HarmonyOS verification boundary
+
+On iOS the same source is ordinary SwiftUI: `TabView(selection:)` owns the selection through the `@State` binding,
+`.tabItem`/`.tag` provide the tab items and `.toolbar` provides the overflow menu. iOS 16 or later is required. No
+macOS/Xcode build was run for this slice, so iOS compilation and real selection/back behavior are unverified here
+and must not be inferred from the Kotlin tests.
+
+The generated ArkTS is reviewed as source only. No HarmonyOS command-line toolchain is installed in this
+environment, so `Tabs` index binding, `bindMenu` behavior and page lifecycle need a real toolchain/device check
+before production use. An unsupported host integration must remain native rather than introducing a shim runtime.
+
+### Diagnostics
+
+| Code | Rejected construct | Required alternative |
+| --- | --- | --- |
+| `RFNAV401` | Malformed `TabView`, tab item, tag or unsupported tab modifier | Use the bounded `TabView(selection:)` + `.tabItem`/`.tag` form |
+| `RFNAV402` | Invalid selection ownership, scalar/payload/non-Hashable selection | Use `@State private var tab: Tab = .case` over a no-payload `Hashable` enum |
+| `RFNAV403` | Non-exhaustive, out-of-order, duplicated or input-carrying tab destination | Cover every case once, in order, with a zero-argument generated View |
+| `RFNAV404` | Unsupported toolbar/menu shape or non-model menu action | One `ToolbarItem`/`Menu` with localized model-action `Button`s |
