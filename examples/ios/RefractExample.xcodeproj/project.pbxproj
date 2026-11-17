@@ -38,6 +38,8 @@
 				AA0000000000000000000022 /* StateCounter.swift */,
 				AA0000000000000000000023 /* ParentBinding.swift */,
 				AA0000000000000000000024 /* ModelInterface.swift */,
+				AA0000000000000000000028 /* AccessibilityDynamicType.swift */,
+				AA0000000000000000000029 /* StackLayout.swift */,
 				AA0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -124,6 +126,18 @@
 			path = ../shared/ModelInterface.swift;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000028 /* AccessibilityDynamicType.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/AccessibilityDynamicType.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000029 /* StackLayout.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/StackLayout.swift;
+			sourceTree = "<group>";
+		};
 		AA0000000000000000000008 /* RefractExample.app */ = {
 			isa = PBXFileReference;
 			explicitFileType = wrapper.application;
@@ -144,6 +158,8 @@
 				AA0000000000000000000025 /* StateCounter.swift in Sources */,
 				AA0000000000000000000026 /* ParentBinding.swift in Sources */,
 				AA0000000000000000000027 /* ModelInterface.swift in Sources */,
+				AA0000000000000000000030 /* AccessibilityDynamicType.swift in Sources */,
+				AA0000000000000000000031 /* StackLayout.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -194,6 +210,14 @@
 		AA0000000000000000000027 /* ModelInterface.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = AA0000000000000000000024 /* ModelInterface.swift */;
+		};
+		AA0000000000000000000030 /* AccessibilityDynamicType.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000028 /* AccessibilityDynamicType.swift */;
+		};
+		AA0000000000000000000031 /* StackLayout.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000029 /* StackLayout.swift */;
 		};
 		AA000000000000000000000D /* Debug */ = {
 			isa = XCBuildConfiguration;
