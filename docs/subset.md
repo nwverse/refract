@@ -210,6 +210,14 @@ row shapes, `.reuse({ reuseId: () => "setting" })`. API 12–17 keep V2 observat
 there is no V1 fallback. Fine-grained `@ObservedV2`/`@Trace` item properties are native optimizations, not a Refract
 cache or runtime. A list cannot be represented by eagerly mapping all rows.
 
+A paged searchable list uses the same `List(model.items)` contract; it does not introduce a paging collection adapter.
+The model exposes typed String search text, loading/error/empty Booleans and `loadNextPage`/`retry` actions. Search
+editing accepts the explicit `Binding(get: { model.searchText }, set: { model.setSearchText($0) })` form, with matching
+model, String type, `set<Property>` action and setter label checked at build time.
+`Fixtures/list-paged-search/` covers the complete source
+and both native outputs. Page acceptance, cancellation and replacement are app-owned semantics documented in
+`docs/state-and-models.md`; generation never performs requests, invents page identity or accepts index-keyed rows.
+
 The first implemented conditional slice accepts `if`/`else if`/`else` with declared Boolean model, `@State`
 or `@Binding` properties. Each condition is emitted directly into the native builder; inactive branches are not
 composed, and no `AnyView` or runtime view registry is introduced. A root Compose conditional uses a native `Box`

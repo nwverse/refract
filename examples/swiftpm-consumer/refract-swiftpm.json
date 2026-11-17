@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "target": "RefractConsumer",
+  "sources": ["Sources/RefractConsumer/Hello.swift"],
+  "mapping": "Sources/RefractConsumer/refract.json",
+  "resourceInputs": [],
+  "androidOutput": "Generated/Android",
+  "harmonyOutput": "Generated/HarmonyOS"
+}
