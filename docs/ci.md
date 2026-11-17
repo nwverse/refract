@@ -109,7 +109,8 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    generated call's final stable state, identity replacement, exit removal, zero scale and leaving composition.
    The app-owned implementation is added to the fixture module through the AGP `kotlin` source-set directory;
    `java` source-set additions do not feed AGP 9's built-in Kotlin compilation. The injected scale is not a
-   physical-device reduced-motion settings test.
+   physical-device reduced-motion settings test. Gradle resolves the pinned Android-all artifact before the test,
+   which runs with Robolectric's offline dependency directory so a second runtime downloader is not required.
 9. Run `./gradlew --no-daemon :app:testDebugUnitTest` from `examples/android/`. The `src/test` source set invokes
    the same CLI-generated `SettingsScreen.kt` that the compile gate checks, in the real application resource package.
    This is essential: an Android library's local test APK does not include a dependent application's resource table,

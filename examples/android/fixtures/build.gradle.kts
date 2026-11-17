@@ -1,6 +1,11 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
 
+val robolectricRuntime = configurations.create("robolectricRuntime") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -61,6 +66,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.8")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.18")
+    robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-14663667-2-i7")
     testImplementation("androidx.test.ext:junit:1.3.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
 }
@@ -68,3 +74,15 @@ dependencies {
 // The test injects observation into the app-owned native implementation through
 // a CompositionLocal. The CLI-generated screen is staged and called verbatim;
 // no generated code is rewritten to add test-only parameters.
+val stageRobolectricRuntime = tasks.register<Copy>("stageRobolectricRuntime") {
+    from(robolectricRuntime)
+    into(layout.buildDirectory.dir("robolectric-runtime"))
+    include("android-all-instrumented-*.jar")
+}
+
+tasks.withType<Test>().configureEach {
+    dependsOn(stageRobolectricRuntime)
+    // Resolve the public runtime through Gradle, then run without a second downloader.
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", stageRobolectricRuntime.get().destinationDir.absolutePath)
+}

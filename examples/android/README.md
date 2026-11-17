@@ -139,7 +139,8 @@ cd examples/android
 
 Robolectric 4.18 executes Compose with a test-provided `MotionDurationScale` and deterministic clock. This is a local
 JVM behavior check, not a physical reduced-motion system-settings test, device/emulator run or timing benchmark. The
-Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches.
+Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches. The
+fixture module resolves the same pinned Android-all runtime as the app tests and runs Robolectric offline.
 
 ## Opt-in Gradle generation
 
