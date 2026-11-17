@@ -11,7 +11,9 @@
 - **Debug information defeats path-independent reproducibility.** Two clean builds can differ solely because their
   temporary paths are embedded in DWARF. Strip debug information before packaging and compare the entire archives,
   not only generated native text. Swift 6.4.2's driver rejects the documented newer
-  `--experimental-strip-products` spelling; invoke `strip --strip-debug` on the product instead.
+  `--experimental-strip-products` spelling; invoke GNU `strip --strip-debug` on Linux and Apple `strip -S` on
+  macOS. Do not pass `--static-swift-stdlib` on macOS: its Swift runtime is supplied by the OS and the compiler
+  rejects static linkage. CI must actually exercise both host tool conventions.
 - **A source archive must contain the whole selected commit.** Filtering only Swift and mapping files silently
   omits the packaging tool, licenses and documentation. Use the Git tree, reject symlinks and other non-regular
   entries, and stamp only the source-revision constant. Never infer a release version from a mutable branch name.

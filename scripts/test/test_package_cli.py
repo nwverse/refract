@@ -62,6 +62,14 @@ class PackagingUnitTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 package.extract_archive(archive_path, self.root / f"installed-{kind}-{mode}")
 
+    def test_platform_specific_link_and_strip_flags(self) -> None:
+        self.assertIn("--static-swift-stdlib", package.swift_build_flags("linux"))
+        self.assertNotIn("--static-swift-stdlib", package.swift_build_flags("macos"))
+        for os_name, flag in (("linux", "--strip-debug"), ("macos", "-S")):
+            with mock.patch.object(package, "run") as run:
+                package.strip_executable(self.root / "refract", os_name)
+                self.assertEqual(run.call_args.args[0], ["strip", flag, str(self.root / "refract")])
+
     def test_checksum_verification_is_mandatory_on_each_host(self) -> None:
         archive = self.root / "artifact.tar.gz"
         archive.write_bytes(b"archive")

@@ -41,6 +41,19 @@ def run(command: list[str], *, cwd: Path = ROOT, stdout=None) -> str:
     return result.stdout.strip() if stdout is None else ""
 
 
+def swift_build_flags(os_name: str) -> list[str]:
+    flags = list(SWIFT_FLAGS)
+    # macOS provides the Swift runtime in the OS and its compiler rejects static Swift linkage.
+    if os_name == "macos":
+        flags.remove("--static-swift-stdlib")
+    return flags
+
+
+def strip_executable(executable: Path, os_name: str) -> None:
+    # Apple strip uses -S for debugging symbols; GNU strip uses --strip-debug.
+    run(["strip", "-S" if os_name == "macos" else "--strip-debug", str(executable)])
+
+
 def revision() -> str:
     value = run(["git", "rev-parse", "HEAD"])
     if not re.fullmatch(r"[0-9a-f]{40}", value):
@@ -117,7 +130,7 @@ def check_tools(triple: str) -> dict[str, object]:
     if not selected.startswith(f"Apple Swift version {TOOLCHAIN} ") and not selected.startswith(f"Swift version {TOOLCHAIN} "):
         raise ValueError(f"Swift {TOOLCHAIN} is required; `swift --version` returned: {selected.splitlines()[0]}")
     return {"swiftVersion": TOOLCHAIN, "hostTriple": triple, "buildConfiguration": "release",
-            "buildOptions": [flag for flag in SWIFT_FLAGS[1:] if flag != "--static-swift-stdlib" or host_target()[0] == "linux"],
+            "buildOptions": swift_build_flags(host_target()[0])[1:],
             "staticSwiftRuntime": host_target()[0] == "linux"}
 
 
@@ -211,14 +224,15 @@ def apply_metadata(info: tarfile.TarInfo) -> None:
     info.uname = info.gname = ""
 
 
-def build(source: Path, scratch: Path) -> Path:
-    run(["swift", "build", "--package-path", str(source), "--scratch-path", str(scratch), *SWIFT_FLAGS], stdout=sys.stderr)
-    binary = run(["swift", "build", "--package-path", str(source), "--scratch-path", str(scratch), *SWIFT_FLAGS, "--show-bin-path"])
+def build(source: Path, scratch: Path, os_name: str) -> Path:
+    flags = swift_build_flags(os_name)
+    run(["swift", "build", "--package-path", str(source), "--scratch-path", str(scratch), *flags], stdout=sys.stderr)
+    binary = run(["swift", "build", "--package-path", str(source), "--scratch-path", str(scratch), *flags, "--show-bin-path"])
     products = Path(binary)
     executable = products / "refract"
     if not executable.is_file() or not os.access(executable, os.X_OK):
         raise ValueError("SwiftPM did not produce an executable refract product")
-    run(["strip", "--strip-debug", str(executable)])
+    strip_executable(executable, os_name)
     bundle = products / "refract_RefractMapping.bundle"
     schema = bundle / "refract.schema.json"
     if not schema.is_file():
@@ -240,7 +254,7 @@ def binary_entries(products: Path, commit: str, metadata: dict[str, object], not
             "packageVersion": VERSION,
             "sourceRevision": commit,
             **metadata,
-            "runtimeDependencyPolicy": "The native CLI statically links its Swift runtime; generated apps have no Refract runtime dependency. System library requirements still apply.",
+            "runtimeDependencyPolicy": "Linux statically links the Swift runtime; macOS uses the OS-provided Swift runtime. Generated apps have no Refract runtime dependency. System library requirements still apply.",
             "portability": "Native host binary only; OS, CPU, toolchain and runtime requirements apply. No cross-platform equivalence is claimed.",
         }, indent=2, sort_keys=True).encode("utf-8") + b"\n"),
     ]
@@ -296,7 +310,7 @@ def package_once(commit: str, destination: Path, os_name: str, architecture: str
     source.mkdir()
     source_root = source / f"refract-source-{VERSION}"
     extract_archive(source_tar, source)
-    products = build(source_root, scratch / "swift-build")
+    products = build(source_root, scratch / "swift-build", os_name)
     archive = destination / f"refract-{VERSION}-{os_name}-{architecture}.tar.gz"
     entries = binary_entries(products, commit, metadata, notices)
     archive.write_bytes(gzip.compress(deterministic_tar(f"refract-{VERSION}-{os_name}-{architecture}", entries),
