@@ -37,6 +37,27 @@ import SwiftUI
 
 public protocol RefractNativeView: View {}
 
+public enum RefractNativeModifier {
+    case testTag(String)
+    case contentDescription(String)
+    case retainCallback(identity: String)
+    case contentType(String)
+}
+
+public extension View {
+    @inlinable
+    @inline(__always)
+    func refractNativeModifier(_ operations: RefractNativeModifier...) -> some View {
+        self
+    }
+
+    @inlinable
+    @inline(__always)
+    func padding(horizontal: CGFloat, vertical: CGFloat) -> some View {
+        padding(EdgeInsets(top: vertical, leading: horizontal, bottom: vertical, trailing: horizontal))
+    }
+}
+
 @inlinable
 @inline(__always)
 public func refractValue<Value>(
@@ -60,9 +81,18 @@ public func refractView<IOS: View, Android: View, HarmonyOS: View>(
 ```
 
 The three `refractView` generic parameters are deliberately independent: different modifier chains can produce
-different concrete Swift types. Swift type-checks all three branches even though only the iOS branch executes. The
-reserved helpers are not imported into generated targets; a project keeps the reference declarations in its own iOS
-source. A conflicting local overload with the reserved names is a diagnostic, not a way to change selection semantics.
+different concrete Swift types. Swift type-checks all three branches even though only the iOS branch executes.
+`refractNativeModifier` is a no-op on the iOS branch; its typed operations are lowered only in the selected Android
+or HarmonyOS branch. The directional `padding(horizontal:vertical:)` declaration is not a standard SwiftUI overload:
+the app-owned source extension maps it to ordinary edge insets. Both helpers are compile-time source declarations,
+not a linked runtime or a reason to import Refract into an iOS target. The reserved helpers are not imported into
+generated targets; a project keeps the reference declarations in its own iOS source. A conflicting local overload
+with the reserved names is a diagnostic, not a way to change selection semantics.
+
+The iOS example compiles the canonical native-measurement, platform-value and platform-view fixtures themselves,
+together with these declarations and the application-owned typography token. This covers the real
+`Binding(get:set:)` initializer, both typed platform-selection helpers, native measurement spellings and directional
+padding with SwiftUI's semantic type checker. Generator parsing alone is not evidence that these constructs compile.
 
 ## Native components inside Refract
 
