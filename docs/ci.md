@@ -147,7 +147,8 @@ CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked se
 job. To run the same checks locally, follow `examples/android/README.md`: build the CLI, run
 `scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, set `REFRACT_CLI_PATH`, then
 `./gradlew :app:checkDebugRefract :app:compileDebugKotlin :fixtures:compileDebugKotlin :theme-fixture:compileDebugKotlin
-:fixtures:testDebugUnitTest :theme-fixture:testDebugUnitTest :app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21 on `PATH`. Run the `tools/gradle/` functional tests as
+:fixtures:testDebugUnitTest :theme-fixture:testDebugUnitTest :app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21
+on `PATH`. Run the `tools/gradle/` functional tests as
 documented in the example README to cover incremental generation and missing-tool behavior.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or

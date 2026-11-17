@@ -180,9 +180,10 @@ Actual control interaction and large-font rendering require native tests; golden
 alone do not establish them. `:theme-fixture:testDebugUnitTest` invokes the real generated component through the
 application host, using one `MutableInteractionSource` for the native clickable and its pressed/focused observations.
 Native JVM Compose tests verify actual touch/focus-driven rendered colors and disabled precedence (including a held
-native press) in `:theme-fixture`; `:fixtures` separately verifies night resources and enlarged text bounds. `LocalContext` supplies real Android resource qualifiers and
-`LocalDensity` supplies the platform font scale for this JVM rendering; neither is a device settings test. Labelled
-normal/pressed/focused/disabled, light/dark and default/large-font captures are published with the test report.
+native press) in `:theme-fixture`; `:fixtures` separately verifies night resources and enlarged text bounds.
+`LocalContext` supplies real Android resource qualifiers and `LocalDensity` supplies the platform font scale for
+this JVM rendering; neither is a device settings test. Labelled normal/pressed/focused/disabled, light/dark and
+default/large-font captures are published with the test report.
 iOS provides its own ordinary SwiftUI semantic-token resolver for the same source, and must not discard these
 arguments; this Native JVM evidence is not an iOS, HarmonyOS, screen-reader or device verification claim.
 
