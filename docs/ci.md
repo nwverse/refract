@@ -58,11 +58,12 @@ compatibility fix, recorded in that issue, and #11 does not bypass it by lowerin
 compiler flags. Dependencies stay locked by `Package.resolved`. There is no skip for the Swift or fixture jobs.
 macOS CI verifies generator portability; it does not constitute an iOS device or simulator measurement.
 
-## Android generated-code compile gate
+## Android generated-code compile and JVM behavior gate
 
 The `android-compile` job proves that the committed generated Kotlin compiles with the documented Android
 toolchain on every pull request and on every push to `main`. A generator change can pass the golden tests while
-producing Kotlin that no longer builds; this job catches that at CI time.
+producing Kotlin that no longer builds; this job catches that at CI time. It also runs the native animation
+lifecycle tests on the JVM.
 
 The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 
@@ -90,14 +91,21 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
    exactly as the fixtures reference. Adding a fixture to the compile set is a manifest-only change; there is no
    skip list, so a new compile failure must be fixed in the same PR.
-8. Reject any untracked files left in the checkout after the compile.
+8. Run `./gradlew --no-daemon :fixtures:testDebugUnitTest`. Robolectric 4.16 and the Compose test rule execute the
+   unmodified generated save-confirmation caller with a test-provided `MotionDurationScale`. The tests cover running
+   versus idle native transition states, identity replacement during an in-flight transition, exit removal, zero
+   scale and leaving composition. The app-owned implementation is added to the fixture module through the AGP
+   `kotlin` source-set directory; `java` source-set additions do not feed AGP 9's built-in Kotlin compilation.
+9. Reject any untracked files left in the checkout after compilation and tests.
 
-The gate is compile-only. It produces no APK, no emulator or device run, and no performance measurement;
-`docs/GOALS.md` goal 2 is not exercised by this job and no such claim may be inferred from it. HarmonyOS remains
-unverified in CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not
-hidden by this job. To run the same check locally, follow `examples/android/README.md`: build the CLI, run
-`scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, then `./gradlew :app:compileDebugKotlin
-:fixtures:compileDebugKotlin` with `ANDROID_HOME` and a JDK 21 on `PATH`.
+Compilation and these JVM behavior tests produce no APK, emulator or device run, physical accessibility-setting test
+or performance measurement; `docs/GOALS.md` goal 2 is not exercised by this job and no such claim may be inferred
+from it. Robolectric verifies the component's use of the public `MotionDurationScale`, not the system settings
+integration on a physical device. HarmonyOS remains unverified in CI until a Linux-compatible hvigor toolchain is
+obtained; that gap is tracked separately and is not hidden by this job. To run the same check locally, follow
+`examples/android/README.md`: build the CLI, run `scripts/check_examples.py` and
+`scripts/check_fixture_compilation.py`, then `./gradlew :app:compileDebugKotlin :fixtures:testDebugUnitTest` with
+`ANDROID_HOME` and a JDK 21 on `PATH`.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or
 changes the Android toolchain must update the generated files or the toolchain pins in the same change rather than

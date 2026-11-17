@@ -27,6 +27,10 @@ android {
         minSdk = 26
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -35,6 +39,10 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets.getByName("main").kotlin.directories.add(
+        "../app/src/main/java/com/example/refract/animation",
+    )
 }
 
 configure<KotlinAndroidProjectExtension> {
@@ -46,7 +54,16 @@ configure<KotlinAndroidProjectExtension> {
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
+    implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation("androidx.test.ext:junit:1.3.0")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
 }
+
+// The test injects observation into the app-owned native implementation through
+// a CompositionLocal. The CLI-generated screen is staged and called verbatim;
+// no generated code is rewritten to add test-only parameters.

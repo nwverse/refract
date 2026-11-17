@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "nativeComponents": [
+    {
+      "swift": "NativeSaveConfirmation",
+      "android": {
+        "kind": "composable",
+        "symbol": "NativeSaveConfirmation",
+        "module": "com.example.refract.animation",
+        "parameters": [
+          { "swift": "visible", "name": "visible", "type": "Boolean" },
+          { "swift": "identity", "name": "identity", "type": "String" }
+        ]
+      },
+      "harmonyOS": {
+        "kind": "component",
+        "symbol": "NativeSaveConfirmation",
+        "module": "com.example.refract.animation",
+        "parameters": [
+          { "swift": "visible", "name": "visible", "type": "boolean" },
+          { "swift": "identity", "name": "identity", "type": "string" }
+        ]
+      }
+    }
+  ]
+}

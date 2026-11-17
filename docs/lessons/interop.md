@@ -1,5 +1,18 @@
 # Native interop pitfalls
 
+- An iOS-only native body may read accessibility preferences without adding them to the generated interface. The
+  narrowly accepted `accessibilityReduceMotion` environment property is not an argument; do not turn it into a shared
+  animation flag or allow arbitrary property wrappers to bypass native-signature validation.
+- Test observation must not alter the generated interface. A host `CompositionLocal` around the unmodified generated
+  caller can supply an app-owned observer; rewriting generated Kotlin to add a test callback would no longer test the
+  actual contract. Compose transition assertions should inspect public transition/idle state, not an invented
+  semantics-alpha property.
+- AGP 9's built-in Kotlin support does not automatically consume a custom `sourceSets.main.java` directory. Register
+  an application-owned Kotlin implementation through `sourceSets.main.kotlin.directories` when compiling a fixture
+  import; adding only a dependency or generated import does not put its source on the compiler input list.
+- A mapping may use the normalized native-only compatibility form. The fixture compilation script must use the same
+  `refract.generated` default package as the Compose backend rather than indexing a full mapping's `android.output`
+  unconditionally.
 - Keep IR independent of mapping and backends. Interop lowering helpers belong in `RefractMapping` or a backend;
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.
 - A native view argument needs its label and source type, not only an expression. Unknown reference types must not be

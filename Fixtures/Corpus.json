@@ -78,6 +78,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-animation",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-callers",
       "implementationStatus": "ready"
     },

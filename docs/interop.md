@@ -188,6 +188,43 @@ action appear in the message or suggestion.
 An error prevents both output files from being written. Refract never emits a comment, empty view, placeholder value
 or iOS expression in place of a missing target implementation.
 
+## Native animation, reduced motion and identity
+
+A native transition uses the same `RefractNativeView` boundary, not a shared animation description. Keep the source
+signature to the state needed by every implementation. The representative save confirmation in
+`Fixtures/interop-native-animation/` declares only `visible: Bool` and `identity: String`: no duration, curve, target
+code, arbitrary closure or animation object crosses the boundary.
+
+The declaration's body remains ordinary SwiftUI. It reads `@Environment(\.accessibilityReduceMotion)` and chooses
+`.identity` instead of `.opacity`; `.id(identity)` gives the content a stable identity. This environment property is
+an iOS-only implementation input, not a native-component argument. Other property wrappers are still
+`RFNATIVE001` diagnostics rather than an implicit expansion of the generated interface. The body is not translated.
+
+On Android, the application-owned `NativeSaveConfirmation` in
+`examples/android/app/src/main/java/com/example/refract/animation/` uses `AnimatedVisibility` and
+`MutableTransitionState`. `key(identity)` replaces the remembered transition when identity changes; the native
+composition disposes the old content. An exit removes its content only after the native transition finishes, and
+leaving the composition disposes it immediately. The component reads `MotionDurationScale` from the recomposer's
+coroutine context. At zero it uses `EnterTransition.None` and `ExitTransition.None`; otherwise it uses native fades.
+It does not run a parallel timer or translate a duration from another platform.
+
+On HarmonyOS, the mapping delegates to the application's typed `NativeSaveConfirmation` component. The implementation
+owns its equivalent native visibility transition, stable-key replacement, disposal and accessibility preference. It
+must not reuse the component's remembered state after an identity change, and reduced motion must produce the same
+final visibility without an animated transition. The golden ArkTS is a direct call with typed arguments, not a native
+implementation. No HarmonyOS compiler or runtime was available to verify this implementation contract.
+
+The optional Android observer is app-owned and supplied through a `CompositionLocal`; it is absent from both generated
+entry points. Its only purpose in the example is to let tests observe actual transition idle/running state and disposal.
+The test host injects the observer around the unmodified CLI-generated `SaveConfirmationScreen`; it does not add a
+test parameter by rewriting generated code.
+
+Run the Android behavior checks with `:fixtures:testDebugUnitTest` after staging the fixtures. The tests execute real
+Compose on Robolectric: an ordinary transition runs and settles, identity replacement disposes the old content during
+the transition, exit removes content, zero duration scale skips enter/exit motion, and leaving composition disposes
+content. They do not exercise a device, emulator, physical animation-duration setting or performance benchmark.
+SwiftUI behavior also requires an Apple toolchain; generator tests do not establish that evidence.
+
 ## Per-platform values, modifiers and animations
 
 Use `refractValue` for scalar values and tokens whose source types agree:
