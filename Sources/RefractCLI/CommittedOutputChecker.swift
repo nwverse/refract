@@ -9,12 +9,12 @@ struct CommittedOutputChecker {
 
     func check(outputs: [(directory: String, filename: String, contents: String)]) throws {
         var differences = 0
-        var expectedFiles: [String: Set<String>] = [:]
+        var expectedFiles: [URL: Set<String>] = [:]
         for output in outputs {
-            let file = URL(fileURLWithPath: output.directory, isDirectory: true)
-                .appendingPathComponent(output.filename)
-            expectedFiles[file.deletingLastPathComponent().standardizedFileURL.path, default: []]
-                .insert(output.filename)
+            let directory = URL(fileURLWithPath: output.directory, isDirectory: true)
+                .standardizedFileURL.resolvingSymlinksInPath()
+            let file = directory.appendingPathComponent(output.filename)
+            expectedFiles[directory, default: []].insert(output.filename)
             let expected = Data(output.contents.utf8)
             guard let committed = try? Data(contentsOf: file) else {
                 writeError("refract: missing committed output \(file.path); run `refract generate` with the same inputs, mapping and output directories, then review and commit it")
@@ -26,13 +26,13 @@ struct CommittedOutputChecker {
                 differences += 1
             }
         }
-        for directory in expectedFiles.keys.sorted() {
+        for directory in expectedFiles.keys.sorted(by: { $0.path < $1.path }) {
             guard let expected = expectedFiles[directory] else { continue }
-            let url = URL(fileURLWithPath: directory, isDirectory: true)
             guard let committed = try? FileManager.default.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: nil
+                at: directory, includingPropertiesForKeys: nil
             ) else { continue }
-            for file in committed where ["kt", "ets"].contains(file.pathExtension) && !expected.contains(file.lastPathComponent) {
+            for file in committed.sorted(by: { $0.path < $1.path })
+                where ["kt", "ets"].contains(file.pathExtension) && !expected.contains(file.lastPathComponent) {
                 writeError("refract: unexpected generated output \(file.path); no supplied input produces this file; remove it if it is obsolete, or add its Swift input")
                 differences += 1
             }
