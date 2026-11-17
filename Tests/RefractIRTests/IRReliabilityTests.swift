@@ -115,7 +115,7 @@ private struct IRCorpus {
 
     private mutating func expression() -> RefractIR.Expression {
         let value: IRExpression.Value
-        switch Int.random(in: 0..<12, using: &random) {
+        switch Int.random(in: 0..<13, using: &random) {
         case 0: value = .stringLiteral("value\(Int.random(in: 0...100, using: &random))")
         case 1: value = .verbatimText("literal")
         case 2: value = .stringKey("settings.title")
@@ -128,6 +128,10 @@ private struct IRCorpus {
         case 9: value = .valueProperty(.itemBinding(ItemBinding(model: "model", item: "row", property: "enabled", key: "id", action: "setEnabled")))
         case 10: let segments: [StringInterpolationSegment] = [.literal("Count: "), .expression(IRExpression(.reference("count"), type: .int))]
             value = .interpolatedString(segments)
+        case 11: value = .interactionColor(InteractionColorValue(token: "DesignColors.action",
+            enabled: IRExpression(.valueProperty(.binding("enabled")), type: .bool),
+            pressed: IRExpression(.boolLiteral(false), type: .bool),
+            focused: IRExpression(.boolLiteral(true), type: .bool)))
         default: value = .platformValue(PlatformAlternatives(
             ios: IRExpression(.stringLiteral("iOS")), android: IRExpression(.stringLiteral("Android")),
             harmonyOS: IRExpression(.stringLiteral("HarmonyOS"))))
@@ -173,7 +177,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 24 public ViewNode cases and all 12 Expression.Value cases must actually occur.
+        // All 24 public ViewNode cases and all 13 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -193,15 +197,22 @@ struct IRReliabilityTests {
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
         #expect(seenViews.count == 24, "Visited view cases: \(seenViews.sorted())")
-        #expect(seenExpressions.count == 12, "Visited expression cases: \(seenExpressions.sorted())")
+        #expect(seenExpressions.count == 13, "Visited expression cases: \(seenExpressions.sorted())")
     }
 
     private func collectCases(in node: ViewNode, views: inout Set<String>, expressions: inout Set<String>) {
         views.insert(String(describing: node).split(separator: "(").first.map(String.init) ?? "")
         if case let .text(expression, _, _) = node {
-            expressions.insert(String(describing: expression.value).split(separator: "(").first.map(String.init) ?? "")
+            collectExpression(expression, into: &expressions)
         }
         for child in node.children { collectCases(in: child, views: &views, expressions: &expressions) }
+    }
+
+    private func collectExpression(_ expression: IRExpression, into expressions: inout Set<String>) {
+        expressions.insert(String(describing: expression.value).split(separator: "(").first.map(String.init) ?? "")
+        if case let .interactionColor(value) = expression.value {
+            for state in [value.enabled, value.pressed, value.focused] { collectExpression(state, into: &expressions) }
+        }
     }
 
     private func viewCount(in node: ViewNode) -> Int {
