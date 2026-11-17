@@ -178,27 +178,27 @@ extension Builder {
         for host in hosts {
             if lifecycle == nil, host.capability == .lifecycle {
                 error("RFHOST003", "A lifecycle host must be bound to the reserved root foreground/background hooks.",
-                      "Use `.refractOnAppear` and `.refractOnDisappear`; do not infer scene state from a button", at: hostSyntax(host.propertyName))
+                      "Use `.refractOnAppear` and `.refractOnDisappear`; do not infer scene state from a button", at: hostMemberSyntax(host.propertyName))
                 valid = false
             }
             if host.capability != .lifecycle && !values.contains(where: { $0.kind == (host.capability == .notification ? .notificationEvent : .backgroundWorkEvent) }) {
                 error("RFHOST004", "A \(host.capability.rawValue) host requires its explicit typed event input.",
-                      "Add the matching @RefractNativeValue event and exhaustively render unavailable, stale and terminal states", at: hostSyntax(host.propertyName))
+                      "Add the matching @RefractNativeValue event and exhaustively render unavailable, stale and terminal states", at: hostMemberSyntax(host.propertyName))
                 valid = false
             }
         }
         for value in values where value.kind == .scenePhase {
             if lifecycle == nil {
                 error("RFHOST004", "A scene-phase input requires explicit lifecycle host forwarding.",
-                      "Forward application/scene transitions from the app-owned lifecycle host", at: hostSyntax(value.propertyName))
+                      "Forward application/scene transitions from the app-owned lifecycle host", at: hostMemberSyntax(value.propertyName))
                 valid = false
             }
         }
         return valid
     }
 
-    private func hostSyntax(_ name: String) -> TokenSyntax {
-        guard let node = currentViewName.flatMap({ viewDeclarations[$0] }) else { return viewDeclarations.values.first!.name }
+    private func hostMemberSyntax(_ name: String) -> TokenSyntax {
+        guard let node = currentViewName.flatMap({ viewDeclarations[$0] }) else { return hostMemberSyntax(name) }
         return node.memberBlock.members.compactMap { member in
             guard let variable = member.decl.as(VariableDeclSyntax.self),
                   variable.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == name else { return nil }
@@ -229,10 +229,10 @@ extension Builder {
 
     func validateNativeEventSwitch(_ enumName: String) -> Bool {
         guard let kind = NativeValueKind.allCases.first(where: { $0.stateTypeName == enumName }) else { return true }
-        guard kind != .scenePhase || currentNativeValues.contains(where: { $0.kind == .scenePhase }),
-              kind == .scenePhase || currentNativeValues.contains(where: { $0.kind == kind }) else {
+        let hasInput = currentNativeValues.contains { $0.kind == kind && $0.selectedField == .state }
+        guard hasInput else {
             error("RFHOST005", "An event-state switch requires the corresponding @RefractNativeValue screen input.",
-                  "Select the event through the reserved .refractNativeValue modifier", at: viewDeclarations[currentViewName ?? ""]?.name ?? viewDeclarations.values.first!.name)
+                  "Select the event through the reserved .refractNativeValue modifier", at: hostMemberSyntax(enumName))
             return false
         }
         return true
