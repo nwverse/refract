@@ -161,7 +161,6 @@ extension Builder {
             }
         }
         let children = Set(identifiers)
-        let hasInvalidIdentifier = identifiers.count != children.count
         guard !children.isEmpty else {
             error("RFACCESS003", "Traversal order belongs on a container with named direct children.",
                   "Apply `.accessibilityTraversal([...])` to a supported stack.", at: call)

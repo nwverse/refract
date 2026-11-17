@@ -1,0 +1,10 @@
+{
+  "swift-syntax": {
+    "url": "https://github.com/swiftlang/swift-syntax.git",
+    "version": "600.0.1",
+    "revision": "0687f71944021d616d34d922343dcef086855920",
+    "license": "Apache-2.0 WITH Swift-exception",
+    "licenseFile": "scripts/release/swift-syntax-LICENSE.txt",
+    "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+  }
+}

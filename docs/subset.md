@@ -20,6 +20,19 @@ there is no Refract runtime, base view, interpreter or lookup registry in a gene
   import in v0. A screen name and its item/protocol names are valid ASCII Swift identifiers beginning with an
   uppercase letter. File order determines declaration output order. A generated View, model, item, enum or native
   declaration name must be unique within one input; repeated names are rejected with `RFSYN004` before IR construction.
+- Multiple `--input` files form one explicit same-module declaration set. A child `View`, model protocol,
+  `Identifiable` item or switch enum may be declared in a different supplied file; no directory is searched and no
+  process-global registry is used. Each file still emits only its own declarations. Duplicate names across files are
+  rejected with `RFVIEW007`; missing types, mismatched child inputs and direct/indirect recursion remain errors.
+  Child arguments retain the existing model/item contract. Cross-file Kotlin references use the configured package;
+  ArkUI imports the sibling output by basename (`./ChildRow`). Inputs and generated outputs must therefore retain
+  unique flat basenames, otherwise `RFVIEW008` rejects an ambiguous import path. A future nested-output layout needs
+  an explicit path-mapping contract rather than guessed relative imports. Type resolution is independent of input
+  order. Recursion diagnostics, however, start from the first input View that reaches a cycle, so the reported
+  rotation of that cycle and its declaration location follow the explicit input order; this is not a claim of
+  order-independent diagnostics. A lazy-list IR node binds its owning model protocol explicitly. Shared catalogs
+  deduplicate only the same declaration identity (source file, source position and name); a same-named declaration
+  at another location is an ambiguity error, never a first-wins fallback.
 - Stored properties are restricted to `let` item fields, the state and model forms in section 5, and computed `body`.
   Initializers, methods, nested functions, property observers and arbitrary computed properties are outside v0.
 - Source expressions are references, literals, list element access, typed construction, comparisons and boolean
@@ -74,6 +87,8 @@ same parameters as the Swift view. Full examples are in the linked fixtures.
 | `Button { model.save() } label: { Label(...) }` | `Button(onClick = { model.save() }) { Label(...) }` | `Button() { Label(...) }.onClick(() => { this.model.save() })` | Supported label forms are `Text`, `Image` and `Label`. An action cannot capture arbitrary values or run general Swift code. |
 | `Toggle("settings.enabled", isOn: $enabled)` | `Row { Text(text = stringResource(R.string.settings_enabled)); Spacer(...); Switch(checked = enabled, onCheckedChange = { enabled = it }) }` | `Row() { Text($r('app.string.settings_enabled')); Blank(); Toggle({ type: ToggleType.Switch, isOn: this.enabled }).onChange((value: boolean) => { this.enabled = value }) }` | The localized title remains visible beside the native boolean control. A binding is native value + change callback; there is no two-way-binding runtime. ArkUI V2 does not support `$$`; use `onChange`. |
 | `TextField("settings.display.name", text: $name)` | `TextField(value = name, onValueChange = { name = it }, label = { Text(text = stringResource(R.string.settings_display_name)) })` | `TextInput({ placeholder: $r('app.string.settings_display_name'), text: this.name }).onChange((value: string) => { this.name = value })` | Text updates use the declared local/binding write. In ArkUI V2 `TextInput` keeps one explicit change path; no polling or framework adapter. |
+| `SecureField("settings.password", text: $password)` | `TextField(value = password, onValueChange = { password = it }, label = { Text(text = stringResource(R.string.settings_password)) }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false))` | `TextInput({ placeholder: $r('app.string.settings_password'), text: this.password }).type(InputType.Password).onChange((value: string) => { this.password = value })` | Native secure entry. Obscured by default; the platform IME/autofill keeps ownership of the secret. No secret literal, log or `Text` echo appears in the generated source. See "Sensitive text entry" below. |
+| `SecureField("settings.token", text: $token).secureReveal($isRevealed)` | `visualTransformation = if (isRevealed) VisualTransformation.None else PasswordVisualTransformation()` (other parameters as above) | `.type(this.isRevealed ? InputType.Normal : InputType.Password)` (other parameters as above) | Explicit opt-in reveal through a typed Bool `@State`/`@Binding`. `.secureReveal(.constant(true))`, literals and non-`SecureField` receivers are `RFSECURE001` errors. |
 | `Label("settings.profile", systemImage: "person")` | `Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(...); Text(...) }` | `Row({ space: 8 }) { Image(...); Text(...) }` | Equivalent to the labeled icon/text pair, with an explicit accessibility label for a standalone image only when declared. |
 | `Divider()` | `HorizontalDivider()` | `Divider()` | Native decoration; color/thickness only through supported token modifiers. |
 | `Spacer()` | `Spacer(modifier = Modifier.weight(1f))` | `Blank()` | Inside a stack only. Expanding whitespace must not change the item count or insert arbitrary fixed dimensions. |
@@ -175,6 +190,33 @@ replaces a native control with a static visual approximation.
 leaf inputs, narrow state reads, remembered scroll/list state, direct modifiers, and no repeated screen-level work.
 Any later benchmark result must identify its environment and is not inferred from fixture correctness.
 
+### Sensitive text entry
+
+`SecureField` lowers to the platform's native secure-input control. Obscured display, keyboard and autofill ownership
+belong to the platform toolkit; Refract only selects the password keyboard and visual transformation. The generator
+never introduces a runtime secret store, an observer that mirrors the bound value, or a wrapper that formats the
+secret into another view.
+
+- **Negative disclosure.** Generated Kotlin and ArkTS for a `SecureField` contain no secret literal, no `println` /
+  `print` / `Log.` / `console.` / `hilog` call inside the control's builder or `onChange` callback, and no `Text`
+  rendering of the bound `String`. The placeholder is a localized resource key resolved through the usual
+  string-resource path; it never carries the secret. The negative-disclosure unit tests
+  (`composeSecureInputNeverDisclosesSecret`, `arkUISecureInputNeverDisclosesSecret`) pin this contract on every PR.
+- **Reveal is explicit and typed.** `.secureReveal($isRevealed)` accepts exactly one projected Bool `@State` or
+  `@Binding`. `.secureReveal(.constant(true))`, literals, non-`SecureField` receivers and repeated application are
+  `RFSECURE001` errors, so "always reveal" cannot be smuggled in through a constant. Reveal state is ordinary
+  SwiftUI ownership; the generator does not impose its own timeout, biometric gate or auto-hide — applications
+  that need those wrap the binding in their own model.
+- **Autofill ownership.** On Android, Material 3 `TextField` with `KeyboardType.Password` keeps the IME, autofill
+  framework and password managers in platform hands; Refract does not register its own autofill service or
+  intercept autofill callbacks. On HarmonyOS, `InputType.Password` gives the same ownership to ArkUI. No secret
+  ever crosses the Refract boundary in either direction.
+- **Source-only evidence and platform limits.** The Android side is verified by `:fixtures:compileDebugKotlin`
+  on every PR (JVM, not device). The ArkTS side is verified by golden fixtures only — the HarmonyOS toolchain is
+  not available on the generator devbox, so the contract is the documented ArkUI V2 API and the committed
+  Expected.ets. The iOS side compiles as ordinary SwiftUI `SecureField` on macOS; not verified on this devbox.
+  No device or emulator screenshot or trace is claimed. See `docs/production-readiness.md`.
+
 ## 4. Lists, identity and control flow
 
 ### Typed items and `ForEach`
@@ -216,6 +258,14 @@ each row has a `ListItem`. For API 18 and newer, a repeated child may use `@Reus
 row shapes, `.reuse({ reuseId: () => "setting" })`. API 12–17 keep V2 observation without this reuse capability;
 there is no V1 fallback. Fine-grained `@ObservedV2`/`@Trace` item properties are native optimizations, not a Refract
 cache or runtime. A list cannot be represented by eagerly mapping all rows.
+
+A paged searchable list uses the same `List(model.items)` contract; it does not introduce a paging collection adapter.
+The model exposes typed String search text, loading/error/empty Booleans and `loadNextPage`/`retry` actions. Search
+editing accepts the explicit `Binding(get: { model.searchText }, set: { model.setSearchText($0) })` form, with matching
+model, String type, `set<Property>` action and setter label checked at build time.
+`Fixtures/list-paged-search/` covers the complete source
+and both native outputs. Page acceptance, cancellation and replacement are app-owned semantics documented in
+`docs/state-and-models.md`; generation never performs requests, invents page identity or accepts index-keyed rows.
 
 The first implemented conditional slice accepts `if`/`else if`/`else` with declared Boolean model, `@State`
 or `@Binding` properties. Each condition is emitted directly into the native builder; inactive branches are not
@@ -345,6 +395,10 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNAV001` | NavigationStack, NavigationLink or destination registration is outside the bounded host contract | Use the explicit forms in docs/navigation.md |
 | `RFNAV002` | Navigation path/identity has invalid ownership or payload values | Use an empty `[Route]` @State and no-payload Hashable enum |
 | `RFNAV003` | Destination coverage, identity or typed model/native view is invalid | Register every case with a same-file typed model destination or declared native component |
+| `RFNAV401` | TabView, tab item, tag or tab modifier is outside the bounded tab contract | Use `TabView(selection:)` with `.tabItem { Label(...) }` and `.tag(.case)` per docs/navigation.md |
+| `RFNAV402` | Tab selection has invalid ownership, scalar/payload or non-Hashable identity | Use `@State private var tab: Tab = .case` over a no-payload Hashable enum |
+| `RFNAV403` | Tab destination is non-exhaustive, out of order, duplicated or carries stored inputs | Cover every case once, in order, with a zero-argument generated View |
+| `RFNAV404` | Toolbar/overflow menu shape is unsupported or a menu action is not a typed model call | Use one `ToolbarItem`/`Menu` with localized model-action `Button`s |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |
@@ -381,6 +435,8 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNATIVE001` | Native component declaration is missing | Declare the application view and both typed platform implementations |
 | `RFMAP003` | Native component parameters disagree with the Swift declaration or platform binding | Match every parameter label and supported type in declaration order |
 | `RFNATIVE003` | Platform-value declaration is malformed or incomplete | Declare one typed value for every required platform |
+| `RFSECURE001` | `.secureReveal` argument is not a projected Bool state/binding, or the modifier is misapplied | Pass `.secureReveal($isRevealed)` once, directly on a `SecureField`, with a declared Bool @State or @Binding |
+| `RFSECURE002` | `SecureField` title or `text:` argument is outside the typed contract | Use `SecureField("settings.password", text: $password)` with a canonical resource key and String state/binding |
 
 ## 7. Corpus coverage
 
@@ -396,6 +452,7 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `local-state` | Local scalar state and toggle |
 | `binding-state` | Hoisted value plus native change callback |
 | `text-input` | Localized text-field placeholder and state writes |
+| `secure-input` | Obscured native secure entry with an explicit typed reveal binding |
 | `model-screen` | Observable application-owned model boundary |
 | `styled-text` | Typography, semantic colors, padding and dimensions |
 | `static-list` | Native lazy static rows and sections |
@@ -421,6 +478,8 @@ Every case directory has the `v0-` prefix. The manifest is the authoritative lis
 | `reject-native-missing` | Missing native declaration |
 | `reject-native-type` | Native parameter mismatch |
 | `reject-platform-if` | Free-form platform conditional |
+| `reject-secure-input-literal` | Hardcoded secret passed to `SecureField.text:` |
+| `reject-secure-reveal-literal` | Non-projected argument passed to `.secureReveal` |
 
 Backend and feature issues may add focused cases, but must not create a competing semantics corpus. A correction to
 source meaning, diagnostics or golden performance behavior is coordinated on issue #2 and documented here.
