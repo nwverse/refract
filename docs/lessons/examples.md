@@ -37,6 +37,21 @@ content receiver. Only real Android compilation catches this; inspecting an expe
 
 ## Test what the example actually compiles
 
+## Real SwiftUI compilation and simulator ownership
+
+A SwiftUI source file must import SwiftUI unless another language-supported import supplies it; parsing successfully
+with SwiftSyntax does not make the source a valid standalone SwiftUI input. Build the actual shared file references
+in the Xcode target before claiming iOS compatibility. The #150 baseline caught a missing import in `Hello.swift`;
+the fix changed neither its body nor generated Kotlin/ArkTS.
+
+On a shared Mac, create a uniquely named simulator for each verification and pass its explicit UDID to every build,
+install, appearance and screenshot command. Do not use `booted`, reboot an existing device or infer simulator
+ownership from a name alone. Capture with `simctl io <UDID> screenshot`; desktop `screencapture` is neither needed
+nor a substitute for checking the actual app pixels. Read the resulting light and dark images before reporting UI
+success, and keep simulator results separate from physical-device or performance claims. External input automation
+must remain outside the app and repository, and its downloaded binaries are not evidence artifacts.
+
+
 A shared source may be ready for iOS while the generator still rejects it for other platforms. Do not commit native
 host imports of the missing generated interface merely to show future wiring: that breaks the otherwise working app.
 Keep the current generated path compiling and land the host change together with actual generated output. Run
