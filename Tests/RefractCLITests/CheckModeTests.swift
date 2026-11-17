@@ -50,9 +50,9 @@ import Foundation
     let missing = try runCheckCLI(["check"] + arguments, executable: executable)
     #expect(missing.status != 0)
     #expect(missing.stderr.contains("missing committed output"))
-    #expect(missing.stderr.contains(android.standardizedFileURL.resolvingSymlinksInPath()
+    #expect(missing.stderr.contains(android.standardizedFileURL
         .appendingPathComponent("First.kt").path))
-    #expect(missing.stderr.contains(harmony.standardizedFileURL.resolvingSymlinksInPath()
+    #expect(missing.stderr.contains(harmony.standardizedFileURL
         .appendingPathComponent("Second.ets").path))
     #expect(missing.stderr.contains("4 committed output(s)"))
     #expect(!FileManager.default.fileExists(atPath: android.path))
@@ -69,7 +69,9 @@ import Foundation
     try Data("// obsolete\n".utf8).write(to: extra)
     let unexpected = try runCheckCLI(["check"] + arguments, executable: executable)
     #expect(unexpected.status != 0)
-    #expect(unexpected.stderr.contains("unexpected generated output \(extra.standardizedFileURL.resolvingSymlinksInPath().path)"))
+    #expect(unexpected.stderr.contains(
+        "unexpected generated output \(URL(fileURLWithPath: extra.path).standardizedFileURL.path)"
+    ))
     #expect(try Data(contentsOf: extra) == Data("// obsolete\n".utf8))
     try FileManager.default.removeItem(at: extra)
     #expect(try runCheckCLI(["check"] + arguments, executable: executable).status == 0)
@@ -82,8 +84,8 @@ import Foundation
     try Data("// hand edit\n".utf8).write(to: staleArkTS)
     let stale = try runCheckCLI(["check"] + arguments, executable: executable)
     #expect(stale.status != 0)
-    #expect(stale.stderr.contains("stale committed output \(staleKotlin.standardizedFileURL.resolvingSymlinksInPath().path)"))
-    #expect(stale.stderr.contains("stale committed output \(staleArkTS.standardizedFileURL.resolvingSymlinksInPath().path)"))
+    #expect(stale.stderr.contains("stale committed output \(staleKotlin.standardizedFileURL.path)"))
+    #expect(stale.stderr.contains("stale committed output \(staleArkTS.standardizedFileURL.path)"))
     #expect(stale.stderr.contains("refract generate"))
     #expect(stale.stderr.contains("2 committed output(s)"))
     #expect(try Data(contentsOf: staleKotlin) == Data("// hand edit\n".utf8))

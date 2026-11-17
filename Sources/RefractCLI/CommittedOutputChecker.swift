@@ -11,8 +11,7 @@ struct CommittedOutputChecker {
         var differences = 0
         var expectedFiles: [URL: Set<String>] = [:]
         for output in outputs {
-            let directory = URL(fileURLWithPath: output.directory, isDirectory: true)
-                .standardizedFileURL.resolvingSymlinksInPath()
+            let directory = URL(fileURLWithPath: output.directory, isDirectory: true).standardizedFileURL
             let file = directory.appendingPathComponent(output.filename)
             expectedFiles[directory, default: []].insert(output.filename)
             let expected = Data(output.contents.utf8)
@@ -29,10 +28,11 @@ struct CommittedOutputChecker {
         for directory in expectedFiles.keys.sorted(by: { $0.path < $1.path }) {
             guard let expected = expectedFiles[directory] else { continue }
             guard let committed = try? FileManager.default.contentsOfDirectory(
-                at: directory, includingPropertiesForKeys: nil
+                atPath: directory.path
             ) else { continue }
-            for file in committed.sorted(by: { $0.path < $1.path })
-                where ["kt", "ets"].contains(file.pathExtension) && !expected.contains(file.lastPathComponent) {
+            for filename in committed.sorted()
+                where ["kt", "ets"].contains(URL(fileURLWithPath: filename).pathExtension) && !expected.contains(filename) {
+                let file = directory.appendingPathComponent(filename)
                 writeError("refract: unexpected generated output \(file.path); no supplied input produces this file; remove it if it is obsolete, or add its Swift input")
                 differences += 1
             }
