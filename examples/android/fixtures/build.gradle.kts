@@ -47,6 +47,7 @@ android {
 
     sourceSets.getByName("main").kotlin.directories.addAll(
         listOf(
+            "src/native/java",
             "../app/src/main/java/com/example/refract/animation",
             "../app/src/main/java/com/example/refract/search",
         ),

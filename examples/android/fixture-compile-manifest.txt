@@ -28,6 +28,7 @@ interop-native-animation
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
+interop-remote-image
 navigation-host
 navigation-native-destination
 accessibility-dynamic-type

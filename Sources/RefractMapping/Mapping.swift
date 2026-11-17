@@ -332,6 +332,8 @@ public struct Parameter: Codable, Equatable, Sendable {
 public enum ParameterType: String, Codable, CaseIterable, Sendable {
     case string, bool, int, double, length, color, font, image, stringKey
     case action, actionString, actionBool, actionInt, actionDouble
+    /// The app-owned native loading interface; no implementation is generated.
+    case remoteImageLoader
 
     public var isAction: Bool { rawValue.hasPrefix("action") }
 }

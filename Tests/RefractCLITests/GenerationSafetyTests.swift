@@ -194,4 +194,3 @@ private func builtCLIExecutable() -> URL {
     return URL(fileURLWithPath: CommandLine.arguments[0])
         .deletingLastPathComponent().appendingPathComponent("refract")
 }
-
