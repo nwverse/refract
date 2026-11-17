@@ -34,6 +34,12 @@ abstract class RefractSourceSet @Inject constructor(private val name: String) : 
 
     /** Every native resource catalog read through this group's mapping, on both platforms. */
     abstract val resources: ConfigurableFileCollection
+
+    /** Existing production Kotlin directory, used when no configurations are declared. */
+    abstract val committedOutputDirectory: DirectoryProperty
+
+    /** Existing production ArkTS directory, used when no configurations are declared. */
+    abstract val harmonyCommittedOutputDirectory: DirectoryProperty
 }
 
 abstract class RefractGenerationConfiguration @Inject constructor(private val name: String) : Named {

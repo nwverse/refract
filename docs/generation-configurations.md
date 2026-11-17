@@ -54,13 +54,13 @@ android {
 
 A configuration name begins with a lowercase ASCII letter and contains only ASCII letters and digits. Every Android
 variant selects exactly one configuration through `androidVariant`; missing or duplicate bindings fail at
-configuration time. There is no inference from a build environment. If a consumer declares no configurations,
-single-source-group consumers retain the existing debug/release production defaults: Kotlin below
-`refract/generated/<group>/` and ArkTS below `refract/generated/<group>/harmony/`.
-Declaring an `internal` configuration is opt-in and leaves those defaults untouched. Every explicitly declared
+configuration time. There is no inference from a build environment. If a consumer declares no configurations, its
+legacy source-group output fields and existing production Kotlin path remain unchanged; the default HarmonyOS
+directory is `refract/generated/harmony/` when that legacy field is not supplied. Declaring an `internal`
+configuration is opt-in and leaves those defaults untouched. Every explicitly declared
 configuration must set its output roots; except for the legacy debug/release pair, different configurations cannot
-share a reviewed root. Each source group receives a separate `<root>/<group>/android/` and
-`<root>/<group>/harmony/` directory so that the complete-output check has an unambiguous owner.
+share a reviewed root. Every source group has separate `<root>/<group>/android/` and `<root>/<group>/harmony/`
+directories so that the complete-output check has an unambiguous owner.
 
 The output directories are per configuration **and per complete source group**. Each independently mapped source
 group has its own child directory. Do not hand-edit the group directories to merge configurations: the checker must

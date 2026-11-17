@@ -24,17 +24,11 @@ refract {
             rootProject.file("../shared/SettingsScreen.swift"),
         )
         mapping.set(rootProject.file("../refract.json"))
+        harmonyCommittedOutputDirectory.set(rootProject.file("../harmony/entry/src/main/ets/generated"))
         resources.from(
             rootProject.file("app/src/main/res/values/strings.xml"),
             rootProject.file("../harmony/entry/src/main/resources/base/element/string.json"),
         )
-    }
-    for (name in listOf("debug", "release")) {
-        configurations.register(name) {
-            androidVariant.set(name)
-            androidOutputDirectory.set(layout.projectDirectory.dir("refract/generated"))
-            harmonyOutputDirectory.set(rootProject.file("../harmony/entry/src/main/ets"))
-        }
     }
 }
 

@@ -3,8 +3,6 @@ package dev.refract.gradle
 import com.android.build.api.variant.AndroidComponentsExtension
 import org.gradle.api.GradleException
 import org.gradle.api.NamedDomainObjectContainer
-import org.gradle.api.file.Directory
-import org.gradle.api.provider.Provider
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 
@@ -34,8 +32,8 @@ class RefractPlugin : Plugin<Project> {
             val androidComponents = project.extensions.getByType(AndroidComponentsExtension::class.java)
             androidComponents.onVariants(androidComponents.selector().all()) { variant ->
                 val configurations = extension.configurations
-                val legacyDefaults = configurations.isEmpty()
-                if (legacyDefaults) {
+                val legacyDefaults = configurations.isEmpty() && extension.sources.size == 1
+                if (configurations.isEmpty()) {
                     registerDefaults(project, configurations, extension.sources)
                 }
                 val selected = configurations.filter { it.androidVariant.orNull == variant.name }
@@ -92,6 +90,19 @@ class RefractPlugin : Plugin<Project> {
 
                 for (source in extension.sources) {
                     val taskName = "${suffix}${source.name.replaceFirstChar { it.uppercase() }}"
+                    val androidOutput = if (legacyDefaults) {
+                        source.committedOutputDirectory.convention(
+                            project.layout.projectDirectory.dir("refract/generated/${source.name}"),
+                        )
+                        source.committedOutputDirectory
+                    } else {
+                        configuration.androidOutputDirectory.map { it.dir(source.name).dir("android") }
+                    }
+                    val harmonyOutput = if (legacyDefaults) {
+                        source.harmonyCommittedOutputDirectory
+                    } else {
+                        configuration.harmonyOutputDirectory.map { it.dir(source.name).dir("harmony") }
+                    }
                     val generation = project.tasks.register(
                         "generate${taskName}Refract", RefractGenerateTask::class.java,
                     ) {
@@ -122,20 +133,8 @@ class RefractPlugin : Plugin<Project> {
                         swiftInputs.from(source.inputs)
                         mapping.convention(source.mapping)
                         resources.from(source.resources)
-                        committedOutputDirectory.convention(
-                            if (legacyDefaults) {
-                                configuration.androidOutputDirectory.map { it.dir(source.name) }
-                            } else {
-                                configuration.androidOutputDirectory.map { it.dir(source.name).dir("android") }
-                            },
-                        )
-                        harmonyCommittedOutputDirectory.convention(
-                            if (legacyDefaults) {
-                                configuration.harmonyOutputDirectory
-                            } else {
-                                configuration.harmonyOutputDirectory.map { it.dir(source.name).dir("harmony") }
-                            },
-                        )
+                        committedOutputDirectory.convention(androidOutput)
+                        harmonyCommittedOutputDirectory.convention(harmonyOutput)
                         dependsOn(version)
                     }
                     check.configure { dependsOn(verification) }
@@ -149,20 +148,8 @@ class RefractPlugin : Plugin<Project> {
                         mapping.convention(source.mapping)
                         resources.from(source.resources)
                         configurationName.convention(configuration.name)
-                        androidDestination.convention(
-                            if (legacyDefaults) {
-                                configuration.androidOutputDirectory.map { it.dir(source.name) }
-                            } else {
-                                configuration.androidOutputDirectory.map { it.dir(source.name).dir("android") }
-                            },
-                        )
-                        harmonyDestination.convention(
-                            if (legacyDefaults) {
-                                configuration.harmonyOutputDirectory
-                            } else {
-                                configuration.harmonyOutputDirectory.map { it.dir(source.name).dir("harmony") }
-                            },
-                        )
+                        androidDestination.convention(androidOutput)
+                        harmonyDestination.convention(harmonyOutput)
                         stagingDirectory.convention(
                             project.layout.buildDirectory.dir("refract/publish/${configuration.name}/${source.name}"),
                         )
@@ -204,13 +191,14 @@ class RefractPlugin : Plugin<Project> {
             }
         }
         if (sources.size == 1) {
+            val source = sources.single()
             for (configuration in configurations) {
-                val defaultRoot = project.layout.projectDirectory.dir("refract/generated")
-                val defaultHarmony: Provider<Directory> = project.provider {
-                    defaultRoot.dir("screens/harmony")
-                }
-                configuration.androidOutputDirectory.convention(defaultRoot)
-                configuration.harmonyOutputDirectory.convention(defaultHarmony)
+                configuration.androidOutputDirectory.convention(
+                    project.layout.projectDirectory.dir("refract/generated"),
+                )
+                configuration.harmonyOutputDirectory.convention(
+                    project.layout.projectDirectory.dir("refract/generated/harmony"),
+                )
             }
         }
     }

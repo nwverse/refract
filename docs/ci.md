@@ -87,8 +87,9 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
 4. Export the built CLI as `REFRACT_CLI_PATH` and its exact `refract --version` line as
    `REFRACT_REQUIRED_VERSION`, then run `./gradlew --no-daemon :app:checkDebugRefract
-   :app:compileDebugKotlin` from `examples/android/`. The version includes the source revision and is checked before
-   generation or publication. The Gradle plugin in `tools/gradle/` registers per-variant
+   :app:compileDebugKotlin` from `examples/android/`. The complete version identity is checked before generation or
+   publication; local development builds identify their source revision as `unknown-source-revision`, while packages
+   carry an exact source revision. The Gradle plugin in `tools/gradle/` registers per-variant
    generation through Android's generated-source API. It compiles the fresh output under `app/build/generated/`,
    while `checkDebugRefract` invokes the CLI's read-only committed-output check. The checked-in Gradle wrapper
    (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle
