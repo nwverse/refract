@@ -10,6 +10,13 @@ extension ComposeBackend {
         var actions: [AccessibilityCustomAction] = []
         var identifier: String?
         for modifier in modifiers {
+            if modifier.name == "accessibilityLabel" &&
+                modifier.arguments.contains(where: { if case .stringLiteral = $0.value { true } else { false } }) {
+                throw Diagnostic(code: "RFNATIVE004",
+                    message: "A native iOS accessibility label cannot be emitted on Android.",
+                    suggestion: "Keep it in the explicit iOS branch, or use localized Text in the shared accessibility contract.",
+                    location: modifier.location)
+            }
             switch modifier.name {
             case "accessibilityLabel", "accessibilityHint":
                 descriptions.append(try rememberAccessibilityText(

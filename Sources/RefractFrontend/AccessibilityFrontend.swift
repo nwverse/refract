@@ -55,8 +55,10 @@ extension Builder {
                 return nil
             }
         } else if name == "accessibilityLabel" {
-            // Preserve the existing model-backed String overload from the dynamic-type contract.
-            if let typed = modelTypedProperty(argument) {
+            // The existing native-iOS label contract also accepts an app-provided literal String.
+            if let literal = stringLiteral(argument) {
+                value = Expression(.stringLiteral(literal), type: .string, location: location(of: argument))
+            } else if let typed = modelTypedProperty(argument) {
                 value = Expression(typed.expression.value, type: typed.type, location: typed.expression.location)
             } else {
                 value = nil

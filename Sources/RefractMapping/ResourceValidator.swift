@@ -5,10 +5,8 @@ public enum LocalizationResourceValidator {
     public static func validate(module: Module, mapping: Mapping, platform: Platform? = nil) throws {
         for expression in localizedExpressions(in: module, platform: platform) {
             guard case let .localizedText(text) = expression.value else { continue }
-            if platform == .harmonyOS {
-                _ = try mapping.stringCatalog(text, platform: .harmonyOS, location: expression.location)
-            } else {
-                _ = try mapping.stringCatalog(text, platform: .android, location: expression.location)
+            _ = try mapping.stringCatalog(text, platform: .android, location: expression.location)
+            if platform != .android {
                 _ = try mapping.stringCatalog(text, platform: .harmonyOS, location: expression.location)
             }
         }

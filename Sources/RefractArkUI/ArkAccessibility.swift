@@ -27,7 +27,7 @@ extension ArkModifiers {
                         attributes.append(".accessibilityNextFocusId('\(predecessor.name)')")
                     }
                 }
-            case "accessibilityLabel":
+            case "accessibilityLabel", "iosAccessibilityLabel":
                 attributes.append(".accessibilityText(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))")
             case "accessibilityHint":
                 attributes.append(".accessibilityDescription(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))")

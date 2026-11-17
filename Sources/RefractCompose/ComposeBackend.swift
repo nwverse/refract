@@ -484,10 +484,14 @@ struct KotlinWriter {
         if value.isEmpty {
             text += "\n"
         } else {
-            let continuation = value.split(separator: "\n", omittingEmptySubsequences: false).map {
-                $0.hasPrefix("\u{1}") ? String($0.dropFirst()) : String($0)
-            }.joined(separator: "\n")
-            text += String(repeating: "    ", count: depth) + continuation.replacingOccurrences(of: "\n", with: "\n" + String(repeating: "    ", count: depth)) + "\n"
+            if value.contains("\u{1}") {
+                let continuation = value.split(separator: "\n", omittingEmptySubsequences: false).map {
+                    $0.hasPrefix("\u{1}") ? String($0.dropFirst()) : String($0)
+                }.joined(separator: "\n")
+                text += String(repeating: "    ", count: depth) + continuation.replacingOccurrences(of: "\n", with: "\n" + String(repeating: "    ", count: depth)) + "\n"
+            } else {
+                text += String(repeating: "    ", count: depth) + value + "\n"
+            }
         }
     }
 

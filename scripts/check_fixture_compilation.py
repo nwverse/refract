@@ -175,9 +175,7 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
     if fixture in {"interop-remote-image", "accessibility-actions-traversal"}:
         # Native JVM tests need the app's real resource table, not a library's
         # isolated test APK. Stage the exact generated call and its resources.
-        for base in (APP_TEST_JAVA, APP_TEST_RES):
-            if base.exists():
-                shutil.rmtree(base)
+        # The batch is cleaned once in main; individual fixtures only append.
         target_package = APP_TEST_JAVA.joinpath(*package.split("."))
         target_package.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(target, target_package / f"{fixture}.kt")
@@ -195,7 +193,7 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
                     shutil.copyfile(source, destination)
         destination = APP_TEST_RES / "values/strings.xml"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(strings_xml, destination)
+        merge_strings(strings_xml, destination, fixture)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:
@@ -240,7 +238,7 @@ def main() -> int:
         fixtures = read_manifest()
         # Start with a clean staging area so a fixture removed from the manifest
         # cannot leave stale Kotlin behind for Gradle to compile.
-        for path in (STAGING_JAVA, STAGING_RES):
+        for path in (STAGING_JAVA, STAGING_RES, APP_TEST_JAVA, APP_TEST_RES):
             if path.exists():
                 shutil.rmtree(path)
         for fixture in fixtures:
