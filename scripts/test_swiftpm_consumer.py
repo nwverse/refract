@@ -113,7 +113,8 @@ def main() -> int:
     host = next(item for item in json.loads(manifest.stdout)["targets"]
                 if item["name"] == "RefractConsumer")
     assert host["product_dependencies"] == ["RefractSwiftPMPlugin"]
-    assert all("refract" not in dependency.lower() for dependency in host["target_dependencies"])
+    assert all("refract" not in dependency.lower()
+               for dependency in host.get("target_dependencies", []))
     staged_kotlin = (outputs / "Android/Hello.kt").read_bytes()
     staged_arkts = (outputs / "HarmonyOS/Hello.ets").read_bytes()
     assert staged_kotlin == original_committed
