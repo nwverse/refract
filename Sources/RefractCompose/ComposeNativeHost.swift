@@ -58,17 +58,19 @@ extension ComposeBackend {
             throw Diagnostic(code: "RFHOST003", message: "The host request no longer matches its checked capability signature.",
                              suggestion: "Keep id and revision typed; do not return or infer a scheduling result.")
         }
-        return "\(host).\(name)(\(arguments.map(\.value).map(renderNativeArgument).joined(separator: ", ")))"
+        return "\(host).\(name)(\(try arguments.map { try renderNativeArgument($0.value) }.joined(separator: ", ")))"
     }
 
-    private func renderNativeArgument(_ expression: Expression) -> String {
+    private func renderNativeArgument(_ expression: Expression) throws -> String {
         switch expression.value {
         case let .stringLiteral(value): "\"\(value.escapedForKotlin())\""
         case let .verbatimText(value): "\"\(value.escapedForKotlin())\""
         case let .boolLiteral(value): value ? "true" : "false"
         case let .numberLiteral(value): value
         case let .nativeValueProperty(value): "\(value.value).\(value.field.rawValue)"
-        default: "invalid"
+        default:
+            throw Diagnostic(code: "RFHOST003", message: "A host request argument is not a supported typed scalar or correlation field.",
+                             suggestion: "Use a literal or selected id/revision field.", location: expression.location)
         }
     }
 }
