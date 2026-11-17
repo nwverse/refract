@@ -37,6 +37,17 @@ content receiver. Only real Android compilation catches this; inspecting an expe
 
 ## Test what the example actually compiles
 
+## Native JVM Compose uses the application's real resource package
+
+An Android library's local unit-test APK does not include a dependent application's resource table. Generated Kotlin
+that refers to the application's numeric `R` IDs can then silently render unrelated dependency strings even though
+the real generated layout and native controls are present. Run Robolectric in the application's own `src/test` source
+set, assert the actual localized strings before rendering, and inspect the resulting PNGs rather than accepting
+nonblank pixels as UI evidence. A test-only Activity supplies a native host; it must never replace the generated
+composable. Keep the standard AGP `test_config.properties` and binary-resource path, and use a direct
+`Robolectric.buildActivity` controller for the empty host when a test-only manifest overlay is not registered. Resolve
+the exact Android runtime through Gradle rather than a second implicit repository downloader.
+
 ## Real SwiftUI compilation and simulator ownership
 
 A SwiftUI source file must import SwiftUI unless another language-supported import supplies it; parsing successfully
@@ -57,6 +68,13 @@ host imports of the missing generated interface merely to show future wiring: th
 Keep the current generated path compiling and land the host change together with actual generated output. Run
 `python3 scripts/check_examples.py` after `swift build` to regenerate and compare committed output, validate mapped
 base resources and check the iOS shared-source references. It is a consistency check, not a native compiler.
+
+## Xcode requires unique source basenames
+
+Xcode's Swift string extraction uses a source basename for its `*.stringsdata` intermediate. Multiple canonical
+`Input.swift` files therefore collide even when their project display names differ. Keep iOS contract compiler inputs
+in `examples/shared/` under unique filenames and require byte identity with their canonical fixtures in the example
+check. Do not add independently maintained screen copies or run generation from those source-only compiler inputs.
 
 ## A documented command and a native target are not compiler evidence
 

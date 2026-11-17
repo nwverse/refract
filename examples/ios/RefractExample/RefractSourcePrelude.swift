@@ -3,6 +3,34 @@ import SwiftUI
 public protocol RefractModel {}
 public protocol RefractNativeView: View {}
 
+/// Typed design spacing for the shared source's named container-spacing values.
+public struct RefractSpacing: Sendable {
+    public let value: CGFloat
+
+    public init(value: CGFloat) {
+        self.value = value
+    }
+
+    public static let small = Self(value: 4)
+    public static let medium = Self(value: 8)
+}
+
+public extension VStack {
+    init(alignment: HorizontalAlignment = .center,
+         spacing: RefractSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.value, content: content)
+    }
+}
+
+public extension HStack {
+    init(alignment: VerticalAlignment = .center,
+         spacing: RefractSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.value, content: content)
+    }
+}
+
 /// Source-level measurement declarations. The generator selects and lowers these
 /// operations for their native targets; they have no effect on the iOS branch.
 public enum RefractNativeModifier {

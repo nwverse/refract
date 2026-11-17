@@ -26,4 +26,10 @@ interop-native-measurement
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
+navigation-host
+navigation-native-destination
 accessibility-dynamic-type
+state-counter
+parent-binding
+model-interface
+v0-stack-layout

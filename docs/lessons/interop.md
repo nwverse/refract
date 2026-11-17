@@ -2,8 +2,14 @@
 
 - SwiftSyntax parsing does not prove SwiftUI type correctness. `Binding(get:set:)` is a real SwiftUI initializer, but
   `.refractNativeModifier(...)` and `.padding(horizontal:vertical:)` require explicit iOS-only source declarations.
-  Keep the measurement fixture itself in the iOS target's Sources phase, including its application-owned design
-  tokens, so Xcode type-checks every platform branch instead of trusting a syntax-only fixture.
+  Compile uniquely named source-only inputs for the measurement contract, with byte-identity checks against the
+  canonical fixtures and their application-owned design tokens. Several `Input.swift` file references collide on
+  Xcode's `Input.stringsdata` even when their display names differ; real Xcode builds catch this before type checking.
+
+- Prefer correcting pseudo-SwiftUI over adding a compatibility shim for it. `Button(verbatim:)` is not SwiftUI;
+  use the ordinary action/label pair with `Text(verbatim:)` and reject the invalid initializer with a source-located
+  diagnostic. The typed interop helpers above are different: they carry declared platform-only semantics while
+  preserving the receiver's native iOS view behavior.
 
 - Keep IR independent of mapping and backends. Interop lowering helpers belong in `RefractMapping` or a backend;
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.
@@ -24,6 +30,15 @@
   native metadata typed until its emitter can place the modifier on Switch/Toggle itself.
 - Retained callback keys include every captured stable value. A source action name is a discriminator, not a
   substitute for the current model or the list item's declared `Identifiable` id.
+- A generated child call needs an ordered typed argument list with the child's label and the caller's expression.
+- Typed navigation must not synthesize a second back stack. `@State [Route]` owns the iOS path, while generated
+  Android/HarmonyOS roots expose a finite-enum navigation callback and the host owns its controller/stack. Compile a
+  real `NavHost` host alongside the generated two-screen components; merely finding `NavController` in documentation
+  proves nothing. A generated link is a child of its root container: forward the host modifier only to that container,
+  not to every nested Button/Text, and scope each link callback to its own path rather than the first navigation
+  screen in the module. Keep the destination component's model parameters in the root screen's scope, not all module screens.
+  When native destinations live in IR rather than ordinary `.native` nodes, collect their typed imports before the
+  ArkUI header is emitted, and include them in the platform compiler's fixture manifest.
 - A generated child call needs an ordered typed argument list with the child's label and the caller's expression.
   Kotlin named arguments use `label = value`, not Swift's `label: value`; ArkTS uses `label: value` in its object
   literal. Golden text alone does not catch that distinction, so compile a child call whose model label differs

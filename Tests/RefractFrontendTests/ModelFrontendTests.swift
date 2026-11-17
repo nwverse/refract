@@ -13,7 +13,9 @@ import RefractIR
         var body: some View {
             VStack {
                 Text(model.title)
-                Button(verbatim: "Disable") { model.setEnabled(false) }
+                Button { model.setEnabled(false) } label: {
+                    Text(verbatim: "Disable")
+                }
             }
         }
     }
@@ -51,7 +53,11 @@ import RefractIR
     }
     struct Settings: View {
         let model: SettingsModel
-        var body: some View { Button(verbatim: "Rename") { model.rename(to: "New") } }
+        var body: some View {
+            Button { model.rename(to: "New") } label: {
+                Text(verbatim: "Rename")
+            }
+        }
     }
     """))
     #expect(unit.diagnostics.isEmpty)
