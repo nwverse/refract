@@ -298,6 +298,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "resource-reject-missing-assets",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "resource-typed-assets",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "state-counter",
       "implementationStatus": "ready"
     },

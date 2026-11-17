@@ -330,7 +330,7 @@ public struct Parameter: Codable, Equatable, Sendable {
 }
 
 public enum ParameterType: String, Codable, CaseIterable, Sendable {
-    case string, bool, int, double, length, color, font, image, stringKey
+    case string, bool, int, double, length, color, font, image, stringKey, rawAsset
     case action, actionString, actionBool, actionInt, actionDouble
     /// The app-owned native loading interface; no implementation is generated.
     case remoteImageLoader
@@ -425,17 +425,23 @@ public struct Resources: Codable, Equatable, Sendable {
     public var namespace: String?
     public var stringTable: String?
     public var catalog: String?
+    /// An explicit Android `res` or HarmonyOS `resources` root; never a glob or asset search path.
+    public var assetCatalog: String?
     public var strings: [String: String]
 
     public init(className: String? = nil, namespace: String? = nil, stringTable: String? = nil,
-                catalog: String? = nil, strings: [String: String] = [:]) {
+                catalog: String? = nil, assetCatalog: String? = nil, strings: [String: String] = [:]) {
         self.className = className
         self.namespace = namespace
         self.stringTable = stringTable
         self.catalog = catalog
+        self.assetCatalog = assetCatalog
         self.strings = strings
     }
     public static let empty = Resources()
+    private enum CodingKeys: String, CodingKey {
+        case className, namespace, stringTable, catalog, assetCatalog, strings
+    }
     public var isConfigured: Bool { className != nil || stringTable != nil }
 }
 

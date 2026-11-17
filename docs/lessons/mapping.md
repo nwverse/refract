@@ -10,6 +10,10 @@
 - **Keep a schema's escaping executable in every consumer.** A regex copied from Swift into JSON needs another layer
   of escaping. Validate the published schema with a standard JSON Schema implementation, and parse the packaged
   resource in Swift tests; inspecting its text alone misses invalid JSON escapes.
+- **Normalize resource-root paths before comparing them.** `URL` retains directory trailing slashes, so an apparently
+  correct one-component resource root can fail a parent-directory comparison. Compare normalized URL paths, include
+  an explicit decode assertion for a newly added mapping field, and test regular files/directories without following
+  symlinks. Resource metadata checks must not become arbitrary directory enumeration or asset-content reads.
 - **Do not make a complete mapping fixture depend on another worktree.** A compatibility example may be copied into
   a test's string input, but test code must never read another Agent's uncommitted path.
 - **Coordinate a shared diagnostic renderer before writing golden errors.** The exact prefix and suggestion wording

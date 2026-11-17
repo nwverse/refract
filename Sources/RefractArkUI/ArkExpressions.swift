@@ -18,7 +18,20 @@ enum ArkExpression {
                                  suggestion: "Use the same lowercase app-owned resource name on both platforms.",
                                  location: expression.location)
             }
+            if mapping.harmonyOS.resources.assetCatalog != nil {
+                _ = try AssetCatalog.resolveBoth(name, kind: .image, mapping: mapping, location: expression.location)
+            }
             return "$r('app.media.\(name)')"
+        case let .rawAssetResource(name):
+            let variants = try AssetCatalog.resolve(name, kind: .raw, mapping: mapping, platform: .harmonyOS,
+                                                    location: expression.location)
+            let suffix = try AssetCatalog.rawExtension(name, variants: variants)
+            return "$rawfile('\(name).\(suffix)')"
+        case .fontAsset:
+            throw Diagnostic(code: "arkui.invalid_font_expression",
+                             message: "A custom font is valid only as the `.font` modifier on Text.",
+                             suggestion: "Use `.font(Font.custom(\"font_name\", size: 16, relativeTo: .body))` on Text",
+                             location: expression.location)
         case let .stringKey(key):
             let resource = try mapping.stringResource(key, platform: .harmonyOS, location: expression.location)
             return "$r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)')"

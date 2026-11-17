@@ -111,7 +111,15 @@ extension ArkModifiers {
                         message: "Text styling cannot be attached to this non-Text view without changing its semantics.",
                         suggestion: "Apply `font` directly to the Text view.", location: modifier.location)
                 }
-                parts.append(".font(\(try token(try arguments.one(), category: .font, mapping: mapping)))")
+                let argument = try arguments.one()
+                if case let .fontAsset(name, size) = argument.value {
+                    _ = try AssetCatalog.resolveBoth(name, kind: .font, mapping: mapping, location: argument.location)
+                    // The app registers this family from its raw font catalog; no font loading is emitted.
+                    parts.append(".fontFamily('\(name)')")
+                    parts.append(".fontSize(\(size))")
+                } else {
+                    parts.append(".font(\(try token(argument, category: .font, mapping: mapping)))")
+                }
             case "foregroundStyle", "foregroundColor":
                 guard isText else {
                     throw Diagnostic(code: "RFVIEW003",

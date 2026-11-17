@@ -135,7 +135,7 @@ def regenerate_and_stage(fixture: str) -> None:
                 fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-    if fixture == "interop-remote-image":
+    if fixture in {"interop-remote-image", "resource-typed-assets"}:
         # Native JVM tests need the app's real resource table, not a library's
         # isolated test APK. Stage the exact generated call and its resources.
         for base in (APP_TEST_JAVA, APP_TEST_RES):
@@ -155,6 +155,11 @@ def regenerate_and_stage(fixture: str) -> None:
                 destination = APP_TEST_RES / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, destination)
+        if fixture == "resource-typed-assets":
+            native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-NativeComponent.kt"
+            app_native = APP_TEST_JAVA / "example" / "app" / "AppPolicyDocument.kt"
+            app_native.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(native_target, app_native)
         destination = APP_TEST_RES / "values/strings.xml"
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(strings_xml, destination)

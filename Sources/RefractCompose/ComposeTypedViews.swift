@@ -1,4 +1,5 @@
 import RefractIR
+import RefractMapping
 
 extension ComposeBackend {
     func emitTyped(_ node: ViewNode, isRoot: Bool, parentAxis: ViewNode.StackAxis?,
@@ -25,6 +26,16 @@ extension ComposeBackend {
             throw Diagnostic(code: "RF-C001", message: "A list item can only be lowered inside its parent LazyColumn.",
                              suggestion: "Use ListItem as a direct List child.", location: location)
         case let .image(source, modifiers, location):
+            if context.mapping.android.resources.assetCatalog != nil, let description = source.contentDescription {
+                context.imports.insert("androidx.compose.foundation.Image")
+                context.imports.insert("androidx.compose.ui.res.painterResource")
+                let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+                let resource = try composeResource(source.name, kind: .image, mapping: context.mapping,
+                                                   location: source.location)
+                let label = try renderExpression(description, context: &context)
+                out.line("Image(painter = painterResource(\(resource)), contentDescription = \(label), modifier = \(chain))")
+                return
+            }
             try emitImage(source, modifiers: modifiers, isRoot: isRoot, location: location,
                           into: &out, context: &context)
         case let .label(title, source, modifiers, location):
@@ -275,6 +286,10 @@ extension ComposeBackend {
             throw Diagnostic(code: "RF-C002", message: "`\(source.name)` is not a supported Android drawable resource name.",
                              suggestion: "Use a lowercase ASCII drawable identifier with digits and underscores.",
                              location: location ?? source.location)
+        }
+        if context.mapping.android.resources.assetCatalog != nil {
+            _ = try AssetCatalog.resolveBoth(source.name, kind: .image, mapping: context.mapping,
+                                             location: location ?? source.location)
         }
         context.imports.insert("androidx.compose.foundation.Image")
         context.imports.insert("androidx.compose.ui.res.painterResource")

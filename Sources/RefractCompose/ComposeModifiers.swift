@@ -174,18 +174,23 @@ extension ComposeBackend {
     }
 
     func textSpecificModifiers(_ modifiers: [Modifier], context: inout Context) throws -> [String] {
-        try modifiers.compactMap { modifier in
+        try modifiers.flatMap { modifier -> [String] in
             switch modifier.name {
             case "font":
-                let font = try composeToken(try ModifierArguments(modifier: modifier).one(),
-                                            category: .font, context: &context)
-                return "style = \(font)"
+                let argument = try ModifierArguments(modifier: modifier).one()
+                if case let .fontAsset(name, size) = argument.value {
+                    context.imports.insert("androidx.compose.ui.unit.sp")
+                    return ["fontFamily = \(try composeFontFamily(name, mapping: context.mapping, location: argument.location, context: &context))",
+                            "fontSize = \(size).sp"]
+                }
+                let font = try composeToken(argument, category: .font, context: &context)
+                return ["style = \(font)"]
             case "foregroundColor", "foregroundStyle":
                 let color = try composeToken(try ModifierArguments(modifier: modifier).one(),
                                              category: .color, context: &context)
-                return "color = \(color)"
+                return ["color = \(color)"]
             default:
-                return nil
+                return []
             }
         }
     }

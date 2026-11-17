@@ -297,7 +297,14 @@ final class MappingValidator {
 
     private func resources(_ value: JSON?, _ platform: Platform) {
         guard let value, object(value, "a resource catalog") else { return }
-        fields(value, allowed: platform == .android ? ["className", "catalog", "strings"] : ["namespace", "stringTable", "catalog", "strings"])
+        fields(value, allowed: platform == .android ? ["className", "catalog", "assetCatalog", "strings"] : ["namespace", "stringTable", "catalog", "assetCatalog", "strings"])
+        if let catalog = field("assetCatalog", in: value), let path = string(catalog) {
+            guard path == "res" && platform == .android || path == "resources" && platform == .harmonyOS else {
+                error("mappingResource", "The asset catalog `\(path)` is not the platform's fixed application resource root.",
+                      "Use `res` on Android and `resources` on HarmonyOS; these roots contain explicit assets, never arbitrary directories.", at: catalog.location)
+                return
+            }
+        }
         if let catalog = field("catalog", in: value) {
             pattern(catalog, "^[^\\\\]+$", "a native base string catalog path", code: "mappingResource")
         }
@@ -375,6 +382,7 @@ final class MappingValidator {
                       "Declare the same interface on both platforms.", at: component.location)
             }
         }
+        compareAssetCatalogs(android, harmony)
         compareModifierSignatures(android.property("modifiers"), harmony.property("modifiers"))
         let androidSymbols = Set(android.property("symbols")?.object?.map { $0.0 } ?? [])
         let harmonySymbols = Set(harmony.property("symbols")?.object?.map { $0.0 } ?? [])
@@ -432,6 +440,15 @@ final class MappingValidator {
                       "Use the same required flag on both platforms.", at: right.property("required")?.location)
             }
         }
+    }
+
+    private func compareAssetCatalogs(_ android: JSON, _ harmony: JSON) {
+        let a = android.property("resources")?.property("assetCatalog")
+        let h = harmony.property("resources")?.property("assetCatalog")
+        guard (a == nil) != (h == nil) else { return }
+        error("mappingPlatformMismatch", "The binary asset catalog is configured on only one platform.",
+              "Declare both `android.resources.assetCatalog: res` and `harmonyOS.resources.assetCatalog: resources`.",
+              at: (a ?? h)?.location)
     }
 
     private func compareModifierSignatures(_ a: JSON?, _ b: JSON?) {
