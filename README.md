@@ -6,10 +6,13 @@
 
 Refract reads screens written in a subset of SwiftUI and generates idiomatic, readable source for Android (Jetpack
 Compose) and HarmonyOS (ArkUI). On iOS the same file is ordinary SwiftUI. There is no Refract runtime: the generated
-code is what a careful engineer would write by hand, so it runs exactly as fast as hand-written native code.
+code is intended to be what a careful engineer would write by hand, without a Refract runtime. Performance parity is a
+goal that must be demonstrated by target-specific measurements, not a verified project-wide guarantee.
 
-> Status: early development. The generator, the subset and the examples are being built in the open; see
-> [the roadmap](docs/roadmap.md).
+> Status: early development; not production-ready. A bounded Android settings example and generated Kotlin fixtures
+> compile in CI. The real iOS SwiftUI app and ArkTS output have not been natively compiled in the current environment;
+> no physical-device performance results are available. See the [production-readiness evidence matrix](docs/production-readiness.md)
+> for verification levels, adoption boundaries and issue owners, and [the roadmap](docs/roadmap.md) for plans.
 
 ## Goals
 
