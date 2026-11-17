@@ -113,6 +113,38 @@ A modifier combination that cannot preserve the source semantics is diagnosed.
 | `.disabled(model.isLocked)` | `enabled = !model.isLocked.value` at the control | `.enabled(!this.model.isLocked)` | This is a view/control property, not a blanket hit-test filter that changes child behavior. |
 | `.accessibilityLabel("settings.icon.hint")` | `Modifier.semantics { contentDescription = ... }` with resource text resolved appropriately | `.accessibilityText($r('app.string.settings_icon_hint'))` | Accessibility labels are localized resources and must not be silently dropped. |
 
+### Dynamic type and native control semantics
+
+Generated text must scale with the platform's user font-size preference, and generated controls must preserve
+their native accessibility role, value and label. The subset never hardcodes a fixed pixel size on text or
+replaces a native control with a static visual approximation.
+
+- **Dynamic type.** `Text` emitted without a font modifier inherits the toolkit default: Compose `Text` falls
+  through to `MaterialTheme.typography.bodyLarge` (scalable `sp`), ArkUI `Text` uses the system font size in
+  font-pixels (`fp`). `Text` with `.font(token)` resolves the token to a declared typography value; Compose
+  tokens map to `MaterialTheme.typography.*` (or any application `TextStyle` whose `fontSize` is in `sp`) and
+  ArkUI tokens map to application-owned `Font`/`Resource` values in `fp`. The mapping rejects a typography
+  token that does not resolve to a typed reference, so there is no silent fallback to a fixed-size literal.
+  The generator does not emit `.fontSize(<fixed>)`, `fontSize(<fixed>)` or any size override on its own;
+  size only changes when the source explicitly requests it through the supported `fontSize` modifier path.
+- **Native control semantics.** A `Toggle`, `TextField` or `Button` lowers to the platform's real control
+  (`Switch`/`TextField`/`Button` on Compose, `Toggle`/`TextInput`/`Button` on ArkUI). The control retains
+  its checked/value state and onChange/onClick callback; the visible label, when present, is a sibling
+  `Text` reading the same localized resource. `.labelsHidden()` removes the visible title only; it never
+  drops an explicit accessibility label. iOS `.accessibilityLabel(...)` and the closed
+  `.refractNativeModifier(.contentDescription(...))` operation lower to Compose
+  `Modifier.semantics { contentDescription = ... }` and ArkUI `.accessibilityText(...)` respectively; both
+  forms require a statically typed `String` value, so an unknown or untyped value is a build-time error
+  rather than a silently dropped label. The generated `Icon`/`Image` lowers decorative images with an
+  explicit `contentDescription = null` (Compose) or no accessibility text (ArkUI), matching the source
+  contract for decorative vs. labeled images.
+- **Fixture and evidence.** `Fixtures/accessibility-dynamic-type/` pins the dual-backend lowering of
+  unstyled text, typography-token text, native `Toggle` (visible label and `.labelsHidden()` with an
+  explicit accessibility label), `TextField` and `Button`. The Android compile gate compiles this fixture
+  on every PR, so a lowering that broke either the dynamic-type path or the control-semantics path fails
+  the build. Runtime large-text rendering and screen-reader traversal are inspected through the Native
+  JVM Compose verification module owned by #163; this contract does not claim device measurements.
+
 `docs/performance.md` is the performance-rule catalog. The structural requirements for these examples are stable
 leaf inputs, narrow state reads, remembered scroll/list state, direct modifiers, and no repeated screen-level work.
 Any later benchmark result must identify its environment and is not inferred from fixture correctness.
