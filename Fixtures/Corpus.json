@@ -250,11 +250,11 @@
       "implementationStatus": "ready"
     },
     {
-      "path": "navigation-host",
+      "path": "navigation-deep-restoration",
       "implementationStatus": "ready"
     },
     {
-      "path": "navigation-deep-restoration",
+      "path": "navigation-host",
       "implementationStatus": "ready"
     },
     {
@@ -262,11 +262,11 @@
       "implementationStatus": "ready"
     },
     {
-      "path": "navigation-reject-dynamic",
+      "path": "navigation-reject-child-untyped",
       "implementationStatus": "ready"
     },
     {
-      "path": "navigation-reject-child-untyped",
+      "path": "navigation-reject-dynamic",
       "implementationStatus": "ready"
     },
     {

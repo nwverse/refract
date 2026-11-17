@@ -35,6 +35,17 @@ extension Builder {
                 }
             }
         }
+        // Rejected link syntax has no IR, but its source View still lacks a host callback.
+        // Report that independent graph error rather than silently treating it as a leaf screen.
+        let registeredDestinationNames = Set(stacks.flatMap { $0.destinations.map(\.viewName) })
+        for (name, declaration) in viewDeclarations {
+            guard registeredDestinationNames.contains(name),
+                  !module.screens.contains(where: { $0.name == name }), containsNavigationLinkSyntax(declaration) else { continue }
+            diagnostics.append(Diagnostic(code: "RFNAV003",
+                message: "A destination NavigationLink must use the enclosing graph's finite enum.",
+                suggestion: "Use `NavigationLink(\"navigation.open\", value: Route.case)` and register that destination in the same source file.",
+                location: location(of: declaration.name)))
+        }
         screens = module.screens.map { screen in
             guard containsNavigationLink(screen.body) else {
                 return Screen(name: screen.name, parameters: screen.parameters, states: screen.states,
@@ -68,6 +79,12 @@ extension Builder {
     private func containsNavigationLink(_ node: ViewNode) -> Bool {
         if case .navigationLink = node { return true }
         return node.children.contains(where: containsNavigationLink)
+    }
+
+    private func containsNavigationLinkSyntax(_ node: SyntaxProtocol) -> Bool {
+        if let call = node.as(FunctionCallExprSyntax.self),
+           call.calledExpression.trimmedDescription == "NavigationLink" { return true }
+        return node.children(viewMode: .sourceAccurate).contains(where: containsNavigationLinkSyntax)
     }
 
     func validateNavigationDeclarations(_ module: Module) {
