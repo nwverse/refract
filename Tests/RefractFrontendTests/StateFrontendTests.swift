@@ -9,7 +9,9 @@ import RefractIR
         var body: some View {
             VStack {
                 Text(verbatim: "Count: \\(count)")
-                Button(verbatim: "Increment") { count += 1 }
+                Button { count += 1 } label: {
+                    Text(verbatim: "Increment")
+                }
             }
         }
     }
@@ -51,7 +53,9 @@ import RefractIR
         var body: some View {
             VStack {
                 Text(verbatim: "Enabled: \\(isEnabled)")
-                Button(verbatim: "Disable") { isEnabled = false }
+                Button { isEnabled = false } label: {
+                    Text(verbatim: "Disable")
+                }
             }
         }
     }
@@ -80,6 +84,20 @@ import RefractIR
     }
     #expect(value.value == .boolLiteral(false))
     #expect(value.location != nil)
+}
+
+@Test func frontendRejectsPseudoSwiftUIButtonVerbatimInitializer() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct InvalidButton: View {
+        var body: some View {
+            Button(verbatim: "Save") { }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["unsupportedButton"])
+    #expect(unit.diagnostics[0].location != nil)
+    #expect(unit.diagnostics[0].suggestion?.contains("label:") == true)
+    #expect(unit.module.screens.isEmpty)
 }
 
 @Test(arguments: [

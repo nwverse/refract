@@ -13,6 +13,7 @@ python3 -I scripts/test/test_privacy_check.py
 python3 -I scripts/test/test_doc_paths.py --self-test
 python3 -I scripts/test/test_doc_paths.py
 node scripts/test/pr_needs_issue_test.mjs
+python3 -I scripts/test/test_harmony_toolchain.py
 actionlint
 ```
 
@@ -27,6 +28,13 @@ The documentation checker verifies that every Markdown file under `docs/` is cov
 and images, rejects links that leave the repository, and checks literal repository paths in inline code. Fenced
 examples, command arguments and explicit placeholders are not paths. It does not validate external URLs or heading
 anchors, which would require network access and a Markdown parser.
+
+The HarmonyOS preflight unit tests use synthetic executable files and mocked process calls; they verify argument and
+missing-tool behavior without running or imitating a vendor compiler. Run the environment probe separately with
+`python3 scripts/check_harmony_toolchain.py --check-only`. A missing authorized SDK must return the documented
+nonzero blocker, never be skipped and reported as a native compile pass. The actual application and native-test build
+commands and the acquisition blocker are in `docs/harmony-toolchain.md`. No public CI HarmonyOS compile job is enabled
+until a licensed reproducible distribution is available.
 
 Install actionlint separately when changing `.github/workflows/`. CI downloads the pinned release only when a
 workflow changes, validates the archive against the SHA-256 published in that release's checksums file, and invokes

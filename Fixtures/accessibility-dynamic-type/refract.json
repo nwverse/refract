@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated.accessibility" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {
+      "font": { "parameters": [{ "label": "_", "type": "font", "required": true }] }
+    },
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {
+        "DesignTypography.sectionTitle": "androidx.compose.material3.MaterialTheme.typography.titleMedium"
+      },
+      "color": {}
+    },
+    "resources": {
+      "className": "refract.generated.accessibility.R",
+      "catalog": "values/strings.xml",
+      "strings": {
+        "settings.section": "settings_section",
+        "settings.display.name": "settings_display_name",
+        "settings.notifications": "settings_notifications",
+        "settings.quiet.hours": "settings_quiet_hours",
+        "settings.save": "settings_save"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [
+      { "module": "example.design", "symbols": ["AppTypography"] }
+    ],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {
+      "font": { "parameters": [{ "label": "_", "type": "font", "required": true }] }
+    },
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {
+        "DesignTypography.sectionTitle": "AppTypography.sectionTitle"
+      },
+      "color": {}
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": {
+        "settings.section": "settings_section",
+        "settings.display.name": "settings_display_name",
+        "settings.notifications": "settings_notifications",
+        "settings.quiet.hours": "settings_quiet_hours",
+        "settings.save": "settings_save"
+      }
+    }
+  }
+}
