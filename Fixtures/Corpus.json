@@ -206,6 +206,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "mapping/model-scalars",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "model-interface",
       "implementationStatus": "ready"
     },
