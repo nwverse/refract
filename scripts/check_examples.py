@@ -52,7 +52,7 @@ def regenerate_hello() -> None:
 
 def regenerate_identified_list() -> None:
     outputs = {
-        "android": ROOT / "examples/android/app/refract/generated/list/IdentifiedList.kt",
+        "android": ROOT / "examples/android/app/refract/generated/screens/IdentifiedList.kt",
         "harmony": ROOT / "examples/harmony/entry/src/main/ets/generated/IdentifiedList.ets",
     }
     source = ROOT / "examples/shared/IdentifiedList.swift"
@@ -63,6 +63,7 @@ def regenerate_identified_list() -> None:
         output = Path(temporary)
         subprocess.run([
             str(ROOT / ".build/debug/refract"), "generate", "--input", str(source),
+            "--mapping", str(ROOT / "examples/refract.json"),
             "--android-out", str(output / "android"), "--harmony-out", str(output / "harmony"),
         ], cwd=ROOT, check=True)
         for platform, expected in outputs.items():
@@ -72,7 +73,7 @@ def regenerate_identified_list() -> None:
                     f"regenerated identified-list {platform} differs from "
                     f"{expected.relative_to(ROOT)}; regenerate and review it"
                 )
-    print("Identified-list Kotlin/ArkTS are identical to actual regenerated canonical output")
+    print("Identified-list Kotlin/ArkTS are identical to actual regenerated project-mapped output")
 
 
     source = ROOT / "examples/shared/SettingsScreen.swift"
@@ -181,26 +182,10 @@ def check_ios_references() -> None:
     print("iOS project compiles every shared source and eight unique, byte-identical compiler inputs")
 
 
-def check_gradle_reviewed_mirrors() -> None:
-    """The Gradle CLI check needs isolated input/output groups, not two platform generation rules."""
-    groups = {
-        "screens": ("Hello", "NativeComponentScreen", "SettingsScreen"),
-        "list": ("IdentifiedList",),
-    }
-    for group, names in groups.items():
-        for name in names:
-            source = ROOT / "examples/harmony/entry/src/main/ets/generated" / f"{name}.ets"
-            mirror = ROOT / "examples/android/app/refract/harmony" / group / f"{name}.ets"
-            if not mirror.is_file() or source.read_bytes() != mirror.read_bytes():
-                fail(f"Gradle reviewed ArkTS mirror differs for {name}; update it from the canonical generated file")
-    print("Gradle grouped reviewed ArkTS mirrors match the canonical generated outputs")
-
-
 def main() -> int:
     try:
         regenerate_hello()
         regenerate_identified_list()
-        check_gradle_reviewed_mirrors()
         check_resources()
         check_harmony_resources()
         check_ios_references()

@@ -14,19 +14,15 @@ refract {
         inputs.from(
             rootProject.file("../shared/Hello.swift"),
             rootProject.file("../shared/NativeComponentScreen.swift"),
+            rootProject.file("../shared/IdentifiedList.swift"),
             rootProject.file("../shared/SettingsScreen.swift"),
         )
-        harmonyCommittedOutputDirectory.set(layout.projectDirectory.dir("refract/harmony/screens"))
         mapping.set(rootProject.file("../refract.json"))
+        harmonyCommittedOutputDirectory.set(rootProject.file("../harmony/entry/src/main/ets/generated"))
         resources.from(
             rootProject.file("app/src/main/res/values/strings.xml"),
             rootProject.file("../harmony/entry/src/main/resources/base/element/string.json"),
         )
-    }
-    sources.register("list") {
-        // This canonical list intentionally uses the unmapped CLI generation path.
-        harmonyCommittedOutputDirectory.set(layout.projectDirectory.dir("refract/harmony/list"))
-        inputs.from(rootProject.file("../shared/IdentifiedList.swift"))
     }
 }
 

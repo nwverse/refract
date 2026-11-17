@@ -93,26 +93,24 @@ cd examples/android
 ## Opt-in Gradle generation
 
 The repository's `tools/gradle/` build supplies the `dev.refract.generator` plugin. `app/build.gradle.kts` opts in
-and declares two input groups: `screens` uses the shared mapping and both resource catalogs; `list` intentionally
-keeps the existing unmapped CLI behavior for `IdentifiedList`. `REFRACT_CLI_PATH` supplies a version-matched CLI
+and declares the four shared Swift inputs as the `screens` group, using the shared mapping and both resource
+catalogs. `REFRACT_CLI_PATH` supplies a version-matched CLI
 without a machine-global path. An application may instead set `refract.executable`; the plugin never runs an implicit
 Swift build. There is no Refract runtime dependency or application start-up hook.
 
-`:app:generateDebugRefract` generates both groups below the variant's build-owned `generated/refract/` directory.
+`:app:generateDebugRefract` generates the group below the variant's build-owned `generated/refract/` directory.
 AGP exposes the compiled files below `build/generated/java/<generation-task>/`. Android's per-variant
 `addGeneratedSourceDirectory` connects these task outputs to `compileDebugKotlin`, so compilation depends on
 generation without eagerly realizing tasks. `:app:compileDebugKotlin` is the normal consumer entry point. Run it
-twice: the second build reports both generation tasks `UP-TO-DATE`. Changing a Swift input, mapping, declared
+twice: the second build reports the generation task `UP-TO-DATE`. Changing a Swift input, mapping, declared
 resource catalog or CLI executable invalidates the relevant group. `:app:clean :app:compileDebugKotlin` regenerates
 and compiles from an empty build directory.
 
 Reviewed generated Kotlin lives in `app/refract/generated/<group>/`, not in an ordinary Android source root. This
-keeps the compiled copy unambiguous: the build always uses its fresh generated copy. `app/refract/harmony/<group>/`
-contains the matching reviewed ArkTS files; `scripts/check_examples.py` requires these mirrors to be byte-identical
-to the canonical Harmony example. Each CLI check receives its group's complete inputs and both output directories,
-so unrelated files in another group cannot be mistaken for stale or unexpected outputs. `:app:checkDebugRefract`
-invokes that read-only CLI check. Missing, stale or extra outputs fail without modifying a source file.
-`checkRefract` covers every Android variant.
+keeps the compiled copy unambiguous: the build always uses its fresh generated copy. `:app:checkDebugRefract`
+invokes the CLI's read-only `check` with all four Swift inputs, the shared mapping and the canonical Kotlin/ArkTS
+output directories. Missing, stale or extra outputs fail without modifying a source file. `checkRefract` covers
+every Android variant.
 
 The plugin supports Android applications and the example's documented Gradle/AGP versions. It is a repository-local
 composite build, not a claim that a versioned plugin has been published to a public plugin repository. The
@@ -126,6 +124,14 @@ fixture:
 
 ```sh
 swift build
+.build/debug/refract check \
+  --input examples/shared/Hello.swift \
+  --input examples/shared/NativeComponentScreen.swift \
+  --input examples/shared/IdentifiedList.swift \
+  --input examples/shared/SettingsScreen.swift \
+  --mapping examples/refract.json \
+  --android-out examples/android/app/refract/generated/screens \
+  --harmony-out examples/harmony/entry/src/main/ets/generated
 python3 scripts/check_examples.py
 .build/debug/refract generate \
   --input examples/shared/Hello.swift \
@@ -140,6 +146,8 @@ diff <(tail -n +3 Fixtures/hello/Expected.ets) <(tail -n +3 examples/harmony/ent
 ```
 
 Changing the shared Swift input regenerates both platforms in place; do not edit either output independently.
+`refract check` performs the same generation in memory and fails on missing, stale or extra committed Kotlin/ArkTS
+without writing files. Supply the complete input set for both output directories.
 
 ## Adopt or roll back
 

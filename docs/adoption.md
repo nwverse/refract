@@ -130,8 +130,27 @@ Regenerate with the command above, then run the consistency check, compare again
 `scripts/check_examples.py` regenerates the current Hello, native-component and full-settings outputs and compares
 both committed files for each screen byte-for-byte,
 checks that every mapped settings key exists in both base catalogs, and verifies that the iOS Sources phase includes
-every shared source. It does not invoke a native compiler and does not excuse a missing generated file. The additional
-fixture-body diffs below compare against #2's canonical reference apart from the source-name header:
+every shared source. It does not invoke a native compiler and does not excuse a missing generated file.
+
+For a read-only check, use the same inputs, mapping and output directories with `refract check`:
+
+```sh
+.build/debug/refract check \
+  --input examples/shared/Hello.swift \
+  --input examples/shared/SettingsScreen.swift \
+  --mapping examples/refract.json \
+  --android-out examples/android/app/refract/generated/screens \
+  --harmony-out examples/harmony/entry/src/main/ets/generated
+```
+
+Check mode generates in memory and compares every expected Kotlin/ArkTS file byte-for-byte. Missing or stale outputs,
+extra `.kt`/`.ets` files in the committed output directories, and source, mapping or resource-catalog diagnostics all
+exit nonzero with an actionable message. It does not create directories or modify committed files, so no staging
+output directory is needed. Pass the complete set of inputs whose outputs share a directory; input changes, mapping
+changes and generator changes are therefore checked together. Explicit output flags override the mapping's output
+directories exactly as they do for generation.
+
+The additional fixture-body diffs below compare against #2's canonical reference apart from the source-name header:
 
 ```sh
 swift build
