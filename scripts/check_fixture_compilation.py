@@ -141,7 +141,7 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
     target = package_directory / f"{output_name}.kt"
     target.write_text(generated, encoding="utf-8")
     for name in ("NativeHost.kt", "NativeComponent.kt"):
-        native_source = fixture_dir / name
+        native_source = expected_kt.parent / name
         if native_source.is_file():
             native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-{name}"
             native_target.parent.mkdir(parents=True, exist_ok=True)
