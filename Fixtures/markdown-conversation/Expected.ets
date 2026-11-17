@@ -23,7 +23,7 @@ export struct ConversationSnippet {
           .onClick(() => {
             this.model.openLink('https://example.com/docs');
           })
-        }.accessibilityText('markdown.answer.summary')
+        }.accessibilityText($r('app.string.conversation_answer') + $r('app.string.conversation_important') + $r('app.string.conversation_note') + 'let answer = 42' + $r('app.string.conversation_docs'))
         Text('func answer() -> Int {\n    return 42\n}\n')
         .fontFamily('monospace')
         .padding(12)

@@ -67,7 +67,7 @@ its localized label attached through `semantics`, not merged into paragraph cont
 
 ArkUI emits sibling `Span`s in a `Text`, with flat font attributes and `onClick` calling the same model action.
 `Span` cannot contain children and does not accept `accessibilityText`, so nested styles are flattened during
-lowering and accessibility stays on `Text`. Code is a separate monospace `Text` with `.accessibilityText`. Its
+lowering and the paragraph `Text` exposes the same localized inline sequence through `accessibilityText`. Code is a separate monospace `Text` with `.accessibilityText`. Its
 background uses the app-owned `app.color.markdown_code_background` resource, declared by the fixture. Native resource
 merging and the ArkTS compiler check are not yet available. `monospace` is the native family name, not a promise of a particular font on every device.
 

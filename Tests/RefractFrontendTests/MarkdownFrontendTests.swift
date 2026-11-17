@@ -31,6 +31,7 @@ import RefractArkUI
     let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
     #expect(ark.contains("Span('let answer = 42')"))
     #expect(ark.contains("this.model.openLink('https://example.com/docs');"))
+    #expect(ark.contains(".accessibilityText($r('app.string.conversation_answer') + $r('app.string.conversation_important') + $r('app.string.conversation_note') + 'let answer = 42' + $r('app.string.conversation_docs'))"))
     #expect(!ark.contains("RichEditor"))
     #expect(!ark.contains("Any"))
 }

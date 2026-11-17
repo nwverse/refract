@@ -25,7 +25,7 @@ extension Generation {
                 for inline in paragraph.content {
                     try emitMarkdownInline(inline, action: linkAction, into: &writer, mapping: mapping)
                 }
-                writer.close(suffix: ".accessibilityText('markdown.\(paragraph.id)')")
+                writer.close(suffix: ".accessibilityText(\(try arkMarkdownAccessibility(paragraph.content, mapping: mapping)))")
             case let .codeBlock(code):
                 writer.line("Text('\(arkMarkdownLiteral(code.code))')")
                 writer.line(".fontFamily('monospace')")
@@ -78,6 +78,18 @@ extension Generation {
                              suggestion: "Put `.strong` or `.emphasis` inside ordinary text, not around `.link`.")
         }
     }
+}
+
+private func arkMarkdownAccessibility(_ content: [MarkdownDocument.Inline], mapping: Mapping) throws -> String {
+    func text(_ inline: MarkdownDocument.Inline) throws -> String {
+        switch inline {
+        case let .text(expression): try ArkExpression.emit(expression, mapping: mapping)
+        case let .strong(value), let .emphasis(value): try text(value)
+        case let .inlineCode(code): "'\(arkMarkdownLiteral(code))'"
+        case let .link(link): try ArkExpression.emit(link.label, mapping: mapping)
+        }
+    }
+    return try content.map(text).joined(separator: " + ")
 }
 
 private func arkMarkdownLiteral(_ value: String) -> String {
