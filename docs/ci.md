@@ -45,7 +45,9 @@ the binary from an empty temporary directory.
 The workflow runs on pull requests, pushes to `main`, and manual dispatch. It has read-only repository permissions
 and never interpolates pull-request text into a shell command. Swift, Android compile, repository checks and
 changed-workflow linting are independent jobs. The required Swift, Android compile and repository jobs run on every
-pull request; workflow linting runs on the changed workflow set.
+pull request; workflow linting runs on the changed workflow set. Each Swift job also performs two clean CLI package
+builds and executes its own relocated native artifact; Linux does not build or verify a macOS artifact and vice
+versa. Archives remain in the runner's temporary directory and are never published.
 
 The documentation check runs unconditionally on every pull request and push. It has no missing-path exceptions:
 every maintained document must be indexed, every relative Markdown link and image must resolve inside the repository,

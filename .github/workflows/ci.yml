@@ -58,6 +58,13 @@ jobs:
         run: swift test --disable-automatic-resolution
       - name: Verify the real SwiftPM consumer integration
         run: python3 -I scripts/test_swiftpm_consumer.py
+      - name: Test packaging policy and clean source archives
+        run: python3 -I scripts/test/test_package_cli.py
+      - name: Build and verify the native CLI package
+        env:
+          REFRACT_PACKAGE_E2E: '1'
+          REFRACT_PACKAGE_OUTPUT: ${{ runner.temp }}/refract-cli-package
+        run: python3 -I scripts/test/test_package_cli.py PackagingEndToEndTests -v
       - name: Regenerate and compare every golden fixture
         run: |
           swift test --disable-automatic-resolution --skip-build --filter GoldenTests
@@ -203,6 +210,16 @@ jobs:
           path: |
             examples/android/app/build/reports/native-jvm-compose/
             examples/android/app/build/reports/tests/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish Native JVM Compose theme captures and test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-jvm-compose-theme
+          path: |
+            examples/android/fixtures/build/reports/native-jvm-compose/
+            examples/android/fixtures/build/reports/tests/
           if-no-files-found: error
           retention-days: 14
       - name: Reject unexpected files left in the checkout

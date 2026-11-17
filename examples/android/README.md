@@ -119,6 +119,32 @@ cd examples/android
 ./gradlew :fixtures:compileDebugKotlin
 ```
 
+### Theme interaction and dynamic-type Native JVM tests
+
+`theme-interaction-states` supplies one generated settings component, an app-owned state resolver and light/night
+resources. `ThemedSettingsAction` observes one actual `MutableInteractionSource` and passes its Boolean pressed and
+focused values into the generated component. The independent `theme-fixture` module compiles the exact golden Kotlin
+with those application resources, and CI includes it in the Android compile gate:
+
+```sh
+./gradlew :theme-fixture:compileDebugKotlin
+```
+
+The fixture test source set compiles that same generated component again with Robolectric and runs
+`ThemeInteractionTest`. It verifies actual press/focus/disabled precedence, light-versus-night rendered pixels and
+default-versus-2x-fontScale text bounds. Run the canonical staging step first, then:
+
+```sh
+python3 scripts/check_fixture_compilation.py
+cd examples/android
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.theme.ThemeInteractionTest
+```
+
+The captures and measured bounds are written to `fixtures/build/reports/native-jvm-compose/` and uploaded as
+`native-jvm-compose-theme` by CI. **These are Native JVM Compose results, not emulator/device screenshots, physical
+screen-reader checks or performance measurements.** The resolver is application code, not a Refract runtime or an
+automatic interaction-state discovery mechanism. iOS and ArkUI compilation/rendering are separate tool checks.
+
 ### Native animation lifecycle tests
 
 The app-owned `NativeSaveConfirmation` demonstrates a typed visibility/identity boundary. Its implementation uses
@@ -137,10 +163,30 @@ cd examples/android
 ./gradlew :fixtures:testDebugUnitTest
 ```
 
+The separate `NativeSelectionEmphasis` fixture follows #159 without duplicating its visibility component. It uses
+an app-owned `Animatable` for a stateful value transition: target changes cancel and resume from the current
+progress, identity replacement disposes the old remembered animation, and zero `MotionDurationScale` snaps without
+intermediate progress. Six additional JVM tests exercise the unchanged CLI-generated caller, reversal, identity,
+reduced motion and disposal. `Fixtures/interop-native-state-transition/` supplies the independent dual-backend
+golden and is part of the real Kotlin fixture compile gate.
+
 Robolectric 4.18 executes Compose with a test-provided `MotionDurationScale` and deterministic clock. This is a local
 JVM behavior check, not a physical reduced-motion system-settings test, device/emulator run or timing benchmark. The
 Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches. The
 fixture module resolves the same pinned Android-all runtime as the app tests and runs Robolectric offline.
+
+### Synthetic document preview lifecycle tests
+
+`interop-document-preview` exercises typed document metadata, exhaustive loading/missing/unsupported/cancelled/closed
+states and a checked native close action on both generated backends. Its app-owned native implementation is confined
+to the fixture module's `src/native` source set. `SyntheticDocumentController` reads only the committed synthetic
+plain-text resource, checks its bytes and owns cancellation, decoded-content cleanup and close. No URI permission or
+decoder is supplied by Refract, and no private document, WebView or remote fetch is involved. PDF/image metadata is
+not a claim of a working renderer. See `../../docs/document-preview.md` for the ownership and verification limits.
+
+The same staging and `:fixtures:testDebugUnitTest` commands above compile the real CLI-generated Kotlin and run three
+Native JVM Compose document tests: ready/close/disposal, missing/unsupported and cancellation with no stale ready
+result. These are source and Native JVM results only, not emulator, device, iOS or HarmonyOS verification.
 
 ### Incremental search model tests
 

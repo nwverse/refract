@@ -173,6 +173,12 @@
         "focused": { "$ref": "#/$defs/interactionValue" }
       }
     },
+    "staticTokenValues": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/tokenKey" },
+      "additionalProperties": { "$ref": "#/$defs/qualifiedReference" },
+      "maxProperties": 1024
+    },
     "tokenValues": {
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/tokenKey" },
@@ -189,9 +195,9 @@
       "additionalProperties": false,
       "required": ["spacing", "radius", "font", "color"],
       "properties": {
-        "spacing": { "$ref": "#/$defs/tokenValues" },
-        "radius": { "$ref": "#/$defs/tokenValues" },
-        "font": { "$ref": "#/$defs/tokenValues" },
+        "spacing": { "$ref": "#/$defs/staticTokenValues" },
+        "radius": { "$ref": "#/$defs/staticTokenValues" },
+        "font": { "$ref": "#/$defs/staticTokenValues" },
         "color": { "$ref": "#/$defs/tokenValues" }
       }
     },

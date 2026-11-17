@@ -25,6 +25,8 @@ v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
 interop-native-animation
+interop-native-state-transition
+interop-document-preview
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
@@ -34,9 +36,13 @@ cross-file-two-models
 interop-remote-image
 navigation-host
 navigation-native-destination
+navigation-tabs-menu
 accessibility-dynamic-type
 state-counter
 parent-binding
 model-interface
 v0-stack-layout
+selection-dragdrop
 mapping/model-scalars
+v0-text-input
+v0-secure-input
