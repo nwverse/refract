@@ -307,6 +307,22 @@ def package_once(commit: str, destination: Path, os_name: str, architecture: str
     return archive
 
 
+def verify_checksums(output: Path, archives: list[Path], os_name: str) -> None:
+    """Verify checksum files without relying on the caller's working directory."""
+    for archive in archives:
+        checksum_path = archive.with_suffix(archive.suffix + ".sha256")
+        digest, separator, name = checksum_path.read_text(encoding="ascii").strip().partition("  ")
+        if not separator or name != archive.name or digest != hashlib.sha256(archive.read_bytes()).hexdigest():
+            raise ValueError(f"checksum manifest mismatch for {archive.name}")
+        if os_name == "macos":
+            checker = ["shasum", "-a", "256", "--check", checksum_path.name]
+        else:
+            checker = ["sha256sum", "--check", "--strict", checksum_path.name]
+        if not shutil.which(checker[0]):
+            raise ValueError(f"{checker[0]} is required to verify the local archive checksum")
+        print(run(checker, cwd=output))
+
+
 def create_package(commit: str, output: Path, reproducible: bool) -> Path:
     os_name, architecture, triple = host_target()
     metadata = check_tools(triple)
@@ -338,9 +354,7 @@ def create_package(commit: str, output: Path, reproducible: bool) -> Path:
         source.write_bytes(source_bytes)
         source_checksum = hashlib.sha256(source_bytes).hexdigest()
         source.with_suffix(source.suffix + ".sha256").write_text(f"{source_checksum}  {source.name}\n", encoding="ascii")
-        verification = run(["sha256sum", "--check", "--strict", checksum_path.name, source.with_suffix(source.suffix + ".sha256").name], cwd=output) if shutil.which("sha256sum") else ""
-        if verification:
-            print(verification)
+        verify_checksums(output, [first, source], os_name)
         print(f"Created and smoke-tested {first}")
         print(f"SHA-256: {checksum}")
         print(f"Clean source archive: {source}")

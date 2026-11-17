@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -60,6 +61,22 @@ class PackagingUnitTests(unittest.TestCase):
                     archive.addfile(member)
             with self.assertRaises(ValueError):
                 package.extract_archive(archive_path, self.root / f"installed-{kind}-{mode}")
+
+    def test_checksum_verification_is_mandatory_on_each_host(self) -> None:
+        archive = self.root / "artifact.tar.gz"
+        archive.write_bytes(b"archive")
+        checksum = archive.with_suffix(".gz.sha256")
+        checksum.write_text(f"{hashlib.sha256(b'archive').hexdigest()}  {archive.name}\n", encoding="ascii")
+        for os_name, tool in (("linux", "sha256sum"), ("macos", "shasum")):
+            with mock.patch.object(package, "run", return_value="OK") as run:
+                package.verify_checksums(self.root, [archive], os_name)
+                self.assertEqual(run.call_args.args[0][:3], [tool] + (["--check", "--strict"] if os_name == "linux" else ["-a", "256"]))
+            with mock.patch.object(package.shutil, "which", return_value=None):
+                with self.assertRaisesRegex(ValueError, "required"):
+                    package.verify_checksums(self.root, [archive], os_name)
+        checksum.write_text("0" * 64 + f"  {archive.name}\n", encoding="ascii")
+        with self.assertRaisesRegex(ValueError, "mismatch"):
+            package.verify_checksums(self.root, [archive], "linux")
 
     def test_stamp_changes_revision_without_touching_version(self) -> None:
         source = b'enum RefractVersion {\n    static let current = "0.1.0"\n    static let sourceRevision = "old"\n}\n'
