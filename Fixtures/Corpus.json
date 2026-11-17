@@ -326,6 +326,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "selection-dragdrop",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-reject-uri-payload",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "state-counter",
       "implementationStatus": "ready"
     },

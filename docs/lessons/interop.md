@@ -70,3 +70,15 @@
 - Hidden Toggle labels remove the visible title and its layout wrapper, not the title's typed getter/action checks,
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
+- Selection editing and drag/drop payloads on a `TextField`/view go through the closed `NativeModifier.Operation`
+  set, not through a generic native component. The Compose drag-and-drop API lives in
+  `androidx.compose.foundation.draganddrop` for the `Modifier` extensions but in
+  `androidx.compose.ui.draganddrop` for the `DragAndDropEvent`/`DragAndDropTarget`/`DragAndDropTransferData`
+  types — importing them from `foundation.draganddrop` produces "Unresolved reference" at Kotlin compile
+  time even though the golden fixture text looks right. Always compile the new fixture before declaring
+  the operation ready, and opt in via `@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)`
+  on the generated file. Drop-target cancellation is gated on the payload string, not on the event: the
+  generated wrapper checks `payload.isEmpty()` and returns `false` before the model action is invoked,
+  so a cancelled drop never reaches the model. Unicode (non-BMP emoji + CJK) round-trips through
+  `ClipData.newPlainText` unchanged; do not introduce a "safe ASCII" encoding — the typed String payload
+  is the contract.

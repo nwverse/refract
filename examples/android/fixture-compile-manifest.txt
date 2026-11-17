@@ -40,4 +40,5 @@ state-counter
 parent-binding
 model-interface
 v0-stack-layout
+selection-dragdrop
 mapping/model-scalars

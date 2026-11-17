@@ -58,6 +58,11 @@ extension Generation {
                         message: "Row content type `\(value)` belongs on the generated child row, not its Toggle.",
                         suggestion: "Apply `.contentType` directly to the generated child inside a dynamic List",
                         location: operation.location)
+                case .textSelection, .dragPayload, .dropTarget:
+                    throw Diagnostic(code: "RFNATIVE005",
+                        message: "Selection and drag/drop operations do not apply to a Toggle receiver.",
+                        suggestion: "Use a TextField for text selection and a Stack-style wrapper for drag/drop.",
+                        location: operation.location)
                 }
             }
             for modifier in modifiers {
