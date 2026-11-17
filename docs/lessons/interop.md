@@ -37,6 +37,13 @@
 - Keep hand-written native caller files in the fixture, but test their imports and invocations explicitly. Their mere
   presence does not establish goal 5 coverage. Platform compiler builds are separate evidence and must not be claimed
   from text comparisons.
+- Platform-selected strings need explicit provenance. A bare `Text(refractValue(ios:android:harmonyOS:))` would
+  feed SwiftUI's `Text(_: LocalizedStringKey)` initializer on iOS, silently treating the iOS branch as a localization
+  key while the native backends emit their branch as a verbatim literal. The accepted form is
+  `Text(verbatim: refractValue(...))`: every branch is a string literal and iOS selects `Text(verbatim:)`, so all
+  three platforms agree on verbatim semantics with no runtime adapter. Reject the bare localized form with a
+  source-located `R.string.unsupported_expression` diagnostic that names the divergence and points to the verbatim
+  form, rather than silently emitting per-platform localization keys or unverified resource lookups.
 - Native measurement operations belong on the measured native control, not an enclosing layout Row. Keep toggle
   native metadata typed until its emitter can place the modifier on Switch/Toggle itself.
 - Retained callback keys include every captured stable value. A source action name is a discriminator, not a
