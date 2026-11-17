@@ -34,7 +34,8 @@ its design-system components and tokens, its model implementations and its nativ
 | `RefractMapping` | Loads and validates `refract.json`: design-system components and tokens per platform, string resources, native component declarations |
 | `RefractCompose` | IR → idiomatic Jetpack Compose source |
 | `RefractArkUI` | IR → idiomatic ArkUI (ArkTS) source |
-| `RefractCLI` | The `refract` executable: `generate`, `check`, `explain <diagnostic>` |
+| `RefractOutput` | Locked, staged generated-file publication with rollback; no frontend or backend dependencies |
+| `RefractCLI` | The `refract` executable: `generate`, `check`, `explain <diagnostic>`; see `docs/cli.md` |
 
 Later: a SwiftPM build-tool plugin, a Gradle plugin and an hvigor plugin that run `refract generate` and the
 regenerate-and-diff check, so generation fits each platform's normal build.
