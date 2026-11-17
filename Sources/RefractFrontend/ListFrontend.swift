@@ -98,7 +98,8 @@ extension Builder {
         }
         let items = ListItems(collection: collection, itemName: itemName, itemType: descriptor.itemType,
                               key: descriptor.key, keyType: descriptor.keyType, content: content,
-                              contentType: rowContentType(content), location: location(of: call))
+                              contentType: rowContentType(content), modelType: reference.protocolName,
+                              location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [], location: location(of: call))
     }
 
@@ -140,7 +141,7 @@ extension Builder {
             }
             return nil
         }
-        let (collection, item) = descriptor
+        let (collection, item, modelType) = descriptor
         if call.arguments.count == 2, let identity = call.arguments.last?.expression,
            !isDeclaredStoredID(identity, item: item) {
             error("RFLIST002", "ForEach identity must be the item's declared stable stored id.",
@@ -165,7 +166,8 @@ extension Builder {
         }
         let items = ListItems(collection: collection, itemName: itemName, itemType: item.name,
                               key: item.identity.name, keyType: item.identity.type, content: content,
-                              contentType: rowContentType(content), location: location(of: call))
+                              contentType: rowContentType(content), modelType: modelType,
+                              location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [],
                      location: location(of: owner))
     }
@@ -178,7 +180,7 @@ extension Builder {
         return property.declName.baseName.text == item.identity.name
     }
 
-    private func modelCollectionDescriptor(_ expression: ExprSyntax) -> (Expression, ItemType)? {
+    private func modelCollectionDescriptor(_ expression: ExprSyntax) -> (Expression, ItemType, String)? {
         guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
@@ -188,7 +190,7 @@ extension Builder {
               let item = itemTypes.first(where: { $0.name == descriptor.itemType }) else { return nil }
         return (Expression(.valueProperty(.model(model: reference.propertyName,
                                                  property: member.declName.baseName.text)),
-                           location: location(of: expression)), item)
+                           location: location(of: expression)), item, reference.protocolName)
     }
 
     private func modelCollectionProperty(_ expression: ExprSyntax) -> Expression? {

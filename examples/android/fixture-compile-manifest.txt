@@ -20,13 +20,19 @@ control-switch-payload
 control-switch-modifier
 list-foreach
 list-foreach-explicit-id
+list-paged-search
 v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
 interop-native-animation
+interop-native-state-transition
+interop-document-preview
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
+cross-file-child-view
+cross-file-enum-switch
+cross-file-two-models
 interop-remote-image
 navigation-host
 navigation-deep-restoration
@@ -36,4 +42,5 @@ state-counter
 parent-binding
 model-interface
 v0-stack-layout
+selection-dragdrop
 mapping/model-scalars

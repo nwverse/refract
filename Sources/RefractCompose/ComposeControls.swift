@@ -84,6 +84,11 @@ extension ComposeBackend {
                     location: operation.location ?? location)
             case .retainCallback:
                 return Modifier(name: "retainCallback", location: operation.location)
+            case .textSelection, .dragPayload, .dropTarget:
+                throw Diagnostic(code: "RFNATIVE005",
+                    message: "Selection and drag/drop operations do not apply to a Toggle receiver.",
+                    suggestion: "Use a TextField for text selection and a Box-style wrapper for drag/drop.",
+                    location: operation.location ?? location)
             }
         }
         let switchChain = try self.modifierChain(switchModifiers, isRoot: false, context: &context)
@@ -130,9 +135,11 @@ extension ComposeBackend {
             onChange = "{ value -> \(name) = value }"
         case let .valueProperty(.binding(name)):
             onChange = "on\(name.uppercasingFirst())Change"
+        case let .valueProperty(.modelScalarBinding(binding)):
+            onChange = "{ value -> \(binding.model).\(binding.action)(value) }"
         default:
             throw Diagnostic(code: "state.invalid_projection",
-                             message: "A text field needs a String local state or parent binding.",
+                             message: "A text field needs a String local state, parent binding or explicit model setter.",
                              suggestion: "Use `text: $name` with String ownership.", location: value.location)
         }
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)

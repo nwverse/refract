@@ -23,13 +23,13 @@ public enum LocalizationResourceValidator {
                 return visit(child) + operations.compactMap { modifier in
                     switch modifier.operation {
                     case let .testTag(value), let .contentDescription(value): value
-                    case .retainCallback, .contentType: nil
+                    case .retainCallback, .contentType, .textSelection, .dragPayload, .dropTarget: nil
                     }
                 }
             case let .native(component, _):
-                return component.arguments.map(\.expression)
+                return component.arguments.compactMap(\.expression)
             case let .component(component, _):
-                return component.arguments.map(\.expression) + component.children.flatMap(visit)
+                return component.arguments.compactMap(\.expression) + component.children.flatMap(visit)
                     + component.modifiers.flatMap(\.arguments)
             case .child:
                 return []
@@ -61,7 +61,7 @@ public enum LocalizationResourceValidator {
                 return [title, value] + modifiers.flatMap(\.arguments) + nativeModifiers.compactMap {
                     switch $0.operation {
                     case let .testTag(value), let .contentDescription(value): value
-                    case .retainCallback, .contentType: nil
+                    case .retainCallback, .contentType, .textSelection, .dragPayload, .dropTarget: nil
                     }
                 }
             case let .textInput(placeholder, value, modifiers, _):
