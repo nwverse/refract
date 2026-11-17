@@ -37,6 +37,54 @@ import SwiftUI
 
 public protocol RefractNativeView: View {}
 
+public struct RefractSpacing: Sendable {
+    public let value: CGFloat
+
+    public init(value: CGFloat) {
+        self.value = value
+    }
+
+    public static let small = Self(value: 4)
+    public static let medium = Self(value: 8)
+}
+
+public extension VStack {
+    init(alignment: HorizontalAlignment = .center,
+         spacing: RefractSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.value, content: content)
+    }
+}
+
+public extension HStack {
+    init(alignment: VerticalAlignment = .center,
+         spacing: RefractSpacing,
+         @ViewBuilder content: () -> Content) {
+        self.init(alignment: alignment, spacing: spacing.value, content: content)
+    }
+}
+
+public enum RefractNativeModifier {
+    case testTag(String)
+    case contentDescription(String)
+    case retainCallback(identity: String)
+    case contentType(String)
+}
+
+public extension View {
+    @inlinable
+    @inline(__always)
+    func refractNativeModifier(_ operations: RefractNativeModifier...) -> some View {
+        self
+    }
+
+    @inlinable
+    @inline(__always)
+    func padding(horizontal: CGFloat, vertical: CGFloat) -> some View {
+        padding(EdgeInsets(top: vertical, leading: horizontal, bottom: vertical, trailing: horizontal))
+    }
+}
+
 @inlinable
 @inline(__always)
 public func refractValue<Value>(
@@ -60,9 +108,23 @@ public func refractView<IOS: View, Android: View, HarmonyOS: View>(
 ```
 
 The three `refractView` generic parameters are deliberately independent: different modifier chains can produce
-different concrete Swift types. Swift type-checks all three branches even though only the iOS branch executes. The
-reserved helpers are not imported into generated targets; a project keeps the reference declarations in its own iOS
-source. A conflicting local overload with the reserved names is a diagnostic, not a way to change selection semantics.
+different concrete Swift types. Swift type-checks all three branches even though only the iOS branch executes.
+`RefractSpacing` makes the documented `.small`/`.medium` container spacing valid Swift: the standard stack
+initializers accept `CGFloat?`, not these names. The overloads forward immediately to the native stack initializer
+and do not create a wrapper view or a global spacing lookup. `refractNativeModifier` is a no-op on the iOS branch;
+its typed operations are lowered only in the selected Android or HarmonyOS branch. The directional
+`padding(horizontal:vertical:)` declaration is not a standard SwiftUI overload: the app-owned source extension maps
+it to ordinary edge insets. These helpers are compile-time source declarations, not a linked runtime or a reason to
+import Refract into an iOS target. The reserved helpers are not imported into generated targets; a project keeps the
+reference declarations in its own iOS source. A conflicting local overload with the reserved names is a diagnostic,
+not a way to change selection semantics.
+
+The iOS example compiles uniquely named source-only inputs for the native-measurement, platform-value and
+platform-view contracts, together with these declarations and the application-owned typography token. The repository
+check requires those files to remain byte-identical to their canonical fixtures: unique basenames are necessary
+because Xcode otherwise merges several `Input.swift` inputs into one `Input.stringsdata` output. This covers the real
+`Binding(get:set:)` initializer, both typed platform-selection helpers, native measurement spellings and directional
+padding with SwiftUI's semantic type checker. Generator parsing alone is not evidence that these constructs compile.
 
 ## Native components inside Refract
 
