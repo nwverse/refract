@@ -81,7 +81,7 @@ func resolve(_ path: String, relativeTo directory: URL, description: String) thr
     guard url.resolvingSymlinksInPath().path.hasPrefix(root + "/") else {
         throw ConsumerError("\(description) escapes the consuming package: \(path).")
     }
-    var ancestor = url
+    var ancestor = url.deletingLastPathComponent()
     while ancestor.path != directory.path, ancestor.path != "/" {
         if try ancestor.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {
             throw ConsumerError("\(description) must not traverse a symbolic link: \(path).")
@@ -139,7 +139,8 @@ func loadConfiguration(arguments: Arguments) throws -> (configuration: Configura
 func findRefract() throws -> URL {
     if let explicit = ProcessInfo.processInfo.environment["REFRACT_EXECUTABLE"], !explicit.isEmpty {
         let url = URL(fileURLWithPath: explicit)
-        guard FileManager.default.isExecutableFile(atPath: url.path) else {
+        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isExecutableKey])
+        guard values?.isRegularFile == true, values?.isExecutable == true else {
             throw ConsumerError("REFRACT_EXECUTABLE is not an executable file. Supply the versioned Refract CLI.")
         }
         return url
@@ -152,8 +153,8 @@ func findRefract() throws -> URL {
     throw ConsumerError("Cannot find refract. Set REFRACT_EXECUTABLE to an existing executable or put refract on PATH.")
 }
 
-func generate(inputs: [String], mapping: String?, android: URL, harmony: URL) throws {
-    var arguments = ["generate"]
+func generate(inputs: [String], mapping: String?, android: URL, harmony: URL, command: String = "generate") throws {
+    var arguments = [command]
     for input in inputs { arguments += ["--input", input] }
     if let mapping { arguments += ["--mapping", mapping] }
     arguments += ["--android-out", android.path, "--harmony-out", harmony.path]
@@ -162,10 +163,10 @@ func generate(inputs: [String], mapping: String?, android: URL, harmony: URL) th
     process.arguments = arguments
     try process.run()
     process.waitUntilExit()
-    guard process.terminationStatus == 0 else { throw ConsumerError("Refract generation failed; no committed output was changed.") }
+    guard process.terminationStatus == 0 else { throw ConsumerError("Refract \(command) failed; no committed output was changed.") }
 }
 
-func compare(configuration: Configuration, package: URL, android: URL, harmony: URL, publish: Bool) throws -> [URL: Data] {
+func publish(configuration: Configuration, package: URL, android: URL, harmony: URL) throws -> [URL: Data] {
     var changes: [URL: Data] = [:]
     for source in configuration.sources {
         let basename = URL(fileURLWithPath: source).deletingPathExtension().lastPathComponent
@@ -178,12 +179,11 @@ func compare(configuration: Configuration, package: URL, android: URL, harmony: 
                                           description: "committed output")
             let expected = try Data(contentsOf: generated)
             guard FileManager.default.fileExists(atPath: destination.path) else {
-                if publish { changes[destination] = expected; continue }
-                throw ConsumerError("Missing committed output \(destination.lastPathComponent). Run swift package refract-generate and review it.")
+                changes[destination] = expected
+                continue
             }
             if try Data(contentsOf: destination) != expected {
-                if publish { changes[destination] = expected }
-                else { throw ConsumerError("Stale committed output \(destination.lastPathComponent). Run swift package refract-generate and review it.") }
+                changes[destination] = expected
             }
         }
     }
@@ -197,18 +197,31 @@ do { loaded = try loadConfiguration(arguments: arguments) } catch { fail("\(erro
 let work = arguments.work ?? arguments.package.appendingPathComponent(".build/refract-command")
 let android = work.appendingPathComponent("Android", isDirectory: true)
 let harmony = work.appendingPathComponent("HarmonyOS", isDirectory: true)
+let mapping = arguments.mapping ?? loaded.configuration.mapping.map {
+    arguments.package.appendingPathComponent($0).path
+}
 do {
-    try generate(inputs: loaded.inputs, mapping: arguments.mapping ?? loaded.configuration.mapping.map {
-        arguments.package.appendingPathComponent($0).path
-    }, android: android, harmony: harmony)
-    let changes = try compare(configuration: loaded.configuration, package: arguments.package,
-                              android: android, harmony: harmony, publish: arguments.mode == "publish")
+    let publishChanges: [URL: Data]
     if arguments.mode == "publish" {
-        for (destination, data) in changes {
-            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: destination, options: .atomic)
-            print("Updated \(destination.lastPathComponent)")
+        try generate(inputs: loaded.inputs, mapping: mapping, android: android, harmony: harmony)
+        publishChanges = try publish(configuration: loaded.configuration, package: arguments.package,
+                                     android: android, harmony: harmony)
+    } else {
+        // The CLI owns fail-closed missing/stale/unexpected-file checks and never writes
+        // in check mode. It also validates the complete declared input group.
+        try generate(inputs: loaded.inputs, mapping: mapping,
+                     android: arguments.package.appendingPathComponent(loaded.configuration.androidOutput),
+                     harmony: arguments.package.appendingPathComponent(loaded.configuration.harmonyOutput),
+                     command: "check")
+        if arguments.mode == "generate-and-check" {
+            try generate(inputs: loaded.inputs, mapping: mapping, android: android, harmony: harmony)
         }
+        publishChanges = [:]
+    }
+    for (destination, data) in publishChanges {
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: destination, options: .atomic)
+        print("Updated \(destination.lastPathComponent)")
     }
     if arguments.mode == "generate-and-check" {
         guard let stamp = arguments.work?.appendingPathComponent("RefractBuildAnchor.swift") else { throw ConsumerError("Missing plugin work directory.") }

@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "RefractGolden", targets: ["RefractGolden"]),
         .plugin(name: "RefractSwiftPMPlugin", targets: ["RefractBuildTool"]),
         .plugin(name: "RefractGenerate", targets: ["RefractGenerate"]),
+        .plugin(name: "RefractCheck", targets: ["RefractCheck"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", exact: "600.0.1"),
@@ -51,6 +52,13 @@ let package = Package(
             capability: .command(
                 intent: .custom(verb: "refract-generate", description: "Regenerate committed native sources"),
                 permissions: [.writeToPackageDirectory(reason: "Refract publishes reviewed Kotlin and ArkTS sources only when explicitly requested.")]
+            ),
+            dependencies: ["RefractConsumerTool", "RefractCLI"]
+        ),
+        .plugin(
+            name: "RefractCheck",
+            capability: .command(
+                intent: .custom(verb: "refract-check", description: "Verify committed native sources without writing")
             ),
             dependencies: ["RefractConsumerTool", "RefractCLI"]
         ),

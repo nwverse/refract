@@ -80,7 +80,9 @@ public extension View { var body: some View { self } }
 
 def swift(arguments: list[str], consumer: Path, env: dict[str, str], *, expected: int = 0,
           verbose: bool = False) -> subprocess.CompletedProcess[str]:
-    command = ["swift"] + arguments + ["--package-path", str(consumer), "-j", "4"]
+    command = ["swift"] + (["package"] if arguments != ["build"] else []) + arguments
+    if arguments == ["build"]:
+        command += ["-j", "4"]
     if verbose:
         command.append("-v")
     return run(command, consumer, env, expected=expected)
@@ -109,8 +111,8 @@ def main() -> int:
                    consumer, env)
     host = next(item for item in json.loads(manifest.stdout)["targets"]
                 if item["name"] == "RefractConsumer")
-    assert all("refract" not in dependency.get("byName", [""])[0].lower()
-               for dependency in host["dependencies"])
+    assert host["product_dependencies"] == ["RefractSwiftPMPlugin"]
+    assert all("refract" not in dependency.lower() for dependency in host["target_dependencies"])
     staged_kotlin = (outputs / "Android/Hello.kt").read_bytes()
     staged_arkts = (outputs / "HarmonyOS/Hello.ets").read_bytes()
     assert staged_kotlin == original_committed
@@ -127,7 +129,7 @@ def main() -> int:
     assert not (consumer / "Sources/RefractConsumer/Generated").exists()
 
     second = swift(["build"], consumer, env, verbose=True)
-    assert "generate-and-check --package" not in second.stdout
+    assert "--target RefractConsumer --plugin-work" not in second.stdout, second.stdout
     assert (outputs / "Android/Hello.kt").stat().st_mtime_ns == first_stamp
     assert committed.read_bytes() == original_committed
 
@@ -146,11 +148,11 @@ def main() -> int:
         previous = dependency.stat().st_mtime_ns
         os.utime(dependency, ns=(previous + 2_000_000_000, previous + 2_000_000_000))
         rebuilt = swift(["build"], consumer, env, verbose=True)
-        assert "generate-and-check --package" in rebuilt.stdout, dependency
+        assert "--target RefractConsumer --plugin-work" in rebuilt.stdout, rebuilt.stdout
         assert "Generate and verify native sources with Refract" in rebuilt.stdout
         assert (outputs / "Android/Hello.kt").read_bytes() == original_committed
         noop = swift(["build"], consumer, env, verbose=True)
-        assert "generate-and-check --package" not in noop.stdout, dependency
+        assert "--target RefractConsumer --plugin-work" not in noop.stdout, dependency
 
     committed.unlink()
     missing = swift(["build"], consumer, env, expected=1)
@@ -159,18 +161,32 @@ def main() -> int:
           consumer, env)
     assert committed.read_bytes() == original_committed
 
+    # A newly added direct native file changes the declared output-directory manifest.
+    # The CLI rejects it; a later clean check must not report it again after removal.
+    obsolete = committed.with_name("Obsolete.kt")
+    obsolete.write_text("// unexpected native output\n")
+    unexpected = swift(["build"], consumer, env, expected=1)
+    assert "unexpected generated output" in unexpected.stdout and "Obsolete.kt" in unexpected.stdout, unexpected.stdout
+    assert obsolete.exists()
+    obsolete.unlink()
+    swift(["build"], consumer, env)
+
     # An invalid explicit override is diagnosed by the build-tool plugin rather than
     # being silently replaced with a downloaded or unrelated CLI.
     broken = dict(env)
     broken["REFRACT_EXECUTABLE"] = str(consumer / "not-an-executable")
     missing_tool = swift(["build"], consumer, broken, expected=1)
     assert "REFRACT_EXECUTABLE is not an executable file" in missing_tool.stdout
+    broken["REFRACT_EXECUTABLE"] = str(consumer)
+    directory_tool = swift(["build"], consumer, broken, expected=1)
+    assert "REFRACT_EXECUTABLE is not an executable file" in directory_tool.stdout
+    assert "NSCocoaErrorDomain" not in directory_tool.stdout
 
-    # The command's --check path must not write to the package even when its plugin
-    # product declares permission for the explicit generation operation.
+    # Read-only checking is a separate command plugin with no package-write
+    # permission. It must preserve stale output and fail with the CLI diagnostic.
     committed.write_bytes(original_committed + b"// read-only check must fail\n")
-    checked = swift(["refract-generate", "--target", "RefractConsumer", "--check"], consumer, env, expected=1)
-    assert "stale committed output" in checked.stdout.lower() and "Hello.kt" in checked.stdout
+    checked = swift(["refract-check", "--target", "RefractConsumer"], consumer, env, expected=1)
+    assert "stale committed output" in checked.stdout.lower() and "Hello.kt" in checked.stdout, checked.stdout
     assert committed.read_bytes().endswith(b"// read-only check must fail\n")
     committed.write_bytes(original_committed)
 

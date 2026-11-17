@@ -40,7 +40,7 @@ To intentionally update committed native outputs, review their changes afterward
 ```sh
 swift package refract-generate --target RefractConsumer \
   --allow-writing-to-package-directory
-swift package refract-generate --target RefractConsumer --check
+swift package refract-check --target RefractConsumer
 ```
 
 The first command requests package-directory write permission explicitly. The

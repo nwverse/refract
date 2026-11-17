@@ -39,11 +39,30 @@ struct RefractSwiftPMPlugin: BuildToolPlugin {
             // one invalidates the check without granting package-directory writes.
             inputs.append(output)
         }
+        // A direct-file manifest notices added/removed .kt/.ets files, which cannot
+        // be inferred from the declared per-input outputs. The CLI owns their check.
+        for directory in configuration.committedOutputDirectories {
+            let manifest = context.pluginWorkDirectoryURL.appendingPathComponent(
+                directory.lastPathComponent + "-inputs.txt")
+            let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+                .filter { ["kt", "ets"].contains(URL(fileURLWithPath: $0).pathExtension) }.sorted()
+            let listing = try files.map { name in
+                let file = directory.appendingPathComponent(name)
+                let values = try file.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+                return "\(name)\t\(values.fileSize ?? -1)\t\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)"
+            }.joined(separator: "\n")
+            let data = Data((listing + "\n").utf8)
+            if (try? Data(contentsOf: manifest)) != data {
+                try data.write(to: manifest, options: .atomic)
+            }
+            inputs.append(manifest)
+        }
         let tool = try context.tool(named: "RefractConsumerTool").url
         let generator: URL
         if let explicit = ProcessInfo.processInfo.environment["REFRACT_EXECUTABLE"], !explicit.isEmpty {
             generator = URL(fileURLWithPath: explicit)
-            guard FileManager.default.isExecutableFile(atPath: generator.path) else {
+            let values = try? generator.resourceValues(forKeys: [.isRegularFileKey, .isExecutableKey])
+            guard values?.isRegularFile == true, values?.isExecutable == true else {
                 throw PluginError(message: "REFRACT_EXECUTABLE is not an executable file: \(explicit)")
             }
         } else {

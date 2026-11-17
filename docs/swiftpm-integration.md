@@ -78,6 +78,9 @@ SwiftPM's incremental `buildCommand` declares these read dependencies:
 - the optional mapping, both mapped native string catalogs and any `resourceInputs`;
 - every committed Kotlin/ArkTS output that exists (missing output also fails the
   command, and may instead fail SwiftPM's earlier missing-input planning check);
+- a content-preserved plugin-work manifest of each committed output directory's
+  direct `.kt`/`.ets` names and metadata, so newly added or removed unexpected files
+  also invalidate the check without rewriting the manifest on no-op builds;
 - the host tool and generator executable, so replacing either invalidates the result.
 
 A no-op build runs no generator process. Touching a declared input causes deterministic
@@ -91,10 +94,10 @@ runtime declarations. Its compilation orders the host source after generation/ch
 the Kotlin/ArkTS staging paths remain explicit tool arguments inside the writable
 plugin work directory.
 
-The ordinary build must leave committed sources unchanged. It compares the staged
-files with committed output and fails on a difference. If the CLI check contract
-from #164 is available, the host delegates committed missing/stale/unexpected-file
-checking to that read-only command rather than maintaining a second policy.
+The ordinary build must leave committed sources unchanged. The host invokes the CLI's
+read-only `check` command for the complete input group. That command regenerates in
+memory and reports missing, stale and unexpected `.kt`/`.ets` committed files. The
+host separately regenerates the staging files, with no second comparison policy.
 
 ## Publish and check explicitly
 
@@ -112,12 +115,11 @@ source; generated code remains ordinary platform code if Refract is later remove
 For a read-only check:
 
 ```sh
-swift package refract-generate --target <target> --check
+swift package refract-check --target <target>
 ```
 
-The command shares the generation plugin's declaration of package-write permission,
-but `--check` never writes to the package. Do not grant the permission flag for this
-operation. A stale or missing file fails instead of being repaired silently.
+The check command is a separate plugin with no package-directory write permission. A
+stale or missing file fails instead of being repaired silently.
 
 ## Verification and limits
 
@@ -129,8 +131,9 @@ python3 -I scripts/test_swiftpm_consumer.py
 
 The test uses a clean temporary consumer and the real SwiftPM plugin. It verifies
 staged generation, deterministic outputs, zero generator invocation on a no-op build,
-invalidation after each declared input changes, missing/stale failure, explicit
-publication, invalid executable diagnostics and symlink boundary rejection. On Linux
+invalidation after each declared input changes, missing/stale/unexpected-output
+failure, explicit publication, invalid executable diagnostics and symlink boundary
+rejection. On Linux
 it supplies an isolated syntax-only `SwiftUI` target solely to compile the host
 syntax; this is not a SwiftUI implementation or iOS evidence.
 

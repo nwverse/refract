@@ -124,6 +124,10 @@ struct ConsumerConfiguration: Decodable {
         }
     }
 
+    var committedOutputDirectories: [URL] {
+        [androidOutput, harmonyOutput].map { package.appendingPathComponent($0) }
+    }
+
     var committedOutputs: [URL] {
         sources.flatMap { source in
             let basename = URL(fileURLWithPath: source).deletingPathExtension().lastPathComponent
