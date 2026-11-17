@@ -160,6 +160,7 @@ extension Builder {
 struct TypedExpression {
     let expression: Expression
     let type: ValueType?
+
     init(_ expression: Expression, _ type: ValueType?) {
         self.expression = expression
         self.type = type

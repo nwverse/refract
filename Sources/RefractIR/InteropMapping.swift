@@ -8,11 +8,11 @@ public struct NativeTarget: Codable, Equatable, Sendable {
 
     public struct Parameter: Codable, Equatable, Sendable {
         public let label: String
-        public let type: ValueType
+        public let type: NativeParameterType
         public let required: Bool
-        /// Explicit target type for compatibility declarations; canonical mappings use the source ValueType.
+        /// Explicit target type for compatibility declarations; canonical mappings use the source NativeParameterType.
         public let targetType: String?
-        public init(label: String, type: ValueType, required: Bool = true, targetType: String? = nil) {
+        public init(label: String, type: NativeParameterType, required: Bool = true, targetType: String? = nil) {
             self.label = label
             self.type = type
             self.required = required
@@ -141,12 +141,18 @@ public enum InteropMapping {
         return diagnostics
     }
 
-    private static func targetType(_ type: ValueType, platform: String) -> String {
-        if platform == "HarmonyOS" { return type == .string ? "string" : type == .bool ? "boolean" : "number" }
+    private static func targetType(_ type: NativeParameterType, platform: String) -> String {
+        if platform == "HarmonyOS" {
+            return switch type {
+            case .string, .stringKey: "string"
+            case .bool: "boolean"
+            case .int, .double, .image: "number"
+            }
+        }
         return switch type {
-        case .string: "String"
+        case .string, .stringKey: "String"
         case .bool: "Boolean"
-        case .int: "Int"
+        case .int, .image: "Int"
         case .double: "Double"
         }
     }

@@ -308,6 +308,16 @@ public struct ComposeBackend: Sendable {
                                                      packageName: context.packageName) {
                 try renderExpression($0, context: &context)
             }
+        case let .imageResource(name):
+            guard let resourceClass = context.androidResourceClass, !name.isEmpty,
+                  name.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }) else {
+                throw Diagnostic(code: "RFMAP003",
+                                 message: "Native image resource `\(name)` requires an Android R class and a valid resource name.",
+                                 suggestion: "Declare the app R class and the same lowercase image resource on both platforms.",
+                                 location: expression.location)
+            }
+            context.imports.insert(resourceClass)
+            return "R.drawable.\(name)"
         case let .boolLiteral(value):
             return value ? "true" : "false"
         case let .numberLiteral(text):

@@ -1,10 +1,36 @@
+/// A native-only extension of the scalar value boundary; it never enters models or local state.
+public enum NativeParameterType: String, Codable, Sendable {
+    case string, bool, double, int, image, stringKey
+
+    public var scalar: ValueType? {
+        switch self {
+        case .string: .string
+        case .bool: .bool
+        case .double: .double
+        case .int: .int
+        case .image, .stringKey: nil
+        }
+    }
+
+    public var sourceName: String {
+        switch self {
+        case .string: "String"
+        case .bool: "Bool"
+        case .double: "Double"
+        case .int: "Int"
+        case .image: "Image"
+        case .stringKey: "LocalizedStringKey"
+        }
+    }
+}
+
 /// A typed parameter in a native component's Swift declaration or call.
 public struct NativeParameter: Codable, Equatable, Sendable {
     public let label: String
-    public let type: ValueType
+    public let type: NativeParameterType
     public let location: SourceLocation?
 
-    public init(label: String, type: ValueType, location: SourceLocation? = nil) {
+    public init(label: String, type: NativeParameterType, location: SourceLocation? = nil) {
         self.label = label
         self.type = type
         self.location = location
@@ -27,10 +53,10 @@ public struct NativeDeclaration: Codable, Equatable, Sendable {
 public struct NativeArgument: Codable, Equatable, Sendable {
     public let label: String
     public let expression: Expression
-    public let type: ValueType?
+    public let type: NativeParameterType?
     public let location: SourceLocation?
 
-    public init(label: String, expression: Expression, type: ValueType?, location: SourceLocation? = nil) {
+    public init(label: String, expression: Expression, type: NativeParameterType?, location: SourceLocation? = nil) {
         self.label = label
         self.expression = expression
         self.type = type

@@ -118,6 +118,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-remote-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-remote-image-reject",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-foreach",
       "implementationStatus": "ready"
     },
