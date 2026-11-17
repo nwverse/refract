@@ -78,6 +78,22 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "form-reject-presence-type",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "form-reject-submit-binding",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "form-reject-unknown-rule",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "form-validation",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
       "implementationStatus": "ready"
     },

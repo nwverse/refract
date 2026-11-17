@@ -7,6 +7,8 @@ func emitComposeModels(_ models: [ModelProtocol], into out: inout KotlinWriter) 
         for property in model.properties {
             let type = if let collection = property.collection {
                 "State<List<\(collection.itemType)>>"
+            } else if property.effect == .text {
+                "State<String?>"
             } else {
                 "State<\(try composeModelType(property.type))>"
             }
@@ -16,7 +18,8 @@ func emitComposeModels(_ models: [ModelProtocol], into out: inout KotlinWriter) 
             let parameters = try action.parameters.map {
                 "\($0.localName): \(try composeModelType($0.type))"
             }.joined(separator: ", ")
-            out.line("public fun \(action.name)(\(parameters))")
+            let result = action.effect == .asyncAttempt ? ": Boolean" : ""
+            out.line("public fun \(action.name)(\(parameters))\(result)")
         }
         out.close()
     }

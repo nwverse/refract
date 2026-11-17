@@ -50,7 +50,7 @@ enum ArkExpression {
             return "this.\(try referenceName(model, location: expression.location)).\(try referenceName(property, location: expression.location))"
         case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
             return "this.\(try referenceName(name, location: expression.location))"
-        case .valueProperty, .interpolatedString:
+        case .valueProperty, .interpolatedString, .formField, .presence, .formValid:
             throw Diagnostic(code: "arkui.unsupported_state_expression",
                              message: "This state expression requires the local-state lowering.",
                              suggestion: "Use a supported state read or interpolation.",

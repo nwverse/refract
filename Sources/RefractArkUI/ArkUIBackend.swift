@@ -130,6 +130,13 @@ struct Generation {
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
+            for modifier in modifiers where modifier.name == "disabled" {
+                guard let argument = modifier.arguments.first else {
+                    throw Diagnostic(code: "RFFORM007", message: "`.disabled` needs one Boolean model property.",
+                                     suggestion: "Use `.disabled(model.submitting)`.", location: modifier.location)
+                }
+                writer.line(".enabled(!(\(try emitLocalExpression(argument, item: item, mapping: mapping))))")
+            }
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .conditional(branches, location):
             guard !branches.isEmpty, branches[0].condition != nil,
@@ -333,7 +340,7 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location): location
+             let .navigationPath(_, _, location), let .form(_, _, location): location
         }
     }
 }

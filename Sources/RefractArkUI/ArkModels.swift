@@ -27,14 +27,18 @@ func emitArkModels(_ models: [ModelProtocol], into writer: inout ArkWriter) thro
         writer.line()
         writer.open("export interface \(model.name)")
         for property in model.properties {
-            let type = try property.collection.map { "BasicDataSource<\($0.itemType)>" } ?? arkModelType(property.type)
+            let type = if property.effect == .text {
+                "string | null | undefined"
+            } else {
+                try property.collection.map { "BasicDataSource<\($0.itemType)>" } ?? arkModelType(property.type)
+            }
             writer.line("\(property.name): \(type);")
         }
         for action in model.actions {
             let parameters = try action.parameters.map {
                 "\($0.localName): \(try arkModelType($0.type))"
             }.joined(separator: ", ")
-            writer.line("\(action.name)(\(parameters)): void;")
+            writer.line("\(action.name)(\(parameters)): \(action.effect == .asyncAttempt ? "boolean" : "void");")
         }
         writer.close()
     }

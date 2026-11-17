@@ -272,6 +272,9 @@ struct SettingsScreen: View {
 - The full parameter and property spelling is specified by `docs/state-and-models.md`; this section is the source
   contract and the required structural semantics. A platform limitation is a diagnostic, not a state-observation
   fallback.
+- Two compile-time-only attribute markers extend the model boundary for forms: `@refractText` on a get-only String
+  property lowers to a nullable native observable text, and `@refractAsync` on an action declares a native attempt
+  returning `Boolean`/`boolean`. `docs/forms.md` owns the form declaration, submission and retry contract.
 
 ## 6. Diagnostics and fixture format
 
@@ -339,6 +342,13 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `state.binding_initializer` | Binding has an initializer or unsupported ownership | Pass an initialized binding from the parent with a supported scalar type |
 | `model.invalid_property` | Model property is writable, computed, static or untyped | Declare a get-only typed instance property on a RefractModel protocol |
 | `model.invalid_action` | Model action is async, throwing or otherwise unsupported | Declare a synchronous nonthrowing Void action with supported parameters |
+| `RFFORM001` | Form or field declaration is malformed, duplicated or collides with another property | Use `refractForm { Field("name", initial: "") }` with unique identifiers |
+| `RFFORM002` | Form rule outside the bounded vocabulary, or a read of an undeclared field | Use `.nonEmpty` or `.equals("field")`; keep business rules in the model |
+| `RFFORM003` | Cross-field equality names a missing or differently typed sibling | Compare two declared String fields of the same form |
+| `RFFORM004` | Form submission references a non-async action or parameters the form cannot supply | Declare `@refractAsync` with parameters matching the form fields |
+| `RFFORM005` | `$form` used directly as a control binding | Project one field, such as `$form.email` |
+| `RFFORM006` | `refractPresent` applied to a property without `@refractText` | Declare the optional text with `@refractText` |
+| `RFFORM007` | `.disabled` applied to anything other than a declared Bool model property | Use `.disabled(model.submitting)` |
 | `model.unsupported_requirement` | Model has associated types, initializers or another unsupported requirement | Keep other requirements in app-owned native code |
 | `R.string.literal` | User-facing literal text is not explicitly non-localized | Use a resource key or Text(verbatim:) for intentional literal text |
 | `R.string.invalid_key` | Key is not canonical or is dynamically selected | Use lowercase ASCII letters/digits in nonempty dot-separated segments |

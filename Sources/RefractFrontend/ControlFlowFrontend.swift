@@ -77,6 +77,8 @@ extension Builder {
     }
 
     private func typedBoolean(_ expression: ExprSyntax) -> Expression? {
+        if let presence = presenceCondition(expression) { return presence }
+        if diagnostics.contains(where: { $0.code == "RFFORM006" }) { return nil }
         if let value = expression.as(BooleanLiteralExprSyntax.self) {
             return Expression(.boolLiteral(value.literal.tokenKind == .keyword(.true)), location: location(of: value))
         }

@@ -132,12 +132,31 @@ extension Builder {
               let titleArgument = call.arguments.first, titleArgument.label == nil,
               let key = stringLiteral(titleArgument.expression), LocalizationKey.isCanonical(key),
               call.arguments.last?.label?.text == "text",
-              let projection = call.arguments.last?.expression.as(DeclReferenceExprSyntax.self),
+              let textArgument = call.arguments.last else {
+            error("state.invalid_projection",
+                  "TextField requires a localized title and `text: $property` for a declared String state, binding or form field.",
+                  "Use `TextField(\"settings.name\", text: $name)` or `text: $form.email` with String ownership", at: call)
+            return nil
+        }
+        if let projection = textArgument.expression.as(MemberAccessExprSyntax.self),
+           projection.base?.as(DeclReferenceExprSyntax.self)?.baseName.text.hasPrefix("$") == true,
+           projection.declName.argumentNames == nil,
+           let base = projection.base?.as(DeclReferenceExprSyntax.self),
+           let declaration = form(named: String(base.baseName.text.dropFirst())),
+           let field = declaration.field(named: projection.declName.baseName.text) {
+            let placeholder = Expression(.localizedText(LocalizedText(key: key)), type: .string,
+                                        location: location(of: titleArgument.expression))
+            return .textInput(placeholder: placeholder,
+                              value: Expression(.formField(form: declaration.name, field: field.name), type: .string,
+                                                location: location(of: projection)),
+                              modifiers: [], location: location(of: call))
+        }
+        guard let projection = textArgument.expression.as(DeclReferenceExprSyntax.self),
               projection.baseName.text.hasPrefix("$"),
               let property = controlTextBinding(named: String(projection.baseName.text.dropFirst())) else {
             error("state.invalid_projection",
-                  "TextField requires a localized title and `text: $property` for a declared String state or binding.",
-                  "Use `TextField(\"settings.name\", text: $name)` with String ownership", at: call)
+                  "TextField requires a localized title and `text: $property` for a declared String state, binding or form field.",
+                  "Use `TextField(\"settings.name\", text: $name)` or `text: $form.email` with String ownership", at: call)
             return nil
         }
         let placeholder = Expression(.localizedText(LocalizedText(key: key)), type: .string,
