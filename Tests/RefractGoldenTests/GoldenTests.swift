@@ -45,10 +45,10 @@ struct CorpusTests {
         #expect(cases.contains { $0.name == "rejected-image" && $0.status == .ready })
         #expect(cases.filter { $0.name.hasPrefix("localization/") }.allSatisfy { $0.status == .ready })
         #expect(cases.filter { $0.name.hasPrefix("interop-") && $0.status == .ready }.map(\.name) == [
-            "interop-native-callers", "interop-native-component", "interop-native-measurement", "interop-native-mismatch",
+            "interop-native-animation", "interop-native-callers", "interop-native-component", "interop-native-measurement", "interop-native-mismatch",
             "interop-native-missing", "interop-native-undeclared", "interop-platform-text-localized-rejected",
             "interop-platform-value", "interop-platform-value-incomplete", "interop-platform-view",
-            "interop-reject-conditional-compilation",
+            "interop-reject-conditional-compilation", "interop-remote-image", "interop-remote-image-reject",
         ])
         #expect(cases.allSatisfy { !$0.name.hasPrefix("interop-") || $0.status == .ready })
         #expect(try CorpusLoader.load(repository: root).map(\.name) == cases.map(\.name))
