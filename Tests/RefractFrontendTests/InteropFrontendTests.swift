@@ -104,7 +104,7 @@ func frontendResolvesNativeArgumentFromDeclaredState(_ declaration: String) thro
         return
     }
     #expect(component.arguments.map(\.type) == [.bool, .string])
-    #expect(component.arguments[1].expression.value == .valueProperty(.model(model: "model", property: "identity")))
+    #expect(component.arguments[1].expression?.value == .valueProperty(.model(model: "model", property: "identity")))
 }
 
 @Test func frontendRejectsNativeArgumentWithMismatchedModelType() {
