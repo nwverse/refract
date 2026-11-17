@@ -117,7 +117,7 @@ def regenerate_and_stage_multiple(fixture: str, fixture_dir: Path, inputs: list[
             arguments += ["--input", str(input_path)]
         arguments += ["--mapping", str(mapping_json), "--android-out", str(out / "android"),
                       "--harmony-out", str(out / "harmony")]
-        subprocess.run(arguments, cwd=ROOT, check=True)
+        subprocess.run(arguments, cwd=out, check=True)
         for input_path in inputs:
             name = input_path.stem
             regenerated = out / "android" / f"{name}.kt"
