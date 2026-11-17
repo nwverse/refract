@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "hello_title", "value": "Hello" },
+    { "name": "hello_go", "value": "Go" }
+  ]
+}
