@@ -19,7 +19,7 @@ class BenchmarkActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 when (variant) {
-                    ScreenVariant.Generated -> GeneratedSettingsScreen(benchmarkModel)
+                    ScreenVariant.Generated -> SettingsScreen(benchmarkModel)
                     ScreenVariant.Reference -> ReferenceSettingsScreen(benchmarkModel)
                 }
             }

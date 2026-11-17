@@ -299,9 +299,9 @@ wrapper view or runtime platform branch. Typography continues through declared d
 
 `Fixtures/interop-native-measurement` exercises these forms through the real CLI on both backends, including the
 typed item toggle from the model-action contract. It is included in the real Android fixture compilation manifest.
-That proves accepted Kotlin compilation, not macrobenchmark parity or device performance. `bench/android` keeps its
-hand-written reference and labelled generated stand-in unchanged until the complete benchmark integration is
-reviewed; macro execution and complete paired timing evidence belong to #120.
+That proves accepted Kotlin compilation, not macrobenchmark parity or device performance. `bench/android` generates
+its real screen through the CLI and preserves the unchanged hand-written reference; macro execution and complete
+paired timing evidence belong to #120.
 
 ## Refract inside native code
 
