@@ -50,7 +50,7 @@ extension ComposeBackend {
         case let .textInput(placeholder, value, modifiers, location):
             try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
                               location: location, into: &out, context: &context)
-        case .stack, .text, .button, .toggle, .native, .nativeModifier, .child, .component, .platformView,
+        case .stack, .text, .markdown, .button, .toggle, .native, .nativeModifier, .child, .component, .platformView,
              .conditional, .optionalBinding, .switchExpression, .navigationLink, .navigationStack:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)

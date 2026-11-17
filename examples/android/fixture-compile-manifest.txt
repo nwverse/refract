@@ -33,4 +33,5 @@ accessibility-dynamic-type
 state-counter
 parent-binding
 model-interface
+markdown-conversation
 v0-stack-layout

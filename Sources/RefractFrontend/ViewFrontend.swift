@@ -3,7 +3,7 @@ import SwiftSyntax
 
 /// View syntax additions. Unsupported shapes are diagnosed rather than lowered by spelling alone.
 extension Builder {
-    private static let extendedViews: Set<String> = ["VStack", "HStack", "ZStack", "ScrollView", "List", "Section", "Image", "Label", "Divider", "Spacer"]
+    private static let extendedViews: Set<String> = ["VStack", "HStack", "ZStack", "ScrollView", "List", "Section", "Image", "Label", "Divider", "Spacer", "refractMarkdown"]
 
     func extendedViewHandles(name: String) -> Bool {
         Self.extendedViews.contains(name)
@@ -23,6 +23,7 @@ extension Builder {
         case "Label": return label(call)
         case "Divider": return leaf(call, .divider(modifiers: [], location: location(of: call)))
         case "Spacer": return leaf(call, .spacer(location: location(of: call)))
+        case "refractMarkdown": return markdownDocument(call)
         default: return nil
         }
     }

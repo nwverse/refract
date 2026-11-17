@@ -7,16 +7,21 @@
 is part of this target. The Xcode project references those shared files explicitly; do not replace them with copied
 platform-specific screens.
 
-The target also compiles eight source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
+The target also compiles nine source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
 `InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift`,
-`ModelInterface.swift`, `AccessibilityDynamicType.swift` and `StackLayout.swift` in `examples/shared/`. Their unique
+`ModelInterface.swift`, `AccessibilityDynamicType.swift`, `StackLayout.swift` and `MarkdownConversation.swift` in `examples/shared/`. Their unique
 on-disk basenames avoid Xcode's duplicate `Input.stringsdata` output; `scripts/check_examples.py` requires each to
 stay byte-identical to its named canonical fixture. They exercise `Binding(get:set:)`, typed platform selection,
 native measurement, directional padding, named stack spacing, accessibility labels and ordinary SwiftUI action/label
 buttons through the real SwiftUI type checker. `RefractSourcePrelude.swift` supplies source-level, iOS-only
 declarations: `RefractSpacing` forwards to ordinary stack spacing, the native-modifier shim returns its receiver
 unchanged, and directional padding forwards to standard SwiftUI `EdgeInsets`. `MeasurementDesignTokens.swift` owns
-the iOS typography tokens. None of these declarations performs runtime platform dispatch or links a Refract library.
+the iOS typography tokens. `RefractMarkdownSource.swift` owns the bounded typed Markdown AST and direct
+`AttributedString` construction; it does not parse Markdown at run time or import Refract. The conversation snippet
+is byte-identical to `Fixtures/markdown-conversation/Input.swift`. **The added Markdown source has not been compiled
+on macOS**; the checks here prove project wiring and source consistency only. Its native link and accessibility
+behavior require a real Apple-toolchain test, as documented in `docs/markdown.md`. None of these declarations
+performs runtime platform dispatch or links a Refract library.
 
 ## Build on macOS
 

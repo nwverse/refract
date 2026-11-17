@@ -95,6 +95,13 @@ Omitted stack spacing preserves the toolkit default rather than inserting a nume
 spacing arguments are retained in output so the contract does not depend on a toolkit version's interpretation of
 those source arguments.
 
+## Bounded typed Markdown
+
+`refractMarkdown` accepts a literal version-1 structural AST for paragraphs, inline emphasis, inline code, a bounded
+HTTPS link and fenced-code equivalents. It does not accept Markdown source, HTML or runtime document input. The
+versioned node forms, stable identities, model-owned link action, resource provenance and native evidence limits are
+specified in `docs/markdown.md`; its `RFMD001`–`RFMD018` diagnostics reject constructs outside that slice.
+
 ## 3. Modifiers
 
 Modifiers retain their visual meaning. On Compose, source modifiers are appended to the caller's root modifier in

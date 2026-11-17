@@ -1,0 +1,1 @@
+Input.swift:10:45: error [RFMD003]: Markdown blocks must be a literal, nonempty array of typed blocks. Suggestion: Construct `.paragraph(id:content:)` and `.codeBlock(id:language:accessibilityLabel:code:)` values at build time.

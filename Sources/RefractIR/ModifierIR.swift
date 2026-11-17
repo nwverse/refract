@@ -16,6 +16,8 @@ public extension ViewNode {
             return .stack(axis: axis, children: children, modifiers: modifiers + [modifier], location: location)
         case let .text(value, modifiers, location):
             return .text(value, modifiers: modifiers + [modifier], location: location)
+        case let .markdown(document, linkAction, modifiers, location):
+            return .markdown(document, linkAction: linkAction, modifiers: modifiers + [modifier], location: location)
         case let .button(label, action, modifiers, location):
             return .button(label: label, action: action, modifiers: modifiers + [modifier], location: location)
         case let .layout(layout, children, modifiers, location):
