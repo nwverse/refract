@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_section">Accessibility</string>
+    <string name="settings_display_name">Display name</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_quiet_hours">Quiet hours</string>
+    <string name="settings_save">Save</string>
+</resources>
