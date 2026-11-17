@@ -83,8 +83,10 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 3. Install JDK 21 (Temurin) and a pinned Android SDK: platform `android-37.2`, build tools `37.0.0`, and the
    command-line tools zip whose SHA-256 is recorded in the workflow. The pinned toolchain mirrors the documented
    values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
-4. Export the built CLI as `REFRACT_CLI_PATH`, then run `./gradlew --no-daemon :app:checkDebugRefract
-   :app:compileDebugKotlin` from `examples/android/`. The Gradle plugin in `tools/gradle/` registers per-variant
+4. Export the built CLI as `REFRACT_CLI_PATH` and its exact `refract --version` line as
+   `REFRACT_REQUIRED_VERSION`, then run `./gradlew --no-daemon :app:checkDebugRefract
+   :app:compileDebugKotlin` from `examples/android/`. The version includes the source revision and is checked before
+   generation or publication. The Gradle plugin in `tools/gradle/` registers per-variant
    generation through Android's generated-source API. It compiles the fresh output under `app/build/generated/`,
    while `checkDebugRefract` invokes the CLI's read-only committed-output check. The checked-in Gradle wrapper
    (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle

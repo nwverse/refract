@@ -153,6 +153,7 @@ jobs:
         run: |
           test -x .build/debug/refract
           printf 'REFRACT_CLI_PATH=%s/refract\n' "$PWD/.build/debug" >> "$GITHUB_ENV"
+          printf 'REFRACT_REQUIRED_VERSION=%s\n' "$(.build/debug/refract --version)" >> "$GITHUB_ENV"
       - name: Compile generated Kotlin with the checked-in wrapper
         working-directory: examples/android
         env:

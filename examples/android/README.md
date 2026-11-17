@@ -50,6 +50,7 @@ export ANDROID_HOME=/path/to/android-sdk
 export JAVA_HOME=/path/to/jdk21
 swift build --package-path ../..
 export REFRACT_CLI_PATH="$PWD/../../.build/debug/refract"
+export REFRACT_REQUIRED_VERSION="$($REFRACT_CLI_PATH --version)"
 ./gradlew -p examples/android :app:assembleDebug
 ./gradlew -p examples/android :app:checkDebugRefract
 

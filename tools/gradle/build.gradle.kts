@@ -38,6 +38,7 @@ tasks.test {
     maxParallelForks = 1
     systemProperty("refract.test.repository", layout.settingsDirectory.dir("../..").asFile.absolutePath)
     systemProperty("refract.test.cli", providers.environmentVariable("REFRACT_CLI_PATH").get())
+    systemProperty("refract.test.version", providers.environmentVariable("REFRACT_REQUIRED_VERSION").get())
     testLogging {
         events("failed", "skipped")
     }
