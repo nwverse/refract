@@ -98,7 +98,7 @@ import RefractIR
     #expect(missing.diagnostics.map(\.code) == ["RFNATIVE003"])
     let mismatched = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct Bad: View {
-        var body: some View { Text(refractValue(ios: "iOS", android: true, harmonyOS: "HarmonyOS")) }
+        var body: some View { Text(verbatim: refractValue(ios: "iOS", android: true, harmonyOS: "HarmonyOS")) }
     }
     """))
     #expect(mismatched.diagnostics.map(\.code) == ["RFNATIVE003"])
