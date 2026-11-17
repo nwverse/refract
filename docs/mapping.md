@@ -79,9 +79,15 @@ explicit order.
 - Scalar types are `string`, `bool`, `int`, `double`, `length`, `color`, `font`, `image` and `stringKey`.
   `length` is a native dimension (for example a Compose `Dp` and an ArkUI number), `font` is the target's native
   text-style value, and `color` is its native color value. `stringKey` is an already resolved localized text value,
-  not permission to emit a literal. Callback types are `action`, `actionString`, `actionBool`, `actionInt` and
-  `actionDouble`. Mapping validation compares these types; platform compilation then checks the concrete native
-  types. Arbitrary Swift expressions, generic type names and structural object types are outside v1.
+  not permission to emit a literal. At a `RefractNativeView` boundary, `image` accepts only a static
+  `Image("resource_name")` argument and `remoteImageLoader` names the app-provided native loading interface. Neither
+  permits an arbitrary object or target expression. The loader must be an explicit typed input of the source screen;
+  see `docs/remote-images.md` for the bounded lifecycle and platform evidence. Callback types are `action`,
+  `actionString`, `actionBool`, `actionInt` and
+  `actionDouble`. A `string`/`bool`/`int`/`double` parameter may read a declared model's matching scalar property;
+  Compose reads the generated `State<T>` through `.value`, while ArkUI uses its direct property reference. Mapping
+  validation and source typing compare these types; platform compilation then checks the concrete native types.
+  Arbitrary Swift expressions, generic type names and structural object types are outside v1.
 - `argumentStyle` is `named` (Compose-style `name = value`), `object` (one typed ArkUI options object), or
   `positional`. `target` is required for named/object arguments and forbidden for positional arguments.
 - `content` is `none` or `children` in the common declaration. The platform spelling is `none`, `trailingClosure`,

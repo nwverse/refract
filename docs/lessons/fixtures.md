@@ -19,6 +19,10 @@
 - **Do not invent default spacing.** An omitted SwiftUI stack `spacing` is not a universal 8 dp/fp value. Leave
   native default behavior intact unless the source supplies a typed spacing token. Explicit values still need a
   common typed representation accepted by both backends.
+- **Generated-source staging must not own native support code.** `check_fixture_compilation.py` removes its Java and
+  resource staging trees before each run. Hand-written native components belong in a separate source set (for
+  example `src/native`), referenced by the Android `sourceSets.getByName("main").kotlin` container in AGP 9.
+  Kotlin Multiplatform's `kotlin.sourceSets["main"]` does not exist here.
 - **Compile a styled golden before changing its imports.** A shaped Compose `background(color, RoundedCornerShape(...))`
   still requires `androidx.compose.foundation.background`; only the separate `clip` import is unnecessary. Do not
   remove imports merely because the shape is fused in the call. Review token provenance on both targets and verify

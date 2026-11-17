@@ -53,7 +53,8 @@ import RefractIR
     ])
     let rows = ListItems(collection: Expression(.valueProperty(.model(model: "model", property: "items"))),
                          itemName: "item", itemType: "IntItem", keyType: .int,
-                         content: .text(Expression(.reference("item.title")), modifiers: [], location: nil))
+                         content: .text(Expression(.reference("item.title")), modifiers: [], location: nil),
+                         modelType: "ListModel")
     let module = Module(sourceFile: "Input.swift",
                         screens: [Screen(name: "IntList", states: [
                             .model(ModelReference(propertyName: "model", protocolName: "ListModel"), location: nil),

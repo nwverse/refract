@@ -142,6 +142,22 @@ JVM behavior check, not a physical reduced-motion system-settings test, device/e
 Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches. The
 fixture module resolves the same pinned Android-all runtime as the app tests and runs Robolectric offline.
 
+### Incremental search model tests
+
+`list-paged-search` compiles the actual dual-backend fixture output and the app-owned
+`IncrementalSearchResultsModel` together. The model is application code, not generated output or a Refract runtime.
+Its JUnit tests run on the host JVM with a scripted in-memory transport and cover append/replacement identity,
+duplicate/out-of-order response rejection, cancellation, loading/empty state and error retry. Run them with the same
+fixture staging step followed by:
+
+```sh
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.search.IncrementalSearchResultsModelTest
+```
+
+This is native model JVM evidence only. It performs no network request, renders no UI and supplies no emulator,
+device, ArkTS compiler, runtime observation or performance evidence. A HarmonyOS implementation must provide the
+corresponding app-owned data-source notifications and lifecycle cancellation described in `docs/state-and-models.md`.
+
 ## Opt-in Gradle generation
 
 The repository's `tools/gradle/` build supplies the `dev.refract.generator` plugin. `app/build.gradle.kts` opts in
