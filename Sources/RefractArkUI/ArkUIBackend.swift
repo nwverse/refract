@@ -196,6 +196,12 @@ struct Generation {
                                  suggestion: "Declare its ArkUI symbol and typed parameters in refract.json.",
                                  location: location)
             }
+            if module.nativeDeclarations.contains(where: { $0.name == component.name && $0.kind == .textInputHost }) {
+                let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
+                try ArkTextInputHost.emit(component, target: target, module: module, mapping: mapping,
+                                          location: location, into: &writer)
+                return
+            }
             let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
             let arguments = try InteropEmission.arguments(for: component, target: target) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)

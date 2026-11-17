@@ -24,6 +24,7 @@ v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
 interop-native-animation
+interop-text-input-host
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type

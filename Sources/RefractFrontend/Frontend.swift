@@ -74,7 +74,7 @@ final class Builder: SyntaxVisitor {
         for statement in tree.statements {
             if let declaration = statement.item.as(StructDeclSyntax.self),
                declaration.inheritanceClause?.inheritedTypes.contains(where: {
-                   $0.type.trimmedDescription == "View"
+                   ["View", "RefractTextInputHost"].contains($0.type.trimmedDescription)
                }) == true {
                 viewDeclarations[declaration.name.text] = declaration
             }
@@ -367,7 +367,9 @@ final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
-            if let declaration = viewDeclarations[name] {
+            if let declaration = viewDeclarations[name], interop.declarations.contains(where: {
+                $0.name == name && $0.kind == .textInputHost
+            }) == false {
                 return childView(call, declaration: declaration)
             }
             if interop.declarations.contains(where: { $0.name == name }) == false,
@@ -389,7 +391,17 @@ final class Builder: SyntaxVisitor {
 
     private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
         let name = call.calledExpression.trimmedDescription
+        let declaration = interop.declarations.first { $0.name == name }
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
+            if declaration?.kind == .textInputHost {
+                let parser = TextInputHostFrontend(file: file, converter: converter)
+                guard let value = parser.argument(argument, in: self) else {
+                    error("RFINPUT002", "Text-input host argument `\(argument.label?.text ?? "unlabeled")` must use the declared binding and model callback contract.",
+                          "Pass `draft: $draft`, `focusRequest: focusRequest`, `onDraftCommit: { model.commitDraft($0) }`, and `onCommit: { model.commit() }`", at: argument)
+                    return nil
+                }
+                return value
+            }
             guard let label = argument.label?.text, let value = scalar(argument.expression) else {
                 error("RFNATIVE002", "Native component arguments require explicit labels and supported scalar values.",
                       "Use the memberwise SwiftUI initializer signature", at: argument)

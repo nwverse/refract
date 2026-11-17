@@ -46,7 +46,8 @@ public struct InteropResolver: Sendable {
             parameters: component.parameters.map { parameter in
                 NativeTarget.Parameter(label: parameter.label,
                     type: ValueType(rawValue: parameter.type.rawValue) ?? .string,
-                    required: parameter.required, targetType: component.targetTypes?[parameter.label])
+                    required: parameter.required, targetType: component.targetTypes?[parameter.label],
+                    callbackType: NativeParameterType(rawValue: parameter.type.rawValue))
             },
             arguments: component.arguments.map { NativeTarget.Argument(source: $0.source, target: $0.target) })
     }

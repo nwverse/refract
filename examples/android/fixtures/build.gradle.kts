@@ -45,8 +45,11 @@ android {
         compose = true
     }
 
-    sourceSets.getByName("main").kotlin.directories.add(
+    sourceSets.getByName("main").kotlin.directories.addAll(
+        listOf(
         "../app/src/main/java/com/example/refract/animation",
+        "../app/src/main/java/com/example/refract/input",
+        ),
     )
 }
 
@@ -68,6 +71,7 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.18")
     robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-14663667-2-i7")
     testImplementation("androidx.test.ext:junit:1.3.0")
+    testImplementation("androidx.activity:activity-compose:1.9.3")
     testImplementation("androidx.compose.ui:ui-test-junit4")
 }
 
