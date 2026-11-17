@@ -250,6 +250,7 @@ final class Builder: SyntaxVisitor {
                 return extendedView(call)
             }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
+            if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
                 guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
                     error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",

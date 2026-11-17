@@ -82,6 +82,9 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
+            if case let .tabView(tabs, _) = screen.body {
+                try emitTabHelpers(tabs, into: &writer)
+            }
             // Local-state emission already supplies the separator before build().
             if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
@@ -171,6 +174,8 @@ struct Generation {
         case let .navigationLink(title, pathName, enumName, destination, _):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
                                    destination: destination, into: &writer, mapping: mapping)
+        case let .tabView(tabs, _):
+            try emitTabView(tabs, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):
             // Selection editing, drag and drop wrap the child in dedicated constructs.
             if let selection = operations.first(where: { if case .textSelection = $0.operation { true } else { false } }),
@@ -490,7 +495,7 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location): location
+             let .navigationPath(_, _, location), let .tabSelection(_, _, location): location
         }
     }
 }

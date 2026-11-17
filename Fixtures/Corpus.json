@@ -274,6 +274,18 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "navigation-tabs-menu",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-tabs-reject-dynamic",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-tabs-reject-inputs",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "parent-binding",
       "implementationStatus": "ready"
     },

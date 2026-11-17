@@ -36,6 +36,7 @@ cross-file-two-models
 interop-remote-image
 navigation-host
 navigation-native-destination
+navigation-tabs-menu
 accessibility-dynamic-type
 state-counter
 parent-binding

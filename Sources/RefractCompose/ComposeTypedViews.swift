@@ -55,7 +55,7 @@ extension ComposeBackend {
                                 modifiers: modifiers, isRoot: isRoot, location: location,
                                 into: &out, context: &context)
         case .stack, .text, .button, .toggle, .native, .nativeModifier, .child, .component, .platformView,
-             .conditional, .optionalBinding, .switchExpression, .navigationLink, .navigationStack:
+             .conditional, .optionalBinding, .switchExpression, .navigationLink, .navigationStack, .tabView:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)
         }
