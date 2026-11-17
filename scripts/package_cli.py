@@ -312,7 +312,14 @@ def create_package(commit: str, output: Path, reproducible: bool) -> Path:
             raise ValueError("--output must be a new or empty directory")
     else:
         output.mkdir(parents=True)
-    with tempfile.TemporaryDirectory(prefix="refract-cli-package.", dir=os.environ.get("REFRACT_PACKAGE_TEMP")) as temporary:
+    temporary_root = Path(os.environ["REFRACT_PACKAGE_TEMP"]) if os.environ.get("REFRACT_PACKAGE_TEMP") else None
+    if temporary_root:
+        if temporary_root.exists() and not temporary_root.is_dir():
+            raise ValueError("REFRACT_PACKAGE_TEMP must name a directory outside the source checkout")
+        if temporary_root.resolve() == ROOT or ROOT in temporary_root.resolve().parents:
+            raise ValueError("REFRACT_PACKAGE_TEMP must be outside the source checkout")
+        temporary_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="refract-cli-package.", dir=temporary_root) as temporary:
         scratch = Path(temporary)
         first = package_once(commit, output, os_name, architecture, metadata, notices, scratch / "first")
         if reproducible:
