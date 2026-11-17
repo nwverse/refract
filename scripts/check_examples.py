@@ -180,7 +180,7 @@ def check_ios_references() -> None:
         fail("iOS target must not compile multiple canonical files named Input.swift")
     if not (ROOT / "examples/ios/RefractExample/MeasurementDesignTokens.swift").is_file():
         fail("iOS target is missing the measurement fixture's application-owned typography token")
-    print("iOS project compiles every shared source and nine unique, byte-identical compiler inputs")
+    print("iOS project references every shared source and nine unique, byte-identical compiler inputs")
 
 
 def main() -> int:
