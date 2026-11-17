@@ -146,40 +146,94 @@ class PackagingUnitTests(unittest.TestCase):
         git = lambda *args: subprocess.run(["git", *args], cwd=fixture, env=environment,
                                            check=True, capture_output=True, text=True).stdout
         subprocess.run(["git", "init", "-q"], cwd=fixture, env=environment, check=True)
-        lockfile = {"pins": [{"identity": "swift-syntax", "state": {"revision": "source-revision"}}]}
-        notice = {"swift-syntax": {"url": "https://example.com/source", "version": "1", "revision": "source-revision",
+        lockfile = {"pins": [{"identity": "swift-syntax", "state": {"revision": "first-revision"}}]}
+        notice = {"swift-syntax": {"url": "https://example.com/source", "version": "1", "revision": "first-revision",
                                    "license": "Apache-2.0", "licenseFile": "vendor/LICENSE.txt", "sha256": ""}}
-        notice["swift-syntax"]["sha256"] = hashlib.sha256(b"committed license").hexdigest()
+        notice["swift-syntax"]["sha256"] = hashlib.sha256(b"first committed license").hexdigest()
         for path, data in (("Package.resolved", json.dumps(lockfile).encode()),
                            ("scripts/release/third_party_notices.json", json.dumps(notice).encode()),
-                           ("vendor/LICENSE.txt", b"committed license"),
-                           ("LICENSE", b"first license")):
+                           ("vendor/LICENSE.txt", b"first committed license"),
+                           ("LICENSE", b"first project license"),
+                           ("Package.swift", b"first manifest"),
+                           ("Sources/RefractMapping/Resources/refract.schema.json", b"first schema"),
+                           ("Sources/RefractCLI/Version.swift", b'static let sourceRevision = "unstamped"\n')):
             destination = fixture / path
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
-        subprocess.run(["git", "add", "Package.resolved", "scripts/release/third_party_notices.json",
-                        "vendor/LICENSE.txt", "LICENSE"], cwd=fixture, env=environment, check=True)
+        subprocess.run(["git", "add", "Package.resolved", "Package.swift", "scripts/release/third_party_notices.json",
+                        "vendor/LICENSE.txt", "LICENSE", "Sources/RefractMapping/Resources/refract.schema.json",
+                        "Sources/RefractCLI/Version.swift"], cwd=fixture, env=environment, check=True)
         subprocess.run(["git", "-c", "user.name=Example", "-c", "user.email=me@example.com",
                         "commit", "-qm", "first provenance fixture"], cwd=fixture, env=environment, check=True)
         first = git("rev-parse", "HEAD").strip()
-        (fixture / "LICENSE").write_bytes(b"second license")
-        subprocess.run(["git", "add", "LICENSE"], cwd=fixture, env=environment, check=True)
+        lockfile["pins"][0]["state"]["revision"] = "second-revision"
+        notice["swift-syntax"]["version"] = "2"
+        notice["swift-syntax"]["revision"] = "second-revision"
+        notice["swift-syntax"]["sha256"] = hashlib.sha256(b"second committed license").hexdigest()
+        for path, data in (("Package.resolved", json.dumps(lockfile).encode()),
+                           ("scripts/release/third_party_notices.json", json.dumps(notice).encode()),
+                           ("vendor/LICENSE.txt", b"second committed license"),
+                           ("LICENSE", b"second project license"),
+                           ("Package.swift", b"second manifest"),
+                           ("Sources/RefractMapping/Resources/refract.schema.json", b"second schema")):
+            (fixture / path).write_bytes(data)
+        subprocess.run(["git", "add", "Package.resolved", "Package.swift", "scripts/release/third_party_notices.json",
+                        "vendor/LICENSE.txt", "LICENSE", "Sources/RefractMapping/Resources/refract.schema.json"],
+                       cwd=fixture, env=environment, check=True)
         subprocess.run(["git", "-c", "user.name=Example", "-c", "user.email=me@example.com",
                         "commit", "-qm", "second provenance fixture"], cwd=fixture, env=environment, check=True)
         second = git("rev-parse", "HEAD").strip()
         self.assertNotEqual(first, second)
-        self.assertEqual(package.committed_bytes(first, "LICENSE"), b"first license")
-        self.assertEqual(package.committed_bytes(second, "LICENSE"), b"second license")
+        self.assertEqual(package.committed_bytes(first, "LICENSE"), b"first project license")
+        self.assertEqual(package.committed_bytes(second, "LICENSE"), b"second project license")
         for path, data in (("Package.resolved", b"dirty lockfile"),
                            ("scripts/release/third_party_notices.json", b"dirty notices"),
                            ("vendor/LICENSE.txt", b"dirty third-party license"),
-                           ("LICENSE", b"dirty project license")):
+                           ("LICENSE", b"dirty project license"),
+                           ("Package.swift", b"dirty manifest")):
             (fixture / path).write_bytes(data)
         notices, text = package.load_notices(first)
-        self.assertIn(b"committed license", text)
+        self.assertIn(b"first committed license", text)
+        self.assertIn(b"first-revision", text)
+        self.assertNotIn(b"second", text)
         self.assertNotIn(b"dirty", text)
-        self.assertEqual(package.committed_bytes(first, "Package.resolved"), json.dumps(lockfile).encode())
-        package.ROOT = original_root
+        products = fixture / "products"
+        schema = products / "refract_RefractMapping.bundle/refract.schema.json"
+        schema.parent.mkdir(parents=True)
+        schema.write_bytes(package.committed_bytes(first, "Sources/RefractMapping/Resources/refract.schema.json"))
+        (products / "refract").write_bytes(b"executable")
+        entries = {name: data for name, _, data in package.binary_entries(products, first, {}, text)}
+        for archive_path, source_path in (("LICENSE", "LICENSE"),
+                                          ("source/Package.resolved", "Package.resolved"),
+                                          ("source/Package.swift", "Package.swift")):
+            self.assertEqual(entries[archive_path], package.committed_bytes(first, source_path))
+            self.assertNotEqual(entries[archive_path], package.committed_bytes(second, source_path))
+        self.assertEqual(entries["THIRD-PARTY-NOTICES.txt"], text)
+
+        # Discard the deliberate caller edits before creating incomplete revisions.
+        git("reset", "-q", "--hard", second)
+
+        # Validate the entire real entry point without running a Swift build.
+        output = fixture / "artifacts"
+        missing_paths = ["Package.resolved", "scripts/release/third_party_notices.json", "vendor/LICENSE.txt",
+                         "LICENSE", "Package.swift", "Sources/RefractMapping/Resources/refract.schema.json"]
+        with mock.patch.object(package, "package_once", side_effect=AssertionError("build must not start")):
+            for missing in missing_paths:
+                git("rm", "-q", missing)
+                git("-c", "user.name=Example", "-c", "user.email=me@example.com",
+                    "commit", "-qm", f"missing {missing}")
+                with self.assertRaisesRegex(ValueError, "lacks required packaging input.*select a complete revision"):
+                    package.create_package(git("rev-parse", "HEAD").strip(), output, False)
+                git("reset", "-q", "--hard", second)
+        self.assertFalse(output.exists())
+
+    def test_required_provenance_must_be_a_regular_blob(self) -> None:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
+                                capture_output=True, check=True).stdout.strip()
+        with mock.patch.object(package.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout="tree\n", stderr="")):
+            with self.assertRaisesRegex(ValueError, "LICENSE.*regular file"):
+                package.committed_bytes(commit, "LICENSE")
 
     def test_provenance_rejects_mismatched_selected_revision_and_unsafe_paths(self) -> None:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,

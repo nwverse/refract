@@ -80,10 +80,15 @@ def validate_revision(value: str) -> str:
 
 
 def committed_bytes(commit: str, path: str) -> bytes:
-    """Read provenance-bearing files from the selected commit, never the working tree."""
+    """Read a required regular file from the selected commit, never the working tree."""
     relative = PurePosixPath(path)
     if relative.is_absolute() or ".." in relative.parts or relative != PurePosixPath(path.strip()):
         raise ValueError("provenance file must be a normalized repository-relative path")
+    result = subprocess.run(["git", "cat-file", "-t", f"{commit}:{path}"], cwd=ROOT,
+                            capture_output=True, text=True, check=False)
+    if result.returncode != 0 or result.stdout.strip() != "blob":
+        raise ValueError(f"selected revision {commit} lacks required packaging input {path}; "
+                         "restore it as a regular file in that commit or select a complete revision")
     return run_bytes(["git", "show", f"{commit}:{path}"])
 
 
@@ -357,6 +362,9 @@ def create_package(commit: str, output: Path, reproducible: bool) -> Path:
     os_name, architecture, triple = host_target()
     metadata = check_tools(triple)
     _, notices = load_notices(commit)
+    # Every legal/build input is validated before source extraction or compilation.
+    for path in ("LICENSE", "Package.swift", "Sources/RefractMapping/Resources/refract.schema.json"):
+        committed_bytes(commit, path)
     if output.exists():
         if not output.is_dir() or any(output.iterdir()):
             raise ValueError("--output must be a new or empty directory")
