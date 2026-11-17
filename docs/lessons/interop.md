@@ -5,6 +5,11 @@
   Keep the measurement fixture itself in the iOS target's Sources phase, including its application-owned design
   tokens, so Xcode type-checks every platform branch instead of trusting a syntax-only fixture.
 
+- Prefer correcting pseudo-SwiftUI over adding a compatibility shim for it. `Button(verbatim:)` is not SwiftUI;
+  use the ordinary action/label pair with `Text(verbatim:)` and reject the invalid initializer with a source-located
+  diagnostic. The typed interop helpers above are different: they carry declared platform-only semantics while
+  preserving the receiver's native iOS view behavior.
+
 - Keep IR independent of mapping and backends. Interop lowering helpers belong in `RefractMapping` or a backend;
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.
 - A native view argument needs its label and source type, not only an expression. Unknown reference types must not be
