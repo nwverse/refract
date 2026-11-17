@@ -21,6 +21,7 @@ public struct Frontend {
                             models: builder.models, itemTypes: builder.itemTypes,
                             enums: builder.enums)
         builder.validateChildViewGraph(module)
+        builder.validateNavigationDeclarations(module)
         builder.validateRowContentTypes(module)
         if builder.hasDuplicateGeneratedDeclaration {
             return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
@@ -51,6 +52,7 @@ final class Builder: SyntaxVisitor {
     var currentListItemType: ItemType?
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
+    var pendingNavigationDestinations: [NavigationDestination] = []
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -118,7 +120,13 @@ final class Builder: SyntaxVisitor {
                 .trimmedDescription else { return false }
             return itemTypes.contains(where: { $0.name == type })
         }
-        if hasItemInputs {
+        let isNavigationRoot = members.contains { member in
+            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
+                .as(ArrayTypeSyntax.self) != nil
+        }
+        if isNavigationRoot {
+            // The navigation parser below validates the path and model inputs together.
+        } else if hasItemInputs {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
             screens.append(body)
             return .skipChildren
@@ -197,6 +205,15 @@ final class Builder: SyntaxVisitor {
             if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
                 return extendedView(call)
             }
+            if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
+            if call.calledExpression.trimmedDescription == "NavigationLink" {
+                guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
+                    error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
+                          "Use `NavigationStack(path: $path)` and a no-payload Hashable destination enum", at: call)
+                    return nil
+                }
+                return navigationLink(call)
+            }
             if let control = stateControl(call) { return control }
             return view(call)
         }
@@ -209,6 +226,7 @@ final class Builder: SyntaxVisitor {
     }
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        if name == "navigationDestination" { return navigationDestination(call, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }

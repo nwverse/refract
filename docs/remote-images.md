@@ -76,12 +76,14 @@ or loader changes. These application limits are examples, not generator-enforced
 `Fixtures/interop-remote-image` proves dual-backend typed lowering; its negative counterpart rejects malformed
 construction. Android compilation and the local native test exercise the actual CLI-generated fixture. The native
 sources live in the fixture module's `src/native` source set, not the generated staging tree that
-`check_fixture_compilation.py` deletes on each run. To repeat the verification after `swift build`:
+`check_fixture_compilation.py` deletes on each run. The script additionally stages the exact generated call and
+its resources into the app's ignored `src/fixtureTest` tree so Native JVM tests use the real application resource
+namespace. To repeat the verification after `swift build`:
 
 ```sh
 python3 -I scripts/check_fixture_compilation.py
 examples/android/gradlew -p examples/android --no-daemon \
-  :fixtures:compileDebugKotlin :fixtures:testDebugUnitTest --tests example.app.RemoteImageTest
+  :fixtures:compileDebugKotlin :app:compileDebugKotlin :app:testDebugUnitTest --tests example.app.RemoteImageTest
 ```
 
 The Gradle task stages the already-resolved public Robolectric runtime and sets `robolectric.offline=true`. No test

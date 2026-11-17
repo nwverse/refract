@@ -1,5 +1,11 @@
 # Repository tooling lessons
 
+- **Test output transactions at the replacement boundary.** Linux Foundation may reject `replaceItem` for a new
+  destination and its file-manager wrappers can differ from direct POSIX behavior. Stage beside the destination,
+  use a same-filesystem rename, and test both a new and an existing destination on each supported host. Keep backups
+  until every replacement succeeds, but never remove a path that this invocation has not replaced: an already
+  rejected directory must survive rollback with its contents. Test a directory whose name ends in `.kt` or `.ets`
+  and construct test paths without URL directory-type propagation masking the fixture.
 - **Test a repository scanner in temporary git repositories.** Replace its home, private-word configuration and git
   configuration, and use synthetic values. Running tests directly on a public checkout can read machine-specific
   rules and accidentally print a value in a test failure.
@@ -34,6 +40,11 @@
   `NO-SOURCE` even though `sourceSets.main.java.srcDirs` shows the new directory. Writing the staged files under
   `src/main/java/<package>/` and `src/main/res/values/` and adding those paths to `.gitignore` is deterministic,
   requires no source set surgery, and keeps the regenerate-and-diff step in one script.
+- **Keep diagnostic path construction consistent across directory enumeration.** macOS can return `/private/var`
+  from URL-based directory enumeration for a `/var` input, while `resolvingSymlinksInPath` may leave a not-yet-created
+  path unchanged. Use a standardized directory URL for expected outputs and append names from
+  `contentsOfDirectory(atPath:)` to that same URL. Compare the normalized path in tests without weakening the
+  unexpected-output assertion, and sort enumerated names explicitly.
 - **Merge per-fixture Android resources with a duplicate-name guard.** When each fixture brings its own
   `values/strings.xml`, concatenating them blindly produces duplicate `<string name="...">` declarations and the
   build fails with `Error: Duplicate resources`. The merge script must deduplicate entries with identical values

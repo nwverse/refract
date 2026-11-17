@@ -6,6 +6,11 @@ func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWrite
         writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName);")
         return
     }
+    if case let .navigationPath(name, enumName, _) = declaration {
+        writer.line("@Event on\(name.prefix(1).uppercased())\(name.dropFirst())Navigate: (destination: \(enumName)) => void = (destination: \(enumName)): void => {};")
+        writer.line()
+        return
+    }
     if case let .binding(name, type, _) = declaration {
         let type = try stateType(type)
         writer.line("@Require @Param \(name): \(type);")

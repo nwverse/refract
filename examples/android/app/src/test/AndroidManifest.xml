@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity
+            android:name="com.example.refract.rendercheck.RenderCheckActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RefractExample" />
+        <activity
             android:name="example.app.RemoteImageTestActivity"
             android:exported="false" />
     </application>

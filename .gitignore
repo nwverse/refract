@@ -18,6 +18,8 @@ local.properties
 # Staged fixture Kotlin/resources, written by scripts/check_fixture_compilation.py.
 examples/android/fixtures/src/main/java/
 examples/android/fixtures/src/main/res/
+examples/android/app/src/fixtureTest/java/
+examples/android/app/src/fixtureTest/res/
 # HarmonyOS
 oh_modules/
 .hvigor/

@@ -7,8 +7,10 @@ No third-party packages, network access, or repository-private values are needed
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +25,9 @@ HIGHER_IS_WORSE = {
 }
 
 LOWER_IS_WORSE_ABSOLUTE_MS = 0.1
+MACRO_SCENARIOS = ("startup", "scroll", "stateUpdate")
+MACRO_MINIMUM_ITERATIONS = 10
+MEMORY_METRICS = {"memoryRssAnonKb", "memoryRssFileKb", "memoryJavaHeapKb", "memoryNativeHeapKb"}
 
 
 class ReportError(ValueError):
@@ -39,6 +44,7 @@ class Measurement:
     sample_count: int
     repeat_iterations: int
     context: dict[str, Any]
+    profiler_outputs: Any
 
 
 def canonical(value: Any) -> str:
@@ -128,10 +134,11 @@ def extract(payload: Any, source: Path) -> list[Measurement]:
             raise ReportError(f"Unexpected macrobenchmark variant in {name!r}")
         key = (kind, variant.lower(), scenario, variant)
         iterations = benchmark.get("repeatIterations", benchmark.get("iterations"))
-        if not isinstance(iterations, int) or iterations < 1:
+        if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 1:
             raise ReportError(f"{source} has no valid iteration count for {name!r}")
         for metric, unit, values, sample_count in samples(metrics, iterations):
-            output.append(Measurement(key, metric, unit, values, "runs" if unit == "native" else "aggregate", sample_count, iterations, context))
+            output.append(Measurement(key, metric, unit, values, "runs" if unit == "native" else "aggregate",
+                                      sample_count, iterations, context, benchmark.get("profilerOutputs")))
     if not output:
         raise ReportError(f"{source} has no benchmark metrics")
     return output
@@ -264,11 +271,106 @@ def markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def make_report(inputs: list[Path], percent: float, absolute_ms: float, environment_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
+                   traces: list[dict[str, Any]] | None) -> None:
+    """Reject partial macro evidence instead of passing whichever tests survived."""
+    if traces is None:
+        raise ReportError("Complete macro evidence requires a verified Perfetto trace manifest")
+    for measurement in measurements:
+        if measurement.key[0] != "Macro":
+            continue
+        outputs = measurement.profiler_outputs
+        # Bind AndroidX's own profiler metadata to the retained trace, rather
+        # than inferring evidence ownership from a filename alone.
+        if not isinstance(outputs, list) or not any(
+            isinstance(output, dict) and output.get("type") == "PerfettoTrace" and
+            isinstance(output.get("filename"), str)
+            for output in outputs
+        ):
+            raise ReportError(f"AndroidX JSON has no Perfetto filename for {measurement.key[3]}.{measurement.key[2]}")
+    for scenario in MACRO_SCENARIOS:
+        for variant in ("generated", "reference"):
+            selected = [row for row in rows if row["benchmark_kind"] == "Macro"
+                        and row["benchmark"] == scenario and row["variant"] == variant]
+            if not selected:
+                raise ReportError(f"Complete macro evidence is missing {variant}.{scenario}")
+            if any(row["sample_kind"] != "runs" or row["repeat_iterations"] < MACRO_MINIMUM_ITERATIONS
+                   for row in selected):
+                raise ReportError(f"Macro {variant}.{scenario} needs raw samples and at least ten iterations")
+            if any(row["metric"] in MEMORY_METRICS and row["sample_count"] < row["repeat_iterations"]
+                   for row in selected):
+                raise ReportError(f"Macro {variant}.{scenario} needs one memory sample per declared iteration")
+            required = "startupMs" if scenario == "startup" else "frameDurationCpuMs"
+            if not any(row["metric"] == required for row in selected):
+                raise ReportError(f"Macro {variant}.{scenario} is missing {required} raw samples")
+            if scenario != "startup" and not any(row["metric"] in MEMORY_METRICS for row in selected):
+                raise ReportError(f"Macro {variant}.{scenario} is missing memory samples")
+            if scenario == "startup" and next(row for row in selected if row["metric"] == required)["sample_count"] < 10:
+                raise ReportError(f"Macro {variant}.startup needs at least ten raw startup samples")
+            if not any(trace.get("variant") == variant and trace.get("scenario") == scenario for trace in traces):
+                raise ReportError(f"Perfetto evidence is missing {variant}.{scenario}")
+            iteration_counts = {row["repeat_iterations"] for row in selected}
+            if len(iteration_counts) != 1:
+                raise ReportError(f"Macro {variant}.{scenario} metrics have inconsistent iteration counts")
+            iterations = iteration_counts.pop()
+            indices = [trace.get("iteration") for trace in traces
+                       if trace.get("variant") == variant and trace.get("scenario") == scenario]
+            if sorted(indices) != list(range(iterations)):
+                raise ReportError(f"Macro {variant}.{scenario} needs one trace for every declared iteration")
+        metrics = [{row["metric"] for row in rows if row["benchmark_kind"] == "Macro"
+                    and row["benchmark"] == scenario and row["variant"] == variant}
+                   for variant in ("generated", "reference")]
+        if metrics[0] != metrics[1]:
+            raise ReportError(f"Macro {scenario} variants have different metric sets")
+
+
+def file_sha256(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def verify_evidence(manifest: Any, output: Path, inputs: list[Path]) -> dict[str, Any]:
+    if not isinstance(manifest, dict) or manifest.get("schema") != 1:
+        raise ReportError("Evidence manifest has an unsupported schema")
+    verified = {}
+    for kind in ("benchmark_json", "traces"):
+        entries = manifest.get(kind)
+        if not isinstance(entries, list) or not entries and kind == "benchmark_json":
+            raise ReportError(f"Evidence manifest has no valid {kind} list")
+        seen = set()
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+                raise ReportError("Evidence manifest contains an invalid artifact")
+            relative = Path(entry["path"])
+            if relative.is_absolute() or ".." in relative.parts or relative.parts[0] != "raw":
+                raise ReportError("Evidence paths must stay inside the run's raw directory")
+            path = output / relative
+            if entry["path"] in seen or not path.is_file():
+                raise ReportError("Evidence file is duplicated or missing")
+            if entry.get("bytes") != path.stat().st_size or entry.get("sha256") != file_sha256(path):
+                raise ReportError(f"Evidence checksum mismatch: {entry['path']}")
+            if kind == "traces" and entry["bytes"] == 0:
+                raise ReportError(f"Empty Perfetto trace is not complete evidence: {entry['path']}")
+            seen.add(entry["path"])
+        verified[kind] = entries
+    recorded = {(output / entry["path"]).resolve() for entry in verified["benchmark_json"]}
+    if recorded != {path.resolve() for path in inputs}:
+        raise ReportError("Report inputs do not exactly match the preserved AndroidX JSON manifest")
+    return verified
+
+
+def make_report(inputs: list[Path], percent: float, absolute_ms: float,
+                environment_metadata: dict[str, Any] | None = None, require_macro: bool = False,
+                evidence: dict[str, Any] | None = None) -> dict[str, Any]:
     if not inputs:
         raise ReportError("At least one AndroidX JSON result is required")
     if environment_metadata is None:
         environment_metadata = {"emulator": True, "source": "unit-test fixture"}
+    if require_macro and not re.fullmatch(r"[0-9a-f]{40}", str(environment_metadata.get("source_revision", ""))):
+        raise ReportError("Complete macro evidence requires a full source revision from the target probe")
     if environment_metadata.get("emulator") is not True:
         raise ReportError("Report generation requires a verified emulator environment")
     if percent < 0 or absolute_ms < 0 or not math.isfinite(percent) or not math.isfinite(absolute_ms):
@@ -280,6 +382,8 @@ def make_report(inputs: list[Path], percent: float, absolute_ms: float, environm
     if len(contexts) != 1:
         raise ReportError("Refusing to compare different devices or build contexts")
     rows = [normalize(measurement) for measurement in measurements]
+    if require_macro:
+        validate_macro(measurements, rows, evidence.get("traces") if evidence else None)
     comparisons = compare_pairs(rows, percent, absolute_ms)
     failures = [comparison for comparison in comparisons if any(
         comparison.get(quantile, {}).get("regressed", False) for quantile in ("p50", "p99")
@@ -289,6 +393,8 @@ def make_report(inputs: list[Path], percent: float, absolute_ms: float, environm
         "platform": "android",
         "environment_label": "emulator",
         "device_result": False,
+        "macro_evidence_required": require_macro,
+        "artifact_integrity": "verified" if evidence else "not_requested",
         "environment": {**environment(measurements[0].context), "verification": environment_metadata},
         "threshold": {"relative_percent": percent, "absolute_ms": absolute_ms, "conjunction": "AND"},
         "measurements": rows,
@@ -304,13 +410,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--threshold-percent", type=float, default=5.0)
     parser.add_argument("--threshold-ms", type=float, default=0.1)
     parser.add_argument("--environment", type=Path, help="JSON metadata recorded by the runner's emulator probe")
+    parser.add_argument("--require-macro", action="store_true",
+                        help="Require both variants of startup/scroll/stateUpdate, raw samples and Perfetto coverage")
+    parser.add_argument("--evidence-manifest", type=Path,
+                        help="Preserved JSON/trace manifest; required for complete macro evidence")
     args = parser.parse_args(argv)
     try:
+        if args.require_macro and not args.evidence_manifest:
+            raise ReportError("--require-macro also requires --evidence-manifest")
+        evidence = verify_evidence(load_json(args.evidence_manifest), args.output, args.inputs) \
+            if args.evidence_manifest else None
         report = make_report(
             args.inputs,
             args.threshold_percent,
             args.threshold_ms,
             load_json(args.environment) if args.environment else None,
+            require_macro=args.require_macro,
+            evidence=evidence,
         )
     except ReportError as error:
         print(f"benchmark-report: ERROR: {error}", file=sys.stderr)

@@ -35,6 +35,9 @@ struct Generation {
             for parameter in screen.parameters where parameter.itemType == "RemoteImageLoader" {
                 emittedImports.insert("RemoteImageLoader")
             }
+            if case let .navigationStack(stack, _) = screen.body {
+                try collectImports(stack, resolver: resolver, into: &emittedImports)
+            }
         }
         for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module })
             where declaration.symbols.contains(where: emittedImports.contains) {
@@ -52,6 +55,9 @@ struct Generation {
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
+            if case let .navigationStack(stack, _) = screen.body {
+                try emitNavigationDestinations(stack, into: &writer)
+            }
             guard ArkText.isIdentifier(screen.name) else {
                 throw Diagnostic(code: "arkui.invalid_component_name",
                                  message: "`\(screen.name)` is not a valid ArkUI component identifier.",
@@ -149,6 +155,13 @@ struct Generation {
         case let .switchExpression(subject, enumName, cases, _):
             try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
                                into: &writer, mapping: mapping, resolver: resolver)
+        case let .navigationStack(stack, _):
+            for child in stack.content {
+                try emit(child, into: &writer, mapping: mapping, resolver: resolver)
+            }
+        case let .navigationLink(title, pathName, enumName, destination, _):
+            try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
+                                   destination: destination, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):
             var modifiers: [Modifier] = []
             for operation in operations {
@@ -235,6 +248,11 @@ struct Generation {
     private func usedNativeComponents(in bodies: [ViewNode]) -> [(component: NativeComponent, location: RefractIR.SourceLocation?)] {
         func collect(_ node: ViewNode, into result: inout [(component: NativeComponent, location: RefractIR.SourceLocation?)]) {
             if case let .native(component, location) = node { result.append((component, location)) }
+            if case let .navigationStack(stack, _) = node {
+                for destination in stack.destinations where destination.model == nil {
+                    result.append((NativeComponent(name: destination.viewName), node.sourceLocation))
+                }
+            }
             for child in node.children(for: .harmonyOS) { collect(child, into: &result) }
         }
         var result: [(component: NativeComponent, location: RefractIR.SourceLocation?)] = []
@@ -262,6 +280,14 @@ struct Generation {
                     }
                 }
             }
+        }
+    }
+
+    private func collectImports(_ stack: NavigationStackNode, resolver: InteropResolver,
+                                into emittedImports: inout Set<String>) throws {
+        for destination in stack.destinations where destination.model == nil {
+            emittedImports.insert(try resolver.target(for: NativeComponent(name: destination.viewName),
+                                                     platform: .harmonyOS, location: nil).symbol)
         }
     }
 
@@ -306,7 +332,8 @@ struct Generation {
 private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
-        case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location): location
+        case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
+             let .navigationPath(_, _, location): location
         }
     }
 }

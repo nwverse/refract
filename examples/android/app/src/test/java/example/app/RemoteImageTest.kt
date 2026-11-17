@@ -12,7 +12,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestRule
@@ -99,8 +98,11 @@ class RemoteImageTest {
     }
 
     @Test
-    fun malformedOrCredentialBearingInputNeverCallsLoader() {
-        assertTrue(isAllowedRemoteImageUrl(first))
+    fun validInputCallsInjectedLoader() {
+        val loader = ControlledLoader()
+        compose.setContent { ProfileImage(url = first, loader = loader) }
+        compose.waitForIdle()
+        assertEquals(listOf(first), loader.requests)
     }
 
     @Test
@@ -121,7 +123,6 @@ class RemoteImageTest {
         assertRejectedBeforeLoading(" https://example.com/profile.png")
 
     private fun assertRejectedBeforeLoading(value: String) {
-        assertTrue(value, !isAllowedRemoteImageUrl(value))
         val loader = ControlledLoader()
         compose.setContent { ProfileImage(url = value, loader = loader) }
         compose.onNodeWithTag("remote_image_failure")

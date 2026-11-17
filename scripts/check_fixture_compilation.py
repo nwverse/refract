@@ -38,6 +38,8 @@ FIXTURES_ROOT = ROOT / "Fixtures"
 STAGING_JAVA = ROOT / "examples/android/fixtures/src/main/java"
 STAGING_RES = ROOT / "examples/android/fixtures/src/main/res"
 STAGING_VALUES = STAGING_RES / "values"
+APP_TEST_JAVA = ROOT / "examples/android/app/src/fixtureTest/java"
+APP_TEST_RES = ROOT / "examples/android/app/src/fixtureTest/res"
 
 
 def fail(message: str) -> None:
@@ -107,6 +109,12 @@ def regenerate_and_stage(fixture: str) -> None:
         )
     target = package_directory / f"{fixture}.kt"
     target.write_text(generated, encoding="utf-8")
+    for name in ("NativeHost.kt", "NativeComponent.kt"):
+        native_source = fixture_dir / name
+        if native_source.is_file():
+            native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-{name}"
+            native_target.parent.mkdir(parents=True, exist_ok=True)
+            native_target.write_text(native_source.read_text(encoding="utf-8"), encoding="utf-8")
     STAGING_VALUES.mkdir(parents=True, exist_ok=True)
     # Each fixture brings its own values/strings.xml. Concatenate the entries
     # into a single staged strings.xml so that resources with the same name do
@@ -123,6 +131,29 @@ def regenerate_and_stage(fixture: str) -> None:
                 fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
+    if fixture == "interop-remote-image":
+        # Native JVM tests need the app's real resource table, not a library's
+        # isolated test APK. Stage the exact generated call and its resources.
+        for base in (APP_TEST_JAVA, APP_TEST_RES):
+            if base.exists():
+                shutil.rmtree(base)
+        target_package = APP_TEST_JAVA.joinpath(*package.split("."))
+        target_package.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(target, target_package / f"{fixture}.kt")
+        generated_test = target_package / f"{fixture}.kt"
+        generated_test.write_text(
+            generated_test.read_text(encoding="utf-8").replace("refract.generated.R", "com.example.refract.R"),
+            encoding="utf-8",
+        )
+        for source in sorted(resources.rglob("*")):
+            if source.is_file():
+                relative = source.relative_to(resources)
+                destination = APP_TEST_RES / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+        destination = APP_TEST_RES / "values/strings.xml"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(strings_xml, destination)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:

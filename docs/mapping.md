@@ -6,7 +6,9 @@ reads this file, interprets a mapping at run time or imports a Refract library.
 
 The published, normative structural schema is `Sources/RefractMapping/Resources/refract.schema.json`, using JSON
 Schema 2020-12. `schemaVersion` is the integer `1`; adding fields still requires a schema, loader, diagnostics and
-fixture update. Unknown keys and unsupported versions are errors rather than ignored extensions.
+fixture update. Unknown keys and unsupported versions are errors rather than ignored extensions. The earlier
+native-component-only `version: 1` draft is a distinct compatibility input, not an alias for the full schema; its
+normalization and the policy for future incompatible changes are specified in `docs/cli.md`.
 
 ## Ownership and inputs
 
