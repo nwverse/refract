@@ -41,7 +41,6 @@ public func linkAction(_ handler: @escaping (String) -> Void) -> RefractMarkdown
 private struct RefractMarkdownParagraph: View {
     let content: [RefractMarkdownInline]
     let onLink: (String) -> Void
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         Text(content.reduce(into: AttributedString()) { result, inline in

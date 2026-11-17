@@ -96,6 +96,7 @@ def check_resources() -> None:
         fail("Android and HarmonyOS string registries differ")
     if set(android) != {
         "example.hello", "example.go",
+        "conversation.answer", "conversation.important", "conversation.note", "conversation.docs", "conversation.code.label",
         "settings.profile", "settings.display.name", "settings.preferences",
         "settings.notifications", "settings.save", "settings.native.component",
     }:

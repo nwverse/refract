@@ -8,4 +8,9 @@
     <string name="settings_notifications">Notifications</string>
     <string name="settings_save">Save</string>
     <string name="settings_native_component">Generated screen with a native component</string>
+    <string name="conversation_answer">Here is a </string>
+    <string name="conversation_important">bounded answer</string>
+    <string name="conversation_note"> with an example: </string>
+    <string name="conversation_docs"> Read the documentation</string>
+    <string name="conversation_code_label">Swift code example</string>
 </resources>
