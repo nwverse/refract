@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
+import com.example.refract.settings.NativeProfileStatusBadge
 
 @Immutable
 public data class SettingItem(

@@ -52,10 +52,6 @@ struct RefractCommand {
             index += 2
         }
         guard !inputs.isEmpty else { throw CLIError.message("missing --input") }
-        if command == "check", options["--android-out"] != nil || options["--harmony-out"] != nil {
-            throw CLIError.message("check does not accept output directories")
-        }
-
         let mapping: Mapping
         do {
             mapping = try options["--mapping"].map { try Mapping.load(contentsOf: URL(fileURLWithPath: $0)) } ?? .empty
@@ -66,9 +62,9 @@ struct RefractCommand {
             for diagnostic in error.diagnostics { writeError(diagnostic.rendered) }
             throw CLIError.message("validation stopped because the mapping has errors")
         }
-        if command == "generate", (options["--android-out"] == nil && mapping.android.output.directory.isEmpty)
+        if (options["--android-out"] == nil && mapping.android.output.directory.isEmpty)
             || (options["--harmony-out"] == nil && mapping.harmonyOS.output.directory.isEmpty) {
-            throw CLIError.message("generate requires output directories in refract.json or explicit --android-out and --harmony-out")
+            throw CLIError.message("\(command) requires output directories in refract.json or explicit --android-out and --harmony-out")
         }
 
         var hasErrors = false
@@ -100,11 +96,15 @@ struct RefractCommand {
             catch { hasErrors = true; reportGeneration(error) }
             do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
             catch { hasErrors = true; reportGeneration(error) }
-            guard command == "generate", let compose, let ark else { continue }
+            guard let compose, let ark else { continue }
             outputs.append((options["--android-out"] ?? mapping.android.output.directory, name + ".kt", compose))
             outputs.append((options["--harmony-out"] ?? mapping.harmonyOS.output.directory, name + ".ets", ark))
         }
         guard !hasErrors else { throw CLIError.message("generation stopped because validation failed") }
+        if command == "check" {
+            try CommittedOutputChecker(writeError: writeError).check(outputs: outputs)
+            return
+        }
         for output in outputs {
             let folder = URL(fileURLWithPath: output.directory, isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
