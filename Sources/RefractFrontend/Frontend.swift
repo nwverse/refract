@@ -204,6 +204,11 @@ final class Builder: SyntaxVisitor {
             guard case let .model(reference, _) = $0 else { return nil }
             return reference
         }
+        let forms = states.compactMap { state -> FormDeclaration? in
+            guard case let .form(_, declaration, _) = state else { return nil }
+            return declaration
+        }
+        guard validateForms(forms) else { return .skipChildren }
         parameters = []
         currentListItem = nil
         currentListItemType = nil
@@ -237,6 +242,9 @@ final class Builder: SyntaxVisitor {
             // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure
             // when classifying the inner call as a view or a modifier.
             if let base = call.calledExpression.as(FunctionCallExprSyntax.self) {
+                if base.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Form" {
+                    return formContainer(call)
+                }
                 var inner = base
                 inner.trailingClosure = call.trailingClosure
                 inner.additionalTrailingClosures = call.additionalTrailingClosures
@@ -249,6 +257,7 @@ final class Builder: SyntaxVisitor {
             if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
                 return extendedView(call)
             }
+            if call.calledExpression.trimmedDescription == "Form" { return formContainer(call) }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
             if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
@@ -280,6 +289,7 @@ final class Builder: SyntaxVisitor {
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "secureReveal" { return secureReveal(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
+        if name == "disabled" { return disabledModifier(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
             if diagnostics.count > before { return nil }
@@ -351,14 +361,19 @@ final class Builder: SyntaxVisitor {
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
             let beforeText = diagnostics.count
-            if let argument = call.arguments.first, argument.label == nil,
-               let value = modelTypedProperty(argument.expression) {
-                guard value.type == .string else {
-                    error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
-                          "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
-                    return nil
+            if let argument = call.arguments.first, argument.label == nil {
+                if let field = formFieldReference(argument.expression) {
+                    guard field.type == .string else { return nil }
+                    return .text(field.expression, modifiers: [], location: nodeLocation)
                 }
-                return .text(value.expression, modifiers: [], location: nodeLocation)
+                if let value = modelTypedProperty(argument.expression) {
+                    guard value.type == .string else {
+                        error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
+                              "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
+                        return nil
+                    }
+                    return .text(value.expression, modifiers: [], location: nodeLocation)
+                }
             }
             if let argument = call.arguments.first, argument.label == nil,
                let reference = argument.expression.as(DeclReferenceExprSyntax.self),
@@ -565,6 +580,7 @@ final class Builder: SyntaxVisitor {
     }
 
     func scalar(_ expression: ExprSyntax) -> TypedExpression? {
+        if let field = formFieldReference(expression) { return field }
         if let string = stringLiteral(expression) {
             return TypedExpression(Expression(.stringLiteral(string), type: .string,
                                              location: location(of: expression)), .string)
