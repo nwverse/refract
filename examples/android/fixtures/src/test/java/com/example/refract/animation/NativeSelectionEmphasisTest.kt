@@ -77,6 +77,7 @@ class NativeSelectionEmphasisTest {
         mainClock.advanceTimeBy(100)
         mainClock.advanceTimeByFrame()
         runOnIdle { }
+        flushEffects()
         assertTrue("states=${observer.events}", observer.events.any { !it.isRunning })
         val stoppedIndex = observer.events.indexOfFirst { !it.isRunning }
         val stoppedProgress = observer.events[stoppedIndex].progress
@@ -101,12 +102,14 @@ class NativeSelectionEmphasisTest {
         mainClock.advanceTimeBy(100)
         assertTrue(observer.progress("first-selection") > 0f)
         assertTrue(observer.progress("first-selection") < 1f)
+        observer.clearHistory()
 
         runOnIdle { identity = "second-selection" }
         awaitFrame()
         mainClock.advanceTimeBy(100)
         mainClock.advanceTimeByFrame()
         runOnIdle { }
+        flushEffects()
         assertEquals("events=${observer.events}", listOf("first-selection"), observer.disposed)
         onNodeWithContentDescription("first-selection").assertDoesNotExist()
         onNodeWithContentDescription("second-selection").assertIsDisplayed()
@@ -130,17 +133,26 @@ class NativeSelectionEmphasisTest {
         runOnIdle { emphasized = true }
         awaitFrame()
         mainClock.advanceTimeBy(100)
-        assertTrue(observer.progress("selection") > 0f)
-        assertTrue(observer.progress("selection") < 1f)
+        val interruptedProgress = observer.progress("selection")
+        assertTrue(interruptedProgress > 0f)
+        assertTrue(interruptedProgress < 1f)
+        observer.clearHistory()
 
         runOnIdle { motionScale.scaleFactor = 0f }
         awaitFrame()
         mainClock.advanceTimeBy(100)
         mainClock.advanceTimeByFrame()
         runOnIdle { }
+        flushEffects()
         assertEquals("events=${observer.events}", 1f, observer.progress("selection"), TOLERANCE)
         assertFalse(observer.latest("selection")!!.isRunning)
-        assertTrue("events=${observer.events}", observer.events.none { it.progress > 0.28f && it.progress < 1f })
+        val settledIndex = observer.events.indexOfLast { it.progress == 1f && !it.isRunning }
+        assertTrue("events=${observer.events}", settledIndex > 0)
+        val stoppedProgress = observer.events.take(settledIndex).last { it.progress < 1f }.progress
+        assertTrue("events=${observer.events}", stoppedProgress > 0f && stoppedProgress < 1f)
+        assertTrue("events=${observer.events}", observer.events.drop(settledIndex).all {
+            it.progress == 1f && !it.isRunning
+        })
     }
 
     @Test
@@ -151,10 +163,12 @@ class NativeSelectionEmphasisTest {
         setObservedContent(observer) {
             NativeSelectionEmphasis(emphasized = emphasized, identity = "selection")
         }
+        observer.clearHistory()
         runOnIdle { emphasized = true }
         mainClock.advanceTimeBy(100)
         mainClock.advanceTimeByFrame()
         runOnIdle { }
+        flushEffects()
         assertEquals("events=${observer.events}", 1f, observer.progress("selection"), TOLERANCE)
         assertFalse(observer.latest("selection")!!.isRunning)
 
@@ -162,6 +176,7 @@ class NativeSelectionEmphasisTest {
         mainClock.advanceTimeBy(100)
         mainClock.advanceTimeByFrame()
         runOnIdle { }
+        flushEffects()
         assertEquals("events=${observer.events}", 0f, observer.progress("selection"), TOLERANCE)
         assertFalse(observer.latest("selection")!!.isRunning)
         onNodeWithContentDescription("selection").assertIsDisplayed()
@@ -189,6 +204,7 @@ class NativeSelectionEmphasisTest {
         mainClock.advanceTimeBy(100)
         mainClock.advanceTimeByFrame()
         runOnIdle { }
+        flushEffects()
         assertEquals("events=${observer.events}", listOf("selection"), observer.disposed)
         onNodeWithContentDescription("selection").assertDoesNotExist()
     }
@@ -213,9 +229,13 @@ class NativeSelectionEmphasisTest {
         }
     }
 
+    private fun AndroidComposeUiTest<ComponentActivity>.flushEffects() {
+        effectDispatcher.scheduler.runCurrent()
+    }
+
     private fun AndroidComposeUiTest<ComponentActivity>.awaitFrame() {
         mainClock.advanceTimeByFrame()
-        effectDispatcher.scheduler.runCurrent()
+        flushEffects()
     }
 
     private class TestMotionDurationScale(override var scaleFactor: Float) : MotionDurationScale

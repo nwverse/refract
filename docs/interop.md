@@ -303,8 +303,8 @@ visibility component. Its `NativeSelectionEmphasis` declaration accepts only `em
 `identity: String`. The generated screen resolves the identity through the declared `SelectionEmphasisModel` and
 the Boolean through a typed binding. On iOS the declaration is an ordinary SwiftUI `Text` with `.id(identity)`, an
 emphasized opacity and `.animation(reduceMotion ? nil : .easeInOut, value: emphasized)`. Duration and animation
-objects do not
-cross the native interface. No Apple-toolchain compilation of this particular source was available in this change.
+objects do not cross the native interface. No Apple-toolchain compilation of this particular source was available in
+this change.
 
 On Android the separate application-owned `NativeSelectionEmphasis` uses `Animatable<Float>` and a native tween.
 The `LaunchedEffect` keyed by the remembered animation, target and native motion policy cancels the old animation
@@ -325,8 +325,8 @@ or iOS test.
 
 On HarmonyOS, `Expected.ets` proves the typed object-literal call
 `NativeSelectionEmphasis({ emphasized: this.emphasized, identity: this.model.identity })`. An app-owned
-implementation must provide the equivalent
-native value transition, accessibility preference, target interruption, identity-scoped state and disposal. This
+implementation must provide the equivalent native value transition, accessibility preference, target interruption,
+identity-scoped state and disposal. This
 change supplies no ArkTS implementation or compiler evidence; those remain unverified.
 
 The generated scalar argument path now preserves the declared type of a model property such as `model.identity`,
