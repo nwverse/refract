@@ -1,8 +1,8 @@
 package com.example.refract.rendercheck
 
+import android.app.Application
 import android.graphics.Bitmap
 import android.os.Looper
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsMatcher
@@ -34,8 +35,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.printToString
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
+import com.example.refract.R
 import java.io.File
 import java.io.FileOutputStream
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -56,14 +61,24 @@ import refract.generated.SettingsScreen
  * for the generated screen participates in these tests.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35], qualifiers = "w400dp-h800dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w400dp-h800dp-xxhdpi", application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class GeneratedSettingsScreenTest {
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = createAndroidComposeRule<RenderCheckActivity>()
 
     private lateinit var model: RecordingSettingsModel
     private var darkTheme by mutableStateOf(false)
+
+    @Test
+    fun generatedScreenUsesTheRealApplicationResources() {
+        val resources = ApplicationProvider.getApplicationContext<Application>().resources
+        println("NATIVE_JVM_APPLICATION_PACKAGE=" + ApplicationProvider.getApplicationContext<Application>().packageName)
+        println("NATIVE_JVM_TARGET_PACKAGE=" + InstrumentationRegistry.getInstrumentation().targetContext.packageName)
+        assertEquals("Profile", resources.getString(R.string.settings_profile))
+        assertEquals("Notifications", resources.getString(R.string.settings_notifications))
+        assertEquals("Save", resources.getString(R.string.settings_save))
+    }
 
     @Test
     fun toggleHasNativeSemanticsAndDrivesItsBinding() {
@@ -224,8 +239,5 @@ private fun isSwitch(): SemanticsMatcher = SemanticsMatcher("native Switch role"
     node.config.getOrNull(SemanticsProperties.Role) == Role.Switch
 }
 
-private fun SemanticsNodeInteraction.fetchBounds(): androidx.compose.ui.geometry.Rect =
-    fetchSemanticsNode().boundsInRoot
-
-private fun androidx.compose.ui.geometry.Rect.overlapsVertically(other: androidx.compose.ui.geometry.Rect): Boolean =
+private fun Rect.overlapsVertically(other: Rect): Boolean =
     top < other.bottom && bottom > other.top

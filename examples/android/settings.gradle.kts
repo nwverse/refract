@@ -17,4 +17,3 @@ dependencyResolutionManagement {
 rootProject.name = "RefractExample"
 include(":app")
 include(":fixtures")
-include(":render-check")
