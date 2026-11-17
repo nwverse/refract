@@ -60,15 +60,17 @@ To compile only the Kotlin and its resources, run `./gradlew :app:compileDebugKo
 
 ## Native JVM Compose rendering and interaction tests
 
-The `render-check/` module directly depends on `:app` and calls the actual CLI-generated
-`refract.generated.SettingsScreen`, not a copied or hand-written replacement. From the repository root, first prove
-the generated file is current, then run the JVM tests:
+The `:app` `src/test` source set calls the actual CLI-generated `refract.generated.SettingsScreen` in the real
+application resource package, not a copied or hand-written replacement. This matters because a separate Android
+library's local test APK does not contain a dependent app's resource table: numeric `R` references can otherwise
+resolve to unrelated strings. From the repository root, first prove the generated file is current, then run the JVM
+tests:
 
 ```sh
 swift build
 python3 scripts/check_examples.py
 cd examples/android
-./gradlew :render-check:testDebugUnitTest
+./gradlew :app:testDebugUnitTest
 ```
 
 The tests use Compose UI testing on Robolectric with native graphics. They exercise the visible rows, the notification

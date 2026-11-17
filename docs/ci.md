@@ -98,19 +98,20 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
    exactly as the fixtures reference. Adding a fixture to the compile set is a manifest-only change; there is no
    skip list, so a new compile failure must be fixed in the same PR.
-8. Run `./gradlew --no-daemon :render-check:testDebugUnitTest` from `examples/android/`. The `:render-check`
-   module is a test-only Android library that depends on `:app`, so it invokes the same CLI-generated
-   `SettingsScreen.kt` that the compile gate checks. Robolectric 4.18 and Compose UI tests run against Android API 35
-   with native graphics. Tests inspect the visible section and row labels, the notification label's bounds relative
-   to its switch, `Role.Switch`, toggle and click actions, state updates, text input and the save callback. A
-   recording implementation of the generated `SettingsModel` supplies native state; no hand-written replacement
-   screen is used.
-9. Upload `render-check/build/reports/native-jvm-compose/` and the JUnit HTML reports as the
+8. Run `./gradlew --no-daemon :app:testDebugUnitTest` from `examples/android/`. The `src/test` source set invokes
+   the same CLI-generated `SettingsScreen.kt` that the compile gate checks, in the real application resource package.
+   This is essential: an Android library's local test APK does not include a dependent application's resource table,
+   so numeric `R` IDs can otherwise resolve to unrelated dependency strings. Tests first verify the actual localized
+   strings. Robolectric 4.18 and Compose UI tests run against Android API 35 with native graphics in a fixed 400×800dp
+   window. Tests inspect visible section and row labels, the notification label's bounds relative to its switch,
+   `Role.Switch`, toggle and click actions, state updates, text input and the save callback. A recording
+   implementation of the generated `SettingsModel` supplies native state; no hand-written replacement screen is used.
+9. Upload `app/build/reports/native-jvm-compose/` and the JUnit HTML reports as the
    `native-jvm-compose-settings` artifact. It contains explicitly labelled Native JVM Compose light/dark PNG captures
    and the observed dark-mode semantics tree. This is rendering and interaction evidence only: **it is not an
    emulator, a device screenshot, a cross-platform visual-parity result or a performance measurement.** The captures
-   must be inspected rather than inferred from a green test. The module is not packaged in the example app and adds
-   no runtime dependency to generated code or consumers.
+   must be inspected rather than inferred from a green test. Tests and their dependencies are confined to the app's
+   test source set and add no runtime dependency to generated code or consumers.
 10. Reject any untracked files left in the checkout after the compile.
 
 The `:app:compileDebugKotlin` and `:fixtures:compileDebugKotlin` gates are compile-only. They produce no APK, no
