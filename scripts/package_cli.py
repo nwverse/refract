@@ -269,6 +269,7 @@ def validate_package(archive: Path, parent: Path) -> None:
 
 def package_once(commit: str, destination: Path, os_name: str, architecture: str,
                  metadata: dict[str, str], notices: bytes, scratch: Path) -> Path:
+    scratch.mkdir()
     source_tar = scratch / "source.tar.gz"
     source_archive(commit, source_tar)
     source = scratch / "source"
@@ -291,7 +292,11 @@ def create_package(commit: str, output: Path, reproducible: bool) -> Path:
     os_name, architecture, triple = host_target()
     metadata = check_tools(triple)
     _, notices = load_notices()
-    output.mkdir(parents=True, exist_ok=True)
+    if output.exists():
+        if not output.is_dir() or any(output.iterdir()):
+            raise ValueError("--output must be a new or empty directory")
+    else:
+        output.mkdir(parents=True)
     with tempfile.TemporaryDirectory(prefix="refract-cli-package.") as temporary:
         scratch = Path(temporary)
         first = package_once(commit, output, os_name, architecture, metadata, notices, scratch / "first")
