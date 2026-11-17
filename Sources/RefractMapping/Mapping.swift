@@ -336,6 +336,17 @@ public enum ParameterType: String, Codable, CaseIterable, Sendable {
     case remoteImageLoader
 
     public var isAction: Bool { rawValue.hasPrefix("action") }
+
+    /// The matching frontend scalar type for a mapped value argument.
+    public var valueType: ValueType? {
+        switch self {
+        case .string: .string
+        case .bool: .bool
+        case .int: .int
+        case .double: .double
+        default: nil
+        }
+    }
 }
 
 public enum ContentKind: String, Codable, Sendable {
