@@ -27,21 +27,25 @@ public struct ChildView: Codable, Equatable, Sendable {
     public let arguments: [Argument]
     public let models: [Argument]
     public let item: Argument?
+    public let contentType: String?
 
-    public init(name: String, arguments: [Argument] = [], models: [Argument] = [], item: Argument? = nil) {
+    public init(name: String, arguments: [Argument] = [], models: [Argument] = [], item: Argument? = nil,
+                contentType: String? = nil) {
         self.name = name
         self.arguments = arguments
         self.models = models
         self.item = item
+        self.contentType = contentType
     }
 
-    private enum CodingKeys: String, CodingKey { case name, arguments, models, item }
+    private enum CodingKeys: String, CodingKey { case name, arguments, models, item, contentType }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         name = try values.decode(String.self, forKey: .name)
         models = try values.decode([Argument].self, forKey: .models)
         item = try values.decodeIfPresent(Argument.self, forKey: .item)
+        contentType = try values.decodeIfPresent(String.self, forKey: .contentType)
         arguments = try values.decodeIfPresent([Argument].self, forKey: .arguments) ?? models + (item.map { [$0] } ?? [])
     }
 }
@@ -90,17 +94,33 @@ public struct ListItems: Codable, Equatable, Sendable {
     public let key: String
     public let keyType: ValueType
     public let content: ViewNode
+    public let contentType: String?
     public let location: SourceLocation?
 
     public init(collection: Expression, itemName: String, itemType: String, key: String = "id",
-                keyType: ValueType, content: ViewNode, location: SourceLocation? = nil) {
+                keyType: ValueType, content: ViewNode, contentType: String? = nil, location: SourceLocation? = nil) {
         self.collection = collection
         self.itemName = itemName
         self.itemType = itemType
         self.key = key
         self.keyType = keyType
         self.content = content
+        self.contentType = contentType
         self.location = location
+    }
+
+    private enum CodingKeys: String, CodingKey { case collection, itemName, itemType, key, keyType, content, contentType, location }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        collection = try values.decode(Expression.self, forKey: .collection)
+        itemName = try values.decode(String.self, forKey: .itemName)
+        itemType = try values.decode(String.self, forKey: .itemType)
+        key = try values.decode(String.self, forKey: .key)
+        keyType = try values.decode(ValueType.self, forKey: .keyType)
+        content = try values.decode(ViewNode.self, forKey: .content)
+        contentType = try values.decodeIfPresent(String.self, forKey: .contentType)
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 
@@ -155,7 +175,7 @@ public extension ViewNode {
              let .child(_, location), let .platformView(_, location), let .conditional(_, location),
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
-             let .image(_, _, location), let .toggle(_, _, _, _, location), let .textInput(_, _, _, location),
+             let .image(_, _, location), let .toggle(_, _, _, _, _, location), let .textInput(_, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
              let .switchExpression(_, _, _, location), let .optionalBinding(_, _, _, _, location): location
         }

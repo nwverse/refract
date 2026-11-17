@@ -26,8 +26,8 @@ public extension ViewNode {
             return .list(children: children, modifiers: modifiers + [modifier], location: location)
         case let .image(source, modifiers, location):
             return .image(source: source, modifiers: modifiers + [modifier], location: location)
-        case let .toggle(title, value, modifiers, nativeModifiers, location):
-            return .toggle(title: title, value: value, modifiers: modifiers + [modifier], nativeModifiers: nativeModifiers, location: location)
+        case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
+            return .toggle(title: title, value: value, modifiers: modifiers + [modifier], nativeModifiers: nativeModifiers, labelsHidden: labelsHidden, location: location)
         case let .textInput(placeholder, value, modifiers, location):
             return .textInput(placeholder: placeholder, value: value, modifiers: modifiers + [modifier], location: location)
         case let .label(title, image, modifiers, location):

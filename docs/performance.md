@@ -59,7 +59,10 @@ Unsupported reference mutation is rejected per the state contract.
 
 Every lazy item has a key derived from the source's `Identifiable` identity, not an array index or object dump.
 The key is stable, unique in the list and `Bundle`-saveable. All rows with the same emitted structure use the same
-literal `contentType`; structurally different supported branches have an explicit finite type discriminator.
+literal `contentType`; structurally different supported branches have an explicit finite type discriminator. A generated
+child row can declare its stable row-shape name directly with `.refractNativeModifier(.contentType("setting"))` in either
+canonical dynamic List form. `Fixtures/child-view-layout-priority` and `Fixtures/child-view-foreach-content-type` cover
+that reviewed source-to-native contract.
 
 ```kotlin
 items(
@@ -172,7 +175,10 @@ V2 observation but do not receive component-reuse generation; this is an explici
 V1 fallback. Use `.reuse({ reuseId: () => "setting" })` only for a real finite family of different row structures.
 Do not nest reusable components or switch the reused subtree shape. V2 reuse automatically resets local state,
 recomputes derived values and re-evaluates related monitors. Do not treat reuse as creation: required inputs must be
-supplied at every call site, and any app-owned resources need the appropriate reuse/recycle lifecycle.
+supplied at every call site, and any app-owned resources need the appropriate reuse/recycle lifecycle. The source-owned
+`.contentType("setting")` operation on a direct generated List child supplies that literal reuse identity, as shown by
+`Fixtures/child-view-layout-priority` and `Fixtures/child-view-foreach-content-type`; their ArkTS is not native-compiled
+in this environment.
 
 Reuse is particularly useful with `LazyForEach`, not with fully expanded `ForEach`. The target SDK must be API 18 or
 newer for this rule; an older configured target leaves out `@ReusableV2` rather than emitting the incompatible V1

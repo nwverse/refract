@@ -26,3 +26,9 @@
   item/model context after its body; a child's item alias is not the parent's `LazyForEach` item.
 - In a modifier `while` loop, even an operation that emits no chain must advance the index before `continue`.
   Otherwise a retained callback can make generation spin instead of producing output or a diagnostic.
+- A row content type belongs to the generated child directly owned by either canonical dynamic List form. Preserve
+  the declaration in the `ForEach` `ListItems` constructor as well as the shorthand constructor, and reject page-level
+  or nested children before either backend emits. An invalid content type is never a retained-callback operation.
+- Hidden Toggle labels remove the visible title and its layout wrapper, not the title's typed getter/action checks,
+  native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
+  wrappers rather than relying on an unused `title` variable to prevent one.

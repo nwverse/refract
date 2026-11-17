@@ -166,9 +166,9 @@ extension ComposeBackend {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .textInput(_, value, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
-        } else if case let .toggle(_, value, _, _, _) = child, case let .valueProperty(.state(name)) = value.value {
+        } else if case let .toggle(_, value, _, _, _, _) = child, case let .valueProperty(.state(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
-        } else if case let .toggle(_, value, _, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
+        } else if case let .toggle(_, value, _, _, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .button(_, action, _, _) = child,
                   case let .modelMethod(_, methodName, arguments)? = action, arguments.isEmpty {

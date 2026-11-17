@@ -156,6 +156,11 @@ struct Generation {
                 case let .contentDescription(value):
                     modifiers.append(Modifier(name: "accessibilityLabel", arguments: [value], argumentLabels: [nil],
                                               location: operation.location))
+                case .contentType:
+                    throw Diagnostic(code: "RFNATIVE004",
+                        message: "Row content type belongs on a generated child, not a native measurement wrapper.",
+                        suggestion: "Apply `.contentType` directly to the generated child row",
+                        location: operation.location ?? location)
                 case .retainCallback:
                     throw Diagnostic(code: "RFNATIVE004",
                         message: "HarmonyOS callback retention requires a typed callback-identity representation.",
@@ -193,8 +198,18 @@ struct Generation {
                 return "\(argument.label): this.\(argument.expression)"
             }
             writer.line("\(child.name)({ \(arguments.joined(separator: ", ")) })")
-        case let .toggle(title, value, modifiers, nativeModifiers, location):
-            try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers, location: location),
+            if let contentType = child.contentType {
+                guard item != nil else {
+                    throw Diagnostic(code: "RFNATIVE004",
+                        message: "A reusable row content type requires a generated child directly owned by a dynamic List.",
+                        suggestion: "Apply `.contentType(\"setting\")` to the generated child inside the model-backed List",
+                        location: node.sourceLocation)
+                }
+                writer.line(".reuse({ reuseId: () => '\(contentType)' })")
+            }
+        case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
+            try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
+                                     labelsHidden: labelsHidden, location: location),
                              into: &writer, item: item, mapping: mapping, resolver: resolver,
                              itemParameters: screenItemTypes, itemTypeName: itemTypeName)
         case let .platformView(alternatives, _):
@@ -252,7 +267,7 @@ struct Generation {
         switch node {
         case let .stack(_, _, values, _), let .layout(_, _, values, _), let .scroll(_, _, values, _),
              let .list(_, values, _), let .text(_, values, _), let .button(_, _, values, _),
-             let .image(_, values, _), let .toggle(_, _, values, _, _), let .textInput(_, _, values, _),
+             let .image(_, values, _), let .toggle(_, _, values, _, _, _), let .textInput(_, _, values, _),
              let .label(_, _, values, _), let .divider(values, _):
             modifiers = values
         default:

@@ -6,6 +6,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "child-view-foreach-content-type",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "child-view-layout-priority",
       "implementationStatus": "ready"
     },

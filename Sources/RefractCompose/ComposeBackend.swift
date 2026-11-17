@@ -150,9 +150,9 @@ public struct ComposeBackend: Sendable {
         case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput,
              .label, .divider, .spacer:
             try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
-        case let .toggle(title, value, modifiers, nativeModifiers, location):
+        case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
             try emitToggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers, isRoot: isRoot,
-                           location: location, into: &out, context: &context)
+                           labelsHidden: labelsHidden, location: location, into: &out, context: &context)
         case let .text(expression, modifiers, location):
             try emitText(expression, modifiers: modifiers, isRoot: isRoot, parentAxis: parentAxis, location: location,
                          into: &out, context: &context)

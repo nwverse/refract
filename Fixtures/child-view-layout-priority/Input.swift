@@ -27,7 +27,7 @@ struct ChildSettingRow: View {
                     Toggle("settings.item\(row.id)", isOn: Binding(
                         get: { row.enabled },
                         set: { value in settings.setEnabled(row.id, value: value) }
-                    )).accessibilityLabel(row.title)
+                    )).accessibilityLabel(row.title).labelsHidden()
                 },
                 android: {
                     Toggle("settings.item\(row.id)", isOn: Binding(
@@ -37,7 +37,7 @@ struct ChildSettingRow: View {
                         .testTag("setting_toggle_\(row.id)"),
                         .contentDescription(row.title),
                         .retainCallback(identity: "settings.setEnabled")
-                    )
+                    ).labelsHidden()
                 },
                 harmonyOS: {
                     Toggle("settings.item\(row.id)", isOn: Binding(
@@ -45,7 +45,7 @@ struct ChildSettingRow: View {
                         set: { value in settings.setEnabled(row.id, value: value) }
                     ))
                     .accessibilityLabel(row.title)
-                    .refractNativeModifier(.testTag("setting_toggle_\(row.id)"))
+                    .refractNativeModifier(.testTag("setting_toggle_\(row.id)")).labelsHidden()
                 }
             )
         }
@@ -61,6 +61,7 @@ struct ChildSettings: View {
     var body: some View {
         List(model.rows) { row in
             ChildSettingRow(settings: model, row: row)
+                .refractNativeModifier(.contentType("setting"))
         }
     }
 }
