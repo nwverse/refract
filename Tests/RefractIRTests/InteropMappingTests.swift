@@ -80,6 +80,21 @@ func nativeMappingRejectsWrongHarmonyStyle(style: NativeTarget.ArgumentStyle) th
     #expect(error?.diagnostics[0].message.contains("HarmonyOS") == true)
 }
 
+@Test func nativeMappingChecksNativeActionTargetTypes() throws {
+    let declaration = NativeDeclaration(name: "Preview", parameters: [NativeParameter(label: "onClose", type: .action)])
+    let valid = NativeTarget(symbol: "Preview", module: "example.documents", kind: .composable, argumentStyle: .named,
+                             parameters: [NativeTarget.Parameter(label: "onClose", type: .action, targetType: "() -> Unit")],
+                             arguments: [NativeTarget.Argument(source: "onClose", target: "onClose")])
+    #expect(try InteropMapping.validate(declaration: declaration, target: valid, platform: .android).symbol == "Preview")
+    let invalid = NativeTarget(symbol: "Preview", module: "example.documents", kind: .component, argumentStyle: .object,
+                               parameters: [NativeTarget.Parameter(label: "onClose", type: .action, targetType: "() -> Unit")],
+                               arguments: valid.arguments)
+    let error = #expect(throws: InteropMappingError.self) {
+        try InteropMapping.validate(declaration: declaration, target: invalid, platform: .harmonyOS)
+    }
+    #expect(error?.diagnostics.map(\.code) == ["RFMAP003"])
+}
+
 @Test func nativeMappingRejectsInvalidSymbolAndTargetLabel() throws {
     let invalid = NativeTarget(symbol: "RoutePreview()", module: "example.maps", kind: .composable,
         argumentStyle: .named,

@@ -7,28 +7,54 @@ public struct Frontend {
     public init() {}
 
     public static func parse(_ source: SourceFile, mapping: Mapping? = nil) -> TranslationUnit {
-        let tree = Parser.parse(source: source.contents)
-        let parserDiagnostics = ParserDiagnostics.validate(tree: tree, file: source.path)
-        guard parserDiagnostics.isEmpty else {
-            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
-                                   diagnostics: parserDiagnostics)
+        parse(sources: [source], mapping: mapping)[0]
+    }
+
+    /// Parses one explicit same-module input set. Each returned unit still owns only
+    /// the declarations in its own file, so native outputs remain one file per input.
+    public static func parse(sources: [SourceFile], mapping: Mapping? = nil) -> [TranslationUnit] {
+        let resolver = CompilationInputResolver(sources: sources)
+        let duplicateDiagnostics = resolver.duplicateDiagnostics()
+        var units: [TranslationUnit] = []
+        for file in resolver.files {
+            guard file.parserDiagnostics.isEmpty else {
+                units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
+                                             diagnostics: file.parserDiagnostics))
+                continue
+            }
+            let context = resolver.context(for: file)
+            let builder = Builder(file: file.source.path, tree: file.tree, mapping: mapping,
+                                  compilationContext: context)
+            builder.rejectDuplicateGeneratedDeclarations(file.tree)
+            let hasDuplicateGeneratedDeclaration = builder.hasDuplicateGeneratedDeclaration
+            builder.walk(file.tree)
+            let module = Module(sourceFile: file.source.path, screens: builder.screens,
+                                nativeDeclarations: builder.interop.declarations,
+                                models: builder.models.filter { $0.location?.file == file.source.path },
+                                itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
+                                enums: builder.enums.filter { $0.location?.file == file.source.path })
+            if sources.count == 1 { builder.validateChildViewGraph(module) }
+            builder.validateNavigationDeclarations(module)
+            builder.validateRowContentTypes(module)
+            let diagnostics = duplicateDiagnostics[file.source.path, default: []] + builder.diagnostics
+            if hasDuplicateGeneratedDeclaration || duplicateDiagnostics[file.source.path]?.isEmpty == false {
+                units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
+                                             diagnostics: diagnostics))
+                continue
+            }
+            units.append(TranslationUnit(module: module, diagnostics: diagnostics,
+                                         resolvedModels: builder.models,
+                                         resolvedItemTypes: builder.itemTypes))
         }
-        let builder = Builder(file: source.path, tree: tree, mapping: mapping)
-        builder.rejectDuplicateGeneratedDeclarations(tree)
-        builder.walk(tree)
-        let module = Module(sourceFile: source.path, screens: builder.screens,
-                            nativeDeclarations: builder.interop.declarations,
-                            models: builder.models, itemTypes: builder.itemTypes,
-                            enums: builder.enums)
-        builder.validateChildViewGraph(module)
-        builder.validateNavigationDeclarations(module)
-        builder.validateRowContentTypes(module)
-        if builder.hasDuplicateGeneratedDeclaration {
-            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
-                                   diagnostics: builder.diagnostics)
+        if sources.count > 1, let cycle = CompilationInputResolver.declarationCycleDiagnostic(units: units) {
+            units = units.map { unit in
+                guard unit.module.sourceFile == cycle.file else { return unit }
+                return TranslationUnit(module: unit.module, diagnostics: unit.diagnostics + [cycle.diagnostic],
+                                       resolvedModels: unit.resolvedModels,
+                                       resolvedItemTypes: unit.resolvedItemTypes)
+            }
         }
-        return TranslationUnit(module: module,
-                               diagnostics: builder.diagnostics)
+        return units
     }
 }
 
@@ -54,7 +80,7 @@ final class Builder: SyntaxVisitor {
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
 
-    init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
+    init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
@@ -67,8 +93,9 @@ final class Builder: SyntaxVisitor {
                       $0.type.trimmedDescription == "RefractModel"
                   }) == true else { return nil }
             return declaration.name.text
-        })
+        }).union(compilationContext?.modelNames ?? [])
         collectEnums(tree)
+        itemTypes = compilationContext?.allItemTypes ?? []
         collectItemTypes(tree)
         collectModels(tree)
         for statement in tree.statements {
@@ -79,6 +106,23 @@ final class Builder: SyntaxVisitor {
                 viewDeclarations[declaration.name.text] = declaration
             }
         }
+        if let compilationContext {
+            models = compilationContext.models + models
+            itemTypes = compilationContext.itemTypes + itemTypes
+            enums = compilationContext.enums + enums
+            var modelKeys: Set<String> = []
+            models = models.filter { modelKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
+            var itemKeys: Set<String> = []
+            itemTypes = itemTypes.filter { itemKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
+            for (name, declaration) in compilationContext.views where viewDeclarations[name] == nil {
+                viewDeclarations[name] = declaration
+            }
+        }
+    }
+
+    private static func declarationKey(name: String, location: RefractIR.SourceLocation?) -> String {
+        guard let location else { return name }
+        return "\(location.file):\(location.line):\(location.column):\(name)"
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -215,6 +259,7 @@ final class Builder: SyntaxVisitor {
             }
             if call.calledExpression.trimmedDescription == "Form" { return formContainer(call) }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
+            if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
                 guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
                     error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
@@ -224,6 +269,10 @@ final class Builder: SyntaxVisitor {
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }
+            // Toggle/TextField/SecureField were recognized above. If their guard failed they have
+            // already emitted a typed diagnostic; do not fall through to the component-mapping path.
+            if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text,
+               name == "Toggle" || name == "TextField" || name == "SecureField" { return nil }
             return view(call)
         }
         if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
@@ -238,6 +287,7 @@ final class Builder: SyntaxVisitor {
         if name == "navigationDestination" { return navigationDestination(call, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
+        if name == "secureReveal" { return secureReveal(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
         if name == "disabled" { return disabledModifier(call, on: node) }
         let before = diagnostics.count
@@ -407,7 +457,7 @@ final class Builder: SyntaxVisitor {
         let before = diagnostics.count
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
             guard let label = argument.label?.text else {
-                error("RFNATIVE002", "Native component arguments require explicit labels and supported scalar values.",
+                error("RFNATIVE002", "Native component arguments require explicit labels and supported values.",
                       "Use the memberwise SwiftUI initializer signature", at: argument)
                 return nil
             }
@@ -431,6 +481,8 @@ final class Builder: SyntaxVisitor {
                 }
             case .remoteImageLoader:
                 parsed = nativeImageLoader(argument.expression, label: label)
+            case .action:
+                parsed = nativeAction(argument.expression, label: label)
             case .string, .bool, .int, .double:
                 parsed = scalar(argument.expression).map {
                     NativeArgument(label: label, expression: $0.expression,
@@ -490,6 +542,23 @@ final class Builder: SyntaxVisitor {
         return TypedExpression(localized, .string)
     }
 
+    private func nativeAction(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let closure = expression.as(ClosureExprSyntax.self),
+              closure.signature == nil, closure.statements.count == 1,
+              let body = closure.statements.first?.item.as(ExprSyntax.self),
+              let action = modelAction(body) else {
+            error("RFNATIVE002", "A native action requires one checked no-argument model action.",
+                  "Use `onEvent: { model.event() }`; arbitrary closures, function values and arguments are not translated", at: expression)
+            return nil
+        }
+        guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
+            error("RFNATIVE002", "Only a no-argument model action matches this native `() -> Void` parameter.",
+                  "Declare a separate no-argument model method", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, action: action, type: .action, location: location(of: expression))
+    }
+
     private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard call.arguments.map(\.label?.text) == ["ios", "android", "harmonyOS"] else {
             error("RFNATIVE003", "`refractView` requires exactly `ios`, `android`, and `harmonyOS` view-builder closures.",
@@ -527,6 +596,12 @@ final class Builder: SyntaxVisitor {
         if let literal = expression.as(FloatLiteralExprSyntax.self) {
             return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .double,
                                              location: location(of: expression)), .double)
+        }
+        if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self),
+           currentModels.contains(where: { $0.propertyName == base.baseName.text }),
+           let model = modelTypedProperty(expression) {
+            return model
         }
         if expression.as(MemberAccessExprSyntax.self) != nil {
             return TypedExpression(Expression(.reference(expression.trimmedDescription),
