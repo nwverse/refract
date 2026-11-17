@@ -48,7 +48,9 @@ public enum GeneratedOutputWriter {
             }
             let directory = URL(fileURLWithPath: output.directory, isDirectory: true).standardizedFileURL
             let destination = URL(fileURLWithPath: output.directory).appendingPathComponent(output.filename)
-            return Plan(directory: directory, destination: destination,
+            let lockDirectory = directory.resolvingSymlinksInPath()
+            let lock = lockDirectory.appendingPathComponent(".refract-generate.lock", isDirectory: true)
+            return Plan(directory: directory, destination: destination, lockDirectory: lockDirectory, lock: lock,
                         contents: Data(output.contents.utf8))
         }
         let destinations = Dictionary(grouping: plans, by: { $0.destination.resolvingSymlinksInPath().path })
@@ -61,7 +63,7 @@ public enum GeneratedOutputWriter {
         defer { transaction.removeCreatedDirectories() }
         do {
             for (_, group) in directories.sorted(by: { $0.key < $1.key }) {
-                let directory = group[0].directory
+                let directory = group[0].lockDirectory
                 var isDirectory: ObjCBool = false
                 if files.fileExists(atPath: directory.path, isDirectory: &isDirectory) {
                     guard isDirectory.boolValue else {
@@ -71,7 +73,7 @@ public enum GeneratedOutputWriter {
                     try files.createDirectory(at: directory, withIntermediateDirectories: true)
                     transaction.createdDirectories.append(directory)
                 }
-                let lock = directory.appendingPathComponent(".refract-generate.lock", isDirectory: true)
+                let lock = group[0].lock
                 try acquire(lock: lock, timeout: lockTimeout, pollInterval: lockPollInterval)
                 transaction.locks.append(lock)
                 for plan in group {
@@ -79,10 +81,10 @@ public enum GeneratedOutputWriter {
                         throw GeneratedOutputError.message("Cannot replace generated output `\(plan.destination.path)` because it is a directory, symbolic link or other non-regular file; remove or relocate it explicitly.")
                     }
                     if files.fileExists(atPath: plan.destination.path) {
-                        plan.backup = directory.appendingPathComponent(".refract-backup-\(UUID().uuidString)")
+                        plan.backup = plan.lockDirectory.appendingPathComponent(".refract-backup-\(UUID().uuidString)")
                         try files.copyItem(at: plan.destination, to: plan.backup!)
                     }
-                    plan.staged = directory.appendingPathComponent(".refract-temporary-\(UUID().uuidString)")
+                    plan.staged = plan.lockDirectory.appendingPathComponent(".refract-temporary-\(UUID().uuidString)")
                     try plan.contents.write(to: plan.staged!)
                 }
             }
@@ -135,14 +137,18 @@ public enum GeneratedOutputWriter {
     private final class Plan {
         let directory: URL
         let destination: URL
+        let lockDirectory: URL
+        let lock: URL
         let contents: Data
         var staged: URL?
         var backup: URL?
         var replaced = false
 
-        init(directory: URL, destination: URL, contents: Data) {
+        init(directory: URL, destination: URL, lockDirectory: URL, lock: URL, contents: Data) {
             self.directory = directory
             self.destination = destination
+            self.lockDirectory = lockDirectory
+            self.lock = lock
             self.contents = contents
         }
     }

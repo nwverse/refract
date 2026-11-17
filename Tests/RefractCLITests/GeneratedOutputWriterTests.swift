@@ -106,6 +106,22 @@ struct GeneratedOutputWriterTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: harmony.path) == [".refract-generate.lock"])
     }
 
+    @Test func aliasedOutputDirectoriesShareOneLockAndOneTransaction() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let real = root.appendingPathComponent("real")
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: real)
+        try GeneratedOutputWriter.commit([
+            GeneratedOutput(directory: real.path, filename: "First.kt", contents: "first"),
+            GeneratedOutput(directory: alias.path, filename: "Second.kt", contents: "second"),
+        ])
+        #expect(try contents(of: real.appendingPathComponent("First.kt")) == "first")
+        #expect(try contents(of: real.appendingPathComponent("Second.kt")) == "second")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: real.path).sorted() == ["First.kt", "Second.kt"])
+    }
+
     @Test func staleLockReturnsActionableErrorAndRetriesAfterRelease() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
