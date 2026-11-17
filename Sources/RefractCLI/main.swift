@@ -4,6 +4,7 @@ import RefractCompose
 import RefractFrontend
 import RefractIR
 import RefractMapping
+import RefractOutput
 
 enum CLIError: Error, CustomStringConvertible {
     case message(String)
@@ -91,7 +92,7 @@ struct RefractCommand {
             try LocalizationResourceValidator.validate(module: unit.module, mapping: mapping)
         }
 
-        var outputs: [(directory: String, filename: String, contents: String)] = []
+        var outputs: [GeneratedOutput] = []
         for unit in units {
             let name = URL(fileURLWithPath: unit.module.sourceFile).deletingPathExtension().lastPathComponent
             var compose: String?
@@ -101,14 +102,23 @@ struct RefractCommand {
             do { ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
             catch { hasErrors = true; reportGeneration(error) }
             guard command == "generate", let compose, let ark else { continue }
-            outputs.append((options["--android-out"] ?? mapping.android.output.directory, name + ".kt", compose))
-            outputs.append((options["--harmony-out"] ?? mapping.harmonyOS.output.directory, name + ".ets", ark))
+            outputs.append(GeneratedOutput(directory: options["--android-out"] ?? mapping.android.output.directory,
+                                           filename: name + ".kt", contents: compose))
+            outputs.append(GeneratedOutput(directory: options["--harmony-out"] ?? mapping.harmonyOS.output.directory,
+                                           filename: name + ".ets", contents: ark))
         }
         guard !hasErrors else { throw CLIError.message("generation stopped because validation failed") }
-        for output in outputs {
-            let folder = URL(fileURLWithPath: output.directory, isDirectory: true)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try Data(output.contents.utf8).write(to: folder.appendingPathComponent(output.filename), options: .atomic)
+        guard command == "generate" else { return }
+        do {
+            try GeneratedOutputWriter.commit(outputs)
+        } catch let error as GeneratedOutputError {
+            switch error {
+            case let .rollback(message): throw CLIError.message(message)
+            case let .message(message):
+                throw CLIError.message("\(message) No committed generated outputs were changed.")
+            }
+        } catch {
+            throw CLIError.message("Could not publish generated outputs: \(error.localizedDescription) The previous committed outputs were restored and newly created outputs were removed.")
         }
     }
 
