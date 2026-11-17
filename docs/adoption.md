@@ -68,7 +68,7 @@ swift build
   --input examples/shared/Hello.swift \
   --input examples/shared/SettingsScreen.swift \
   --mapping examples/refract.json \
-  --android-out examples/android/app/src/main/java/refract/generated \
+  --android-out examples/android/app/refract/generated/screens \
   --harmony-out examples/harmony/entry/src/main/ets/generated
 ```
 
@@ -137,7 +137,7 @@ fixture-body diffs below compare against #2's canonical reference apart from the
 swift build
 python3 scripts/check_examples.py
 swift test
-diff <(tail -n +3 Fixtures/hello/Expected.kt) <(tail -n +3 examples/android/app/src/main/java/refract/generated/Hello.kt)
+diff <(tail -n +3 Fixtures/hello/Expected.kt) <(tail -n +3 examples/android/app/refract/generated/screens/Hello.kt)
 diff <(tail -n +3 Fixtures/hello/Expected.ets) <(tail -n +3 examples/harmony/entry/src/main/ets/generated/Hello.ets)
 python3 scripts/privacy_check.py
 

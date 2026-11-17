@@ -29,4 +29,7 @@ abstract class RefractSourceSet @Inject constructor(private val name: String) : 
 
     /** Reviewed Kotlin for this group, compared by checkRefract and excluded from default Android source. */
     abstract val committedOutputDirectory: DirectoryProperty
+
+    /** Reviewed ArkTS for this group; supplied to the CLI check, never published into an Android app. */
+    abstract val harmonyCommittedOutputDirectory: DirectoryProperty
 }

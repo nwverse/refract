@@ -1,14 +1,19 @@
 package dev.refract.gradle
 
 import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.Task
 
 class RefractPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.plugins.apply("base")
         val extension = project.extensions.create("refract", RefractExtension::class.java)
+        for (source in extension.sources) {
+            if (source.inputs.files.isEmpty()) {
+                throw GradleException("Refract source group '${source.name}' has no Swift inputs.")
+            }
+        }
         val executable = extension.executable.orElse(
             project.providers.environmentVariable("REFRACT_CLI_PATH").map { path ->
                 project.layout.projectDirectory.file(path)
@@ -61,6 +66,7 @@ class RefractPlugin : Plugin<Project> {
                         mapping.convention(source.mapping)
                         resources.from(source.resources)
                         committedOutputDirectory.convention(source.committedOutputDirectory)
+                        harmonyCommittedOutputDirectory.convention(source.harmonyCommittedOutputDirectory)
                         verificationMarker.convention(
                             project.layout.buildDirectory.file("refract/check/$taskName/verified.txt"),
                         )

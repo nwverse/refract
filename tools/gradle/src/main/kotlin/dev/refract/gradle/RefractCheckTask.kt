@@ -17,6 +17,11 @@ abstract class RefractCheckTask : RefractTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val committedOutputDirectory: DirectoryProperty
 
+    @get:InputDirectory
+    @get:IgnoreEmptyDirectories
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val harmonyCommittedOutputDirectory: DirectoryProperty
+
     @get:Internal
     abstract val verificationMarker: RegularFileProperty
 
@@ -31,7 +36,7 @@ abstract class RefractCheckTask : RefractTask() {
         arguments += listOf(
             "--android-out", committedOutputDirectory.get().asFile.absolutePath,
             // #164 owns the CLI's read-only check contract; Android does not publish ArkTS here.
-            "--harmony-out", temporaryDir.resolve("harmony").absolutePath,
+            "--harmony-out", harmonyCommittedOutputDirectory.get().asFile.absolutePath,
         )
         val output = ByteArrayOutputStream()
         val result = execOperations.exec {
