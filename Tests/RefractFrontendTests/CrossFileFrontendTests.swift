@@ -1,0 +1,134 @@
+import Foundation
+import Testing
+import RefractIR
+import RefractArkUI
+import RefractCompose
+@testable import RefractFrontend
+
+private let crossFileModel = SourceFile(path: "Model.swift", contents: """
+protocol RowsModel: RefractModel {
+    var rows: [RowItem] { get }
+    func setEnabled(_ id: Int, value: Bool)
+}
+""")
+
+private let crossFileItem = SourceFile(path: "RowItem.swift", contents: """
+struct RowItem: Identifiable {
+    let id: Int
+    let title: String
+    let enabled: Bool
+}
+""")
+
+private let crossFileChild = SourceFile(path: "ChildRow.swift", contents: """
+struct ChildRow: View {
+    let model: RowsModel
+    let row: RowItem
+    var body: some View { Text(row.title) }
+}
+""")
+
+private let crossFileParent = SourceFile(path: "Parent.swift", contents: """
+struct Parent: View {
+    let model: RowsModel
+    var body: some View {
+        List(model.rows) { item in
+            ChildRow(model: model, row: item)
+        }
+    }
+}
+""")
+
+@Test func crossFileDeclarationsKeepPerFileNativeOutputs() throws {
+    let units = Frontend.parse(sources: [crossFileParent, crossFileItem, crossFileChild, crossFileModel])
+    #expect(units.allSatisfy { !$0.hasErrors }, Comment(rawValue: units.flatMap(\.diagnostics).map(\.rendered).joined(separator: "\n")))
+    #expect(units.map(\.module.sourceFile) == ["Parent.swift", "RowItem.swift", "ChildRow.swift", "Model.swift"])
+    #expect(units.allSatisfy { $0.module.models.count + $0.module.itemTypes.count <= 1 })
+    let sources = NativeSourceSet(modules: units.map(\.module), models: units.flatMap(\.resolvedModels),
+                                  itemTypes: units.flatMap(\.resolvedItemTypes))
+    let parent = try #require(units.first { $0.module.sourceFile == "Parent.swift" })
+    let child = try #require(units.first { $0.module.sourceFile == "ChildRow.swift" })
+    let kotlin = try ComposeBackend().generate(module: parent.module, sources: sources)
+    #expect(kotlin.contains("ChildRow(model = model, row = item)"))
+    #expect(!kotlin.contains("interface RowsModel"))
+    #expect(!kotlin.contains("data class RowItem"))
+    let ark = try ArkUIBackend().generate(module: parent.module, sources: sources)
+    #expect(ark.contains("import { ChildRow } from './ChildRow';"))
+    #expect(ark.contains("import { RowsModel } from './Model';"))
+    #expect(ark.contains("import { RowItem } from './RowItem';"))
+    #expect(ark.contains("ChildRow({ model: this.model, row: item })"))
+    let childArk = try ArkUIBackend().generate(module: child.module, sources: sources)
+    #expect(childArk.contains("export struct ChildRow"))
+    #expect(childArk.contains("import { RowsModel } from './Model';"))
+    #expect(childArk.contains("import { RowItem } from './RowItem';"))
+    let modelUnit = try #require(units.first { $0.module.sourceFile == "Model.swift" })
+    let modelArk = try ArkUIBackend().generate(module: modelUnit.module, sources: sources)
+    #expect(modelArk.contains("import { RowItem } from './RowItem';"))
+    #expect(modelArk.contains("rows: BasicDataSource<RowItem>;"))
+}
+
+@Test func crossFileResolutionIsIndependentOfInputOrder() throws {
+    let sources = [crossFileModel, crossFileItem, crossFileChild, crossFileParent]
+    let first = Frontend.parse(sources: sources)
+    let second = Frontend.parse(sources: Array(sources.reversed()))
+    #expect(first.map(\.module.sourceFile) == Array(second.map(\.module.sourceFile).reversed()))
+    for unit in first {
+        let other = try #require(second.first { $0.module.sourceFile == unit.module.sourceFile })
+        #expect(unit == other)
+    }
+}
+
+@Test func crossFileRejectsDuplicateAndMissingDeclarations() {
+    let duplicate = SourceFile(path: "Duplicate.swift", contents: """
+
+    struct RowItem: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    """)
+
+    let units = Frontend.parse(sources: [crossFileModel, crossFileItem, duplicate])
+    let diagnostics = units.flatMap(\.diagnostics).filter { $0.code == "RFVIEW007" }
+    #expect(diagnostics.count == 2)
+    #expect(Set(diagnostics.map(\.location?.file)) == ["RowItem.swift", "Duplicate.swift"])
+    #expect(diagnostics.map(\.location?.line) == [1, 2])
+
+    let missing = Frontend.parse(sources: [crossFileModel, crossFileChild, crossFileParent])
+    #expect(missing.flatMap(\.diagnostics).contains { $0.code == "RFLIST001" })
+}
+
+@Test func crossFileRejectsMismatchedChildInputs() {
+    let parent = SourceFile(path: "Parent.swift", contents: """
+    struct Parent: View {
+        let model: RowsModel
+        var body: some View { List(model.rows) { row in ChildRow(model: model, row: model) } }
+    }
+    """)
+    let units = Frontend.parse(sources: [crossFileModel, crossFileItem, crossFileChild, parent])
+    #expect(units.flatMap(\.diagnostics).contains { $0.code == "RFVIEW006" })
+}
+
+@Test func crossFileRejectsDirectAndIndirectRecursion() {
+    let direct = Frontend.parse(sources: [
+        SourceFile(path: "Parent.swift", contents: "struct Parent: View { var body: some View { Child() } }"),
+        SourceFile(path: "Child.swift", contents: "struct Child: View { var body: some View { Child() } }"),
+    ])
+    #expect(direct.flatMap(\.diagnostics).contains { $0.code == "RFVIEW006" && $0.location?.file == "Child.swift" })
+
+    let units = Frontend.parse(sources: [
+        SourceFile(path: "Parent.swift", contents: "struct Parent: View { var body: some View { Child() } }"),
+        SourceFile(path: "Child.swift", contents: "struct Child: View { var body: some View { Parent() } }"),
+    ])
+    let diagnostics = units.flatMap(\.diagnostics).filter { $0.code == "RFVIEW006" }
+    #expect(diagnostics.count == 1)
+    #expect(diagnostics[0].message.contains("Parent -> Child -> Parent"))
+}
+
+@Test func arkCrossFileImportsRequireFlatExplicitSiblingPaths() throws {
+    let module = Module(sourceFile: "Folder/Parent.swift", screens: [
+        Screen(name: "Parent", body: .child(ChildView(name: "Child"), location: nil)),
+    ])
+    let dependency = Module(sourceFile: "Child.swift", screens: [
+        Screen(name: "Child", body: .text(Expression(.verbatimText("Child")), modifiers: [], location: nil)),
+    ])
+    #expect(throws: Diagnostic.self) {
+        _ = try ArkUIBackend().generate(module: module, sources: NativeSourceSet(modules: [module, dependency]))
+    }
+}

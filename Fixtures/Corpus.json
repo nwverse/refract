@@ -74,6 +74,18 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "cross-file-child-view",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-reject-duplicate",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-reject-recursion",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
       "implementationStatus": "ready"
     },

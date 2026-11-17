@@ -61,6 +61,11 @@ def regenerate_and_stage(fixture: str) -> None:
     if not fixture_dir.is_dir():
         fail(f"manifest entry is not a fixture directory: {fixture}")
     input_swift = fixture_dir / "Input.swift"
+    sibling_inputs = sorted(path for path in fixture_dir.glob("*.swift") if path.name != "Input.swift")
+    mapping_json = fixture_dir / "refract.json"
+    strings_xml = fixture_dir / "values/strings.xml"
+    if sibling_inputs:
+        return regenerate_and_stage_multiple(fixture, fixture_dir, sibling_inputs, mapping_json, strings_xml)
     expected_kt = fixture_dir / "Expected.kt"
     mapping_json = fixture_dir / "refract.json"
     strings_xml = fixture_dir / "values/strings.xml"
@@ -91,8 +96,37 @@ def regenerate_and_stage(fixture: str) -> None:
                 "regenerate and review it"
             )
 
+def regenerate_and_stage_multiple(fixture: str, fixture_dir: Path, inputs: list[Path],
+                                  mapping_json: Path, strings_xml: Path) -> None:
+    """Compile every sibling output, not only the parent that references them."""
+    for path in (fixture_dir / "Input.swift", mapping_json, strings_xml):
+        if not path.is_file():
+            fail(f"{fixture}: missing required file {path.relative_to(ROOT)}")
+    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture}-") as tmp:
+        out = Path(tmp)
+        arguments = [str(ROOT / ".build/debug/refract"), "generate"]
+        for input_path in inputs:
+            arguments += ["--input", str(input_path)]
+        arguments += ["--mapping", str(mapping_json), "--android-out", str(out / "android"),
+                      "--harmony-out", str(out / "harmony")]
+        subprocess.run(arguments, cwd=ROOT, check=True)
+        for input_path in inputs:
+            name = input_path.stem
+            regenerated = out / "android" / f"{name}.kt"
+            expected = fixture_dir / f"Expected.{name}.kt"
+            if not regenerated.is_file() or not expected.is_file():
+                fail(f"{fixture}: missing generated or expected Kotlin for {input_path.name}")
+            if regenerated.read_bytes() != expected.read_bytes():
+                fail(f"{fixture}: {name}.kt differs from {expected.relative_to(ROOT)}")
+            stage_generated(expected, fixture, f"{name}-{fixture}")
+    merge_strings(strings_xml, STAGING_RES / "strings.xml", fixture)
+
+
+def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
+    mapping_json = expected_kt.parent / "refract.json"
     # Preserve each fixture's declared package while sharing the fixture module's R class.
     # Android library R classes are generated in the Gradle namespace, not each Kotlin subpackage.
+    strings_xml = expected_kt.parent / "values/strings.xml"
     package = json.loads(mapping_json.read_text(encoding="utf-8"))["android"]["output"]["packageName"]
     namespace = "refract.generated"
     package_directory = STAGING_JAVA.joinpath(*package.split("."))
@@ -104,7 +138,7 @@ def regenerate_and_stage(fixture: str) -> None:
         generated = generated.replace(
             f"package {package}\n", f"package {package}\n\nimport {namespace}.R\n", 1
         )
-    target = package_directory / f"{fixture}.kt"
+    target = package_directory / f"{output_name}.kt"
     target.write_text(generated, encoding="utf-8")
     STAGING_RES.mkdir(parents=True, exist_ok=True)
     # Each fixture brings its own values/strings.xml. Concatenate the entries

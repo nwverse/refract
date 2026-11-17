@@ -9,7 +9,7 @@ extension ComposeBackend {
                   screen.states.contains { state in
                       if case let .model(reference, _) = state {
                           return reference.propertyName == model &&
-                              context.module.models.contains(where: { $0.name == reference.protocolName })
+                              context.models.contains(where: { $0.name == reference.protocolName })
                       }
                       return false
                   }
@@ -19,7 +19,7 @@ extension ComposeBackend {
                              suggestion: "Use a RefractModel collection of Identifiable items with a stable String or Int id.",
                              location: items.location ?? items.collection.location)
         }
-        guard let reference = context.module.models.first(where: { $0.properties.contains(where: { $0.name == property }) }),
+        guard let reference = context.models.first(where: { $0.properties.contains(where: { $0.name == property }) }),
               let modelProperty = reference.properties.first(where: { $0.name == property }),
               let collection = modelProperty.collection,
               collection.itemType == items.itemType,
@@ -36,7 +36,7 @@ extension ComposeBackend {
                              suggestion: "Use Identifiable with a stable stored String or Int id.",
                              location: items.location)
         }
-        guard context.module.itemTypes.contains(where: {
+        guard context.itemTypes.contains(where: {
             $0.name == items.itemType && $0.identity.name == items.key && $0.identity.type == items.keyType
         }) else {
             throw Diagnostic(code: "RFLIST001",

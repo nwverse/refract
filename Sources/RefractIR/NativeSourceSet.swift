@@ -1,0 +1,116 @@
+import Foundation
+
+/// One generated source file and its resolved compile-time sibling declarations.
+/// Dependencies are scoped to this invocation; generated code never performs a runtime lookup.
+public struct NativeSourceSet: Sendable {
+    public let modules: [Module]
+    public let models: [ModelProtocol]
+    public let itemTypes: [ItemType]
+    private let screens: [String: String]
+    private let items: [String: String]
+    private let modelFiles: [String: String]
+    private let enums: [String: String]
+
+    public init(modules: [Module]) {
+        self.init(modules: modules, models: modules.flatMap(\.models), itemTypes: modules.flatMap(\.itemTypes))
+    }
+
+    public init(modules: [Module], models: [ModelProtocol], itemTypes: [ItemType]) {
+        self.modules = modules
+        self.models = models
+        self.itemTypes = itemTypes
+        var screens: [String: String] = [:]
+        var items: [String: String] = [:]
+        var models: [String: String] = [:]
+        var enums: [String: String] = [:]
+        for module in modules {
+            for screen in module.screens { screens[screen.name] = module.sourceFile }
+            for item in module.itemTypes { items[item.name] = module.sourceFile }
+            for model in module.models { models[model.name] = module.sourceFile }
+            for enumeration in module.enums { enums[enumeration.name] = module.sourceFile }
+        }
+        self.screens = screens
+        self.items = items
+        self.modelFiles = models
+        self.enums = enums
+    }
+
+    public func source(for module: Module) throws -> NativeSource {
+        guard !module.sourceFile.isEmpty,
+              module.sourceFile.split(separator: "/", omittingEmptySubsequences: false).count == 1 else {
+            throw Diagnostic(code: "RFVIEW008",
+                message: "Cross-file output `\(module.sourceFile)` must be a basename within one flat generated directory.",
+                suggestion: "Use sibling input files and preserve their basenames as output filenames.")
+        }
+        var names: [String: RefractIR.SourceLocation] = [:]
+        func collect(_ node: ViewNode) {
+            if case let .child(child, location) = node, let location {
+                names[child.name] = location
+            }
+            if case let .forEach(list, _) = node, let location = list.location {
+                names[list.itemType] = location
+            }
+            for child in node.children { collect(child) }
+        }
+        for screen in module.screens {
+            collect(screen.body)
+            for parameter in screen.parameters {
+                if let name = parameter.itemType ?? parameter.enumName, let location = parameter.location {
+                    names[name] = location
+                }
+            }
+            for state in screen.states {
+                guard case let .model(reference, location) = state, let location else { continue }
+                names[reference.protocolName] = location
+            }
+        }
+        for model in module.models {
+            for property in model.properties {
+                if let item = property.collection?.itemType, let location = property.location {
+                    names[item] = location
+                }
+            }
+        }
+        var references: [String: String] = [:]
+        for (name, location) in names {
+            if let file = screens[name] ?? items[name] ?? modelFiles[name] ?? enums[name],
+               file != module.sourceFile {
+                references[name] = file
+                continue
+            }
+            // Local declarations are emitted in this file, not imported from a sibling.
+            if module.screens.contains(where: { $0.name == name }) ||
+                module.itemTypes.contains(where: { $0.name == name }) ||
+                module.models.contains(where: { $0.name == name }) ||
+                module.enums.contains(where: { $0.name == name }) { continue }
+            throw Diagnostic(code: "RFVIEW007",
+                message: "Declaration `\(name)` is not defined in the explicit input set.",
+                suggestion: "Supply the file declaring this type as another --input, or declare a mapped native component.",
+                location: location)
+        }
+        return NativeSource(references: references)
+    }
+}
+
+/// Imports use the CLI's existing flat, one-output-per-input convention. A future
+/// directory-preserving output contract must revise this resolver, not guess a path.
+public struct NativeSource: Sendable {
+    let references: [String: String]
+
+    public func arkImport(for name: String) throws -> String? {
+        guard let file = references[name] else { return nil }
+        let components = file.split(separator: "/", omittingEmptySubsequences: false)
+        guard components.count == 1, let base = Self.basename(file) else {
+            throw Diagnostic(code: "RFVIEW008",
+                message: "Cross-file ArkUI import `\(name)` requires flat sibling source and output paths.",
+                suggestion: "Supply sibling Swift files with unique basenames and generate all ArkUI outputs into one directory.")
+        }
+        return "./" + base
+    }
+
+    private static func basename(_ file: String) -> String? {
+        let name = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
+        guard name.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil else { return nil }
+        return name
+    }
+}

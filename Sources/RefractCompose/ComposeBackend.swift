@@ -10,8 +10,10 @@ import RefractMapping
 public struct ComposeBackend: Sendable {
     public init() {}
 
-    public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        var context = Context(module: module, mapping: mapping)
+    public func generate(module: Module, mapping: Mapping = .empty, sources: NativeSourceSet? = nil) throws -> String {
+        let dependencies = sources ?? NativeSourceSet(modules: [module])
+        var context = Context(module: module, mapping: mapping,
+                              models: dependencies.models, itemTypes: dependencies.itemTypes)
         // Native references validate both target signatures at each call site below.
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
@@ -102,7 +104,7 @@ public struct ComposeBackend: Sendable {
                 parameters.append("\(name): \(kotlinType(type))")
                 parameters.append("on\(name.uppercasingFirst())Change: (\(kotlinType(type))) -> Unit")
             case let .model(reference, _):
-                if context.module.models.contains(where: {
+                if context.models.contains(where: {
                     $0.name == reference.protocolName && !$0.properties.isEmpty
                 }) {
                     context.imports.insert("androidx.compose.runtime.State")
@@ -378,12 +380,16 @@ public struct ComposeBackend: Sendable {
         ]
         let mapping: Mapping
         let module: Module
+        let models: [ModelProtocol]
+        let itemTypes: [ItemType]
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
 
-        init(module: Module, mapping: Mapping) {
+        init(module: Module, mapping: Mapping, models: [ModelProtocol]? = nil, itemTypes: [ItemType]? = nil) {
             self.mapping = mapping
             self.module = module
+            self.models = models ?? module.models
+            self.itemTypes = itemTypes ?? module.itemTypes
             self.androidResourceClass = mapping.android.resources.className
             if let packageName = mapping.android.output.packageName {
                 self.packageName = packageName

@@ -5,8 +5,11 @@ import RefractMapping
 public struct ArkUIBackend: Sendable {
     public init() {}
 
-    public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        var generation = Generation(module: module, mapping: mapping)
+    public func generate(module: Module, mapping: Mapping = .empty, sources: NativeSourceSet? = nil) throws -> String {
+        let dependencies = sources ?? NativeSourceSet(modules: [module])
+        let nativeSource = try dependencies.source(for: module)
+        var generation = Generation(module: module, mapping: mapping, nativeSource: nativeSource,
+                                    models: dependencies.models, itemTypes: dependencies.itemTypes)
         return try generation.generate()
     }
 }
@@ -14,6 +17,9 @@ public struct ArkUIBackend: Sendable {
 struct Generation {
     let module: Module
     let mapping: Mapping
+    let nativeSource: NativeSource
+    let models: [ModelProtocol]
+    let itemTypes: [ItemType]
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
 
@@ -44,6 +50,7 @@ struct Generation {
                 importLines.append("import { \(target.symbol) } from '\(target.module)';")
             }
         }
+        for line in try ArkNativeImports.emit(module: module, nativeSource: nativeSource) { writer.line(line) }
         for line in importLines { writer.line(line) }
         try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
@@ -74,7 +81,7 @@ struct Generation {
             listItemTypes = [:]
             for state in screen.states {
                 if case let .model(reference, _) = state,
-                   let model = module.models.first(where: { $0.name == reference.protocolName }) {
+                   let model = models.first(where: { $0.name == reference.protocolName }) {
                     for property in model.properties {
                         if let collection = property.collection {
                             screenItemTypes[reference.propertyName] = collection.itemType

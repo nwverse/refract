@@ -7,22 +7,46 @@ public struct Frontend {
     public init() {}
 
     public static func parse(_ source: SourceFile, mapping: Mapping? = nil) -> TranslationUnit {
-        let tree = Parser.parse(source: source.contents)
-        let parserDiagnostics = ParserDiagnostics.validate(tree: tree, file: source.path)
-        guard parserDiagnostics.isEmpty else {
-            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
-                                   diagnostics: parserDiagnostics)
+        parse(sources: [source], mapping: mapping)[0]
+    }
+
+    /// Parses one explicit same-module input set. Each returned unit still owns only
+    /// the declarations in its own file, so native outputs remain one file per input.
+    public static func parse(sources: [SourceFile], mapping: Mapping? = nil) -> [TranslationUnit] {
+        let resolver = CompilationInputResolver(sources: sources)
+        let duplicateDiagnostics = resolver.duplicateDiagnostics()
+        var units: [TranslationUnit] = []
+        for file in resolver.files {
+            guard file.parserDiagnostics.isEmpty else {
+                units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
+                                             diagnostics: file.parserDiagnostics))
+                continue
+            }
+            let context = resolver.context(for: file)
+            let builder = Builder(file: file.source.path, tree: file.tree, mapping: mapping,
+                                  compilationContext: context)
+            builder.walk(file.tree)
+            let module = Module(sourceFile: file.source.path, screens: builder.screens,
+                                nativeDeclarations: builder.interop.declarations,
+                                models: builder.models.filter { $0.location?.file == file.source.path },
+                                itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
+                                enums: builder.enums.filter { $0.location?.file == file.source.path })
+            if sources.count == 1 { builder.validateChildViewGraph(module) }
+            builder.validateRowContentTypes(module)
+            let diagnostics = duplicateDiagnostics[file.source.path, default: []] + builder.diagnostics
+            units.append(TranslationUnit(module: module, diagnostics: diagnostics,
+                                         resolvedModels: builder.models,
+                                         resolvedItemTypes: builder.itemTypes))
         }
-        let builder = Builder(file: source.path, tree: tree, mapping: mapping)
-        builder.walk(tree)
-        let module = Module(sourceFile: source.path, screens: builder.screens,
-                            nativeDeclarations: builder.interop.declarations,
-                            models: builder.models, itemTypes: builder.itemTypes,
-                            enums: builder.enums)
-        builder.validateChildViewGraph(module)
-        builder.validateRowContentTypes(module)
-        return TranslationUnit(module: module,
-                               diagnostics: builder.diagnostics)
+        if sources.count > 1, let cycle = CompilationInputResolver.declarationCycleDiagnostic(units: units) {
+            units = units.map { unit in
+                guard unit.module.sourceFile == cycle.file else { return unit }
+                return TranslationUnit(module: unit.module, diagnostics: unit.diagnostics + [cycle.diagnostic],
+                                       resolvedModels: unit.resolvedModels,
+                                       resolvedItemTypes: unit.resolvedItemTypes)
+            }
+        }
+        return units
     }
 }
 
@@ -46,7 +70,8 @@ final class Builder: SyntaxVisitor {
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
 
-    init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
+    init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil,
+         collectTopLevelDeclarations: Bool = true) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
@@ -59,16 +84,46 @@ final class Builder: SyntaxVisitor {
                       $0.type.trimmedDescription == "RefractModel"
                   }) == true else { return nil }
             return declaration.name.text
-        })
-        collectEnums(tree)
-        collectItemTypes(tree)
-        collectModels(tree)
+        }).union(compilationContext?.modelNames ?? [])
+        if collectTopLevelDeclarations || compilationContext != nil {
+            collectEnums(tree)
+            itemTypes = compilationContext?.allItemTypes ?? []
+            collectItemTypes(tree)
+            collectModels(tree)
+        }
         for statement in tree.statements {
             if let declaration = statement.item.as(StructDeclSyntax.self),
                declaration.inheritanceClause?.inheritedTypes.contains(where: {
                    $0.type.trimmedDescription == "View"
                }) == true {
                 viewDeclarations[declaration.name.text] = declaration
+            }
+        }
+        if let compilationContext {
+            models = compilationContext.models + models
+            itemTypes = compilationContext.itemTypes + itemTypes
+            enums = compilationContext.enums + enums
+            var modelKeys: Set<String> = []
+            models = models.filter { modelKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
+            var itemKeys: Set<String> = []
+            itemTypes = itemTypes.filter { itemKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
+            for (name, declaration) in compilationContext.views where viewDeclarations[name] == nil {
+                viewDeclarations[name] = declaration
+            }
+        }
+    }
+
+    private static func declarationKey(name: String, location: RefractIR.SourceLocation?) -> String {
+        guard let location else { return name }
+        return "\(location.file):\(location.line):\(location.column):\(name)"
+    }
+
+    func buildTopLevelDeclarations(_ tree: SourceFileSyntax) {
+        for statement in tree.statements {
+            if let node = statement.item.as(StructDeclSyntax.self) {
+                _ = visit(node)
+            } else if let node = statement.item.as(IfConfigDeclSyntax.self) {
+                _ = visit(node)
             }
         }
     }
@@ -80,7 +135,12 @@ final class Builder: SyntaxVisitor {
         }
         guard node.inheritanceClause?.inheritedTypes.contains(where: {
             $0.type.trimmedDescription == "View"
-        }) == true else { return .skipChildren }
+        }) == true else {
+            // These top-level declarations were collected before the walk with
+            // their full explicit-input type environment; visiting them again
+            // would duplicate declarations and diagnose item fields as View inputs.
+            return .skipChildren
+        }
         guard validateViewMembers(node) else { return .skipChildren }
 
         let savedParameters = parameters
