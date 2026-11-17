@@ -130,11 +130,23 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-remote-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-remote-image-reject",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-foreach",
       "implementationStatus": "ready"
     },
     {
       "path": "list-foreach-explicit-id",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-paged-search",
       "implementationStatus": "ready"
     },
     {
@@ -195,6 +207,10 @@
     },
     {
       "path": "mapping/missing-token",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "mapping/model-scalars",
       "implementationStatus": "ready"
     },
     {

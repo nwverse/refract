@@ -36,7 +36,10 @@ ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "examples/android/fixture-compile-manifest.txt"
 FIXTURES_ROOT = ROOT / "Fixtures"
 STAGING_JAVA = ROOT / "examples/android/fixtures/src/main/java"
-STAGING_RES = ROOT / "examples/android/fixtures/src/main/res/values"
+STAGING_RES = ROOT / "examples/android/fixtures/src/main/res"
+STAGING_VALUES = STAGING_RES / "values"
+APP_TEST_JAVA = ROOT / "examples/android/app/src/fixtureTest/java"
+APP_TEST_RES = ROOT / "examples/android/app/src/fixtureTest/res"
 
 
 def fail(message: str) -> None:
@@ -68,7 +71,9 @@ def regenerate_and_stage(fixture: str) -> None:
         if not path.is_file():
             fail(f"{fixture}: missing required file {path.relative_to(ROOT)}")
 
-    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture}-") as tmp:
+    # A corpus subdirectory is not a single path component; TemporaryDirectory creates its parents and returns
+    # only the leaf. Use a flat, unique label so nested fixtures use the same lifecycle as top-level ones.
+    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture.replace('/', '-')}-") as tmp:
         out = Path(tmp)
         subprocess.run(
             [
@@ -105,7 +110,8 @@ def regenerate_and_stage(fixture: str) -> None:
         generated = generated.replace(
             f"package {package}\n", f"package {package}\n\nimport {namespace}.R\n", 1
         )
-    target = package_directory / f"{fixture}.kt"
+    # Keep every fixture's generated file a direct child of its Kotlin package, even when its corpus path is nested.
+    target = package_directory / f"{fixture.replace('/', '-')}.kt"
     target.write_text(generated, encoding="utf-8")
     for name in ("NativeHost.kt", "NativeComponent.kt"):
         native_source = fixture_dir / name
@@ -113,11 +119,45 @@ def regenerate_and_stage(fixture: str) -> None:
             native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-{name}"
             native_target.parent.mkdir(parents=True, exist_ok=True)
             native_target.write_text(native_source.read_text(encoding="utf-8"), encoding="utf-8")
-    STAGING_RES.mkdir(parents=True, exist_ok=True)
+    STAGING_VALUES.mkdir(parents=True, exist_ok=True)
     # Each fixture brings its own values/strings.xml. Concatenate the entries
     # into a single staged strings.xml so that resources with the same name do
     # not silently override each other.
-    merge_strings(strings_xml, STAGING_RES / "strings.xml", fixture)
+    merge_strings(strings_xml, STAGING_VALUES / "strings.xml", fixture)
+    resources = fixture_dir / "res"
+    if resources.is_dir():
+        for source in sorted(resources.rglob("*")):
+            if not source.is_file():
+                continue
+            relative = source.relative_to(resources)
+            destination = (STAGING_RES / relative).resolve()
+            if not destination.is_relative_to(STAGING_RES.resolve()) or destination.exists():
+                fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+    if fixture == "interop-remote-image":
+        # Native JVM tests need the app's real resource table, not a library's
+        # isolated test APK. Stage the exact generated call and its resources.
+        for base in (APP_TEST_JAVA, APP_TEST_RES):
+            if base.exists():
+                shutil.rmtree(base)
+        target_package = APP_TEST_JAVA.joinpath(*package.split("."))
+        target_package.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(target, target_package / f"{fixture}.kt")
+        generated_test = target_package / f"{fixture}.kt"
+        generated_test.write_text(
+            generated_test.read_text(encoding="utf-8").replace("refract.generated.R", "com.example.refract.R"),
+            encoding="utf-8",
+        )
+        for source in sorted(resources.rglob("*")):
+            if source.is_file():
+                relative = source.relative_to(resources)
+                destination = APP_TEST_RES / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+        destination = APP_TEST_RES / "values/strings.xml"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(strings_xml, destination)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:

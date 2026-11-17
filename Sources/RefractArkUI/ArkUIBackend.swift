@@ -32,6 +32,9 @@ struct Generation {
         var emittedImports: Set<String> = []
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
+            for parameter in screen.parameters where parameter.itemType == "RemoteImageLoader" {
+                emittedImports.insert("RemoteImageLoader")
+            }
             if case let .navigationStack(stack, _) = screen.body {
                 try collectImports(stack, resolver: resolver, into: &emittedImports)
             }
