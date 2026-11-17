@@ -57,6 +57,12 @@ public struct Expression: Codable, Equatable, Sendable {
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
         case interactionColor(InteractionColorValue)
+        /// `form.email`: a typed draft value owned by native state.
+        case formField(form: String, field: String)
+        /// `refractPresent(model.submissionError)`: a null check on a declared optional model text.
+        case presence(Expression)
+        /// The checked guard of a form's declared field rules, lowered to native comparisons.
+        case formValid(FormDeclaration)
     }
 
     public let value: Value
@@ -155,6 +161,12 @@ public enum StateDeclaration: Codable, Equatable, Sendable {
     case navigationPath(name: String, enumName: String, location: SourceLocation?)
     case tabSelection(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
+    /// A `refractForm` declaration on local @State or a parent @Binding.
+    case form(ownership: FormOwnership, declaration: FormDeclaration, location: SourceLocation?)
+}
+
+public enum FormOwnership: String, Codable, Sendable {
+    case state, binding
 }
 
 public struct ModelReference: Codable, Equatable, Sendable {

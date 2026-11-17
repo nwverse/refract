@@ -1,0 +1,1 @@
+Input.swift:5:56: error [RFFORM002]: Unknown form rule `.minLength`. Suggestion: Use `.nonEmpty` or `.equals("otherField")`; other rules belong in native model code
