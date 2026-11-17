@@ -102,6 +102,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-animation",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-callers",
       "implementationStatus": "ready"
     },
@@ -126,6 +130,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-platform-text-localized-rejected",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-platform-value",
       "implementationStatus": "ready"
     },
@@ -139,6 +147,14 @@
     },
     {
       "path": "interop-reject-conditional-compilation",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-remote-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-remote-image-reject",
       "implementationStatus": "ready"
     },
     {

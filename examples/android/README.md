@@ -95,9 +95,9 @@ Large-text behavior is tracked separately by the accessibility workstream and is
 builds the `refract` CLI, runs `scripts/check_examples.py` to regenerate this example and reject stale committed
 output, then invokes `./gradlew --no-daemon :app:compileDebugKotlin` against a pinned JDK 21 + Android SDK
 (platform `android-37.2`, build tools `37.0.0`). The compile is byte-equivalent to the local command above; the
-job never edits the generated files and never accepts a Kotlin compiler failure. It is a compile-only gate with
-no emulator, no device and no performance measurement. See `../../docs/ci.md` for the toolchain pins and cache
-layout.
+job never edits the generated files and never accepts a Kotlin compiler failure. It includes no emulator, device or
+performance measurement. Its additional fixture JVM tests run Compose on Robolectric, also not a device. See
+`../../docs/ci.md` for the toolchain pins and cache layout.
 
 The same job also compiles the canonical fixture corpus. `fixture-compile-manifest.txt` (next to this README)
 lists the fixtures to compile (one per line, names are directories under `Fixtures/`).
@@ -118,6 +118,29 @@ python3 scripts/check_fixture_compilation.py
 cd examples/android
 ./gradlew :fixtures:compileDebugKotlin
 ```
+
+### Native animation lifecycle tests
+
+The app-owned `NativeSaveConfirmation` demonstrates a typed visibility/identity boundary. Its implementation uses
+`AnimatedVisibility`; `MotionDurationScale` follows the system animation scale, and `key(identity)` gives replacement
+content a new native transition. It has no Refract runtime dependency. Its optional observer is an application
+`CompositionLocal`, not an extra generated argument; the tests provide it around the exact CLI-generated caller.
+The native contract, iOS implementation and HarmonyOS limits are documented in `../../docs/interop.md`.
+
+The fixture JVM tests verify the generated call's final stable state, disposal on identity replacement, exit removal,
+zero-scale enter/exit and removal from composition. The fixture module includes that app-owned implementation in its
+Android source set so the generated import is a real compiler dependency. Run the tests after `swift build` and
+`scripts/check_fixture_compilation.py`:
+
+```sh
+cd examples/android
+./gradlew :fixtures:testDebugUnitTest
+```
+
+Robolectric 4.18 executes Compose with a test-provided `MotionDurationScale` and deterministic clock. This is a local
+JVM behavior check, not a physical reduced-motion system-settings test, device/emulator run or timing benchmark. The
+Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches. The
+fixture module resolves the same pinned Android-all runtime as the app tests and runs Robolectric offline.
 
 ## Opt-in Gradle generation
 

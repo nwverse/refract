@@ -59,6 +59,9 @@ there is no Refract runtime, base view, interpreter or lookup registry in a gene
   Dynamic keys, unsupported interpolation and implicit string conversion are errors. Android and HarmonyOS resource
   files declare compatible one-based positional `%s`, `%d` or `%f` placeholders. `String(localized:)` follows the
   same resource-key rule for supported non-view arguments; no unverified platform overload is part of the subset.
+  Per-platform literal text uses `Text(verbatim: refractValue(ios:android:harmonyOS:))` with a string literal in
+  every branch; the bare localized form `Text(refractValue(...))` is rejected because iOS would reinterpret the
+  selected string as a localization key, diverging from the verbatim native output (see `docs/interop.md`).
 - Expected output contains only necessary, alphabetically sorted imports. No backend may introduce a dependency
   merely to share formatting or utility code between outputs. Whitespace is significant in golden comparisons.
 
@@ -76,6 +79,7 @@ same parameters as the Swift view. Full examples are in the linked fixtures.
 | `List { rows }` | `LazyColumn { item { Row() }; ... }` | `List() { ListItem() { Row() }; ... }` | Static children have one native lazy item each. A dynamic `ForEach` uses the identity rules in section 4. |
 | `Text("settings.title")` | `Text(text = stringResource(R.string.settings_title))` | `Text($r('app.string.settings_title'))` | Resources are resolved at build time. Text styles and colors use declared tokens. |
 | `Text(verbatim: "Debug")` | `Text(text = "Debug")` | `Text("Debug")` | Explicit non-localized text; escaping is defined by the target language. No hidden resource lookup. |
+| `Text(verbatim: refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS"))` | `Text(text = "Android")` | `Text("HarmonyOS")` | Per-platform literal text. The iOS branch feeds SwiftUI's `Text(verbatim:)` initializer, so all three platforms agree on verbatim semantics. The bare localized form `Text(refractValue(...))` is rejected (`R.string.unsupported_expression`): on iOS it would reinterpret the string as a localization key, diverging from the verbatim native output. |
 | `Text(model.title)` | `Text(text = model.title.value)` | `Text(this.model.title)` | Read observable state at the leaf. No eager screen-level snapshot or derived full-view copy. |
 | `Image(systemName: "gear")` | `Icon(imageVector = Icons.Default.Settings, contentDescription = null)` | `Image($r('app.media.settings'))` | A typed per-platform symbol mapping is required. `Image("asset_name")` maps to an application-declared drawable/media resource. Decorative images have a null/empty accessibility description unless an explicit localized label is declared. |
 | `Button("settings.save") { model.save() }` | `Button(onClick = { model.save() }) { Text(text = stringResource(R.string.settings_save)) }` | `Button($r('app.string.settings_save')) { ... }.onClick(() => { this.model.save() })` | The body is exactly one zero-argument action from the model/state section. ArkUI uses a `Button` with a text resource; a custom single-view label uses `Button() { label }`. |

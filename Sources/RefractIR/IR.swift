@@ -47,6 +47,7 @@ public struct Expression: Codable, Equatable, Sendable {
         case verbatimText(String)
         case stringKey(String)
         case localizedText(LocalizedText)
+        case imageResource(String)
         case boolLiteral(Bool)
         case numberLiteral(String)
         case layoutSpacing(LayoutSpacing)

@@ -110,7 +110,7 @@ struct DesignSystemFrontend {
                 _ = try mapping.stringResource(key, platform: .harmonyOS, location: value.expression.location)
             }
             result.append(NativeArgument(label: parameter.label, expression: value.expression,
-                                         type: value.type, location: builder.location(of: argument)))
+                                         type: value.type.flatMap { NativeParameterType(rawValue: $0.rawValue) }, location: builder.location(of: argument)))
         }
         let known = Set(declaration.parameters.map(\.label))
         for argument in call.arguments where !known.contains(argument.label?.text ?? "") {

@@ -23,12 +23,14 @@ list-foreach-explicit-id
 v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
+interop-native-animation
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
 cross-file-child-view
 cross-file-enum-switch
 cross-file-two-models
+interop-remote-image
 navigation-host
 navigation-native-destination
 accessibility-dynamic-type
