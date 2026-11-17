@@ -7,15 +7,16 @@
 is part of this target. The Xcode project references those shared files explicitly; do not replace them with copied
 platform-specific screens.
 
-The target also compiles six source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
-`InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift` and
-`ModelInterface.swift` in `examples/shared/`. Their unique on-disk basenames avoid Xcode's duplicate
-`Input.stringsdata` output; `scripts/check_examples.py` requires each to stay byte-identical to its named canonical
-fixture. They exercise `Binding(get:set:)`, typed platform selection, native measurement, directional padding and
-ordinary SwiftUI action/label buttons through the real SwiftUI type checker. `RefractSourcePrelude.swift` supplies
-source-level, iOS-only declarations: the native-modifier shim returns its receiver unchanged and directional padding
-forwards to standard SwiftUI `EdgeInsets`. `MeasurementDesignTokens.swift` owns the measurement fixture's iOS
-typography token. None of these declarations performs runtime platform dispatch or links a Refract library.
+The target also compiles eight source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
+`InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift`,
+`ModelInterface.swift`, `AccessibilityDynamicType.swift` and `StackLayout.swift` in `examples/shared/`. Their unique
+on-disk basenames avoid Xcode's duplicate `Input.stringsdata` output; `scripts/check_examples.py` requires each to
+stay byte-identical to its named canonical fixture. They exercise `Binding(get:set:)`, typed platform selection,
+native measurement, directional padding, named stack spacing, accessibility labels and ordinary SwiftUI action/label
+buttons through the real SwiftUI type checker. `RefractSourcePrelude.swift` supplies source-level, iOS-only
+declarations: `RefractSpacing` forwards to ordinary stack spacing, the native-modifier shim returns its receiver
+unchanged, and directional padding forwards to standard SwiftUI `EdgeInsets`. `MeasurementDesignTokens.swift` owns
+the iOS typography tokens. None of these declarations performs runtime platform dispatch or links a Refract library.
 
 ## Build on macOS
 
