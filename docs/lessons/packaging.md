@@ -21,7 +21,10 @@
   entries, and stamp only the source-revision constant. Never infer a release version from a mutable branch name.
 - **Dependency pins need corresponding legal pins.** `Package.resolved` identifies source revisions but does not
   include redistribution notices. Keep the exact license and its SHA-256 beside the packaging script and fail when
-  either the revision or license file drifts. Generated applications do not link the CLI's parser dependency.
+  either the revision or license file drifts. Read the manifest, lockfile, notice registry, project license and
+  third-party licenses from the selected Git commit, not from the working tree. A two-revision fixture with
+  deliberately dirty provenance files catches accidental mixing; packaging fails when the selected revision does
+  not contain the required evidence. Generated applications do not link the CLI's parser dependency.
 - **Reproducibility and portability are different claims.** Byte-identical archives from two clean builds on one
   host say nothing about other operating systems, architectures or Swift releases. Record the exact host triple
   and toolchain in `BUILD-INFO.json` and avoid general compatibility claims without separate evidence.

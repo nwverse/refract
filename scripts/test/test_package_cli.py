@@ -118,15 +118,79 @@ class PackagingUnitTests(unittest.TestCase):
                 package.validate_revision("a" * 40)
 
     def test_notices_cover_lockfile_and_detect_tampering(self) -> None:
-        notices, text = package.load_notices()
-        pins = json.loads((ROOT / "Package.resolved").read_text(encoding="utf-8"))["pins"]
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+                                capture_output=True, text=True).stdout.strip()
+        notices, text = package.load_notices(commit)
+        pins = json.loads(package.committed_bytes(commit, "Package.resolved").decode())["pins"]
         self.assertEqual(set(notices), {pin["identity"] for pin in pins})
         for pin in pins:
             self.assertEqual(notices[pin["identity"]]["revision"], pin["state"]["revision"])
             self.assertIn(pin["state"]["revision"].encode(), text)
-        with mock.patch.object(package, "ROOT", self.root):
-            with self.assertRaises(FileNotFoundError):
-                package.load_notices()
+        document = json.loads(package.committed_bytes(commit, "scripts/release/third_party_notices.json"))
+        license_path = next(iter(document.values()))["licenseFile"]
+        original = package.committed_bytes
+        with mock.patch.object(package, "committed_bytes", side_effect=lambda revision, path: (
+            b"changed license" if path == license_path else original(revision, path))):
+            with self.assertRaisesRegex(ValueError, "digest"):
+                package.load_notices(commit)
+
+    def test_selected_revision_ignores_dirty_provenance_files(self) -> None:
+        original_root = package.ROOT
+        fixture = self.root / "repository"
+        fixture.mkdir()
+        self.addCleanup(lambda: setattr(package, "ROOT", original_root))
+        package.ROOT = fixture
+        environment = dict(os.environ)
+        environment["GIT_OBJECT_DIRECTORY"] = str(fixture / ".git/objects")
+        environment["GIT_ALTERNATE_OBJECT_DIRECTORIES"] = ""
+        git = lambda *args: subprocess.run(["git", *args], cwd=fixture, env=environment,
+                                           check=True, capture_output=True, text=True).stdout
+        subprocess.run(["git", "init", "-q"], cwd=fixture, env=environment, check=True)
+        lockfile = {"pins": [{"identity": "swift-syntax", "state": {"revision": "source-revision"}}]}
+        notice = {"swift-syntax": {"url": "https://example.com/source", "version": "1", "revision": "source-revision",
+                                   "license": "Apache-2.0", "licenseFile": "vendor/LICENSE.txt", "sha256": ""}}
+        notice["swift-syntax"]["sha256"] = hashlib.sha256(b"committed license").hexdigest()
+        for path, data in (("Package.resolved", json.dumps(lockfile).encode()),
+                           ("scripts/release/third_party_notices.json", json.dumps(notice).encode()),
+                           ("vendor/LICENSE.txt", b"committed license"),
+                           ("LICENSE", b"first license")):
+            destination = fixture / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+        subprocess.run(["git", "add", "Package.resolved", "scripts/release/third_party_notices.json",
+                        "vendor/LICENSE.txt", "LICENSE"], cwd=fixture, env=environment, check=True)
+        subprocess.run(["git", "-c", "user.name=Example", "-c", "user.email=me@example.com",
+                        "commit", "-qm", "first provenance fixture"], cwd=fixture, env=environment, check=True)
+        first = git("rev-parse", "HEAD").strip()
+        (fixture / "LICENSE").write_bytes(b"second license")
+        subprocess.run(["git", "add", "LICENSE"], cwd=fixture, env=environment, check=True)
+        subprocess.run(["git", "-c", "user.name=Example", "-c", "user.email=me@example.com",
+                        "commit", "-qm", "second provenance fixture"], cwd=fixture, env=environment, check=True)
+        second = git("rev-parse", "HEAD").strip()
+        self.assertNotEqual(first, second)
+        self.assertEqual(package.committed_bytes(first, "LICENSE"), b"first license")
+        self.assertEqual(package.committed_bytes(second, "LICENSE"), b"second license")
+        for path, data in (("Package.resolved", b"dirty lockfile"),
+                           ("scripts/release/third_party_notices.json", b"dirty notices"),
+                           ("vendor/LICENSE.txt", b"dirty third-party license"),
+                           ("LICENSE", b"dirty project license")):
+            (fixture / path).write_bytes(data)
+        notices, text = package.load_notices(first)
+        self.assertIn(b"committed license", text)
+        self.assertNotIn(b"dirty", text)
+        self.assertEqual(package.committed_bytes(first, "Package.resolved"), json.dumps(lockfile).encode())
+        package.ROOT = original_root
+
+    def test_provenance_rejects_mismatched_selected_revision_and_unsafe_paths(self) -> None:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+                                capture_output=True, text=True).stdout.strip()
+        with mock.patch.object(package, "committed_json", side_effect=lambda revision, path: (
+            {"pins": [{"identity": "swift-syntax", "state": {"revision": "different-revision"}}]}
+            if path == "Package.resolved" else {"swift-syntax": {"revision": "selected-revision"}})):
+            with self.assertRaisesRegex(ValueError, "missing or stale"):
+                package.load_notices(commit)
+        with self.assertRaisesRegex(ValueError, "normalized"):
+            package.committed_bytes(commit, "../LICENSE")
 
     def test_clean_source_archive_contains_only_committed_inputs_and_stamped_version(self) -> None:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,

@@ -39,7 +39,10 @@ python3 scripts/package_cli.py --output /tmp/refract-artifacts --verify-reproduc
 
 `--revision` accepts a full 40-character commit; the default is the current `HEAD`. The output must be a new or
 empty directory outside the checkout. The script fails on a different toolchain, an unresolved commit, stale
-licenses or an unsafe destination. It does not use the working tree's uncommitted files.
+licenses or an unsafe destination. It does not use the working tree's uncommitted files. The source archive,
+`LICENSE`, `Package.swift`, `Package.resolved`, notice registry and every third-party license are read from Git
+blobs at that selected commit, even when the corresponding working-tree files are modified. A missing provenance
+file or a revision/license mismatch fails packaging rather than substituting working-tree content.
 
 The command creates:
 
@@ -67,9 +70,10 @@ checksum supplied by the local builder rather than accepting an arbitrary archiv
 
 ```sh
 mkdir -p /tmp/refract-installed
-sha256sum --check --strict /tmp/refract-artifacts/refract-0.1.0-linux-x86_64.tar.gz.sha256
-tar -tzf /tmp/refract-artifacts/refract-0.1.0-linux-x86_64.tar.gz
-tar -xzf /tmp/refract-artifacts/refract-0.1.0-linux-x86_64.tar.gz -C /tmp/refract-installed
+cd /tmp/refract-artifacts
+sha256sum --check --strict refract-0.1.0-linux-x86_64.tar.gz.sha256
+tar -tzf refract-0.1.0-linux-x86_64.tar.gz
+tar -xzf refract-0.1.0-linux-x86_64.tar.gz -C /tmp/refract-installed
 REFRACT_EXECUTABLE=/tmp/refract-installed/refract-0.1.0-linux-x86_64/bin/refract
 "$REFRACT_EXECUTABLE" --version
 "$REFRACT_EXECUTABLE" check --input <screen.swift>
@@ -91,7 +95,9 @@ REFRACT_PACKAGE_E2E=1 python3 -I scripts/test/test_package_cli.py
 ```
 
 The offline tests cover canonical tar metadata, version stamping, source selection and dependency/license pinning.
-The opt-in end-to-end test invokes two real clean builds. `REFRACT_PACKAGE_OUTPUT` can name a persistent artifact
+A two-revision Git fixture makes the lockfile, notice registry and licenses differ between commits and in the dirty
+working tree, proving that selected-commit provenance is used instead. The opt-in end-to-end test invokes two real
+clean builds. `REFRACT_PACKAGE_OUTPUT` can name a persistent artifact
 directory outside the checkout for later checksum and extraction inspection; by default the test uses a temporary
 directory. On every supported CI host, the release job performs the same archive creation, checksum verification,
 relocated `--version` invocation and generation smoke test. Linux and macOS each test only their own native package;

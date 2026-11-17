@@ -33,8 +33,9 @@ SWIFT_FLAGS = ["--disable-automatic-resolution", "--configuration", "release", "
                "--static-swift-stdlib"]
 
 
-def run(command: list[str], *, cwd: Path = ROOT, stdout=None) -> str:
-    result = subprocess.run(command, cwd=cwd, text=True, capture_output=stdout is None, stdout=stdout, check=False)
+def run(command: list[str], *, cwd: Path | None = None, stdout=None) -> str:
+    result = subprocess.run(command, cwd=ROOT if cwd is None else cwd, text=True,
+                            capture_output=stdout is None, stdout=stdout, check=False)
     if result.returncode != 0:
         diagnostic = (result.stderr or "").strip() if stdout is None else f"exit status {result.returncode}"
         raise RuntimeError(f"{command[0]} failed: {diagnostic}")
@@ -78,18 +79,29 @@ def validate_revision(value: str) -> str:
     return value
 
 
-def load_notices() -> tuple[dict[str, dict[str, str]], bytes]:
-    path = ROOT / "scripts" / "release" / "third_party_notices.json"
-    document = json.loads(path.read_text(encoding="utf-8"))
+def committed_bytes(commit: str, path: str) -> bytes:
+    """Read provenance-bearing files from the selected commit, never the working tree."""
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or ".." in relative.parts or relative != PurePosixPath(path.strip()):
+        raise ValueError("provenance file must be a normalized repository-relative path")
+    return run_bytes(["git", "show", f"{commit}:{path}"])
+
+
+def committed_json(commit: str, path: str) -> object:
+    return json.loads(committed_bytes(commit, path).decode("utf-8"))
+
+
+def load_notices(commit: str) -> tuple[dict[str, dict[str, str]], bytes]:
+    validate_revision(commit)
+    document = committed_json(commit, "scripts/release/third_party_notices.json")
     expected_pins = set()
-    for pin in json.loads((ROOT / "Package.resolved").read_text(encoding="utf-8"))["pins"]:
+    for pin in committed_json(commit, "Package.resolved")["pins"]:
         identity = pin["identity"]
         expected_pins.add(identity)
         notice = document.get(identity)
         if not notice or pin["state"]["revision"] != notice["revision"]:
             raise ValueError(f"missing or stale third-party notice for {identity}")
-        archive = ROOT / notice["licenseFile"]
-        actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+        actual = hashlib.sha256(committed_bytes(commit, notice["licenseFile"])).hexdigest()
         if actual != notice["sha256"]:
             raise ValueError(f"third-party license digest does not match {identity}")
     if set(document) != expected_pins:
@@ -102,7 +114,7 @@ def load_notices() -> tuple[dict[str, dict[str, str]], bytes]:
         "",
     ]
     for name, notice in sorted(document.items()):
-        license_bytes = (ROOT / notice["licenseFile"]).read_bytes()
+        license_bytes = committed_bytes(commit, notice["licenseFile"])
         notices.extend([
             f"Component: {name}",
             f"Source: {notice['url']}",
@@ -176,8 +188,8 @@ def source_archive(commit: str, destination: Path) -> None:
     destination.write_bytes(gzip.compress(archive_bytes, compresslevel=9, mtime=ARCHIVE_EPOCH))
 
 
-def run_bytes(command: list[str], cwd: Path = ROOT) -> bytes:
-    result = subprocess.run(command, cwd=cwd, capture_output=True, check=False)
+def run_bytes(command: list[str], cwd: Path | None = None) -> bytes:
+    result = subprocess.run(command, cwd=ROOT if cwd is None else cwd, capture_output=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.decode("utf-8", "replace").strip())
     return result.stdout
@@ -248,12 +260,12 @@ def build(source: Path, scratch: Path, os_name: str) -> Path:
 
 def binary_entries(products: Path, commit: str, metadata: dict[str, object], notices: bytes) -> list[tuple[str, int, bytes]]:
     resource = resource_bundle(products).read_bytes()
-    expected = run_bytes(["git", "show", f"{commit}:Sources/RefractMapping/Resources/refract.schema.json"])
+    expected = committed_bytes(commit, "Sources/RefractMapping/Resources/refract.schema.json")
     if resource != expected:
         raise ValueError("packaged mapping schema differs from the source revision")
     entries = [
         ("bin/refract", 0o755, (products / "refract").read_bytes()),
-        ("LICENSE", 0o644, (ROOT / "LICENSE").read_bytes()),
+        ("LICENSE", 0o644, committed_bytes(commit, "LICENSE")),
         ("THIRD-PARTY-NOTICES.txt", 0o644, notices),
         ("BUILD-INFO.json", 0o644, json.dumps({
             "formatVersion": 1,
@@ -265,7 +277,7 @@ def binary_entries(products: Path, commit: str, metadata: dict[str, object], not
         }, indent=2, sort_keys=True).encode("utf-8") + b"\n"),
     ]
     for name in ("Package.swift", "Package.resolved"):
-        entries.append((f"source/{name}", 0o644, run_bytes(["git", "show", f"{commit}:{name}"])))
+        entries.append((f"source/{name}", 0o644, committed_bytes(commit, name)))
     bundle = products / "refract_RefractMapping.bundle"
     for path in sorted(bundle.rglob("*")):
         if path.is_symlink() or (path.is_file() and not stat.S_ISREG(path.stat().st_mode)):
@@ -301,7 +313,7 @@ def validate_package(archive: Path, parent: Path, commit: str) -> None:
         if "Packaged" not in kotlin.read_text(encoding="utf-8") or "Packaged" not in arkts.read_text(encoding="utf-8"):
             raise ValueError("packaged CLI generated incomplete native output")
         resource = resource_bundle(extracted / "lib")
-        if resource.read_bytes() != run_bytes(["git", "show", f"{commit}:Sources/RefractMapping/Resources/refract.schema.json"]):
+        if resource.read_bytes() != committed_bytes(commit, "Sources/RefractMapping/Resources/refract.schema.json"):
             raise ValueError("installed mapping schema differs from the source revision")
 
 
@@ -344,7 +356,7 @@ def verify_checksums(output: Path, archives: list[Path], os_name: str) -> None:
 def create_package(commit: str, output: Path, reproducible: bool) -> Path:
     os_name, architecture, triple = host_target()
     metadata = check_tools(triple)
-    _, notices = load_notices()
+    _, notices = load_notices(commit)
     if output.exists():
         if not output.is_dir() or any(output.iterdir()):
             raise ValueError("--output must be a new or empty directory")
