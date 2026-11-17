@@ -33,6 +33,13 @@ import RefractMapping
     }
 }
 
+@Test func arkUIRendersTypedBindingAndIdentityForNativeAnimation() throws {
+    let generated = try generateInteropFixture("interop-native-animation")
+    #expect(generated.contains("@Require @Param saved: boolean;"))
+    #expect(generated.contains("NativeSaveConfirmation({ visible: this.saved, identity: 'profile-save' })"))
+    #expect(!generated.contains("AnimationSpec") && !generated.contains("animateTo"))
+}
+
 private func generateInteropFixture(_ name: String) throws -> String {
     let directory = fixture(name)
     let input = try String(contentsOf: directory.appendingPathComponent("Input.swift"), encoding: .utf8)

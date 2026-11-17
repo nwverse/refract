@@ -38,6 +38,9 @@ struct InteropFrontend {
             for binding in property.bindings {
                 guard let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
                       pattern.identifier.text != "body" else { continue }
+                // Accessibility configuration belongs to the ordinary iOS body, not the cross-platform ABI.
+                // Other property wrappers remain diagnostics rather than silently widening that ABI.
+                if Self.isReduceMotionEnvironment(property, binding) { continue }
                 guard property.bindingSpecifier.tokenKind == .keyword(.let),
                       binding.initializer == nil, binding.accessorBlock == nil,
                       let annotation = binding.typeAnnotation,
@@ -102,6 +105,14 @@ struct InteropFrontend {
         case "Double", "double": .double
         default: nil
         }
+    }
+
+    static func isReduceMotionEnvironment(_ property: VariableDeclSyntax,
+                                          _ binding: PatternBindingSyntax) -> Bool {
+        property.bindingSpecifier.tokenKind == .keyword(.var)
+            && binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "reduceMotion"
+            && binding.accessorBlock == nil
+            && property.attributes.trimmedDescription == "@Environment(\\.accessibilityReduceMotion)"
     }
 
     static func signature(_ parameters: [NativeParameter]) -> String {
