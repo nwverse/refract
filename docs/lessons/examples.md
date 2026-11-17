@@ -84,3 +84,12 @@ actual compiler run. A prepared `ohosTest` target likewise remains unverified un
 accepts the application and test target. Use `docs/harmony-toolchain.md` for the explicit acquisition blocker and
 `python3 scripts/check_harmony_toolchain.py --check-only` for a non-installing local preflight. Never make missing
 prerequisites pass by supplying a TypeScript parser, a fake SDK, a named stub or an unrelated HAP.
+
+## Native render automation must separate execution from inspected evidence
+
+An ArkUI test-only ability can host a generated component directly; it does not need a production host container or
+runtime. Use the test module's page registration and an ordinary `@ObservedV2` model, while leaving the generated
+component unchanged. UI Test can inspect native toggle state, input, scrolling and accessibility-backed attributes.
+A test runner must require the complete Hypium summary rather than accepting its overall zero code alongside errors,
+and retrieve each theme's captures before running the next one. Screenshots/layout dumps and source/tool/target
+metadata remain private evidence until reviewed; successful execution alone must not be labelled inspected rendering.
