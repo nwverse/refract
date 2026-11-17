@@ -29,6 +29,7 @@ benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
 interop-remote-image
+interop-link-handoff
 navigation-host
 navigation-native-destination
 accessibility-dynamic-type

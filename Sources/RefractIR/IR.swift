@@ -48,6 +48,8 @@ public struct Expression: Codable, Equatable, Sendable {
         case stringKey(String)
         case localizedText(LocalizedText)
         case imageResource(String)
+        case linkDestination(LinkDestination)
+        case linkPolicy(LinkPolicy)
         case boolLiteral(Bool)
         case numberLiteral(String)
         case layoutSpacing(LayoutSpacing)

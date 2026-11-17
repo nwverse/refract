@@ -82,6 +82,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-link-handoff",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-link-handoff-reject",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-animation",
       "implementationStatus": "ready"
     },

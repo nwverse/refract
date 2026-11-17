@@ -499,6 +499,16 @@ A signature-affecting change is visible in the golden Kotlin and ArkTS files. Th
 contains hand-written callers for both platforms. Platform example builds are the eventual compile check for these
 imports and calls; text goldens alone do not claim toolchain validation.
 
+## Typed external links and deep links
+
+`docs/link-handoff.md` specifies the bounded `RefractLinkDestination`/`RefractLinkPolicy` values and the app-owned
+`RefractLinkHandoff` protocol. These are additional native-only parameter types, never model/state/enum scalar types.
+The generated component constructs immutable values and delegates confirmation, cancellation, routing and lifecycle
+to a mapped native component. It does not open URLs or dispatch arbitrary intents. The marker view may keep the
+specific private `@State isConfirming: Bool = false` used by its ordinary iOS confirmation UI only when its three
+cross-platform inputs are exactly `destination`, `policy` and `handoff`; no other private state or general protocol
+input is added to native declarations by this contract.
+
 ## Typed navigation hosts
 
 `docs/navigation.md` defines the bounded `NavigationStack(path:)` contract. Generated root screens accept a typed

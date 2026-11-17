@@ -32,8 +32,15 @@ struct Generation {
         var emittedImports: Set<String> = []
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
-            for parameter in screen.parameters where parameter.itemType == "RemoteImageLoader" {
-                emittedImports.insert("RemoteImageLoader")
+            for parameter in screen.parameters where ["RemoteImageLoader", "RefractLinkHandoff"].contains(parameter.itemType) {
+                emittedImports.insert(parameter.itemType == "RefractLinkHandoff"
+                    ? InteropMapping.targetType(.linkHandoff, platform: .harmonyOS) : parameter.itemType!)
+            }
+            if screen.body.hasLinkHandoff {
+                for type in [NativeParameterType.linkDestination, .linkPolicy] {
+                    emittedImports.insert(InteropMapping.targetType(type, platform: .harmonyOS))
+                }
+                emittedImports.insert("LinkAllowlistEntry")
             }
             if case let .navigationStack(stack, _) = screen.body {
                 try collectImports(stack, resolver: resolver, into: &emittedImports)
@@ -68,7 +75,10 @@ struct Generation {
             writer.line("@ComponentV2")
             writer.open("export struct \(screen.name)")
             for input in screen.parameters {
-                writer.line("@Param @Require public var \(input.name): \(try input.itemType ?? input.enumName ?? arkType(input.type))\(input.isOptional ? " | null | undefined" : "")")
+                let inputType = input.itemType == "RefractLinkHandoff"
+                    ? InteropMapping.targetType(.linkHandoff, platform: .harmonyOS)
+                    : try input.itemType ?? input.enumName ?? arkType(input.type)
+                writer.line("@Param @Require public var \(input.name): \(inputType)\(input.isOptional ? " | null | undefined" : "")")
             }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)

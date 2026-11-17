@@ -125,11 +125,13 @@ extension Builder {
                                                   location: location(of: identifier)))
                 continue
             }
-            if type.trimmedDescription == "RemoteImageLoader",
+            if ["RemoteImageLoader", "RefractLinkHandoff"].contains(type.trimmedDescription),
                interop.declarations.contains(where: {
-                   $0.parameters.contains { $0.type == .remoteImageLoader }
+                   $0.parameters.contains { parameter in
+                       parameter.type == (type.trimmedDescription == "RefractLinkHandoff" ? .linkHandoff : .remoteImageLoader)
+                   }
                }) {
-                parameters.append(ScreenParameter(name: identifier.text, type: .string, itemType: "RemoteImageLoader",
+                parameters.append(ScreenParameter(name: identifier.text, type: .string, itemType: type.trimmedDescription,
                                                   location: location(of: identifier)))
                 continue
             }
