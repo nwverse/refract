@@ -2,8 +2,14 @@
 
 - SwiftSyntax parsing does not prove SwiftUI type correctness. `Binding(get:set:)` is a real SwiftUI initializer, but
   `.refractNativeModifier(...)` and `.padding(horizontal:vertical:)` require explicit iOS-only source declarations.
-  Keep the measurement fixture itself in the iOS target's Sources phase, including its application-owned design
-  tokens, so Xcode type-checks every platform branch instead of trusting a syntax-only fixture.
+  Compile uniquely named source-only inputs for the measurement contract, with byte-identity checks against the
+  canonical fixtures and their application-owned design tokens. Several `Input.swift` file references collide on
+  Xcode's `Input.stringsdata` even when their display names differ; real Xcode builds catch this before type checking.
+
+- Prefer correcting pseudo-SwiftUI over adding a compatibility shim for it. `Button(verbatim:)` is not SwiftUI;
+  use the ordinary action/label pair with `Text(verbatim:)` and reject the invalid initializer with a source-located
+  diagnostic. The typed interop helpers above are different: they carry declared platform-only semantics while
+  preserving the receiver's native iOS view behavior.
 
 - Keep IR independent of mapping and backends. Interop lowering helpers belong in `RefractMapping` or a backend;
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.

@@ -99,12 +99,18 @@ jobs:
           fi
       - name: Build the generator CLI with locked dependencies
         run: swift build --disable-automatic-resolution
-      - name: Regenerate examples and reject stale committed output
+      - name: Check committed native outputs without writing
         run: |
-          python3 scripts/check_examples.py
-          git diff --exit-code -- \
-            examples/android/app/src/main/java/refract/generated \
-            examples/harmony/entry/src/main/ets/generated
+          .build/debug/refract check \
+            --input examples/shared/Hello.swift \
+            --input examples/shared/NativeComponentScreen.swift \
+            --input examples/shared/IdentifiedList.swift \
+            --input examples/shared/SettingsScreen.swift \
+            --mapping examples/refract.json \
+            --android-out examples/android/app/src/main/java/refract/generated \
+            --harmony-out examples/harmony/entry/src/main/ets/generated
+      - name: Regenerate examples and verify resource catalogs
+        run: python3 scripts/check_examples.py
       - name: Select JDK 21 for the Android toolchain
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:

@@ -77,9 +77,11 @@ producing Kotlin that no longer builds; this job catches that at CI time.
 The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 
 1. Build the `refract` CLI with the same locked dependencies as the Swift job.
-2. Run `python3 scripts/check_examples.py` to regenerate the example sources through the actual CLI and reject
-   stale committed Kotlin/ArkTS. `git diff --exit-code` over the generated directories then fails on any drift
-   the script did not catch.
+2. Run `refract check` over every shared example input and both committed native output directories. This generates
+   only in memory and rejects missing, stale or unexpected Kotlin/ArkTS files without writing to the checkout.
+   Run `python3 scripts/check_examples.py` to independently regenerate the example sources through the actual CLI,
+   validate resource catalogs and confirm the shared iOS source set. The final unexpected-file check rejects any
+   unexpected drift.
 3. Install JDK 21 (Temurin) and a pinned Android SDK: platform `android-37.2`, build tools `37.0.0`, and the
    command-line tools zip whose SHA-256 is recorded in the workflow. The pinned toolchain mirrors the documented
    values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
