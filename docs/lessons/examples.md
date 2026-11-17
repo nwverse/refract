@@ -91,5 +91,6 @@ An ArkUI test-only ability can host a generated component directly; it does not 
 runtime. Use the test module's page registration and an ordinary `@ObservedV2` model, while leaving the generated
 component unchanged. UI Test can inspect native toggle state, input, scrolling and accessibility-backed attributes.
 A test runner must require the complete Hypium summary rather than accepting its overall zero code alongside errors,
-and retrieve each theme's captures before running the next one. Screenshots/layout dumps and source/tool/target
-metadata remain private evidence until reviewed; successful execution alone must not be labelled inspected rendering.
+and retrieve every expected capture/layout artifact after the interaction sequence. Screenshots/layout dumps and
+source/tool/target metadata remain private evidence until reviewed; successful execution alone must not be labelled
+inspected rendering.
