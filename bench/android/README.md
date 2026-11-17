@@ -40,16 +40,38 @@ and `GRADLE_USER_HOME` for your machine, not in repository files. Dependency ver
 ```sh
 # No device needed:
 python3 -I bench/android/report_test.py
+python3 -I bench/android/evidence_test.py
 bench/android/gradlew -p bench/android :app:assembleRelease :benchmark:assembleRelease
 
-# One fully booted emulator, with a responsive system and external storage mounted:
+# Regenerate and compile, or fail if any committed generated output is stale:
+JAVA_HOME=/path/to/jdk bench/android/generate-and-compile.sh
+JAVA_HOME=/path/to/jdk bench/android/generate-and-compile.sh --check
+
+# One already-booted, stable emulator with mounted, writable external storage:
 bench/android/run-emulator.sh bench/android/results/emulator-01
 ```
 
-`run-emulator.sh` checks `ro.kernel.qemu`, boot completion, external-storage writability, disables animations,
-runs the release instrumentation, reads only `*benchmarkData.json`, and records the emulator probe in the report.
-It exits nonzero for build/test failures, timeouts or missing results. AOSP images without Google services need the
-same startup/rendering stability checks; slow first frames are not accepted as passing startup measurements.
+`run-emulator.sh` requires a committed source tree so that the revision names every generator and harness input.
+`probe_target.py` only selects an attached target and reads bounded boot/package/mount/SurfaceFlinger/storage
+properties. It does not create, boot, stop, root or reboot an emulator, and it rejects an offline, incomplete or
+storage-unready target before Gradle instrumentation starts. Its only target write is the documented output-directory
+writability test; the runner separately disables animations. The JSON records model, device, OS/build, ABI, rendering
+properties, compilation mode, macro iteration count and the exact Git revision. Local run metadata retains the
+selected target serial and Gradle receives that exact serial through `android.test.devices`, so a second attached
+target cannot redirect or duplicate the measurement. Run directories and serial-bearing reports are not committed.
+A dirty source tree is rejected. Any old `additional-output` directory is moved intact into the new run directory
+before instrumentation so historical JSON/traces cannot be mistaken for this run's evidence.
+
+`run-emulator.sh` first checks that the real CLI regenerates the exact committed Kotlin and fixture ArkTS without
+installing changes, then compiles the release artifacts. After instrumentation it preserves every AndroidX JSON and
+`.perfetto-trace` file with SHA-256 checksums in a new per-run directory. `report.py --require-macro` requires both
+variants of startup, scroll and state update, at least ten iterations, raw startup/frame samples, one memory sample
+per declared scroll/state-update iteration, matching metrics and a distinct indexed Perfetto trace for every declared
+iteration. Each macro record's AndroidX `profilerOutputs` must
+reference a retained trace with the matching variant/scenario; unreferenced or ambiguous traces fail closed. Missing
+pairs, JSON, traces, mismatched checksums or incomplete traces fail rather than becoming a partial PASS. AOSP images
+without Google services need the same startup/rendering stability checks; slow first frames are not accepted as
+passing startup measurements. The existing frame deadline and 5% AND 0.1 ms latency gate are unchanged.
 
 The Gradle wrapper bootstrap and distribution have pinned versions. On a new machine the wrapper downloads its
 distribution from the public Gradle service; no local proxy or internal mirror is configured in this project.

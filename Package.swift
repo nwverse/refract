@@ -43,9 +43,10 @@ let package = Package(
         ),
         .target(name: "RefractCompose", dependencies: ["RefractIR", "RefractMapping"]),
         .target(name: "RefractArkUI", dependencies: ["RefractIR", "RefractMapping"]),
+        .target(name: "RefractOutput"),
         .executableTarget(
             name: "RefractCLI",
-            dependencies: ["RefractIR", "RefractFrontend", "RefractMapping", "RefractCompose", "RefractArkUI"]
+            dependencies: ["RefractIR", "RefractFrontend", "RefractMapping", "RefractCompose", "RefractArkUI", "RefractOutput"]
         ),
         .plugin(
             name: "RefractGenerate",
@@ -77,7 +78,7 @@ let package = Package(
         ),
         .testTarget(name: "RefractComposeTests", dependencies: ["RefractCompose", "RefractFrontend", "RefractMapping"]),
         .testTarget(name: "RefractArkUITests", dependencies: ["RefractArkUI", "RefractFrontend", "RefractCompose"]),
-        .testTarget(name: "RefractCLITests"),
+        .testTarget(name: "RefractCLITests", dependencies: ["RefractOutput"]),
         .testTarget(name: "RefractGoldenTests", dependencies: ["RefractGolden"]),
         .target(
             name: "RefractGolden",

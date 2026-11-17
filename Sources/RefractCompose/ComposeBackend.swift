@@ -23,6 +23,13 @@ public struct ComposeBackend: Sendable {
         try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
+            if case let .navigationStack(stack, _) = screen.body {
+                for destination in stack.destinations where destination.model == nil {
+                    _ = try InteropResolver(module: module, mapping: mapping)
+                        .target(for: NativeComponent(name: destination.viewName), platform: .android, location: screen.location)
+                }
+                try emitNavigationDestinations(stack, into: &bodyWriter, context: &context)
+            }
         }
 
         var out = KotlinWriter()
@@ -51,6 +58,11 @@ public struct ComposeBackend: Sendable {
     private func selectedNativeNames(in bodies: [ViewNode]) -> Set<String> {
         func collect(_ node: ViewNode, into names: inout Set<String>) {
             if case let .native(component, _) = node { names.insert(component.name) }
+            if case let .navigationStack(stack, _) = node {
+                for destination in stack.destinations where destination.model == nil {
+                    names.insert(destination.viewName)
+                }
+            }
             for child in node.children(for: .android) { collect(child, into: &names) }
         }
         var names: Set<String> = []
@@ -98,6 +110,8 @@ public struct ComposeBackend: Sendable {
                 context.imports.insert("androidx.compose.ui.Modifier")
                 parameters.append("\(name): \(kotlinType(type))")
                 parameters.append("on\(name.uppercasingFirst())Change: (\(kotlinType(type))) -> Unit")
+            case let .navigationPath(name, enumName, _):
+                parameters.append("on\(name.uppercasingFirst())Navigate: (\(enumName)) -> Unit")
             case let .model(reference, _):
                 if context.module.models.contains(where: {
                     $0.name == reference.protocolName && !$0.properties.isEmpty
@@ -156,6 +170,11 @@ public struct ComposeBackend: Sendable {
         case let .button(label, action, modifiers, location):
             try emitButton(label: label, action: action, modifiers: modifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
+        case let .navigationStack(stack, location):
+            try emitNavigationStack(stack, isRoot: isRoot, location: location, into: &out, context: &context)
+        case let .navigationLink(title, pathName, enumName, destination, location):
+            try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
+                                   destination: destination, location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .nativeModifier(child, operations, _):
@@ -261,7 +280,7 @@ public struct ComposeBackend: Sendable {
         out.close()
     }
 
-    private func emitNative(_ component: NativeComponent, location: SourceLocation?, isRoot: Bool,
+    func emitNative(_ component: NativeComponent, location: SourceLocation?, isRoot: Bool,
                             into out: inout KotlinWriter, context: inout Context) throws {
         let resolver = InteropResolver(module: context.module, mapping: context.mapping)
         let target = try resolver.target(for: component, platform: .android, location: location)

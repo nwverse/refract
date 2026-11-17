@@ -1,5 +1,31 @@
 # Android benchmarking
 
+## Keep Gradle generated-source wiring lazy and check with the real CLI
+
+Use Android's `SourceDirectories.Flat.addGeneratedSourceDirectory(taskProvider, taskOutputProperty)`. This preserves
+configuration avoidance and the compile dependency. A `DirectoryProperty` passed through `flatMap` retains the task
+dependency. An `@OutputDirectory` must be build-owned: generate into staging, and publish only after the complete CLI
+succeeds. Never delete a source directory as part of a generation task.
+
+Do not implement a second Gradle-only stale-output checker. The CLI's `check` command owns missing, stale and extra
+native-file behavior for both Kotlin and ArkTS. Supply every explicit Swift input that produces files in an output
+directory, the same mapping, both resource catalogs and both reviewed output directories. If source groups need
+different mappings, give each a separate reviewed output directory; comparing one group with a directory containing
+another group's outputs correctly fails as unexpected. Keep a byte-checked mirror when the consumer layout differs
+from another example's canonical output layout. A source group whose existing CLI invocation omits a mapping must
+remain unmapped in its own Gradle source group rather than silently acquiring different generation behavior.
+
+A Gradle `Task` already has an `inputs` property. A custom `abstract val inputs: ConfigurableFileCollection` prevents
+creation of the decorated task; name it `swiftInputs` or another distinct name. A required `RegularFileProperty`
+without a value fails Gradle validation before the task action. For an actionable missing-tool message, accept the
+executable as an `@InputFiles` file collection and verify its single file and executable bit in the action. Include
+the executable bytes as an input so switching to a different CLI invalidates generation.
+
+A TestKit runner uses the Gradle Tooling API and does not accept `--no-daemon` as a build argument; put
+`org.gradle.daemon=false` in the test project's `gradle.properties` instead. The tests create a small real Android
+application and require the same SDK as the examples, rather than claiming that a plain JVM project proves Android
+integration. Keep generated and reviewed Kotlin outside the default source set to avoid duplicate declarations.
+
 ## Match plugins to the Android Gradle Plugin version
 
 AGP 9 includes Kotlin Android support: applying `org.jetbrains.kotlin.android` as well is a configuration error.
@@ -24,17 +50,22 @@ The self-instrumenting key is `android.experimental.self-instrumenting` (hyphen)
 latter silently leaves `targetPackage` pointing at the app and causes macro permission/process failures. Use
 `AndroidBenchmarkRunner` for benchmarks. Compose test rules need a host activity in the test package.
 
-A test module cannot import another module's Kotlin classes just because it has `targetProjectPath`. Share the exact
-source directory via `sourceSets.main.kotlin.srcDir`, rather than copying generated and reference implementations,
-and include the activity/Compose dependencies of that shared source.
+A test module cannot import another module's Kotlin classes just because it has `targetProjectPath`. Use a shared
+Android library with the real generated UI, its unchanged reference and model declarations. App and test modules then
+consume that library normally; sharing a Kotlin source directory across incompatible resource namespaces does not
+work. A macrobenchmark runner should check the actual CLI output before compiling the tested release artifacts.
 
 ## A running emulator is not a valid benchmark by itself
 
 Wait for `sys.boot_completed=1`, a readable `ro.build.version.sdk` (a transient 1 is not a real API level), and
-initial dex optimization/system load to settle before measuring. Check that external storage is writable before
-AndroidX starts shell scripts. Keep raw AndroidX JSON in a per-run output directory immediately after each test;
-later tests can clean the shared additional-output directory. Instrumentation failure and absence of JSON are
-errors, not empty passing reports. A headless emulator is always labelled as an emulator, never as a device.
+responsive package, mount and SurfaceFlinger services before measuring. Check that `sm list-volumes all` has a mounted
+emulated volume and that external storage is writable before AndroidX starts shell scripts. Bind every adb command to
+a timeout: a booted property alone is not readiness. Do not keep restarting a known-failed software image; preserve
+its blocker and provision a stable target instead. Keep raw AndroidX JSON and all Perfetto traces in a per-run output
+directory immediately after each test; later tests can clean the shared additional-output directory. A complete macro
+report must reject any missing scenario/variant, missing memory/frame samples, or missing trace even if another test
+passed. Checksums tie the report inputs to the retained files. Instrumentation failure and absence of JSON are errors,
+not empty passing reports. A headless emulator is always labelled as an emulator, never as a device.
 
 Macrobenchmark startup needs an actual first frame within the platform deadline. Software rendering can exceed it
 (`lastFrameNs=null`) even if the activity is resumable and later draws successfully. A `reportFullyDrawn()` marker

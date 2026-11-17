@@ -1,5 +1,11 @@
 # Repository tooling lessons
 
+- **Test output transactions at the replacement boundary.** Linux Foundation may reject `replaceItem` for a new
+  destination and its file-manager wrappers can differ from direct POSIX behavior. Stage beside the destination,
+  use a same-filesystem rename, and test both a new and an existing destination on each supported host. Keep backups
+  until every replacement succeeds, but never remove a path that this invocation has not replaced: an already
+  rejected directory must survive rollback with its contents. Test a directory whose name ends in `.kt` or `.ets`
+  and construct test paths without URL directory-type propagation masking the fixture.
 - **Test a repository scanner in temporary git repositories.** Replace its home, private-word configuration and git
   configuration, and use synthetic values. Running tests directly on a public checkout can read machine-specific
   rules and accidentally print a value in a test failure.
