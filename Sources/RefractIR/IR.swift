@@ -108,6 +108,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case button(label: ViewNode, action: StateAction?, modifiers: [Modifier], location: SourceLocation?)
     case navigationLink(title: Expression, pathName: String, enumName: String, destination: String, location: SourceLocation?)
     case navigationStack(NavigationStackNode, location: SourceLocation?)
+    case tabView(TabViewNode, location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
     case nativeModifier(child: ViewNode, operations: [NativeModifier], location: SourceLocation?)
     case component(ComponentReference, location: SourceLocation?)
@@ -126,6 +127,11 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case toggle(title: Expression, value: Expression, modifiers: [Modifier], nativeModifiers: [NativeModifier] = [], labelsHidden: Bool = false, location: SourceLocation?)
     case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    /// Secure text entry (SwiftUI `SecureField`). Always obscured unless `reveal` is a projected Bool
+    /// state/binding selecting plain display. Backends must use native secure-input components and never
+    /// emit secret literals or log the bound value. See docs/subset.md "Sensitive text entry".
+    case secureInput(placeholder: Expression?, value: Expression, reveal: Expression?,
+                     modifiers: [Modifier], location: SourceLocation?)
     case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case divider(modifiers: [Modifier], location: SourceLocation?)
     case spacer(location: SourceLocation?)
@@ -146,6 +152,7 @@ public enum StateDeclaration: Codable, Equatable, Sendable {
     case state(name: String, type: ValueType, initialValue: Expression?, location: SourceLocation?)
     case binding(name: String, type: ValueType, location: SourceLocation?)
     case navigationPath(name: String, enumName: String, location: SourceLocation?)
+    case tabSelection(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
 }
 
@@ -225,9 +232,25 @@ public struct Module: Codable, Equatable, Sendable {
 public struct TranslationUnit: Codable, Equatable, Sendable {
     public let module: Module
     public let diagnostics: [Diagnostic]
-    public init(module: Module, diagnostics: [Diagnostic] = []) {
+    /// Lowering-only type declarations from the same explicit input set. Unlike
+    /// `module.models` and `module.itemTypes`, these are never emitted by this file.
+    public let resolvedModels: [ModelProtocol]
+    public let resolvedItemTypes: [ItemType]
+    public init(module: Module, diagnostics: [Diagnostic] = [],
+                resolvedModels: [ModelProtocol]? = nil, resolvedItemTypes: [ItemType]? = nil) {
         self.module = module
         self.diagnostics = diagnostics
+        self.resolvedModels = resolvedModels ?? module.models
+        self.resolvedItemTypes = resolvedItemTypes ?? module.itemTypes
+    }
+
+    private enum CodingKeys: String, CodingKey { case module, diagnostics, resolvedModels, resolvedItemTypes }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        module = try values.decode(Module.self, forKey: .module)
+        diagnostics = try values.decode([Diagnostic].self, forKey: .diagnostics)
+        resolvedModels = try values.decodeIfPresent([ModelProtocol].self, forKey: .resolvedModels) ?? module.models
+        resolvedItemTypes = try values.decodeIfPresent([ItemType].self, forKey: .resolvedItemTypes) ?? module.itemTypes
     }
 
     public var hasErrors: Bool { diagnostics.contains { $0.severity == .error } }

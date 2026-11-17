@@ -5,6 +5,11 @@ sources in memory before publishing any file. `refract check` uses the same in-m
 committed files; it never calls the output writer. See `docs/mapping.md` for the input contract and `docs/adoption.md`
 for the build integration.
 
+`refract --version` prints the CLI version and `RefractVersion.sourceRevision`. The packaging script stamps the
+complete commit into its clean archive; public source archives expand that same identity through `export-subst`.
+Neither build invokes Git or infers a moving branch. The version command writes no output files, does not change
+generation and is not a supported-release or readiness claim.
+
 ## Publishing and concurrent invocations
 
 A generate invocation publishes only the Kotlin and ArkTS files derived from its supplied inputs. It does not remove

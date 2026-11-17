@@ -13,8 +13,10 @@ its restrictions. The backend never interprets a view tree at run time and never
   app's existing page own entry points. Public input properties use `@Param`; local mutable values use `@Local`.
   `@Event` callbacks express parent-owned actions. Component declarations use V2 consistently, rather than mixing
   V1 `@State`/`@Link` observation with V2 components.
-- Generated components expose ordinary properties and callbacks and can be used by a hand-written ArkUI page. Their
-  implementation calls only ArkUI and app-provided components, resources and models.
+- When a generated child View, model, item or enum is declared in another explicit input, the generated file imports
+  that declaration from its sibling output (`import { ChildRow } from './ChildRow';`). Imports are grouped by source
+  file, with paths and symbols sorted; a model's collection item type is imported as well. Each declaration is emitted
+  once, in its owning input's output. These are ordinary static imports, not a runtime symbol registry.
 - ArkTS is emitted with explicit declared property types. `any`, untyped object literals, structural interface
   matching and implicit globals are not generated. The mapping contract supplies the types of design-system and
   native component arguments. The compiler, rather than textual token substitution, resolves platform values.

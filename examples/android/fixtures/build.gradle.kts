@@ -45,9 +45,11 @@ android {
         compose = true
     }
 
-    sourceSets.getByName("main").kotlin.directories.add("src/native/java")
-    sourceSets.getByName("main").kotlin.directories.add(
-        "../app/src/main/java/com/example/refract/animation",
+    sourceSets.getByName("main").kotlin.directories.addAll(
+        listOf(
+            "src/native/java",
+            "../app/src/main/java/com/example/refract/animation",
+        ),
     )
 }
 
@@ -64,6 +66,8 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3:material3-window-size-class")
+    // Typed tab/menu symbols map to Material icons through the fixture `symbols` contract.
+    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.navigation:navigation-compose:2.9.8")
     testImplementation("junit:junit:4.13.2")
