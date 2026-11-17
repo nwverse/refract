@@ -42,3 +42,12 @@ host imports of the missing generated interface merely to show future wiring: th
 Keep the current generated path compiling and land the host change together with actual generated output. Run
 `python3 scripts/check_examples.py` after `swift build` to regenerate and compare committed output, validate mapped
 base resources and check the iOS shared-source references. It is a consistency check, not a native compiler.
+
+## A documented command and a native target are not compiler evidence
+
+A separate application can document `devecocli build` without making its SDK available on this machine. Inspect that
+workflow read-only, do not copy credentials or change its environment, and distinguish its source pattern from an
+actual compiler run. A prepared `ohosTest` target likewise remains unverified until the authorized vendor compiler
+accepts the application and test target. Use `docs/harmony-toolchain.md` for the explicit acquisition blocker and
+`python3 scripts/check_harmony_toolchain.py --check-only` for a non-installing local preflight. Never make missing
+prerequisites pass by supplying a TypeScript parser, a fake SDK, a named stub or an unrelated HAP.
