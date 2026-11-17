@@ -32,9 +32,12 @@
 				AA0000000000000000000007 /* Hello.swift */,
 				AA0000000000000000000012 /* SettingsScreen.swift */,
 				AA0000000000000000000013 /* NativeComponentScreen.swift */,
-				AA0000000000000000000016 /* Input.swift */,
-				AA0000000000000000000018 /* Input.swift */,
-				AA0000000000000000000019 /* Input.swift */,
+				AA0000000000000000000016 /* InteropNativeMeasurement.swift */,
+				AA0000000000000000000018 /* InteropPlatformValue.swift */,
+				AA0000000000000000000019 /* InteropPlatformView.swift */,
+				AA0000000000000000000022 /* StateCounter.swift */,
+				AA0000000000000000000023 /* ParentBinding.swift */,
+				AA0000000000000000000024 /* ModelInterface.swift */,
 				AA0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -85,25 +88,40 @@
 			path = ../shared/NativeComponentScreen.swift;
 			sourceTree = "<group>";
 		};
-		AA0000000000000000000016 /* Input.swift */ = {
+		AA0000000000000000000016 /* InteropNativeMeasurement.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
-			name = MeasurementSource.swift;
-			path = ../../../Fixtures/interop-native-measurement/Input.swift;
+			path = ../shared/InteropNativeMeasurement.swift;
 			sourceTree = "<group>";
 		};
-		AA0000000000000000000018 /* Input.swift */ = {
+		AA0000000000000000000018 /* InteropPlatformValue.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
-			name = PlatformValueSource.swift;
-			path = ../../../Fixtures/interop-platform-value/Input.swift;
+			path = ../shared/InteropPlatformValue.swift;
 			sourceTree = "<group>";
 		};
-		AA0000000000000000000019 /* Input.swift */ = {
+		AA0000000000000000000019 /* InteropPlatformView.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
-			name = PlatformViewSource.swift;
-			path = ../../../Fixtures/interop-platform-view/Input.swift;
+			path = ../shared/InteropPlatformView.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000022 /* StateCounter.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/StateCounter.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000023 /* ParentBinding.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/ParentBinding.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000024 /* ModelInterface.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/ModelInterface.swift;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000008 /* RefractExample.app */ = {
@@ -120,9 +138,12 @@
 				AA0000000000000000000011 /* Hello.swift in Sources */,
 				AA0000000000000000000014 /* SettingsScreen.swift in Sources */,
 				AA0000000000000000000015 /* NativeComponentScreen.swift in Sources */,
-				AA0000000000000000000017 /* Input.swift in Sources */,
-				AA0000000000000000000020 /* Input.swift in Sources */,
-				AA0000000000000000000021 /* Input.swift in Sources */,
+				AA0000000000000000000017 /* InteropNativeMeasurement.swift in Sources */,
+				AA0000000000000000000020 /* InteropPlatformValue.swift in Sources */,
+				AA0000000000000000000021 /* InteropPlatformView.swift in Sources */,
+				AA0000000000000000000025 /* StateCounter.swift in Sources */,
+				AA0000000000000000000026 /* ParentBinding.swift in Sources */,
+				AA0000000000000000000027 /* ModelInterface.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,17 +171,29 @@
 			isa = PBXBuildFile;
 			fileRef = AA0000000000000000000013 /* NativeComponentScreen.swift */;
 		};
-		AA0000000000000000000017 /* Input.swift in Sources */ = {
+		AA0000000000000000000017 /* InteropNativeMeasurement.swift in Sources */ = {
 			isa = PBXBuildFile;
-			fileRef = AA0000000000000000000016 /* Input.swift */;
+			fileRef = AA0000000000000000000016 /* InteropNativeMeasurement.swift */;
 		};
-		AA0000000000000000000020 /* Input.swift in Sources */ = {
+		AA0000000000000000000020 /* InteropPlatformValue.swift in Sources */ = {
 			isa = PBXBuildFile;
-			fileRef = AA0000000000000000000018 /* Input.swift */;
+			fileRef = AA0000000000000000000018 /* InteropPlatformValue.swift */;
 		};
-		AA0000000000000000000021 /* Input.swift in Sources */ = {
+		AA0000000000000000000021 /* InteropPlatformView.swift in Sources */ = {
 			isa = PBXBuildFile;
-			fileRef = AA0000000000000000000019 /* Input.swift */;
+			fileRef = AA0000000000000000000019 /* InteropPlatformView.swift */;
+		};
+		AA0000000000000000000025 /* StateCounter.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000022 /* StateCounter.swift */;
+		};
+		AA0000000000000000000026 /* ParentBinding.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000023 /* ParentBinding.swift */;
+		};
+		AA0000000000000000000027 /* ModelInterface.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000024 /* ModelInterface.swift */;
 		};
 		AA000000000000000000000D /* Debug */ = {
 			isa = XCBuildConfiguration;

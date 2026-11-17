@@ -42,3 +42,10 @@ host imports of the missing generated interface merely to show future wiring: th
 Keep the current generated path compiling and land the host change together with actual generated output. Run
 `python3 scripts/check_examples.py` after `swift build` to regenerate and compare committed output, validate mapped
 base resources and check the iOS shared-source references. It is a consistency check, not a native compiler.
+
+## Xcode requires unique source basenames
+
+Xcode's Swift string extraction uses a source basename for its `*.stringsdata` intermediate. Multiple canonical
+`Input.swift` files therefore collide even when their project display names differ. Keep iOS contract compiler inputs
+in `examples/shared/` under unique filenames and require byte identity with their canonical fixtures in the example
+check. Do not add independently maintained screen copies or run generation from those source-only compiler inputs.

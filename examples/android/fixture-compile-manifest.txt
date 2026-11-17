@@ -27,3 +27,6 @@ benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
 accessibility-dynamic-type
+state-counter
+parent-binding
+model-interface
