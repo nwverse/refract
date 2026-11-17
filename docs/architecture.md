@@ -163,9 +163,10 @@ introduce a second Swift parser.
    and macOS; the matching SDK is required. `examples/harmony/README.md` documents the OS/architecture-specific
    interactive download, JDK requirements, SHA-256 verification, build command and unsigned-HAP signing boundary.
    The download requires user-reviewed terms and may require login; no anonymous installable distribution was
-   established. The example configuration targets 26.0.0 with state V2 (API 12 or later). The current development
-   environment has not installed this toolchain, so actual ArkTS compilation remains explicitly unverified rather
-   than inferred from source generation.
+   established. `docs/harmony-toolchain.md` records the inspected environments, exact authorization blocker and
+   separate app/native-test commands. The example configuration targets 26.0.0 with state V2 (API 12 or later).
+   The current development environment has not installed this toolchain, so actual ArkTS compilation remains
+   explicitly unverified rather than inferred from source generation or a prepared test target.
 5. **Resolved for the current examples:** iOS uses Xcode 16.3+ with Swift 6 and an iOS 18 deployment target;
    Android builds with JDK 21 and JVM 17 bytecode, Android Gradle Plugin 9.5.0, Kotlin/Compose plugin 2.4.21,
    Compose BOM 2026.09.00 and SDK 37.2; HarmonyOS uses the SDK selected in item 4. These pinned example versions

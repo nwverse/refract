@@ -27,9 +27,25 @@ xcodebuild -project RefractExample.xcodeproj \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
-**Not verified on macOS in this change.** Linux has no SwiftUI or Xcode, so this project has not been compiled in the
-Linux environment. Real compiler diagnostics and simulator evidence are tracked separately in #150. The view body of
-`Hello.swift` is identical to the canonical `Fixtures/hello/Input.swift`; interop source references are the canonical
-fixtures themselves, not copies. Shared-file references are part of the project rather than external runtime
-dependencies. A successful generator or Android build is not evidence for this iOS target. Device screenshots and
-performance results are also unavailable.
+**Verified on macOS:** Xcode 27.2 built the shared settings target against the iOS 27.2 simulator SDK for an iPhone
+17 Pro running iOS 27.0. The baseline failed because `Hello.swift` lacked `import SwiftUI`; adding that import fixed
+the compiler error without changing any view body, model, native helper or generated backend output. A successful
+generator or Android build is not evidence for this iOS target. The canonical interop fixture references were added
+by a separate change and are not covered by that successful build.
+
+The owned simulator was newly created for this verification and used by its explicit UDID; no existing simulator was
+rebooted or modified. The app was installed and launched, and native navigation opened `SettingsScreen`. Both
+appearance modes were captured using `simctl io screenshot` and visually inspected. [Light](evidence/settings-light.png)
+and [dark](evidence/settings-dark.png) preserve the actual settings-screen pixels, and
+[home-light](evidence/home-light.png) shows native navigation into the shared source. The screenshots contain only
+this example's placeholder content and simulator status UI. Release an owned simulator with
+`xcrun simctl shutdown <UDID>` when finished; do not use `booted` or another owner's device.
+
+For an independent check, create a uniquely owned simulator, pass its UDID explicitly to the destination,
+`simctl install`, `simctl launch` and `simctl ui <UDID> appearance light|dark`, and navigate through the actual app
+or an external simulator-only automation client. Do not add an automation dependency to the app or commit downloaded
+tools.
+
+**Limits:** this is simulator-only rendering evidence, not a physical-device result. No performance was measured.
+It does not establish visual equivalence with Android or HarmonyOS, validate every supported SwiftUI construct, or
+compile ArkTS. See [the evidence record](evidence/README.md) for the exact environment, hashes and review notes.
