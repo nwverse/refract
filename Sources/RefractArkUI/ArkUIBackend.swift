@@ -49,6 +49,9 @@ struct Generation {
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
         for screen in module.screens {
+            if case let .navigationStack(stack, _) = screen.body {
+                try emitNavigationDestinations(stack, into: &writer)
+            }
             guard ArkText.isIdentifier(screen.name) else {
                 throw Diagnostic(code: "arkui.invalid_component_name",
                                  message: "`\(screen.name)` is not a valid ArkUI component identifier.",
@@ -146,6 +149,12 @@ struct Generation {
         case let .switchExpression(subject, enumName, cases, _):
             try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
                                into: &writer, mapping: mapping, resolver: resolver)
+        case let .navigationStack(stack, _):
+            for child in stack.content {
+                try emit(child, into: &writer, mapping: mapping, resolver: resolver)
+            }
+        case let .navigationLink(title, destination, _):
+            try emitNavigationLink(title: title, destination: destination, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):
             var modifiers: [Modifier] = []
             for operation in operations {
@@ -303,7 +312,8 @@ struct Generation {
 private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
-        case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location): location
+        case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
+             let .navigationPath(_, _, location): location
         }
     }
 }

@@ -45,6 +45,7 @@ final class Builder: SyntaxVisitor {
     var currentListItemType: ItemType?
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
+    var pendingNavigationDestinations: [NavigationDestination] = []
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
         self.file = file
@@ -191,6 +192,8 @@ final class Builder: SyntaxVisitor {
             if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
                 return extendedView(call)
             }
+            if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
+            if call.calledExpression.trimmedDescription == "NavigationLink" { return navigationLink(call) }
             if let control = stateControl(call) { return control }
             return view(call)
         }
@@ -203,6 +206,7 @@ final class Builder: SyntaxVisitor {
     }
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
+        if name == "navigationDestination" { return navigationDestination(call, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
