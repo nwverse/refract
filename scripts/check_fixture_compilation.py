@@ -37,6 +37,7 @@ MANIFEST = ROOT / "examples/android/fixture-compile-manifest.txt"
 FIXTURES_ROOT = ROOT / "Fixtures"
 STAGING_JAVA = ROOT / "examples/android/fixtures/src/main/java"
 STAGING_RES = ROOT / "examples/android/fixtures/src/main/res/values"
+STAGING_TEST = ROOT / "examples/android/fixtures/src/test/java/example/native"
 
 
 def fail(message: str) -> None:
@@ -113,6 +114,21 @@ def regenerate_and_stage(fixture: str) -> None:
             native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-{name}"
             native_target.parent.mkdir(parents=True, exist_ok=True)
             native_target.write_text(native_source.read_text(encoding="utf-8"), encoding="utf-8")
+    # Native JVM tests are first-class fixture evidence: compile and execute the
+    # exact checked-in test against the CLI-generated source, never a replacement.
+    for native_test in sorted(fixture_dir.glob("*Test.kt")):
+        test_contents = native_test.read_text(encoding="utf-8")
+        package_lines = [line for line in test_contents.splitlines() if line.startswith("package ")]
+        if len(package_lines) != 1:
+            fail(f"{fixture}: {native_test.name} needs one package declaration")
+        relative_package = package_lines[0].removeprefix("package ").strip()
+        if not relative_package or any(not segment.isidentifier() for segment in relative_package.split(".")):
+            fail(f"{fixture}: {native_test.name} has an invalid test package")
+        target_directory = STAGING_TEST
+        for segment in ("example", "native", *relative_package.split(".")):
+            target_directory /= segment
+        target_directory.mkdir(parents=True, exist_ok=True)
+        (target_directory / native_test.name).write_text(native_test.read_text(encoding="utf-8"), encoding="utf-8")
     STAGING_RES.mkdir(parents=True, exist_ok=True)
     # Each fixture brings its own values/strings.xml. Concatenate the entries
     # into a single staged strings.xml so that resources with the same name do
@@ -162,7 +178,7 @@ def main() -> int:
         fixtures = read_manifest()
         # Start with a clean staging area so a fixture removed from the manifest
         # cannot leave stale Kotlin behind for Gradle to compile.
-        for path in (STAGING_JAVA, STAGING_RES):
+        for path in (STAGING_JAVA, STAGING_RES, STAGING_TEST):
             if path.exists():
                 shutil.rmtree(path)
         for fixture in fixtures:

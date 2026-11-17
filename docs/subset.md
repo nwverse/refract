@@ -118,6 +118,8 @@ A modifier combination that cannot preserve the source semantics is diagnosed.
 | `.cornerRadius(.small)` | `Modifier.clip(RoundedCornerShape(4.dp))` | `.borderRadius(4)` | Clipping follows the documented native semantics. Shape instances are not cached in a Refract runtime. |
 | `.disabled(model.isLocked)` | `enabled = !model.isLocked.value` at the control | `.enabled(!this.model.isLocked)` | This is a view/control property, not a blanket hit-test filter that changes child behavior. |
 | `.accessibilityLabel("settings.icon.hint")` | `Modifier.semantics { contentDescription = ... }` with resource text resolved appropriately | `.accessibilityText($r('app.string.settings_icon_hint'))` | Accessibility labels are localized resources and must not be silently dropped. |
+| `.sheet(isPresented: $visible) { content }` | Native `ModalBottomSheet` while `visible` is true; dismissal writes the same state/binding false | Root `.bindSheet` with typed `@Builder` and native `onWillDismiss` | A native modal host, not Boolean layout or an overlay registry. One content root; no item sheets or detents in this slice. See `docs/navigation.md`. |
+| `.alert("key", isPresented: $visible) { confirm; cancel } message: { Text("message.key") }` | Native `AlertDialog`, two native buttons, typed confirmation/cancel and `LaunchedEffect` host notification | Typed `on<State>Present` event from `aboutToAppear`/`@Monitor`; application UIContext calls native `showAlertDialog` | Static localized text, one model-action confirmation and one cancel-role button. Native back, focus and accessibility stay with the host. See `docs/navigation.md`. |
 
 ### Dynamic type and native control semantics
 
@@ -325,6 +327,9 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNAV001` | NavigationStack, NavigationLink or destination registration is outside the bounded host contract | Use the explicit forms in docs/navigation.md |
 | `RFNAV002` | Navigation path/identity has invalid ownership or payload values | Use an empty `[Route]` @State and no-payload Hashable enum |
 | `RFNAV003` | Destination coverage, identity or typed model/native view is invalid | Register every case with a same-file typed model destination or declared native component |
+| `RFMODAL001` | Item sheet, invalid Boolean ownership or malformed sheet content | Use a declared Boolean @State/@Binding and one bounded sheet content root |
+| `RFMODAL002` | Confirmation alert text, action or message shape is unsupported | Use localized static text, one model-action confirmation and one cancel-role button |
+| `RFMODAL003` | Nested/repeated modals, shared presentation state, non-container host or generated event name collision | Keep one sheet and one alert with distinct owners on a supported root container and a unique typed event name |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |

@@ -16,6 +16,7 @@ struct Generation {
     let mapping: Mapping
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
+    var currentModals: [ModalPresentation] = []
 
     mutating func generate() throws -> String {
         guard mapping.schemaVersion == 1 else {
@@ -32,6 +33,11 @@ struct Generation {
         var emittedImports: Set<String> = []
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
+            for modal in screen.modals {
+                for content in modal.content {
+                    try collectImports(content, resolver: resolver, into: &emittedImports)
+                }
+            }
             if case let .navigationStack(stack, _) = screen.body {
                 try collectImports(stack, resolver: resolver, into: &emittedImports)
             }
@@ -70,9 +76,24 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
-            // Local-state emission already supplies the separator before build().
+            for modal in screen.modals where modal.kind == .alert {
+                let event = "on\(modal.stateName.prefix(1).uppercased())\(modal.stateName.dropFirst())Present"
+                writer.line("@Event \(event): () => void = (): void => {};")
+                if screen.states.isEmpty && screen.parameters.isEmpty { writer.line() }
+            }
             if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
+            try emitModalBuilders(screen, into: &writer)
+            if screen.modals.contains(where: { $0.kind == .alert }) {
+                writer.line()
+                writer.open("aboutToAppear(): void")
+                emitInitialModalPresentation(screen, into: &writer)
+                writer.close()
+                writer.line()
+                emitModalObservers(screen, into: &writer)
+                writer.line()
+            }
             writer.open("build()")
+            currentModals = screen.modals
             let previousItemParameters = screenItemTypes
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
                 input.itemType.map { (input.name, $0) }
@@ -92,8 +113,12 @@ struct Generation {
             defer { screenItemTypes = previousItemParameters }
             try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver,
                      itemTypeName: listItemTypes.values.first)
+            for modal in screen.modals {
+                try emitModalAttachment(modal, for: screen, into: &writer)
+            }
             writer.close()
             writer.close()
+            currentModals = []
         }
         return writer.text
     }

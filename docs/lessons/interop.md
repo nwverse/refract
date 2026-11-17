@@ -70,3 +70,15 @@
 - Hidden Toggle labels remove the visible title and its layout wrapper, not the title's typed getter/action checks,
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
+- Native modal presentation is not an ordinary `if` around layout content. Compose must call Material 3's real
+  `ModalBottomSheet`/`AlertDialog`; its sheet requires a narrowly scoped `ExperimentalMaterial3Api` opt-in. ArkUI
+  `.bindSheet` belongs after the host's complete modifier chain, with content in a named `@Builder`. AlertDialog is
+  imperative there: observe the typed Boolean and hand a `on<State>Present` event to the application's UIContext host,
+  never call `showAlertDialog` from `build()` or invent an overlay registry. A parent may set the binding directly,
+  so do not tie presentation only to a button action.
+- Robolectric Native JVM Compose is not proof of physical system-back behavior. In the modal tests, direct Activity
+  `onBackPressedDispatcher.onBackPressed()` did not dismiss either Material 3 modal. The sheet exposes a native
+  `Dismiss` semantics action that can be tested; the alert does not expose that same action. Test the actual available
+  semantics and typed dismissal, and label hardware back as device-unverified rather than adding a global back handler
+  or claiming that an Activity dispatch proves platform Popup behavior. Modal semantics can have multiple roots, so
+  select the node that defines `SemanticsActions.Dismiss`, not an arbitrary `onRoot()`.

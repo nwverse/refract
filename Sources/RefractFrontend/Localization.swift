@@ -152,8 +152,8 @@ extension Builder {
             currentListItemType = itemInput.type
         }
         guard let root = viewStatements(items, body: binding) else { return nil }
-        return Screen(name: node.name.text, parameters: parameters, states: states, body: root,
-                      location: location(of: node.name))
+        return Screen(name: node.name.text, parameters: parameters, states: states, modals: currentModals,
+                      body: root, location: location(of: node.name))
     }
 }
 

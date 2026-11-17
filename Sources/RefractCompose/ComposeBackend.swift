@@ -22,7 +22,9 @@ public struct ComposeBackend: Sendable {
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
+            context.currentModals = screen.modals
             try emit(screen, into: &bodyWriter, context: &context)
+            context.currentModals = []
             if case let .navigationStack(stack, _) = screen.body {
                 for destination in stack.destinations where destination.model == nil {
                     _ = try InteropResolver(module: module, mapping: mapping)
@@ -72,18 +74,41 @@ public struct ComposeBackend: Sendable {
 
     private func emit(_ screen: Screen, into out: inout KotlinWriter, context: inout Context) throws {
         out.line()
+        if screen.modals.contains(where: { $0.kind == .sheet }) {
+            context.imports.insert("androidx.compose.material3.ExperimentalMaterial3Api")
+            context.imports.insert("kotlin.OptIn")
+            out.line("@OptIn(ExperimentalMaterial3Api::class)")
+        }
         out.line("@Composable")
         let parameters = parameterList(for: screen, context: &context)
-        if parameters.isEmpty {
+        if parameters.isEmpty && screen.modals.isEmpty {
             out.open("public fun \(screen.name)(modifier: Modifier = Modifier)")
             try emitStates(screen.states, into: &out, context: &context)
             try emit(screen.body, isRoot: true, into: &out, context: &context)
             out.close()
+        } else if parameters.isEmpty {
+            out.line("public fun \(screen.name)(")
+            out.depth += 1
+            out.line("modifier: Modifier = Modifier,")
+            for modal in screen.modals where modal.kind == .alert {
+                out.line("on\(modal.stateName.uppercasingFirst())Present: () -> Unit = {},")
+            }
+            out.depth -= 1
+            out.line(") {")
+            out.depth += 1
+            try emitStates(screen.states, into: &out, context: &context)
+            try emit(screen.body, isRoot: true, into: &out, context: &context)
+            try emitModals(screen.modals, into: &out, context: &context)
+            out.depth -= 1
+            out.line("}")
         } else {
             out.line("public fun \(screen.name)(")
             out.depth += 1
             for parameter in parameters {
                 out.line("\(parameter),")
+            }
+            for modal in screen.modals where modal.kind == .alert {
+                out.line("on\(modal.stateName.uppercasingFirst())Present: () -> Unit = {},")
             }
             out.line("modifier: Modifier = Modifier,")
             out.depth -= 1
@@ -91,6 +116,7 @@ public struct ComposeBackend: Sendable {
             out.depth += 1
             try emitStates(screen.states, into: &out, context: &context)
             try emit(screen.body, isRoot: true, into: &out, context: &context)
+            try emitModals(screen.modals, into: &out, context: &context)
             out.depth -= 1
             out.line("}")
         }
@@ -396,6 +422,7 @@ public struct ComposeBackend: Sendable {
         let module: Module
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
+        var currentModals: [ModalPresentation] = []
 
         init(module: Module, mapping: Mapping) {
             self.mapping = mapping

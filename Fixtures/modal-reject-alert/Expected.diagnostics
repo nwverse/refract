@@ -1,0 +1,1 @@
+Input.swift:12:9: error [RFMODAL002]: This alert accepts one title, a Boolean binding, two actions and one message. Suggestion: Use `.alert("key", isPresented: $state) { Button("confirm.key") { model.confirm() }; Button("cancel.key", role: .cancel) {} } message: { Text("message.key") }`

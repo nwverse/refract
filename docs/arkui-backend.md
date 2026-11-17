@@ -94,6 +94,19 @@ contract. Direct `IDataSource` ownership makes update delivery explicit and keep
 updates. The shared model frontend supplies the item type and identity; the backend never guesses `SettingItem` from
 a property named `items` and never silently uses an untyped `Item` fallback.
 
+## Native modal hosts
+
+A bounded sheet attaches `.bindSheet` to the generated root's real modifier chain, with one named `@Builder` for
+content and a native `onWillDismiss` that completes `DismissSheetAction.dismiss()` before synchronizing the declared
+Boolean owner. It never substitutes a conditional `Column` for the platform's modal host.
+
+`AlertDialog.show` is an imperative UIContext operation, not a builder attribute. The generator does not call it from
+`build()`. A typed `@Event on<State>Present` fires from `aboutToAppear` when initially presented and from `@Monitor`
+when its declared Boolean becomes true; the application's native component handles that event with
+`getUIContext().showAlertDialog`, localized title/message/buttons and matching dismissal writes. This is native
+integration without a controller registry, custom overlay host or imperative view-builder side effect. The complete
+source and verification boundary are in `docs/navigation.md`; these API 12+ shapes have not been compiler-verified.
+
 ## Formatting and diagnostics
 
 The backend uses an indentation-aware writer, never global regular-expression formatting. Strings and identifiers

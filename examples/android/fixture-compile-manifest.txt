@@ -29,6 +29,8 @@ child-view-layout-priority
 child-view-foreach-content-type
 navigation-host
 navigation-native-destination
+modal-native-host
+modal-sheet-state
 accessibility-dynamic-type
 state-counter
 parent-binding

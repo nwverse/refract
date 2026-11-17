@@ -1,0 +1,1 @@
+Input.swift:10:29: error [RFMODAL001]: Modal state `title` is not a declared Boolean @State or @Binding. Suggestion: Declare the modal's typed Boolean owner before using its `$` projection

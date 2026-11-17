@@ -98,7 +98,8 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    `examples/android/fixture-compile-manifest.txt` through the CLI, diff the output against the committed
    `Expected.kt`, and stage the Kotlin plus the fixture's `values/strings.xml` under
    `examples/android/fixtures/src/main/`. The staged files are `.gitignored`; they are produced on every CI run
-   and never committed.
+   and never committed. Fixture-owned `*Test.kt` files are also staged into the test source set; they exercise the
+   exact generated fixture source, not a substitute screen.
 7. Run `./gradlew --no-daemon :fixtures:compileDebugKotlin` from `examples/android/`. The `:fixtures` module
    (`examples/android/fixtures/`) is an Android library whose `namespace = "refract.generated"` matches the
    package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
@@ -111,6 +112,10 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    `java` source-set additions do not feed AGP 9's built-in Kotlin compilation. The injected scale is not a
    physical-device reduced-motion settings test. Gradle resolves the pinned Android-all artifact before the test,
    which runs with Robolectric's offline dependency directory so a second runtime downloader is not required.
+   Native modal tests additionally execute the generated Material 3 sheet/alert, typed dismissal and sheet `Dismiss`
+   accessibility action on the JVM. They do not establish hardware-back or physical screen-reader behavior; direct
+   Activity back dispatch did not dismiss those modals in this host, so that boundary is explicit in
+   `docs/navigation.md` and requires a separately owned device check.
 9. Run `./gradlew --no-daemon :app:testDebugUnitTest` from `examples/android/`. The `src/test` source set invokes
    the same CLI-generated `SettingsScreen.kt` that the compile gate checks, in the real application resource package.
    This is essential: an Android library's local test APK does not include a dependent application's resource table,

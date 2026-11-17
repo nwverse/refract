@@ -22,6 +22,8 @@ public struct Frontend {
                             enums: builder.enums)
         builder.validateChildViewGraph(module)
         builder.validateNavigationDeclarations(module)
+        builder.validateModalDeclarations(module)
+        builder.currentModals = []
         builder.validateRowContentTypes(module)
         if builder.hasDuplicateGeneratedDeclaration {
             return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
@@ -51,6 +53,7 @@ final class Builder: SyntaxVisitor {
     var currentListItem: String?
     var currentListItemType: ItemType?
     var currentBindings: [String: ValueType] = [:]
+    var currentModals: [ModalPresentation] = []
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
 
@@ -98,8 +101,10 @@ final class Builder: SyntaxVisitor {
         let savedItemType = currentListItemType
         let savedBindings = currentBindings
         let savedViewName = currentViewName
+        let savedModals = currentModals
         parameters = []
         currentStates = []
+        currentModals = []
         currentModels = []
         currentListItem = nil
         currentListItemType = nil
@@ -113,6 +118,7 @@ final class Builder: SyntaxVisitor {
             currentListItemType = savedItemType
             currentBindings = savedBindings
             currentViewName = savedViewName
+            currentModals = savedModals
         }
         let members = node.memberBlock.members
         let hasItemInputs = members.contains { member in
@@ -170,9 +176,17 @@ final class Builder: SyntaxVisitor {
             currentListItemType = nil
         }
         guard let root = viewStatements(items, body: binding) else { return .skipChildren }
+        let modals = currentModals
+        currentModals = []
+        guard modals.count <= 2, modals.filter({ $0.kind == .sheet }).count <= 1,
+              modals.filter({ $0.kind == .alert }).count <= 1 else {
+            error("RFMODAL003", "A screen supports one sheet and one confirmation alert on its root host.",
+                  "Move additional modal presentations into separate typed child screens", at: node.name)
+            return .skipChildren
+        }
 
         screens.append(Screen(name: node.name.text, parameters: parameters, states: states,
-                              body: root, location: location(of: node.name)))
+                              modals: modals, body: root, location: location(of: node.name)))
         return .skipChildren
     }
 
@@ -227,6 +241,7 @@ final class Builder: SyntaxVisitor {
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
         if name == "navigationDestination" { return navigationDestination(call, on: node) }
+        if name == "sheet" || name == "alert" { return modal(call, name: name, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
