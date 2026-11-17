@@ -77,13 +77,11 @@ func resolve(_ path: String, relativeTo directory: URL, description: String) thr
         throw ConsumerError("Unsafe or empty path component for \(description): \(path).")
     }
     let url = components.reduce(directory) { $0.appendingPathComponent(String($1)) }
-    guard url.standardizedFileURL.path.hasPrefix(directory.standardizedFileURL.path + "/") else {
+    guard url.path.hasPrefix(directory.path + "/") else {
         throw ConsumerError("\(description) escapes the consuming package: \(path).")
     }
-    let root = directory.resolvingSymlinksInPath().path
-    guard url.deletingLastPathComponent().resolvingSymlinksInPath().path.hasPrefix(root + "/") else {
-        throw ConsumerError("\(description) escapes the consuming package: \(path).")
-    }
+    // Darwin can map a nonexistent parent to a different temporary-path spelling.
+    // Lexical containment plus explicit symlink checks below is deterministic.
     var ancestor = url.deletingLastPathComponent()
     while ancestor.path != directory.path, ancestor.path != "/" {
         if try ancestor.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true {

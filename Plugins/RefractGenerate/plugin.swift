@@ -28,6 +28,7 @@ struct RefractGenerate: CommandPlugin {
         process.executableURL = tool
         process.arguments = ["publish", "--package", context.package.directoryURL.path, "--target", targets[0]]
         process.environment = ["REFRACT_EXECUTABLE": generator.path]
+        process.standardError = FileHandle.standardError
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else { throw PluginError(message: "Refract did not complete.") }
