@@ -84,6 +84,11 @@ extension ComposeBackend {
                     location: operation.location ?? location)
             case .retainCallback:
                 return Modifier(name: "retainCallback", location: operation.location)
+            case .textSelection, .dragPayload, .dropTarget:
+                throw Diagnostic(code: "RFNATIVE005",
+                    message: "Selection and drag/drop operations do not apply to a Toggle receiver.",
+                    suggestion: "Use a TextField for text selection and a Box-style wrapper for drag/drop.",
+                    location: operation.location ?? location)
             }
         }
         let switchChain = try self.modifierChain(switchModifiers, isRoot: false, context: &context)
