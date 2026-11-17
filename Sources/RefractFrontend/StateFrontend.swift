@@ -82,13 +82,30 @@ extension Builder {
                   declaration.bindingSpecifier.tokenKind == .keyword(.var),
                   declaration.bindings.count == 1, let binding = declaration.bindings.first,
                   let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
-                  let typeName = binding.typeAnnotation?.type.trimmedDescription,
-                  let type = scalarType(typeName) else {
+                  let typeName = binding.typeAnnotation?.type.trimmedDescription else {
                 error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
                       "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
                 return nil
             }
             let ownership = attribute.attributeName.trimmedDescription
+            if let tabEnum = enums.first(where: { $0.name == typeName }), scalarType(typeName) == nil {
+                guard ownership == "State", tabEnum.isNavigationDestination, tabEnum.payloadTypes.isEmpty,
+                      declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }),
+                      let initial = binding.initializer,
+                      let member = initial.value.as(MemberAccessExprSyntax.self),
+                      member.base == nil, tabEnum.cases.contains(member.declName.baseName.text) else {
+                    error("RFNAV402", "A tab selection must be `@State private var tab: Tab = .home` over a no-payload Hashable enum.",
+                          "Use one static enum case as the initial selection; the native host owns the selected tab", at: member)
+                    return nil
+                }
+                states.append(.tabSelection(name: name, enumName: tabEnum.name, location: location(of: declaration)))
+                continue
+            }
+            guard let type = scalarType(typeName) else {
+                error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
+                      "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
+                return nil
+            }
             if ownership == "Binding" {
                 guard binding.initializer == nil else {
                     error("state.binding_initializer", "@Binding property `\(name)` cannot have an independent initializer.",

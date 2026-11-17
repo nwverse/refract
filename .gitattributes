@@ -1,2 +1,4 @@
 # Generated golden outputs are compared byte for byte.
 Fixtures/** -text
+# Public source archives carry the same immutable CLI identity as the packaging script's stamped archive.
+Sources/RefractCLI/Version.swift export-subst

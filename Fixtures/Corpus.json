@@ -134,6 +134,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-state-transition",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-undeclared",
       "implementationStatus": "ready"
     },
@@ -274,6 +278,18 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "navigation-tabs-menu",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-tabs-reject-dynamic",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-tabs-reject-inputs",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "parent-binding",
       "implementationStatus": "ready"
     },
@@ -327,6 +343,14 @@
     },
     {
       "path": "rejected-view-declaration",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-dragdrop",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-reject-uri-payload",
       "implementationStatus": "ready"
     },
     {
@@ -426,6 +450,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "v0-reject-secure-input-literal",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-secure-reveal-literal",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "v0-reject-state-wrapper",
       "implementationStatus": "ready"
     },
@@ -443,6 +475,10 @@
     },
     {
       "path": "v0-scroll-content",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-secure-input",
       "implementationStatus": "ready"
     },
     {

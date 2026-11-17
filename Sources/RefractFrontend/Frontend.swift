@@ -250,6 +250,7 @@ final class Builder: SyntaxVisitor {
                 return extendedView(call)
             }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
+            if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
                 guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
                     error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
@@ -259,6 +260,10 @@ final class Builder: SyntaxVisitor {
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }
+            // Toggle/TextField/SecureField were recognized above. If their guard failed they have
+            // already emitted a typed diagnostic; do not fall through to the component-mapping path.
+            if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text,
+               name == "Toggle" || name == "TextField" || name == "SecureField" { return nil }
             return view(call)
         }
         if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
@@ -273,6 +278,7 @@ final class Builder: SyntaxVisitor {
         if name == "navigationDestination" { return navigationDestination(call, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
+        if name == "secureReveal" { return secureReveal(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
@@ -593,6 +599,12 @@ final class Builder: SyntaxVisitor {
         if let literal = expression.as(FloatLiteralExprSyntax.self) {
             return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .double,
                                              location: location(of: expression)), .double)
+        }
+        if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self),
+           currentModels.contains(where: { $0.propertyName == base.baseName.text }),
+           let model = modelTypedProperty(expression) {
+            return model
         }
         if expression.as(MemberAccessExprSyntax.self) != nil {
             return TypedExpression(Expression(.reference(expression.trimmedDescription),
