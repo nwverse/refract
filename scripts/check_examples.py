@@ -181,10 +181,26 @@ def check_ios_references() -> None:
     print("iOS project compiles every shared source and eight unique, byte-identical compiler inputs")
 
 
+def check_gradle_reviewed_mirrors() -> None:
+    """The Gradle CLI check needs isolated input/output groups, not two platform generation rules."""
+    groups = {
+        "screens": ("Hello", "NativeComponentScreen", "SettingsScreen"),
+        "list": ("IdentifiedList",),
+    }
+    for group, names in groups.items():
+        for name in names:
+            source = ROOT / "examples/harmony/entry/src/main/ets/generated" / f"{name}.ets"
+            mirror = ROOT / "examples/android/app/refract/harmony" / group / f"{name}.ets"
+            if not mirror.is_file() or source.read_bytes() != mirror.read_bytes():
+                fail(f"Gradle reviewed ArkTS mirror differs for {name}; update it from the canonical generated file")
+    print("Gradle grouped reviewed ArkTS mirrors match the canonical generated outputs")
+
+
 def main() -> int:
     try:
         regenerate_hello()
         regenerate_identified_list()
+        check_gradle_reviewed_mirrors()
         check_resources()
         check_harmony_resources()
         check_ios_references()

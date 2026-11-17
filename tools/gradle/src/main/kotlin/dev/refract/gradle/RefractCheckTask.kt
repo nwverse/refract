@@ -30,7 +30,6 @@ abstract class RefractCheckTask : RefractTask() {
         mapping.orNull?.let { arguments += listOf("--mapping", it.asFile.absolutePath) }
         arguments += listOf(
             "--android-out", committedOutputDirectory.get().asFile.absolutePath,
-            // #164 owns the CLI's read-only check contract; Android does not publish ArkTS here.
             "--harmony-out", harmonyCommittedOutputDirectory.get().asFile.absolutePath,
         )
         val output = ByteArrayOutputStream()

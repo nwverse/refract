@@ -107,9 +107,12 @@ resource catalog or CLI executable invalidates the relevant group. `:app:clean :
 and compiles from an empty build directory.
 
 Reviewed generated Kotlin lives in `app/refract/generated/<group>/`, not in an ordinary Android source root. This
-keeps the compiled copy unambiguous: the build always uses its fresh generated copy. `:app:checkDebugRefract` calls
-the CLI's read-only `check` with the same Swift inputs, mapping and both platforms' committed output directories.
-Missing, stale or extra outputs fail without modifying a source file. `checkRefract` covers every Android variant.
+keeps the compiled copy unambiguous: the build always uses its fresh generated copy. `app/refract/harmony/<group>/`
+contains the matching reviewed ArkTS files; `scripts/check_examples.py` requires these mirrors to be byte-identical
+to the canonical Harmony example. Each CLI check receives its group's complete inputs and both output directories,
+so unrelated files in another group cannot be mistaken for stale or unexpected outputs. `:app:checkDebugRefract`
+invokes that read-only CLI check. Missing, stale or extra outputs fail without modifying a source file.
+`checkRefract` covers every Android variant.
 
 The plugin supports Android applications and the example's documented Gradle/AGP versions. It is a repository-local
 composite build, not a claim that a versioned plugin has been published to a public plugin repository. The
