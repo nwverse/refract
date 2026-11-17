@@ -4,6 +4,28 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("dev.refract.generator")
+}
+
+refract {
+    // An environment override keeps machine-specific CLI paths out of the build script.
+    executable.set(providers.environmentVariable("REFRACT_CLI_PATH").map { layout.projectDirectory.file(it) })
+    sources.register("screens") {
+        inputs.from(
+            rootProject.file("../shared/Hello.swift"),
+            rootProject.file("../shared/NativeComponentScreen.swift"),
+            rootProject.file("../shared/SettingsScreen.swift"),
+        )
+        mapping.set(rootProject.file("../refract.json"))
+        resources.from(
+            rootProject.file("app/src/main/res/values/strings.xml"),
+            rootProject.file("../harmony/entry/src/main/resources/base/element/string.json"),
+        )
+    }
+    sources.register("list") {
+        // This canonical list intentionally uses the unmapped CLI generation path.
+        inputs.from(rootProject.file("../shared/IdentifiedList.swift"))
+    }
 }
 
 android {
