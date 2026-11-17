@@ -71,7 +71,9 @@ def regenerate_and_stage(fixture: str) -> None:
         if not path.is_file():
             fail(f"{fixture}: missing required file {path.relative_to(ROOT)}")
 
-    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture}-") as tmp:
+    # A corpus subdirectory is not a single path component; TemporaryDirectory creates its parents and returns
+    # only the leaf. Use a flat, unique label so nested fixtures use the same lifecycle as top-level ones.
+    with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture.replace('/', '-')}-") as tmp:
         out = Path(tmp)
         subprocess.run(
             [
@@ -108,7 +110,8 @@ def regenerate_and_stage(fixture: str) -> None:
         generated = generated.replace(
             f"package {package}\n", f"package {package}\n\nimport {namespace}.R\n", 1
         )
-    target = package_directory / f"{fixture}.kt"
+    # Keep every fixture's generated file a direct child of its Kotlin package, even when its corpus path is nested.
+    target = package_directory / f"{fixture.replace('/', '-')}.kt"
     target.write_text(generated, encoding="utf-8")
     for name in ("NativeHost.kt", "NativeComponent.kt"):
         native_source = fixture_dir / name
