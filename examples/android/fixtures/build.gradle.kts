@@ -49,7 +49,6 @@ android {
         listOf(
             "src/native/java",
             "../app/src/main/java/com/example/refract/animation",
-            "../app/src/main/java/com/example/refract/search",
         ),
     )
 }
