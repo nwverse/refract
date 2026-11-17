@@ -52,6 +52,16 @@ jobs:
           printf 'bin_path=%s\n' "$(swift build --show-bin-path --disable-automatic-resolution)" >> "$GITHUB_OUTPUT"
       - name: Build with locked dependencies
         run: swift build --disable-automatic-resolution
+      - name: Configure XCTest runtime paths on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform="$(xcrun --show-sdk-platform-path)"
+          test -d "$platform/Developer/Library/Frameworks/XCTest.framework"
+          test -f "$platform/Developer/usr/lib/libXCTestSwiftSupport.dylib"
+          printf 'DYLD_FRAMEWORK_PATH=%s\n' "$platform/Developer/Library/Frameworks" >> "$GITHUB_ENV"
+          printf 'DYLD_LIBRARY_PATH=%s\n' "$platform/Developer/usr/lib" >> "$GITHUB_ENV"
       - name: Run the complete test suite
         env:
           REFRACT_CLI_PATH: ${{ steps.swift.outputs.bin_path }}/refract
