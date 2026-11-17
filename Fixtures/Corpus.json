@@ -78,7 +78,35 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "cross-file-child-view",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-enum-switch",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-reject-duplicate",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-reject-recursion",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "cross-file-two-models",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "hello",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-document-preview",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-document-preview-reject",
       "implementationStatus": "ready"
     },
     {
@@ -118,6 +146,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-state-transition",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-undeclared",
       "implementationStatus": "ready"
     },
@@ -142,11 +174,23 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-remote-image",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-remote-image-reject",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-foreach",
       "implementationStatus": "ready"
     },
     {
       "path": "list-foreach-explicit-id",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-paged-search",
       "implementationStatus": "ready"
     },
     {
@@ -210,6 +254,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "mapping/model-scalars",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "model-interface",
       "implementationStatus": "ready"
     },
@@ -235,6 +283,18 @@
     },
     {
       "path": "navigation-reject-payload",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-tabs-menu",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-tabs-reject-dynamic",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-tabs-reject-inputs",
       "implementationStatus": "ready"
     },
     {
@@ -291,6 +351,14 @@
     },
     {
       "path": "rejected-view-declaration",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-dragdrop",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-reject-uri-payload",
       "implementationStatus": "ready"
     },
     {
@@ -390,6 +458,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "v0-reject-secure-input-literal",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-reject-secure-reveal-literal",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "v0-reject-state-wrapper",
       "implementationStatus": "ready"
     },
@@ -407,6 +483,10 @@
     },
     {
       "path": "v0-scroll-content",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-secure-input",
       "implementationStatus": "ready"
     },
     {

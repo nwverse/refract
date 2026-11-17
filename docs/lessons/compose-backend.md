@@ -13,6 +13,12 @@ Compose examples, and add to it when something surprises you.
   skip. When the body is anything more, wrap in `remember(keys) { { … } }`.
 - **`font` and `foregroundColor` are `Text` parameters, not modifiers.** Emitting them as `Modifier.*` calls does
   not compile. The split is part of the IR lowering, not a formatting choice.
+- **`KeyboardOptions(autoCorrect = ...)` is deprecated in recent Compose BOMs.** The constructor warns at
+  `:fixtures:compileDebugKotlin`. Use `autoCorrectEnabled = false` for the password keyboard on `SecureField`;
+  the previous spelling still compiles but adds a deprecation warning to every consumer.
+- **`SecureField` must stay a native `TextField`, not a custom composable.** Wrapping a basic `TextField` in a
+  hand-rolled "secure" composable duplicates autofill and IME wiring that the platform already owns. The
+  generator's job is `visualTransformation` and `keyboardOptions`, not a parallel secret input pipeline.
 - **Typed pattern lowering needs an explicit native scope.** Optional scalar aliases and single-payload enum cases
   are branch-local immutable values. Compose uses smart casts on a captured `when` subject; ArkTS uses documented
   null/undefined checks or class-union `instanceof` narrowing. Do not accept optional chaining, object payloads,
@@ -40,3 +46,19 @@ Compose examples, and add to it when something surprises you.
 - **Closing delimiters are part of golden correctness.** A composable call and a trailing closure have different
   closing shapes. Do not use a generic writer close for a plain `TextField(...)` call; validate actual generated
   syntax and compare both native goldens. Formatting-only changes must be reviewed in every affected fixture.
+- **Parenthesized calls close with `)`, not `}`.** `NavigationBarItem(...)`, `DropdownMenuItem(...)` and similar
+  composables take their content as named lambda arguments inside parentheses. A generic writer `close()` emits `}`,
+  which is a syntax error ("Expecting ')'"). Use a dedicated `closeParen()` for `open("Name(")` calls, and never put
+  a trailing comma after the last named lambda argument before `)`. Compile generated Kotlin through
+  `:fixtures:compileDebugKotlin` rather than trusting a source read; a hand-written probe file is easy to typo and
+  can send you chasing the wrong bug.
+- **Non-composable lambdas cannot call composable functions.** `Modifier.semantics { contentDescription = ... }`
+  runs outside composition, so `stringResource(...)` must be read into a local `val` in composable scope first and
+  captured. The Kotlin compiler reports "@Composable invocations can only happen from the context of a @Composable
+  function".
+- **Material icon symbols need an explicit dependency.** `Icons.Default.*` lives in
+  `androidx.compose.material:material-icons-core`, which is not pulled in by `material3` alone in this build. A
+  `symbols` mapping of kind `materialIcon` must be matched by the consuming module's dependency.
+- **Icon-only buttons need an accessibility label.** A generated `IconButton` with only an icon has no text for
+  screen readers or for `onNodeWithText` lookups. Put the localized label on the button as `contentDescription`
+  (see above), which also gives native tests a stable selector.

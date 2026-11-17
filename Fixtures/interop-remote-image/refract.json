@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": ["example.app.RemoteImage", "example.app.RemoteImageLoader"],
+    "components": {},
+    "nativeComponents": {
+      "RemoteImage": {
+        "parameters": [
+          { "label": "url", "type": "string", "required": true },
+          { "label": "placeholder", "type": "image", "required": true },
+          { "label": "failure", "type": "image", "required": true },
+          { "label": "contentDescription", "type": "stringKey", "required": true },
+          { "label": "loader", "type": "remoteImageLoader", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "RemoteImage",
+        "argumentStyle": "named",
+        "arguments": [
+          { "source": "url", "target": "url" },
+          { "source": "placeholder", "target": "placeholder" },
+          { "source": "failure", "target": "failure" },
+          { "source": "contentDescription", "target": "contentDescription" },
+          { "source": "loader", "target": "loader" }
+        ],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "strings": { "profile.photo.description": "profile_photo_description" }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.app", "symbols": ["RemoteImage", "RemoteImageLoader"] }],
+    "components": {},
+    "nativeComponents": {
+      "RemoteImage": {
+        "parameters": [
+          { "label": "url", "type": "string", "required": true },
+          { "label": "placeholder", "type": "image", "required": true },
+          { "label": "failure", "type": "image", "required": true },
+          { "label": "contentDescription", "type": "stringKey", "required": true },
+          { "label": "loader", "type": "remoteImageLoader", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "RemoteImage",
+        "argumentStyle": "object",
+        "arguments": [
+          { "source": "url", "target": "url" },
+          { "source": "placeholder", "target": "placeholder" },
+          { "source": "failure", "target": "failure" },
+          { "source": "contentDescription", "target": "contentDescription" },
+          { "source": "loader", "target": "loader" }
+        ],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": { "profile.photo.description": "profile_photo_description" }
+    }
+  }
+}

@@ -56,6 +56,15 @@ jobs:
         env:
           REFRACT_CLI_PATH: ${{ steps.swift.outputs.bin_path }}/refract
         run: swift test --disable-automatic-resolution
+      - name: Verify the real SwiftPM consumer integration
+        run: python3 -I scripts/test_swiftpm_consumer.py
+      - name: Test packaging policy and clean source archives
+        run: python3 -I scripts/test/test_package_cli.py
+      - name: Build and verify the native CLI package
+        env:
+          REFRACT_PACKAGE_E2E: '1'
+          REFRACT_PACKAGE_OUTPUT: ${{ runner.temp }}/refract-cli-package
+        run: python3 -I scripts/test/test_package_cli.py PackagingEndToEndTests -v
       - name: Regenerate and compare every golden fixture
         run: |
           swift test --disable-automatic-resolution --skip-build --filter GoldenTests

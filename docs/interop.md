@@ -220,7 +220,18 @@ For every native call, before either backend writes output, the frontend/lowerin
 - The symbol and module are explicit identifiers, not arbitrary code. Imports are deterministic and deduplicated.
 
 The v0 value boundary is `String`, `Bool`, `Int` and `Double`, plus expressions supported by the state/model
-contract. Closures and arbitrary Swift objects are rejected until their typed native representation is specified;
+contract. Native component declarations additionally accept `Image` and `LocalizedStringKey` for app-owned static
+image resources and localized text, and the explicitly bounded `RemoteImageLoader` service protocol. `Image` arguments
+must be literal `Image("lowercase_resource_name")` expressions; string keys must resolve in both resource catalogs.
+A `RemoteImageLoader` must be injected as an explicitly typed screen input and cannot be constructed in the view.
+These native-only parameter types are not model, state, binding or arbitrary object values. The bounded remote-image
+lifecycle, URL policy and platform verification limits are specified in `docs/remote-images.md`.
+A native component can declare a zero-argument `() -> Void` callback. Its only accepted closure body is one checked
+no-argument model method such as `{ model.closePreview() }`; Compose emits a `() -> Unit` lambda and ArkTS emits a
+`() => void` lambda. Arbitrary closures, function values and parameterized callbacks remain diagnostics. The typed
+document preview boundary, its app-owned URI/permission/decode/lifecycle ownership, and synthetic Native JVM evidence
+are specified in `docs/document-preview.md`.
+Other closures and arbitrary Swift objects are otherwise rejected until their typed native representation is specified;
 they are never converted to untyped target expressions.
 
 The accepted target-type mappings are:
@@ -231,6 +242,7 @@ The accepted target-type mappings are:
 | `Bool` | `Boolean` | `boolean` |
 | `Int` | `Int` | `number` |
 | `Double` | `Double` | `number` |
+| `() -> Void` (one checked model action) | `() -> Unit` | `() => void` |
 
 `Int` values must be integral when emitted for ArkTS. The generator does not silently round, coerce or add a cast.
 
@@ -289,6 +301,43 @@ Compose on Robolectric: an ordinary transition runs and settles, identity replac
 the transition, exit removes content, zero duration scale skips enter/exit motion, and leaving composition disposes
 content. They do not exercise a device, emulator, physical animation-duration setting or performance benchmark.
 SwiftUI behavior also requires an Apple toolchain; generator tests do not establish that evidence.
+
+### Stateful value transitions, interruption and replacement
+
+`Fixtures/interop-native-state-transition/` is a separate stateful case, not a duplicate of the save-confirmation
+visibility component. Its `NativeSelectionEmphasis` declaration accepts only `emphasized: Bool` and
+`identity: String`. The generated screen resolves the identity through the declared `SelectionEmphasisModel` and
+the Boolean through a typed binding. On iOS the declaration is an ordinary SwiftUI `Text` with `.id(identity)`, an
+emphasized opacity and `.animation(reduceMotion ? nil : .easeInOut, value: emphasized)`. Duration and animation
+objects do not cross the native interface. No Apple-toolchain compilation of this particular source was available in
+this change.
+
+On Android the separate application-owned `NativeSelectionEmphasis` uses `Animatable<Float>` and a native tween.
+The `LaunchedEffect` keyed by the remembered animation, target and native motion policy cancels the old animation
+when a target changes; `animateTo` then continues from its current value and velocity. `key(identity)` scopes the
+remembered animation and its effects, so replacement cannot inherit the old identity's progress or running job.
+`MotionDurationScale == 0` uses `snapTo`, including when the preference changes during an animation, so there is no
+intermediate progress on that path. Leaving composition cancels effects and disposes the identity. Per-frame alpha
+is read in `graphicsLayer`, rather than invalidating the parent composition on every frame. No timer, animation
+interpreter or shared target-language animation description is generated.
+
+`NativeSelectionEmphasisTest` runs the unmodified generated caller and the app-owned implementation on real
+Compose/Robolectric. Its six tests cover generated-call progress, a target reversal that stops at an intermediate
+value and resumes downwards from that value, identity replacement with old-content disposal and independent new
+progress, reducing motion during an animation, zero-scale targets without intermediate progress, and disposal when
+leaving composition. Frame advancement and observation are controlled by the test host; they are not a wall-clock
+performance measurement. This is **Native JVM evidence**, not an emulator, device, physical reduced-motion setting,
+or iOS test.
+
+On HarmonyOS, `Expected.ets` proves the typed object-literal call
+`NativeSelectionEmphasis({ emphasized: this.emphasized, identity: this.model.identity })`. An app-owned
+implementation must provide the equivalent native value transition, accessibility preference, target interruption,
+identity-scoped state and disposal. This
+change supplies no ArkTS implementation or compiler evidence; those remain unverified.
+
+The generated scalar argument path now preserves the declared type of a model property such as `model.identity`,
+using the same typed expression as existing model-backed views. Unknown model or item members remain `RFSEM001`
+diagnostics; no unknown type is silently inferred as `String`.
 
 ## Per-platform values, modifiers and animations
 

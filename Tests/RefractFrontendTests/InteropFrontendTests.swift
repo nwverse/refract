@@ -24,6 +24,37 @@ import RefractIR
     #expect(component.arguments.map(\.type) == [.double, .bool])
 }
 
+@Test func frontendBuildsTypedNativeImageResources() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct RemoteImage: RefractNativeView {
+        let url: String
+        let placeholder: Image
+        let failure: Image
+        let contentDescription: LocalizedStringKey
+        var body: some View { placeholder }
+    }
+    struct Profile: View {
+        let url: String
+        var body: some View {
+            RemoteImage(url: url, placeholder: Image("profile_placeholder"), failure: Image("profile_unavailable"), contentDescription: "profile.photo")
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    #expect(unit.module.nativeDeclarations[0].parameters.map(\.type) == [.string, .image, .image, .stringKey])
+    guard case let .native(component, _) = unit.module.screens[0].body else {
+        Issue.record("Expected a native image reference")
+        return
+    }
+    #expect(component.arguments.map(\.type) == [.string, .image, .image, .stringKey])
+    #expect(component.arguments[1].expression?.value == .imageResource("profile_placeholder"))
+    guard case let .localizedText(text) = component.arguments[3].expression?.value else {
+        Issue.record("Expected localized accessibility text")
+        return
+    }
+    #expect(text.key == "profile.photo")
+}
+
 @Test(arguments: [
     "@State private var saved: Bool = false",
     "@Binding var saved: Bool",
@@ -46,9 +77,52 @@ func frontendResolvesNativeArgumentFromDeclaredState(_ declaration: String) thro
         return
     }
     #expect(component.arguments.map(\.type) == [.bool, .string])
-    #expect(component.arguments[0].expression.value == (declaration.hasPrefix("@State")
+    #expect(component.arguments[0].expression?.value == (declaration.hasPrefix("@State")
         ? .valueProperty(.state("saved")) : .valueProperty(.binding("saved"))))
-    #expect(component.arguments[1].expression.value == .stringLiteral("profile-save"))
+    #expect(component.arguments[1].expression?.value == .stringLiteral("profile-save"))
+}
+
+@Test func frontendResolvesNativeArgumentFromDeclaredModel() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SelectionModel: RefractModel {
+        var identity: String { get }
+    }
+    struct Selection: RefractNativeView {
+        let emphasized: Bool
+        let identity: String
+        var body: some View { Text(verbatim: "Selection") }
+    }
+    struct Screen: View {
+        let model: SelectionModel
+        @Binding var emphasized: Bool
+        var body: some View { Selection(emphasized: emphasized, identity: model.identity) }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .native(component, _) = unit.module.screens[0].body else {
+        Issue.record("Expected a native reference")
+        return
+    }
+    #expect(component.arguments.map(\.type) == [.bool, .string])
+    #expect(component.arguments[1].expression?.value == .valueProperty(.model(model: "model", property: "identity")))
+}
+
+@Test func frontendRejectsNativeArgumentWithMismatchedModelType() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SelectionModel: RefractModel {
+        var identity: String { get }
+    }
+    struct Selection: RefractNativeView {
+        let identity: String
+        var body: some View { Text(verbatim: "Selection") }
+    }
+    struct Screen: View {
+        let model: SelectionModel
+        var body: some View { Selection(identity: model.unknown) }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFSEM001"])
+    #expect(unit.diagnostics[0].message.contains("cannot infer the type of `identity`"))
 }
 
 @Test func frontendRejectsNativeArgumentWithMismatchedStateType() {
@@ -191,6 +265,45 @@ func frontendResolvesNativeArgumentFromDeclaredState(_ declaration: String) thro
     """))
     #expect(unit.diagnostics.map(\.code) == ["RFVIEW005"])
     #expect(unit.diagnostics[0].location?.column == 9)
+}
+
+@Test func frontendAcceptsOnlyCheckedNoArgumentNativeActions() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol PreviewModel: RefractModel {
+        func closePreview()
+    }
+    struct Preview: RefractNativeView {
+        let onClose: () -> Void
+        var body: some View { Button("document.close") { onClose() } }
+    }
+    struct Screen: View {
+        let model: PreviewModel
+        var body: some View { Preview(onClose: { model.closePreview() }) }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    #expect(unit.module.nativeDeclarations[0].parameters.map(\.type) == [.action])
+    guard case let .native(component, _) = unit.module.screens[0].body else {
+        Issue.record("Expected a native reference")
+        return
+    }
+    #expect(component.arguments[0].type == .action)
+    #expect(component.arguments[0].expression == nil)
+    #expect(component.arguments[0].action == .modelMethod(model: "model", name: "closePreview", arguments: []))
+}
+
+@Test func frontendRejectsArbitraryNativeActionClosure() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Preview: RefractNativeView {
+        let onClose: () -> Void
+        var body: some View { Button("document.close") { onClose() } }
+    }
+    struct Screen: View {
+        var body: some View { Preview(onClose: { print("not a typed action") }) }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE002"])
+    #expect(unit.module.nativeDeclarations[0].parameters.map(\.type) == [.action])
 }
 
 @Test func frontendRejectsDuplicateAndUnsupportedNativeDeclarations() {

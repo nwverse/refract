@@ -85,11 +85,25 @@ public struct ItemBinding: Codable, Equatable, Sendable {
     }
 }
 
+/// A checked read/write scalar model property. The native model owns the mutation.
+public struct ModelScalarBinding: Codable, Equatable, Sendable {
+    public let model: String
+    public let property: String
+    public let action: String
+
+    public init(model: String, property: String, action: String) {
+        self.model = model
+        self.property = property
+        self.action = action
+    }
+}
+
 public enum ValueProperty: Codable, Equatable, Sendable {
     case state(String)
     case binding(String)
     case model(model: String, property: String)
     case itemBinding(ItemBinding)
+    case modelScalarBinding(ModelScalarBinding)
 }
 
 public enum WritableProperty: Codable, Equatable, Sendable {

@@ -99,7 +99,20 @@ struct DesignSystemFrontend {
                 }
                 continue
             }
-            guard let value = builder.scalar(argument.expression) else { return nil }
+            // A declared scalar model property is not a token reference. Preserve its typed IR before
+            // generic scalar parsing, whose member-access branch handles design tokens and enum cases.
+            let value: TypedExpression?
+            if let model = builder.modelTypedProperty(argument.expression), model.type != nil {
+                value = model
+            } else {
+                value = builder.scalar(argument.expression)
+            }
+            guard let value else { return nil }
+            if parameter.type != .stringKey, let type = parameter.type.valueType, value.type != type {
+                throw Diagnostic(code: "componentArgument",
+                    message: "Parameter `\(parameter.label)` requires \(parameter.type.rawValue), not \(value.type?.rawValue ?? "unknown").",
+                    suggestion: "Supply a scalar of the type declared in refract.json.", location: builder.location(of: argument))
+            }
             if parameter.type == .stringKey {
                 guard case let .stringLiteral(key) = value.expression.value else {
                     throw Diagnostic(code: "componentArgument",
@@ -110,7 +123,7 @@ struct DesignSystemFrontend {
                 _ = try mapping.stringResource(key, platform: .harmonyOS, location: value.expression.location)
             }
             result.append(NativeArgument(label: parameter.label, expression: value.expression,
-                                         type: value.type, location: builder.location(of: argument)))
+                                         type: value.type.flatMap { NativeParameterType(rawValue: $0.rawValue) }, location: builder.location(of: argument)))
         }
         let known = Set(declaration.parameters.map(\.label))
         for argument in call.arguments where !known.contains(argument.label?.text ?? "") {
