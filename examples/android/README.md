@@ -31,7 +31,8 @@ native components inside a generated screen through the typed mapping, not an in
 
 Requirements: JDK 21, Android SDK Platform 37.2 and Build Tools 37.0.0. The wrapper uses Gradle 9.8.2. The build
 uses Android Gradle Plugin 9.5.0, Kotlin/Compose plugin 2.4.21 and Compose BOM 2026.09.00; the BOM requires
-compileSdk 37. `ANDROID_HOME` is the only machine-specific configuration; do not commit `local.properties`.
+compileSdk 37. Native JVM Compose tests additionally pin Robolectric 4.18 and Android API 35 for their test runtime.
+`ANDROID_HOME` is the only machine-specific configuration; do not commit `local.properties`.
 
 `gradle/wrapper/gradle-wrapper.jar` is the official Gradle 9.8.2 wrapper jar, extracted from
 `gradle-9.8.2/lib/plugins/gradle-wrapper-main-9.8.2.jar` inside the verified Gradle 9.8.2 distribution (the zip
@@ -56,6 +57,34 @@ local debug key by the Android plugin; no application signing key is committed. 
 performance result for this example.
 
 To compile only the Kotlin and its resources, run `./gradlew :app:compileDebugKotlin`.
+
+## Native JVM Compose rendering and interaction tests
+
+The `:app` `src/test` source set calls the actual CLI-generated `refract.generated.SettingsScreen` in the real
+application resource package, not a copied or hand-written replacement. This matters because a separate Android
+library's local test APK does not contain a dependent app's resource table: numeric `R` references can otherwise
+resolve to unrelated strings. From the repository root, first prove the generated file is current, then run the JVM
+tests:
+
+```sh
+swift build
+python3 scripts/check_examples.py
+cd examples/android
+./gradlew :app:testDebugUnitTest
+```
+
+The tests use Compose UI testing on Robolectric with native graphics. They exercise the visible rows, the notification
+label's relationship to the native Switch, Switch role/checked/click semantics, binding updates, text input, model
+updates and the save callback. The separate `generatedRowsExposeTheirRelationshipWithoutInventedSemantics` test
+observes the label and control as separate semantics nodes; the test does not add a row merger or accessibility
+behavior that the generator did not emit.
+
+Light and dark captures and the dark-mode semantics tree are written to
+`app/build/reports/native-jvm-compose/`. **These are Native JVM Compose captures, not device or emulator
+screenshots.** They are not visual-parity or performance measurements and must be visually inspected. CI publishes
+them and the JUnit HTML reports as `native-jvm-compose-settings`. Tests and their dependencies are confined to the
+application's test source set and add no runtime library to the example APK, generated code or consuming apps.
+Large-text behavior is tracked separately by the accessibility workstream and is not claimed by this check.
 
 ## CI compile gate
 
