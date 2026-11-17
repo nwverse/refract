@@ -1,5 +1,31 @@
 # Android benchmarking
 
+## Keep Gradle generated-source wiring lazy and check with the real CLI
+
+Use Android's `SourceDirectories.Flat.addGeneratedSourceDirectory(taskProvider, taskOutputProperty)`. This preserves
+configuration avoidance and the compile dependency. A `DirectoryProperty` passed through `flatMap` retains the task
+dependency. An `@OutputDirectory` must be build-owned: generate into staging, and publish only after the complete CLI
+succeeds. Never delete a source directory as part of a generation task.
+
+Do not implement a second Gradle-only stale-output checker. The CLI's `check` command owns missing, stale and extra
+native-file behavior for both Kotlin and ArkTS. Supply every explicit Swift input that produces files in an output
+directory, the same mapping, both resource catalogs and both reviewed output directories. If source groups need
+different mappings, give each a separate reviewed output directory; comparing one group with a directory containing
+another group's outputs correctly fails as unexpected. Keep a byte-checked mirror when the consumer layout differs
+from another example's canonical output layout. A source group whose existing CLI invocation omits a mapping must
+remain unmapped in its own Gradle source group rather than silently acquiring different generation behavior.
+
+A Gradle `Task` already has an `inputs` property. A custom `abstract val inputs: ConfigurableFileCollection` prevents
+creation of the decorated task; name it `swiftInputs` or another distinct name. A required `RegularFileProperty`
+without a value fails Gradle validation before the task action. For an actionable missing-tool message, accept the
+executable as an `@InputFiles` file collection and verify its single file and executable bit in the action. Include
+the executable bytes as an input so switching to a different CLI invalidates generation.
+
+A TestKit runner uses the Gradle Tooling API and does not accept `--no-daemon` as a build argument; put
+`org.gradle.daemon=false` in the test project's `gradle.properties` instead. The tests create a small real Android
+application and require the same SDK as the examples, rather than claiming that a plain JVM project proves Android
+integration. Keep generated and reviewed Kotlin outside the default source set to avoid duplicate declarations.
+
 ## Match plugins to the Android Gradle Plugin version
 
 AGP 9 includes Kotlin Android support: applying `org.jetbrains.kotlin.android` as well is a configuration error.

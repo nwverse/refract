@@ -71,7 +71,8 @@ macOS CI verifies generator portability; it does not constitute an iOS device or
 ## Android generated-code compile gate
 
 The `android-compile` job proves that the committed generated Kotlin compiles with the documented Android
-toolchain on every pull request and on every push to `main`. A generator change can pass the golden tests while
+toolchain on every pull request and on every push to `main`. It also runs the opt-in Gradle generation and
+committed-output check against the actual CLI. A generator change can pass the golden tests while
 producing Kotlin that no longer builds; this job catches that at CI time.
 
 The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
@@ -85,7 +86,10 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 3. Install JDK 21 (Temurin) and a pinned Android SDK: platform `android-37.2`, build tools `37.0.0`, and the
    command-line tools zip whose SHA-256 is recorded in the workflow. The pinned toolchain mirrors the documented
    values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
-4. Run `./gradlew --no-daemon :app:compileDebugKotlin` from `examples/android/`. The checked-in Gradle wrapper
+4. Export the built CLI as `REFRACT_CLI_PATH`, then run `./gradlew --no-daemon :app:checkDebugRefract
+   :app:compileDebugKotlin` from `examples/android/`. The Gradle plugin in `tools/gradle/` registers per-variant
+   generation through Android's generated-source API. It compiles the fresh output under `app/build/generated/`,
+   while `checkDebugRefract` invokes the CLI's read-only committed-output check. The checked-in Gradle wrapper
    (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle
    through `services.gradle.org`. Android Gradle Plugin, Kotlin and the Compose BOM are pinned in the same
    Gradle scripts; no version is left to resolve at CI time.
@@ -123,8 +127,10 @@ emulator or device run, and no performance measurement; `docs/GOALS.md` goal 2 i
 such claim may be inferred from them. The separate JVM tests do not close that gap. HarmonyOS remains unverified in
 CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not hidden by this
 job. To run the same checks locally, follow `examples/android/README.md`: build the CLI, run
-`scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, then `./gradlew :app:compileDebugKotlin
-:fixtures:compileDebugKotlin :app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21 on `PATH`.
+`scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, set `REFRACT_CLI_PATH`, then
+`./gradlew :app:checkDebugRefract :app:compileDebugKotlin :fixtures:compileDebugKotlin :app:testDebugUnitTest`
+with `ANDROID_HOME` and a JDK 21 on `PATH`. Run the `tools/gradle/` functional tests as documented in the example
+README to cover incremental generation and missing-tool behavior.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or
 changes the Android toolchain must update the generated files or the toolchain pins in the same change rather than

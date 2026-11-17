@@ -117,7 +117,7 @@ refract generate \
   --input examples/shared/Hello.swift \
   --input examples/shared/SettingsScreen.swift \
   --mapping examples/refract.json \
-  --android-out examples/android/app/src/main/java/refract/generated \
+  --android-out examples/android/app/refract/generated/screens \
   --harmony-out examples/harmony/entry/src/main/ets/generated
 ```
 

@@ -23,7 +23,7 @@ def fail(message: str) -> None:
 
 def regenerate_hello() -> None:
     outputs = {
-        "kotlin": ROOT / "examples/android/app/src/main/java/refract/generated",
+        "kotlin": ROOT / "examples/android/app/refract/generated/screens",
         "arkts": ROOT / "examples/harmony/entry/src/main/ets/generated",
     }
     sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift")
@@ -52,7 +52,7 @@ def regenerate_hello() -> None:
 
 def regenerate_identified_list() -> None:
     outputs = {
-        "android": ROOT / "examples/android/app/src/main/java/refract/generated/IdentifiedList.kt",
+        "android": ROOT / "examples/android/app/refract/generated/screens/IdentifiedList.kt",
         "harmony": ROOT / "examples/harmony/entry/src/main/ets/generated/IdentifiedList.ets",
     }
     source = ROOT / "examples/shared/IdentifiedList.swift"
