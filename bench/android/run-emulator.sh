@@ -26,6 +26,8 @@ mkdir -p "$out/raw"
 python3 -I "$here/probe_target.py" --adb "$adb" --source-revision "$revision" \
     --timeout "${TARGET_PROBE_TIMEOUT_SECONDS:-15}" --output "$out/environment.json"
 
+export ANDROID_SERIAL="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["android_serial"])' "$out/environment.json")"
+
 # This checks that the actual CLI output is committed before compiling it. It
 # never changes generated Kotlin/ArkTS or the hand-written reference.
 "$here/generate-and-compile.sh" --check
@@ -46,6 +48,7 @@ if [ -e "$additional_output" ]; then
     [ -d "$additional_output" ] || { printf 'Unexpected additional-output path; preserve it manually.\n' >&2; exit 2; }
     mv -- "$additional_output" "$out/pre-existing-additional-output"
 fi
+python3 -I -c 'import pathlib,sys; pathlib.Path(sys.argv[1]).mkdir(exist_ok=False)' "$additional_output"
 
 set +e
 (
@@ -53,7 +56,8 @@ set +e
     timeout "${BENCHMARK_TIMEOUT_SECONDS:-3600}" \
         ./gradlew --no-daemon --max-workers="${GRADLE_WORKERS:-2}" --console=plain \
         :benchmark:connectedReleaseAndroidTest \
-        -Pandroid.testInstrumentationRunnerArguments.class=dev.refract.bench.test.SettingsMacrobenchmark
+        -Pandroid.testInstrumentationRunnerArguments.class=dev.refract.bench.test.SettingsMacrobenchmark \
+        -Pandroid.test.devices="$ANDROID_SERIAL"
 )
 instrumentation_status=$?
 set -e

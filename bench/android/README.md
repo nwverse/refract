@@ -56,15 +56,18 @@ bench/android/run-emulator.sh bench/android/results/emulator-01
 properties. It does not create, boot, stop, root or reboot an emulator, and it rejects an offline, incomplete or
 storage-unready target before Gradle instrumentation starts. Its only target write is the documented output-directory
 writability test; the runner separately disables animations. The JSON records model, device, OS/build, ABI, rendering
-properties, compilation mode, macro iteration count and the exact Git revision, with no target serial or host path.
+properties, compilation mode, macro iteration count and the exact Git revision. Local run metadata retains the
+selected target serial and Gradle receives that exact serial through `android.test.devices`, so a second attached
+target cannot redirect or duplicate the measurement. Run directories and serial-bearing reports are not committed.
 A dirty source tree is rejected. Any old `additional-output` directory is moved intact into the new run directory
 before instrumentation so historical JSON/traces cannot be mistaken for this run's evidence.
 
 `run-emulator.sh` first checks that the real CLI regenerates the exact committed Kotlin and fixture ArkTS without
 installing changes, then compiles the release artifacts. After instrumentation it preserves every AndroidX JSON and
 `.perfetto-trace` file with SHA-256 checksums in a new per-run directory. `report.py --require-macro` requires both
-variants of startup, scroll and state update, at least ten iterations, raw startup/frame/memory samples, matching
-metric sets and trace coverage for every variant/scenario. Each macro record's AndroidX `profilerOutputs` must
+variants of startup, scroll and state update, at least ten iterations, raw startup/frame samples, one memory sample
+per declared scroll/state-update iteration, matching metrics and a distinct indexed Perfetto trace for every declared
+iteration. Each macro record's AndroidX `profilerOutputs` must
 reference a retained trace with the matching variant/scenario; unreferenced or ambiguous traces fail closed. Missing
 pairs, JSON, traces, mismatched checksums or incomplete traces fail rather than becoming a partial PASS. AOSP images
 without Google services need the same startup/rendering stability checks; slow first frames are not accepted as

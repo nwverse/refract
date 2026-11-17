@@ -2,8 +2,8 @@
 """Read-only emulator readiness probe, except for the documented storage write test.
 
 This never creates, boots, stops, roots or reboots a target. A failed probe is a
-blocker, not a benchmark result. The optional JSON file contains no serial or
-host-specific paths.
+blocker, not a benchmark result. The local run metadata stores the selected
+serial to pin Gradle to this exact target; it is not committed to the repository.
 """
 
 from __future__ import annotations
@@ -63,7 +63,8 @@ def select_target(listing: str, requested: str | None) -> str:
     return serial
 
 
-def inspect(properties: dict[str, str], volumes: str, source_revision: str) -> dict[str, Any]:
+def inspect(properties: dict[str, str], volumes: str, source_revision: str,
+            serial: str = "selected-target") -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-f]{40}", source_revision):
         raise ProbeError("A full Git source revision is required.")
     if properties.get("sys.boot_completed") != "1":
@@ -89,6 +90,7 @@ def inspect(properties: dict[str, str], volumes: str, source_revision: str) -> d
         "device_result": False,
         "source": "read-only adb properties, service checks and a bounded storage write probe",
         "source_revision": source_revision,
+        "android_serial": serial,
         "target": {
             "model": properties["ro.product.model"],
             "device": properties["ro.product.device"],
@@ -139,7 +141,7 @@ def probe(adb: Adb, requested_serial: str | None, source_revision: str) -> dict[
         if not response or "not found" in response.lower():
             raise ProbeError(f"Required Android service is unavailable: {service}")
     volumes = adb.call(["shell", "sm", "list-volumes", "all"], serial)
-    result = inspect(properties, volumes, source_revision)
+    result = inspect(properties, volumes, source_revision, serial)
     # This is the only target write: create the documented output directory and
     # verify its writability. It does not alter existing files or mount state.
     adb.call(["shell", f"mkdir -p '{OUTPUT_ROOT}' && test -w '{OUTPUT_ROOT}'"], serial)

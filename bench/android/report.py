@@ -297,6 +297,9 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
             if any(row["sample_kind"] != "runs" or row["repeat_iterations"] < MACRO_MINIMUM_ITERATIONS
                    for row in selected):
                 raise ReportError(f"Macro {variant}.{scenario} needs raw samples and at least ten iterations")
+            if any(row["metric"] in MEMORY_METRICS and row["sample_count"] < row["repeat_iterations"]
+                   for row in selected):
+                raise ReportError(f"Macro {variant}.{scenario} needs one memory sample per declared iteration")
             required = "startupMs" if scenario == "startup" else "frameDurationCpuMs"
             if not any(row["metric"] == required for row in selected):
                 raise ReportError(f"Macro {variant}.{scenario} is missing {required} raw samples")
@@ -306,6 +309,14 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
                 raise ReportError(f"Macro {variant}.startup needs at least ten raw startup samples")
             if not any(trace.get("variant") == variant and trace.get("scenario") == scenario for trace in traces):
                 raise ReportError(f"Perfetto evidence is missing {variant}.{scenario}")
+            iteration_counts = {row["repeat_iterations"] for row in selected}
+            if len(iteration_counts) != 1:
+                raise ReportError(f"Macro {variant}.{scenario} metrics have inconsistent iteration counts")
+            iterations = iteration_counts.pop()
+            indices = [trace.get("iteration") for trace in traces
+                       if trace.get("variant") == variant and trace.get("scenario") == scenario]
+            if sorted(indices) != list(range(iterations)):
+                raise ReportError(f"Macro {variant}.{scenario} needs one trace for every declared iteration")
         metrics = [{row["metric"] for row in rows if row["benchmark_kind"] == "Macro"
                     and row["benchmark"] == scenario and row["variant"] == variant}
                    for variant in ("generated", "reference")]

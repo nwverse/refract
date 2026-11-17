@@ -94,6 +94,7 @@ class TargetProbeTest(unittest.TestCase):
         adb.call.side_effect = lambda arguments, serial=None: responses[tuple(arguments)]
         result = probe_target.probe(adb, None, REVISION)
         self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["android_serial"], "target")
         commands = [call.args[0] for call in adb.call.call_args_list]
         self.assertFalse(any(command[0] in ("emu", "root", "reboot") for command in commands))
 
@@ -107,7 +108,7 @@ class EvidenceCollectionTest(unittest.TestCase):
         self.output = self.root / "run"
         self.inputs.mkdir()
 
-    def add_json(self, name="benchmarkData.json", benchmarks=None):
+    def add_json(self, name="benchmarkData.json", benchmarks=None, iterations=1):
         path = self.inputs / name
         if benchmarks is None:
             benchmarks = []
@@ -116,19 +117,21 @@ class EvidenceCollectionTest(unittest.TestCase):
                     benchmarks.append({
                         "name": f"dev.refract.bench.test.SettingsMacrobenchmark.{variant}{scenario}",
                         "className": "dev.refract.bench.test.SettingsMacrobenchmark",
+                        "repeatIterations": iterations,
                         "profilerOutputs": [{
-                            "type": "PerfettoTrace", "label": "Trace Iteration 0",
-                            "filename": collect_results.trace_filename(variant, scenario),
-                        }],
+                            "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
+                            "filename": collect_results.trace_filename(variant, scenario, iteration),
+                        } for iteration in range(iterations)],
                     })
         path.write_text(json.dumps(benchmarks))
         return path
 
-    def add_traces(self):
+    def add_traces(self, iterations=1):
         for variant in ("generated", "reference"):
             for scenario in ("startup", "scroll", "stateUpdate"):
-                filename = collect_results.trace_filename(variant, scenario)
-                (self.inputs / filename).write_bytes(b"trace")
+                for iteration in range(iterations):
+                    filename = collect_results.trace_filename(variant, scenario, iteration)
+                    (self.inputs / filename).write_bytes(b"trace")
 
     def test_copies_json_and_all_six_perfetto_scenarios(self):
         self.add_json()
@@ -155,6 +158,20 @@ class EvidenceCollectionTest(unittest.TestCase):
         source.write_text(json.dumps(payload))
         self.add_traces()
         with self.assertRaisesRegex(collect_results.EvidenceError, "missing or ambiguous"):
+            collect_results.collect(self.inputs, self.output)
+
+    def test_ten_declared_iterations_require_ten_distinct_traces(self):
+        self.add_json(iterations=10)
+        self.add_traces(iterations=1)
+        with self.assertRaisesRegex(collect_results.EvidenceError, "missing or ambiguous"):
+            collect_results.collect(self.inputs, self.output)
+
+    def test_duplicate_iteration_label_cannot_fill_a_missing_iteration(self):
+        payload = json.loads(self.add_json(iterations=10).read_text())
+        payload[0]["profilerOutputs"][1] = payload[0]["profilerOutputs"][0]
+        (self.inputs / "benchmarkData.json").write_text(json.dumps(payload))
+        self.add_traces(iterations=10)
+        with self.assertRaisesRegex(collect_results.EvidenceError, "every declared iteration"):
             collect_results.collect(self.inputs, self.output)
 
     def test_macro_without_profiler_outputs_cannot_pass(self):
@@ -195,19 +212,18 @@ class EvidenceCollectionTest(unittest.TestCase):
         for variant in ("Generated", "Reference"):
             for scenario, metrics in (
                 ("startup", {"startupMs": {"runs": [1.0] * 10}}),
-                ("scroll", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0]}}),
-                ("stateUpdate", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0]}}),
+                ("scroll", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}),
+                ("stateUpdate", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}),
             ):
                 value = report_test.benchmark(variant, scenario, metrics)
                 value["repeatIterations"] = 10
                 value["profilerOutputs"] = [{
-                    "type": "PerfettoTrace",
-                    "filename": collect_results.trace_filename(variant.lower(), scenario),
-                }]
+                    "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
+                    "filename": collect_results.trace_filename(variant.lower(), scenario, iteration),
+                } for iteration in range(10)]
                 values.append(value)
-        source = self.add_json()
-        source.write_text(json.dumps(values))
-        self.add_traces()
+        source = self.add_json(benchmarks=values, iterations=10)
+        self.add_traces(iterations=10)
         collect_results.collect(self.inputs, self.output)
         environment = self.output / "environment.json"
         environment.write_text(json.dumps({"emulator": True, "source_revision": REVISION}))

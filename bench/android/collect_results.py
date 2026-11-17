@@ -9,10 +9,31 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 
 class EvidenceError(RuntimeError):
     pass
+
+
+def perfetto_iterations(outputs: list[Any], repeat_iterations: int) -> list[int]:
+    iterations = []
+    for output in outputs:
+        if not isinstance(output, dict) or output.get("type") != "PerfettoTrace":
+            continue
+        label = output.get("label")
+        if not isinstance(label, str) or not label.startswith("Trace Iteration "):
+            raise EvidenceError("Perfetto output has no iteration label")
+        try:
+            iteration = int(label.removeprefix("Trace Iteration "))
+        except ValueError as error:
+            raise EvidenceError("Perfetto output has an invalid iteration label") from error
+        if iteration < 0 or iteration >= repeat_iterations:
+            raise EvidenceError("Perfetto iteration is outside repeatIterations")
+        iterations.append(iteration)
+    if sorted(iterations) != list(range(repeat_iterations)):
+        raise EvidenceError("Perfetto outputs must contain exactly one trace for every declared iteration")
+    return iterations
 
 
 def digest(path: Path) -> str:
@@ -74,9 +95,15 @@ def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
             outputs = benchmark.get("profilerOutputs")
             if not isinstance(outputs, list) or not outputs:
                 raise EvidenceError(f"AndroidX JSON has no profilerOutputs for {name}")
+            repeat_iterations = benchmark.get("repeatIterations")
+            if not isinstance(repeat_iterations, int) or isinstance(repeat_iterations, bool) or repeat_iterations < 1:
+                raise EvidenceError(f"AndroidX JSON has no valid repeatIterations for {name}")
+            iterations = perfetto_iterations(outputs, repeat_iterations)
+            trace_index = -1
             for output in outputs:
                 if not isinstance(output, dict) or output.get("type") != "PerfettoTrace":
                     continue
+                trace_index += 1
                 filename = output.get("filename")
                 if not isinstance(filename, str) or not filename:
                     raise EvidenceError(f"Invalid Perfetto filename for {name}")
@@ -88,6 +115,7 @@ def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
                     raise EvidenceError(f"Perfetto filename does not match its AndroidX benchmark identity: {name}")
                 trace["androidx_benchmark"] = name
                 trace["androidx_json"] = copied["path"]
+                trace["iteration"] = iterations[trace_index]
                 referenced.add(trace["source_name"])
     unreferenced = [trace["source_name"] for trace in traces if trace["source_name"] not in referenced]
     if unreferenced:
