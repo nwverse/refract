@@ -132,18 +132,29 @@ extension Builder {
               let titleArgument = call.arguments.first, titleArgument.label == nil,
               let key = stringLiteral(titleArgument.expression), LocalizationKey.isCanonical(key),
               call.arguments.last?.label?.text == "text",
-              let projection = call.arguments.last?.expression.as(DeclReferenceExprSyntax.self),
-              projection.baseName.text.hasPrefix("$"),
-              let property = controlTextBinding(named: String(projection.baseName.text.dropFirst())) else {
+              let projection = call.arguments.last?.expression else {
             error("state.invalid_projection",
-                  "TextField requires a localized title and `text: $property` for a declared String state or binding.",
-                  "Use `TextField(\"settings.name\", text: $name)` with String ownership", at: call)
+                  "TextField requires a localized title and a supported String binding.",
+                  "Use `text: $name`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })", at: call)
+            return nil
+        }
+        let value: Expression
+        if let reference = projection.as(DeclReferenceExprSyntax.self),
+           reference.baseName.text.hasPrefix("$"),
+           let property = controlTextBinding(named: String(reference.baseName.text.dropFirst())) {
+            value = Expression(.valueProperty(property), location: location(of: projection))
+        } else if let binding = modelTextBinding(projection) {
+            value = binding
+        } else {
+            error("state.invalid_projection",
+                  "TextField requires a local/parent String binding or an explicit model String property and setter.",
+                  "Use `text: $name`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })", at: projection)
             return nil
         }
         let placeholder = Expression(.localizedText(LocalizedText(key: key)), type: .string,
                                     location: location(of: titleArgument.expression))
         return .textInput(placeholder: placeholder,
-                          value: Expression(.valueProperty(property), location: location(of: projection)),
+                          value: value,
                           modifiers: [], location: location(of: call))
     }
 

@@ -84,7 +84,8 @@ runtime library. A `var` model property or a model property wrapper is not accep
 `$property` is accepted only for a binding passed to a supported control or child component. Arbitrary projected
 values, key-path expressions, `wrappedValue` and `projectedValue` are rejected. A button action may call a supported
 model method or assign a supported state/binding value, including `+=` for numeric local state. Broader Swift
-statement translation and arbitrary custom bindings are rejected. The sole custom-binding exception is a Bool `Toggle`
+statement translation and arbitrary custom bindings are rejected. Two closed custom-binding forms preserve an ordinary
+SwiftUI write path without making a get-only model property writable. The first is a Bool `Toggle`
 inside a typed `Identifiable` list row. Its getter must read a stored Bool property of that exact row, and its setter
 must invoke one declared model action with that row's stored `String`/`Int` id and the new Bool value:
 
@@ -105,6 +106,43 @@ not string substitution. Different rows, non-Bool values,
 mismatched labels/types/identities, side effects and general getter/setter computation are build-time errors. No
 observer registry, per-row binding adapter or synthetic model mutation is generated. See
 `Fixtures/v0-item-toggle/` for the exact native shape.
+
+The second is a String `TextField` whose getter reads one declared model String property and whose setter calls the
+corresponding `set<Property>` action with one String parameter on that same model. `$model.searchText` is not accepted:
+the get-only protocol does not
+supply a SwiftUI writable projection. Use the valid explicit binding instead:
+
+```swift
+TextField("search.results.placeholder", text: Binding(
+    get: { model.searchText },
+    set: { value in model.setSearchText(value) }
+))
+```
+
+Compose reads `model.searchText.value` and calls `model.setSearchText(value)` from `onValueChange`; ArkUI reads
+`this.model.searchText` and calls the same action from `onChange`. Getter/setter owner, type, label or side-effect
+mismatches are `state.invalid_projection` errors. The app owns debouncing, cancellation and request generations;
+there is no generated subscriber, writable-model fallback or paging adapter.
+
+## Bounded incremental search pages
+
+`Fixtures/list-paged-search/` adds loading, error, empty and result branches around the same keyed lazy-list lowering.
+Loading and error indicators do not remove an existing list from the native composition; empty is a settled result,
+not a transient loading state. Its model actions are `setSearchText`, `loadNextPage` and `retry`; transport execution,
+remain native application code on every platform. A useful bounded implementation has one in-flight page, assigns a
+new generation and cancels the old request when the query changes, and accepts a completion only when its generation,
+query and page match that active request. A duplicate completion or a skipped page is ignored rather than merged.
+Page zero replaces the snapshot; later pages append. Reusing an item id updates that logical row without creating a
+second native key. Failure keeps accepted rows and retry requests only the failed next page. These rules keep native
+keys stable, but do not imply transport retry, process persistence or a measured scrolling/performance result.
+
+The Android example's hand-written `IncrementalSearchResultsModel` implements this boundary and its JVM tests use an
+in-memory scripted transport: no network request or device behavior is part of the evidence. Its ArkUI counterpart
+must similarly update an app-owned `BasicDataSource` and issue the appropriate insert/reload notifications; the
+ArkTS golden is source-only until the authorized HarmonyOS compiler and runtime are available. Native request
+callbacks must arrive serially on the platform UI owner after the request-start call returns, and the owner must
+Generation counters are an internal implementation detail (zero-based in the example), not an API exposed to the
+transport. Their equality, not a particular starting number, defines stale-response rejection.
 
 ## Compose output
 

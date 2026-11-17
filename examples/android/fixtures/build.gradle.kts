@@ -45,8 +45,11 @@ android {
         compose = true
     }
 
-    sourceSets.getByName("main").kotlin.directories.add(
-        "../app/src/main/java/com/example/refract/animation",
+    sourceSets.getByName("main").kotlin.directories.addAll(
+        listOf(
+            "../app/src/main/java/com/example/refract/animation",
+            "../app/src/main/java/com/example/refract/search",
+        ),
     )
 }
 
