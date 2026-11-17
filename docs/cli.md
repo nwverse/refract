@@ -11,8 +11,9 @@ A generate invocation publishes only the Kotlin and ArkTS files derived from its
 unrelated or no-longer-generated screens; review and remove obsolete generated files explicitly. Input base filenames
 must be unique, and two outputs resolving to the same path are rejected before publication.
 
-Each output directory has a `.refract-generate.lock` directory. Refract serializes publication within all affected
-directories, acquiring locks in deterministic path order, and waits up to 30 seconds. A busy lock is a nonzero,
+Each output directory has a `.refract-generate.lock` directory. Aliases of the same resolved output directory share a
+lock. Refract serializes publication within all affected directories, acquiring locks in deterministic path order, and
+waits up to 30 seconds. A busy lock is a nonzero,
 actionable failure, not an interleaved write. After a process crash, confirm no generator is running before removing a
 stale lock. External editors and non-Refract writers do not participate in this exclusion and must not write generated
 files concurrently.
