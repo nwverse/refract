@@ -432,6 +432,9 @@ struct Generation {
             try emit(.nativeModifier(child: node, operations: remaining, location: node.sourceLocation),
                      into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
         }
+        writer.close()
+        // Stack modifiers attach after the closing brace.
+        writer.depth += 1
         if let drag {
             let value = try emitLocalExpression(drag.value, item: item, mapping: mapping)
             writer.line(".draggable(true)")
@@ -449,7 +452,7 @@ struct Generation {
             writer.close()
             writer.close(suffix: ")")
         }
-        writer.close()
+        writer.depth -= 1
     }
 
     /// Looks up a model property whose declared protocol exposes `name` as a synchronous action.

@@ -24,13 +24,14 @@ export struct SelectionDropScreen {
         })
       Stack() {
         Text('Drag me')
+      }
         .draggable(true)
         .onDragStart((event: DragEvent) => {
           event.setData({ 'note': this.dragNote } as Record<string, string>);
         })
-      }
       Stack() {
         Text('Drop here')
+      }
         .allowDrop([{ type: 'note' } as uniformTypeDescriptor.UniformDataType])
         .onDrop((event: DragEvent) => {
           const data = event.getData() as Record<string, string>;
@@ -39,7 +40,6 @@ export struct SelectionDropScreen {
             this.model.receiveDrop('note', payload);
           }
         })
-      }
     }
   }
 }
