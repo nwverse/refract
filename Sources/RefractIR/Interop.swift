@@ -44,6 +44,7 @@ public struct NativeModifier: Codable, Equatable, Sendable {
         case testTag(Expression)
         case contentDescription(Expression)
         case retainCallback(identity: String)
+        case contentType(String)
     }
 
     public let operation: Operation

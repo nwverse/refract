@@ -31,16 +31,11 @@ export struct ChildSettingRow {
         Text(this.row.title)
         Text(this.row.subtitle)
       }.layoutWeight(1)
-      Row() {
-        Text($r('app.string.settings_item', this.row.id))
-        Blank()
-        Toggle({ type: ToggleType.Switch, isOn: row.enabled })
-          .onChange((enabled: boolean) => {
-            this.settings.setEnabled(row.id, enabled);
-          })
-          .id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)
-      }
-      .justifyContent(FlexAlign.SpaceBetween)
+      Toggle({ type: ToggleType.Switch, isOn: row.enabled })
+        .onChange((enabled: boolean) => {
+          this.settings.setEnabled(row.id, enabled);
+        })
+        .id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)
     }
     .alignItems(VerticalAlign.Center)
     .id(`setting_row_${this.row.id}`)
@@ -57,6 +52,7 @@ export struct ChildSettings {
       LazyForEach(this.model.rows, (row: ChildSettingItem) => {
         ListItem() {
           ChildSettingRow({ settings: this.model, row: row })
+          .reuse({ reuseId: () => 'setting' })
         }
       }, (row: ChildSettingItem): string => String(row.id))
     }

@@ -98,7 +98,7 @@ extension Builder {
         }
         let items = ListItems(collection: collection, itemName: itemName, itemType: descriptor.itemType,
                               key: descriptor.key, keyType: descriptor.keyType, content: content,
-                              location: location(of: call))
+                              contentType: rowContentType(content), location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [], location: location(of: call))
     }
 
@@ -165,7 +165,7 @@ extension Builder {
         }
         let items = ListItems(collection: collection, itemName: itemName, itemType: item.name,
                               key: item.identity.name, keyType: item.identity.type, content: content,
-                              location: location(of: call))
+                              contentType: rowContentType(content), location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [],
                      location: location(of: owner))
     }
@@ -201,6 +201,32 @@ extension Builder {
         return Expression(.valueProperty(.model(model: reference.propertyName,
                                                 property: member.declName.baseName.text)),
                           location: location(of: expression))
+    }
+
+    func validateRowContentTypes(_ module: Module) {
+        for screen in module.screens {
+            func visit(_ node: ViewNode, directDynamicRow: Bool = false) {
+                if case let .child(child, location) = node, child.contentType != nil, !directDynamicRow {
+                    diagnostics.append(Diagnostic(code: "RFNATIVE004",
+                        message: "A row content type requires a generated child directly owned by a dynamic List.",
+                        suggestion: "Apply `.contentType(\"setting\")` only to the generated child row inside List(model.items) or List { ForEach(model.items) }",
+                        location: location))
+                }
+                for child in node.children {
+                    if case let .forEach(items, _) = child {
+                        visit(items.content, directDynamicRow: true)
+                    } else {
+                        visit(child)
+                    }
+                }
+            }
+            visit(screen.body)
+        }
+    }
+
+    private func rowContentType(_ content: ViewNode) -> String? {
+        if case let .child(child, _) = content { return child.contentType }
+        return nil
     }
 
     private func closureItemName(_ closure: ClosureExprSyntax) -> String? {

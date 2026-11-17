@@ -39,6 +39,22 @@ extension Builder {
                     return nil
                 }
                 operation = name == "testTag" ? .testTag(value.expression) : .contentDescription(value.expression)
+            case "contentType":
+                guard operationCall.arguments.count == 1, operationCall.arguments.first?.label == nil,
+                      operationCall.trailingClosure == nil,
+                      let identity = stringLiteral(operationCall.arguments.first!.expression),
+                      identity.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }),
+                      let first = identity.first, first.isLowercase else {
+                    error("RFNATIVE004", "A row content type needs a stable lowercase ASCII identifier.",
+                              "Use `.contentType(\"setting\")` on a generated child that is a direct dynamic List row", at: operationCall)
+                    return nil
+                }
+                guard case let .child(child, _) = node, child.contentType == nil else {
+                    error("RFNATIVE004", "A row content type applies once to a generated child View.",
+                              "Put `.contentType(\"setting\")` directly on the generated child row", at: operationCall)
+                    return nil
+                }
+                operation = .contentType(identity)
             case "retainCallback":
                 guard operationCall.arguments.count == 1,
                       operationCall.arguments.first?.label?.text == "identity",
@@ -57,7 +73,7 @@ extension Builder {
                     error("RFNATIVE004", "Callback retention requires a typed model action.",
                               "Attach retention to a Button with a declared model action", at: operationCall)
                     return nil
-                case let .toggle(_, value, _, _, _):
+                case let .toggle(_, value, _, _, _, _):
                     guard case .valueProperty(.itemBinding) = value.value else {
                         error("RFNATIVE004", "Toggle callback retention requires a checked item model action.",
                                   "Use the typed current-item Binding with its stable stored id", at: operationCall)
@@ -77,10 +93,19 @@ extension Builder {
             operations.append(operation)
             locations.append(location(of: operationCall))
         }
-        if case let .toggle(title, value, modifiers, nativeModifiers, location) = node {
+        if case let .child(child, childLocation) = node {
+            guard operations.count == 1, case let .contentType(identity) = operations[0] else {
+                error("RFNATIVE004", "A generated child accepts only one explicit row content type.",
+                      "Use `.refractNativeModifier(.contentType(\"setting\"))` on a direct dynamic List row", at: call)
+                return nil
+            }
+            return .child(ChildView(name: child.name, arguments: child.arguments, models: child.models,
+                                    item: child.item, contentType: identity), location: childLocation)
+        }
+        if case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location) = node {
             return .toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers + zip(operations, locations).map {
                 NativeModifier(operation: $0.0, location: $0.1)
-            }, location: location)
+            }, labelsHidden: labelsHidden, location: location)
         }
         return .nativeModifier(child: node,
                                operations: zip(operations, locations).map {

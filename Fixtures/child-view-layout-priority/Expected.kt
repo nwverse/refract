@@ -4,7 +4,6 @@
 
 package refract.generated.childlayout
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,11 +19,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import refract.generated.childlayout.R
 
 @Immutable
 public data class ChildSettingItem(
@@ -53,17 +50,11 @@ public fun ChildSettingRow(
         val onCheckedChange = remember(settings, row.id) {
             { enabled: Boolean -> settings.setEnabled(row.id, enabled) }
         }
-        Row(
-            modifier = Modifier,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(text = stringResource(R.string.settings_item, row.id))
-            Switch(
-                checked = row.enabled,
-                onCheckedChange = onCheckedChange,
-                modifier = Modifier.testTag("setting_toggle_${row.id}").semantics { contentDescription = row.title },
-            )
-        }
+        Switch(
+            checked = row.enabled,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testTag("setting_toggle_${row.id}").semantics { contentDescription = row.title },
+        )
     }
 }
 
@@ -76,7 +67,7 @@ public fun ChildSettings(
         items(
             items = model.rows.value,
             key = { row -> row.id },
-            contentType = { "ChildSettingItem" },
+            contentType = { "setting" },
         ) { row ->
             ChildSettingRow(settings = model, row = row)
         }

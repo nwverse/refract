@@ -2,7 +2,7 @@ import Testing
 @testable import RefractFrontend
 import RefractIR
 
-private func listSource(_ body: String, identityType: String = "String") -> SourceFile {
+private func listSource(_ body: String, identityType: String = "String", child: Bool = false) -> SourceFile {
     SourceFile(path: "Input.swift", contents: """
     struct SettingItem: Identifiable {
         let id: \(identityType)
@@ -12,7 +12,13 @@ private func listSource(_ body: String, identityType: String = "String") -> Sour
     protocol SettingsListModel: RefractModel {
         var items: [SettingItem] { get }
     }
-
+    \(child ? """
+    struct SettingRow: View {
+        let model: SettingsListModel
+        let item: SettingItem
+        var body: some View { Text(item.title) }
+    }
+    """ : "")
     struct IdentifiedList: View {
         let model: SettingsListModel
 
@@ -25,7 +31,7 @@ private func listSource(_ body: String, identityType: String = "String") -> Sour
 
 private func dynamicItems(_ unit: TranslationUnit) throws -> ListItems {
     #expect(unit.diagnostics.isEmpty, Comment(rawValue: unit.diagnostics.map(\.rendered).joined(separator: "\n")))
-    let screen = try #require(unit.module.screens.first)
+    let screen = try #require(unit.module.screens.last)
     guard case let .list(children, _, _) = screen.body, children.count == 1,
           case let .forEach(items, _) = children[0] else {
         Issue.record("Expected one dynamic ListItems child")
@@ -63,6 +69,69 @@ private struct TestError: Error {}
     }
     #expect(wrappedText.value == canonicalText.value)
     #expect(wrappedModifiers.isEmpty)
+}
+
+@Test func canonicalListsPreserveExplicitChildContentType() throws {
+    let canonical = Frontend.parse(listSource("""
+    List(model.items) { item in
+        SettingRow(model: model, item: item)
+            .refractNativeModifier(.contentType("setting"))
+    }
+    """, child: true))
+    let wrapped = Frontend.parse(listSource("""
+    List {
+        ForEach(model.items) { item in
+            SettingRow(model: model, item: item)
+                .refractNativeModifier(.contentType("setting"))
+        }
+    }
+    """, child: true))
+    #expect(canonical.diagnostics.isEmpty)
+    #expect(wrapped.diagnostics.isEmpty)
+    let canonicalItems = try dynamicItems(canonical)
+    let wrappedItems = try dynamicItems(wrapped)
+    #expect(wrappedItems.contentType == "setting")
+    #expect(wrappedItems.contentType == canonicalItems.contentType)
+    #expect(wrappedItems.itemType == canonicalItems.itemType)
+    #expect(wrappedItems.key == canonicalItems.key)
+    #expect(wrappedItems.collection.value == canonicalItems.collection.value)
+}
+
+@Test(arguments: [
+    "VStack { SettingRow(model: model, item: item).refractNativeModifier(.contentType(\"setting\")) }",
+])
+func rowContentTypeRequiresDirectGeneratedListChild(_ row: String) {
+    let unit = Frontend.parse(listSource("""
+    List {
+        ForEach(model.items) { item in
+            \(row)
+        }
+    }
+    """, child: true))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE004"])
+    #expect(unit.hasErrors)
+}
+
+@Test func misplacedChildContentTypeIsRejectedOnAnOrdinaryPage() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct SettingItem: Identifiable { let id: String; let title: String }
+    protocol SettingsListModel: RefractModel { var items: [SettingItem] { get } }
+    struct SettingRow: View {
+        let model: SettingsListModel
+        let item: SettingItem
+        var body: some View { Text(item.title) }
+    }
+    struct Page: View {
+        let model: SettingsListModel
+        let item: SettingItem
+        var body: some View {
+            SettingRow(model: model, item: item)
+                .refractNativeModifier(.contentType("setting"))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE004"])
+    #expect(unit.hasErrors)
 }
 
 @Test func explicitStoredIDAndIntegerIdentityReuseNativeListLowering() throws {

@@ -273,7 +273,14 @@ Kotlin/ArkTS string or a general modifier language. The initial accepted operati
 - `retainCallback(identity: String)`: on Android, retain a checked model action with all of its captured stable
   references. A no-argument action remembers its model; a typed item-toggle action remembers `(model, row.id)`.
   The identity must be a literal ASCII dot-separated name of the source action. HarmonyOS rejects this operation
-  until a native typed callback-identity contract is available; it is never silently discarded.
+  until a native typed callback-identity contract is available; it is never silently discarded;
+- `contentType(String)`: a lowercase ASCII row-shape identifier, applied exactly once to a generated child View
+  that is the direct content of `List(model.items)` or `List { ForEach(model.items) }`. Compose emits
+  `contentType = { "setting" }` and ArkUI attaches `.reuse({ reuseId: () => 'setting' })` to that same child call.
+  A page-level child, nested row, Toggle, arbitrary operation list, computed identity or duplicate declaration is
+  `RFNATIVE004`; it never falls back to callback retention. ArkUI reuse requires API 18 or newer and the matching
+  reusable-component contract. The generator fixture records this source shape, but no HarmonyOS native compiler is
+  available here, so it is not toolchain or runtime verification.
 
 Only values whose source type is statically known to be `String` are accepted for measurement/accessibility text.
 String interpolation may combine literal segments with typed scalar item/model values, for example

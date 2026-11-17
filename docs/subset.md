@@ -104,6 +104,7 @@ A modifier combination that cannot preserve the source semantics is diagnosed.
 | `.padding(.horizontal, .large)` | `Modifier.padding(horizontal = 16.dp)` | `.padding({ left: 16, right: 16 })` | Horizontal/vertical insets; start/end semantics must be retained for horizontal text layouts. |
 | `.frame(width: 120, height: 44)` | `Modifier.size(width = 120.dp, height = 44.dp)` | `.width(120).height(44)` | Dimensions are scalar dp/vp values. Numeric literals are layout values, not design-token colors or fonts. |
 | `.layoutPriority(1)` on a direct `HStack` child | `Modifier.weight(1f)` in the enclosing `RowScope` | `.layoutWeight(1)` | This bounded layout slice supports only a direct HStack child with the integer literal `1`. Nested children, other priorities, repeated priorities and non-HStack receivers are errors. |
+| `.labelsHidden()` directly on a supported Toggle | Only `Switch(checked = ..., onCheckedChange = ...)`, with declared native measurement/accessibility modifiers | Only the actual `Toggle`, retaining `onChange`, `.id` and `.accessibilityText` | Hide the visible title without dropping its typed source validation or explicit native accessibility. Repeated application, arguments, a wrong receiver, or an unrepresentable layout receiver is an error. |
 | `.fillMaxWidth()` is not SwiftUI; use `.frame(maxWidth: .infinity)` | `Modifier.fillMaxWidth()` | `.width("100%")` | Only the SwiftUI spelling is accepted. It must not be confused with a fixed width. |
 | `.background(.surface)` | `Modifier.background(AppTheme.colors.surface)` | `.backgroundColor(AppTheme.colors.surface)` | A semantic color token resolved by the mapping; never an RGB fallback. |
 | `.foregroundStyle(.secondary)` | `Modifier` does not change the text call; use `color = AppTheme.colors.secondary` at `Text` | `.fontColor(AppTheme.colors.secondary)` | Text color is passed directly to the leaf instead of adding a draw/layout wrapper. |
@@ -143,7 +144,10 @@ with static rows are rejected with `RFLIST003`. The id expression must be the st
 
 Compose emits `items(items = model.items.value, key = { it.id }, contentType = { "SettingItem" })`. The item type is
 immutable and list identity is supplied directly to the platform. Do not use an index as a fallback or wrap each
-row in a new observable holder.
+row in a new observable holder. When a generated child row needs a stable row-shape name independent of its model
+item type, apply the closed `.refractNativeModifier(.contentType("setting"))` operation directly to that child. Both
+canonical List forms preserve the declaration and Compose emits the literal row type. The identifier is lowercase
+ASCII, cannot be computed or repeated, and is rejected on page-level children, nested containers and controls.
 
 ArkUI emits `LazyForEach(model.items, (item: SettingItem) => { ListItem() { ... } }, (item: SettingItem) =>
 item.id)`. Its model property is a platform `BasicDataSource<SettingItem>`: an application-owned subclass supplies

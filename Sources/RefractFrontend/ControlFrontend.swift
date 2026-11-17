@@ -10,6 +10,21 @@ extension Builder {
         }
     }
 
+    func labelsHidden(_ call: FunctionCallExprSyntax, on node: ViewNode) -> ViewNode? {
+        guard call.arguments.isEmpty, call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty else {
+            error("RFVIEW003", "`labelsHidden()` takes no arguments or child closure.",
+                  "Apply `.labelsHidden()` directly to a supported Toggle", at: call)
+            return nil
+        }
+        guard case let .toggle(title, value, modifiers, nativeModifiers, hidden, location) = node, !hidden else {
+            error("RFVIEW003", "`labelsHidden()` applies once to a supported Toggle.",
+                  "Put `.labelsHidden()` directly after the Toggle or its measurement modifiers", at: call)
+            return nil
+        }
+        return .toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
+                       labelsHidden: true, location: location)
+    }
+
     private func toggleControl(_ call: FunctionCallExprSyntax) -> ViewNode? {
         guard call.arguments.count == 2, call.trailingClosure == nil,
               call.arguments.first?.label == nil,

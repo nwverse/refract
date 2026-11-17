@@ -14,7 +14,7 @@ func frontendParsesOnlyDeclaredBoolToggleProjection(_ declaration: String, _ exp
     }
     """))
     #expect(unit.diagnostics.isEmpty)
-    guard case let .toggle(title, value, _, _, _) = unit.module.screens.first?.body else {
+    guard case let .toggle(title, value, _, _, _, _) = unit.module.screens.first?.body else {
         Issue.record("Expected a typed toggle")
         return
     }
@@ -44,7 +44,7 @@ func frontendParsesOnlyDeclaredBoolToggleProjection(_ declaration: String, _ exp
     #expect(unit.diagnostics.isEmpty)
     guard case let .list(children, _, _) = unit.module.screens.first?.body,
           case let .forEach(items, _) = children.first,
-          case let .toggle(title, value, _, _, _) = items.content,
+          case let .toggle(title, value, _, _, _, _) = items.content,
           case let .valueProperty(.itemBinding(binding)) = value.value else {
         Issue.record("Expected a typed item toggle")
         return
@@ -105,6 +105,83 @@ func frontendRejectsItemToggleTitleOutsideCurrentRow(_ title: String, _ modelTit
                     get: { row.enabled },
                     set: { value in model.setEnabled(row.id, value: value) }
                 ))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.contains { $0.code == "state.invalid_projection" })
+    #expect(unit.module.screens.isEmpty)
+}
+
+@Test func hiddenItemTogglePreservesTypedTitleActionAndMeasurement() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SettingsModel: RefractModel {
+        var rows: [SettingRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct SettingRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct ItemToggle: View {
+        let model: SettingsModel
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("settings.item\\(row.id)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                )).refractNativeModifier(.testTag("setting_toggle_\\(row.id)"), .contentDescription(row.title)).labelsHidden()
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .list(children, _, _) = unit.module.screens.first?.body,
+          case let .forEach(items, _) = children.first,
+          case let .toggle(title, value, _, nativeModifiers, labelsHidden, _) = items.content,
+          case let .valueProperty(.itemBinding(binding)) = value.value else {
+        Issue.record("Expected a hidden typed item toggle")
+        return
+    }
+    #expect(labelsHidden)
+    guard case let .localizedText(localized) = title.value else {
+        Issue.record("Expected the hidden title to retain its typed localization")
+        return
+    }
+    #expect(localized.arguments.map(\.value) == [.reference("row.id")])
+    #expect(binding == ItemBinding(model: "model", item: "row", property: "enabled", key: "id", action: "setEnabled"))
+    #expect(nativeModifiers.count == 2)
+}
+
+@Test(arguments: [
+    "Text(verbatim: \"Title\").labelsHidden()",
+    "Toggle(\"settings.enabled\", isOn: $enabled).labelsHidden().labelsHidden()",
+    "Toggle(\"settings.enabled\", isOn: $enabled).labelsHidden(true)",
+])
+func frontendRejectsInvalidHiddenLabels(_ body: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct ToggleRow: View {
+        @State private var enabled: Bool = false
+        var body: some View { \(body) }
+    }
+    """))
+    #expect(unit.diagnostics.contains { $0.code == "RFVIEW003" })
+    #expect(unit.module.screens.isEmpty)
+}
+
+@Test func hiddenItemToggleRejectsInvalidTypedTitle() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SettingsModel: RefractModel {
+        var title: String { get }
+        var rows: [SettingRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct SettingRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct ItemToggle: View {
+        let model: SettingsModel
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("settings.item\\(model.title)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                )).labelsHidden()
             }
         }
     }

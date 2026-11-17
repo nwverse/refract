@@ -144,6 +144,74 @@ private let measurementMapping = Mapping(
     #expect(text.diagnostics.map(\.code) == ["RFNATIVE004"])
 }
 
+@Test(arguments: [
+    ".contentType(\"setting\", \"other\")",
+    ".contentType(identity)",
+    ".contentType(\"Setting\")",
+    ".contentType(\"setting-row\")",
+    ".contentType(\"\")",
+    ".contentType(\"setting\").refractNativeModifier(.contentType(\"setting\"))",
+])
+func rowContentTypeRejectsInvalidOrDuplicateDeclarations(_ operation: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol Model: RefractModel { var rows: [Row] { get } }
+    struct Row: Identifiable { let id: Int; let title: String }
+    struct SettingRow: View {
+        let model: Model
+        let row: Row
+        var body: some View { Text(row.title) }
+    }
+    struct Page: View {
+        let model: Model
+        var body: some View {
+            List {
+                ForEach(model.rows) { row in
+                    SettingRow(model: model, row: row)
+                        .refractNativeModifier(\(operation))
+                }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.contains { $0.code == "RFNATIVE004" })
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.map(\.name) == ["SettingRow"])
+}
+
+@Test(arguments: ["Toggle", "Text", "HStack"])
+func rowContentTypeDoesNotFallThroughToToggleOrWrapper(_ receiver: String) {
+    let body: String
+    switch receiver {
+    case "Toggle":
+        body = "Toggle(\"settings.enabled\", isOn: $enabled).refractNativeModifier(.contentType(\"setting\"))"
+    case "Text":
+        body = "Text(verbatim: \"Title\").refractNativeModifier(.contentType(\"setting\"))"
+    default:
+        body = "HStack { Text(verbatim: \"Title\") }.refractNativeModifier(.contentType(\"setting\"))"
+    }
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Invalid: View {
+        @State private var enabled: Bool = false
+        var body: some View { \(body) }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE004"])
+    #expect(!unit.diagnostics.contains { $0.message.contains("callback retention") })
+    #expect(unit.module.screens.isEmpty)
+}
+
+@Test func invalidToggleContentTypeCannotUseRetainedCallbackFallback() throws {
+    let toggle = ViewNode.toggle(title: Expression(.stringLiteral("Enabled")),
+                                 value: Expression(.valueProperty(.state("enabled"))), modifiers: [],
+                                 nativeModifiers: [NativeModifier(operation: .contentType("setting"))],
+                                 labelsHidden: true, location: nil)
+    let module = Module(sourceFile: "Input.swift", screens: [Screen(name: "Invalid", body: toggle)])
+    let compose = #expect(throws: Diagnostic.self) { try ComposeBackend().generate(module: module) }
+    let ark = #expect(throws: Diagnostic.self) { try ArkUIBackend().generate(module: module) }
+    #expect(compose?.code == "RFNATIVE004" && compose?.message.contains("not its Toggle") == true)
+    #expect(ark?.code == "RFNATIVE004" && ark?.message.contains("not its Toggle") == true)
+}
+
 @Test func measurementStringsPreserveTypedItemInterpolation() throws {
     let fixture = try CorpusLoader.load(repository: URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent())
@@ -154,6 +222,11 @@ private let measurementMapping = Mapping(
     #expect(result.kotlin?.contains("Column(modifier = Modifier.weight(1f))") == true)
     #expect(result.kotlin?.contains("Modifier.testTag(\"setting_toggle_${row.id}\")") == true)
     #expect(result.arkTS?.contains(".id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)") == true)
+    #expect(result.arkTS?.contains("Toggle({ type: ToggleType.Switch, isOn: row.enabled })") == true)
+    #expect(result.arkTS?.contains("ChildSettingRow({ settings: this.model, row: row })\n          .reuse({ reuseId: () => 'setting' })") == true)
+    #expect(result.kotlin?.contains("contentType = { \"setting\" }") == true)
+    #expect(result.kotlin?.contains("Arrangement.SpaceBetween") == false)
+    #expect(result.arkTS?.contains("justifyContent(FlexAlign.SpaceBetween)") == false)
     #expect(result.arkTS?.contains(".alignItems(VerticalAlign.Center)\n    .id(`setting_row_${this.row.id}`)") == true)
 }
 

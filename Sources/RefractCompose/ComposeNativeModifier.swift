@@ -34,6 +34,10 @@ struct ComposeNativeModifier {
                 context.imports.insert("androidx.compose.ui.semantics.semantics")
                 modifier = Modifier(name: "nativeContentDescription", arguments: [value], argumentLabels: [nil],
                                     location: operation.location)
+            case .contentType:
+                throw Diagnostic(code: "RFNATIVE004",
+                    message: "Row content type belongs on a generated child, not a wrapped native modifier receiver.",
+                    suggestion: "Apply `.contentType` directly to the generated child row", location: operation.location)
             case .retainCallback:
                 guard seen.insert("retainCallback").inserted else { throw duplicate(operation) }
                 continue

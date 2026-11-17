@@ -20,6 +20,7 @@ public struct Frontend {
                             models: builder.models, itemTypes: builder.itemTypes,
                             enums: builder.enums)
         builder.validateChildViewGraph(module)
+        builder.validateRowContentTypes(module)
         return TranslationUnit(module: module,
                                diagnostics: builder.diagnostics)
     }
@@ -203,6 +204,7 @@ final class Builder: SyntaxVisitor {
 
     func modifier(_ call: FunctionCallExprSyntax, name: String, on node: ViewNode) -> ViewNode? {
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
+        if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {

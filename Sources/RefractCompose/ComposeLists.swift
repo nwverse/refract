@@ -59,7 +59,13 @@ extension ComposeBackend {
         out.open("items(")
         out.line("items = \(collection),")
         out.line("key = { \(item) -> \(key) },")
-        out.line("contentType = { \"\(items.itemType)\" },")
+        if let contentType = items.contentType {
+            guard case let .child(child, _) = items.content, child.contentType == contentType else {
+                throw Diagnostic(code: "RFNATIVE004", message: "A row content type must belong to the direct generated child row.",
+                                 suggestion: "Apply `.refractNativeModifier(.contentType(\"setting\"))` to the child call", location: items.location)
+            }
+        }
+        out.line("contentType = { \"\(items.contentType ?? items.itemType)\" },")
         out.depth -= 1
         out.line(") { \(item) ->")
         out.depth += 1

@@ -23,7 +23,7 @@ public enum LocalizationResourceValidator {
                 return visit(child) + operations.compactMap { modifier in
                     switch modifier.operation {
                     case let .testTag(value), let .contentDescription(value): value
-                    case .retainCallback: nil
+                    case .retainCallback, .contentType: nil
                     }
                 }
             case let .native(component, _):
@@ -57,11 +57,11 @@ public enum LocalizationResourceValidator {
                 return [items.collection] + visit(items.content)
             case let .image(_, modifiers, _):
                 return modifiers.flatMap(\.arguments)
-            case let .toggle(title, value, modifiers, nativeModifiers, _):
+            case let .toggle(title, value, modifiers, nativeModifiers, _, _):
                 return [title, value] + modifiers.flatMap(\.arguments) + nativeModifiers.compactMap {
                     switch $0.operation {
                     case let .testTag(value), let .contentDescription(value): value
-                    case .retainCallback: nil
+                    case .retainCallback, .contentType: nil
                     }
                 }
             case let .textInput(placeholder, value, modifiers, _):
