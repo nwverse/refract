@@ -41,6 +41,15 @@ def run(command: list[str], *, cwd: Path = ROOT, stdout=None) -> str:
     return result.stdout.strip() if stdout is None else ""
 
 
+def resource_bundle(products: Path) -> Path:
+    bundle = products / "refract_RefractMapping.bundle"
+    schemas = [path for path in bundle.rglob("refract.schema.json")
+               if path.is_file() and not path.is_symlink()]
+    if len(schemas) != 1 or any(path.is_symlink() for path in bundle.rglob("*")):
+        raise ValueError("SwiftPM must produce one regular mapping schema in a symlink-free resource bundle")
+    return schemas[0]
+
+
 def swift_build_flags(os_name: str) -> list[str]:
     flags = list(SWIFT_FLAGS)
     # macOS provides the Swift runtime in the OS and its compiler rejects static Swift linkage.
@@ -233,15 +242,12 @@ def build(source: Path, scratch: Path, os_name: str) -> Path:
     if not executable.is_file() or not os.access(executable, os.X_OK):
         raise ValueError("SwiftPM did not produce an executable refract product")
     strip_executable(executable, os_name)
-    bundle = products / "refract_RefractMapping.bundle"
-    schema = bundle / "refract.schema.json"
-    if not schema.is_file():
-        raise ValueError("SwiftPM did not produce the required mapping resource bundle")
+    resource_bundle(products)
     return products
 
 
 def binary_entries(products: Path, commit: str, metadata: dict[str, object], notices: bytes) -> list[tuple[str, int, bytes]]:
-    resource = (products / "refract_RefractMapping.bundle/refract.schema.json").read_bytes()
+    resource = resource_bundle(products).read_bytes()
     expected = run_bytes(["git", "show", f"{commit}:Sources/RefractMapping/Resources/refract.schema.json"])
     if resource != expected:
         raise ValueError("packaged mapping schema differs from the source revision")
@@ -294,9 +300,7 @@ def validate_package(archive: Path, parent: Path, commit: str) -> None:
             raise ValueError("packaged CLI did not generate both native outputs")
         if "Packaged" not in kotlin.read_text(encoding="utf-8") or "Packaged" not in arkts.read_text(encoding="utf-8"):
             raise ValueError("packaged CLI generated incomplete native output")
-        resource = extracted / "lib/refract_RefractMapping.bundle/refract.schema.json"
-        if not resource.is_file():
-            raise ValueError("installed package is missing its mapping schema")
+        resource = resource_bundle(extracted / "lib")
         if resource.read_bytes() != run_bytes(["git", "show", f"{commit}:Sources/RefractMapping/Resources/refract.schema.json"]):
             raise ValueError("installed mapping schema differs from the source revision")
 

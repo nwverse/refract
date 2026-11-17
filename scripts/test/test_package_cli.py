@@ -62,6 +62,21 @@ class PackagingUnitTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 package.extract_archive(archive_path, self.root / f"installed-{kind}-{mode}")
 
+    def test_resource_bundle_preserves_linux_and_macos_layouts(self) -> None:
+        for relative in ("refract.schema.json", "Contents/Resources/refract.schema.json"):
+            products = self.root / relative.split("/")[0]
+            schema = products / "refract_RefractMapping.bundle" / relative
+            schema.parent.mkdir(parents=True)
+            schema.write_bytes(b"schema")
+            self.assertEqual(package.resource_bundle(products), schema)
+        duplicate = self.root / "duplicate/refract_RefractMapping.bundle"
+        for relative in ("refract.schema.json", "Contents/Resources/refract.schema.json"):
+            schema = duplicate / relative
+            schema.parent.mkdir(parents=True, exist_ok=True)
+            schema.write_bytes(b"schema")
+        with self.assertRaisesRegex(ValueError, "one regular mapping schema"):
+            package.resource_bundle(self.root / "duplicate")
+
     def test_platform_specific_link_and_strip_flags(self) -> None:
         self.assertIn("--static-swift-stdlib", package.swift_build_flags("linux"))
         self.assertNotIn("--static-swift-stdlib", package.swift_build_flags("macos"))
