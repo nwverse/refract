@@ -4,9 +4,9 @@
 
 **SwiftUI 只写一份，编译期生成原生的 Jetpack Compose 和 ArkUI。**
 
-Refract 读取用 SwiftUI 子集写的页面，为 Android（Jetpack Compose）和鸿蒙（ArkUI）生成地道、可读的源码。在 iOS 上，同一个文件就是普通的 SwiftUI。Refract 没有运行时：生成的代码就是一位细心的工程师会手写的代码，所以运行速度和手写原生代码完全一样。
+Refract 读取用 SwiftUI 子集写的页面，为 Android（Jetpack Compose）和鸿蒙（ArkUI）生成地道、可读的源码。在 iOS 上，同一个文件就是普通的 SwiftUI。Refract 没有运行时：生成代码的目标是达到细心工程师手写的水平，但性能不劣化必须由针对具体执行目标的测量来证明，而不是整个项目已经验证过的保证。
 
-> 状态：早期开发中。生成器、子集和示例都在公开开发，见[路线图](docs/roadmap.md)。
+> 状态：早期开发中，尚未达到生产就绪。限定范围的 Android 设置页示例和生成的 Kotlin fixture 已在 CI 中编译。真实的 iOS SwiftUI 应用和 ArkTS 输出尚未在当前环境中完成原生编译；没有物理设备性能结果。验证层级、尚不支持的采用边界和 issue 负责人见[生产就绪证据矩阵](docs/production-readiness.md)，开发计划见[路线图](docs/roadmap.md)。
 
 ## 目标
 
