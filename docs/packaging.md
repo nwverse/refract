@@ -17,7 +17,8 @@ unchanged by packaging.
   current host is built. No cross compilation, universal macOS binary, code signing, notarization or unverified
   platform support is implied.
 - The Linux CLI statically links the Swift runtime. System C/C++ libraries remain host requirements, so this is
-  not a claim that one Linux binary supports every distribution. macOS uses the system-provided Swift runtime.
+  not a claim that one Linux binary supports every distribution. The verified Debian 12 build dynamically links
+  glibc, libstdc++, libgcc_s, libxml2, ICU 72, zlib and liblzma. macOS uses the system-provided Swift runtime.
   There is no Refract runtime in a generated application on either platform.
 
 ## Build from a committed revision

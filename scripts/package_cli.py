@@ -312,7 +312,7 @@ def create_package(commit: str, output: Path, reproducible: bool) -> Path:
             raise ValueError("--output must be a new or empty directory")
     else:
         output.mkdir(parents=True)
-    with tempfile.TemporaryDirectory(prefix="refract-cli-package.") as temporary:
+    with tempfile.TemporaryDirectory(prefix="refract-cli-package.", dir=os.environ.get("REFRACT_PACKAGE_TEMP")) as temporary:
         scratch = Path(temporary)
         first = package_once(commit, output, os_name, architecture, metadata, notices, scratch / "first")
         if reproducible:
