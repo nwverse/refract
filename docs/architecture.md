@@ -36,8 +36,7 @@ its design-system components and tokens, its model implementations and its nativ
 | `RefractArkUI` | IR → idiomatic ArkUI (ArkTS) source |
 | `RefractCLI` | The `refract` executable: `generate`, `check`, `explain <diagnostic>` |
 
-Later: a SwiftPM build-tool plugin, a Gradle plugin and an hvigor plugin that run `refract generate` and the
-regenerate-and-diff check, so generation fits each platform's normal build.
+`docs/swiftpm-integration.md` defines the bounded SwiftPM build-tool integration: explicit Swift, mapping and resource inputs regenerate staged Kotlin/ArkTS before the same native host source compiles, without an app runtime or ordinary-build package writes. The explicit command plugin is the only committed-output publication path. A Gradle plugin and an hvigor plugin can use the same CLI contracts for each platform's normal build.
 
 The generator is written in Swift because SwiftSyntax is the reference parser for the language Refract accepts, and
 because the people who write Refract screens already read Swift. It builds and runs on macOS and Linux.
