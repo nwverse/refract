@@ -3,6 +3,7 @@
     "name": "entry_test",
     "type": "feature",
     "mainElement": "TestAbility",
+    "pages": "$profile:test_pages",
     "abilities": [
       {
         "name": "TestAbility",

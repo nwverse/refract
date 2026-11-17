@@ -28,7 +28,7 @@ enum ArkTextInputHost {
                     throw invalid(argument.location, "A host value needs a resolved scalar type.")
                 }
                 guard case let .valueProperty(.binding(name)) = argument.expression.value,
-                      expression == (argument.label == "draft" ? .string : .int) else {
+                      expression.scalar == (argument.label == "draft" ? .string : .int) else {
                     throw invalid(argument.location, "The draft and focus request must be parent bindings.")
                 }
                 values[argument.label] = "this.\(name)"

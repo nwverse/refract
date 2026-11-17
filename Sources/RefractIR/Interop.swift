@@ -1,10 +1,40 @@
+/// A native-only extension of the scalar value boundary; it never enters models or local state.
+public enum NativeParameterType: String, Codable, Sendable {
+    case string, bool, double, int, image, stringKey, remoteImageLoader
+    case action, actionString
+
+    public var scalar: ValueType? {
+        switch self {
+        case .string: .string
+        case .bool: .bool
+        case .double: .double
+        case .int: .int
+        case .image, .stringKey, .remoteImageLoader, .action, .actionString: nil
+        }
+    }
+
+    public var sourceName: String {
+        switch self {
+        case .string: "String"
+        case .bool: "Bool"
+        case .double: "Double"
+        case .int: "Int"
+        case .image: "Image"
+        case .stringKey: "LocalizedStringKey"
+        case .remoteImageLoader: "RemoteImageLoader"
+        case .action: "() -> Void"
+        case .actionString: "(String) -> Void"
+        }
+    }
+}
+
 /// A typed parameter in a native component's Swift declaration or call.
 public struct NativeParameter: Codable, Equatable, Sendable {
     public let label: String
-    public let type: ValueType
+    public let type: NativeParameterType
     public let location: SourceLocation?
 
-    public init(label: String, type: ValueType, location: SourceLocation? = nil) {
+    public init(label: String, type: NativeParameterType, location: SourceLocation? = nil) {
         self.label = label
         self.type = type
         self.location = location
@@ -40,15 +70,13 @@ public struct NativeDeclaration: Codable, Equatable, Sendable {
 public struct NativeArgument: Codable, Equatable, Sendable {
     public let label: String
     public let expression: Expression
-    public let type: ValueType?
-    public let parameterType: NativeParameterType?
+    public let type: NativeParameterType?
     public let location: SourceLocation?
 
-    public init(label: String, expression: Expression, type: ValueType?, location: SourceLocation? = nil) {
+    public init(label: String, expression: Expression, type: NativeParameterType?, location: SourceLocation? = nil) {
         self.label = label
         self.expression = expression
         self.type = type
-        self.parameterType = type.flatMap { NativeParameterType(rawValue: $0.rawValue) }
         self.location = location
     }
 
@@ -56,21 +84,8 @@ public struct NativeArgument: Codable, Equatable, Sendable {
                 location: SourceLocation? = nil) {
         self.label = label
         self.expression = expression
-        self.type = ValueType(rawValue: parameterType.rawValue)
-        self.parameterType = parameterType
+        self.type = parameterType
         self.location = location
-    }
-
-    private enum CodingKeys: String, CodingKey { case label, expression, type, parameterType, location }
-
-    public init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        label = try values.decode(String.self, forKey: .label)
-        expression = try values.decode(Expression.self, forKey: .expression)
-        type = try values.decodeIfPresent(ValueType.self, forKey: .type)
-        parameterType = try values.decodeIfPresent(NativeParameterType.self, forKey: .parameterType)
-            ?? type.flatMap { NativeParameterType(rawValue: $0.rawValue) }
-        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 

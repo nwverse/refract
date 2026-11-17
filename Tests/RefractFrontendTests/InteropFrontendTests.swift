@@ -24,6 +24,37 @@ import RefractIR
     #expect(component.arguments.map(\.type) == [.double, .bool])
 }
 
+@Test func frontendBuildsTypedNativeImageResources() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct RemoteImage: RefractNativeView {
+        let url: String
+        let placeholder: Image
+        let failure: Image
+        let contentDescription: LocalizedStringKey
+        var body: some View { placeholder }
+    }
+    struct Profile: View {
+        let url: String
+        var body: some View {
+            RemoteImage(url: url, placeholder: Image("profile_placeholder"), failure: Image("profile_unavailable"), contentDescription: "profile.photo")
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    #expect(unit.module.nativeDeclarations[0].parameters.map(\.type) == [.string, .image, .image, .stringKey])
+    guard case let .native(component, _) = unit.module.screens[0].body else {
+        Issue.record("Expected a native image reference")
+        return
+    }
+    #expect(component.arguments.map(\.type) == [.string, .image, .image, .stringKey])
+    #expect(component.arguments[1].expression.value == .imageResource("profile_placeholder"))
+    guard case let .localizedText(text) = component.arguments[3].expression.value else {
+        Issue.record("Expected localized accessibility text")
+        return
+    }
+    #expect(text.key == "profile.photo")
+}
+
 @Test(arguments: [
     "@State private var saved: Bool = false",
     "@Binding var saved: Bool",

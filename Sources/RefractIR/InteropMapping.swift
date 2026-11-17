@@ -8,37 +8,15 @@ public struct NativeTarget: Codable, Equatable, Sendable {
 
     public struct Parameter: Codable, Equatable, Sendable {
         public let label: String
-        public let type: ValueType
+        public let type: NativeParameterType
         public let required: Bool
-        /// Explicit target type for compatibility declarations; canonical mappings use the source ValueType.
+        /// Explicit target type for compatibility declarations; canonical mappings use the source NativeParameterType.
         public let targetType: String?
-        public let callbackType: NativeParameterType?
-        public init(label: String, type: ValueType, required: Bool = true, targetType: String? = nil,
-                    callbackType: NativeParameterType? = nil) {
+        public init(label: String, type: NativeParameterType, required: Bool = true, targetType: String? = nil) {
             self.label = label
             self.type = type
             self.required = required
             self.targetType = targetType
-            self.callbackType = callbackType
-        }
-
-        public init(label: String, type: NativeParameterType, required: Bool = true) {
-            self.label = label
-            self.type = ValueType(rawValue: type.rawValue) ?? .string
-            self.required = required
-            self.targetType = nil
-            self.callbackType = type
-        }
-
-        private enum CodingKeys: String, CodingKey { case label, type, required, targetType, callbackType }
-
-        public init(from decoder: Decoder) throws {
-            let values = try decoder.container(keyedBy: CodingKeys.self)
-            label = try values.decode(String.self, forKey: .label)
-            type = try values.decode(ValueType.self, forKey: .type)
-            required = try values.decode(Bool.self, forKey: .required)
-            targetType = try values.decodeIfPresent(String.self, forKey: .targetType)
-            callbackType = try values.decodeIfPresent(NativeParameterType.self, forKey: .callbackType)
         }
     }
 
@@ -86,7 +64,7 @@ public enum InteropMapping {
         return target
     }
 
-    private static let textInputHostParameters: [(String, ValueType)] = [
+    private static let textInputHostParameters: [(String, NativeParameterType)] = [
         ("draft", .string), ("focusRequest", .int), ("onDraftCommit", .string), ("onCommit", .string),
     ]
 
@@ -96,7 +74,7 @@ public enum InteropMapping {
         let valid = declaration.kind == .textInputHost
             ? declaration.name == "NativeTextInputHost"
                 && declaration.parameters.map { ($0.label, $0.type) }.elementsEqual(expected, by: ==)
-            : declaration.parameters.allSatisfy { NativeParameterType(rawValue: $0.type.rawValue)?.isAction != true }
+            : declaration.parameters.allSatisfy { !$0.type.isAction }
         return valid ? [] : [Diagnostic(code: "RFINPUT003",
             message: "Native component `\(declaration.name)` does not have a valid \(platform) text-input host ABI.",
             suggestion: declaration.kind == .textInputHost
@@ -151,20 +129,19 @@ public enum InteropMapping {
                     switch expected.label {
                     case "onDraftCommit": .actionString
                     case "onCommit": .action
-                    default: NativeParameterType(rawValue: expected.type.rawValue) ?? .string
+                    default: expected.type
                     }
                 } else {
-                    NativeParameterType(rawValue: expected.type.rawValue) ?? .string
+                    expected.type
                 }
-                let actualTargetType = actual.callbackType?.rawValue ?? actual.targetType ?? actual.type.rawValue
-                let typesMatch = actual.callbackType == expectedType
-                    || (actual.callbackType == nil && actual.targetType == nil && actual.type == expected.type)
+                let actualTargetType = actual.targetType ?? actual.type.rawValue
+                let typesMatch = actual.targetType == nil && actual.type == expectedType
                 if actual.label != expected.label || !typesMatch || !actual.required {
                     diagnostics.append(Diagnostic(code: "RFMAP003",
                         message: "Native component `\(declaration.name)` expects Swift `\(expected.label): \(expected.type.rawValue)`, required; \(platform) mapping declares `\(actual.label): \(actualTargetType)`, required: \(actual.required).",
                         suggestion: "Match the stored-property signature in declaration order.",
                         location: location ?? declaration.location))
-                } else if actual.targetType != nil && actual.callbackType == nil && actual.targetType != expectedTargetType {
+                } else if actual.targetType != nil && actual.targetType != expectedTargetType {
                     diagnostics.append(Diagnostic(code: "RFMAP003",
                         message: "Native component `\(declaration.name)` maps Swift `\(expected.label): \(expected.type.rawValue)` to \(platform) `\(actualTargetType)`; expected `\(expectedTargetType)`.",
                         suggestion: "Use the declared target type for this source scalar.",
@@ -194,13 +171,25 @@ public enum InteropMapping {
         return diagnostics
     }
 
-    private static func targetType(_ type: ValueType, platform: String) -> String {
-        if platform == "HarmonyOS" { return type == .string ? "string" : type == .bool ? "boolean" : "number" }
+    private static func targetType(_ type: NativeParameterType, platform: String) -> String {
+        if platform == "HarmonyOS" {
+            return switch type {
+            case .string, .stringKey: "string"
+            case .bool: "boolean"
+            case .int, .double, .image: "number"
+            case .remoteImageLoader: "RemoteImageLoader"
+            case .action: "() -> Void"
+            case .actionString: "(string) -> void"
+            }
+        }
         return switch type {
-        case .string: "String"
+        case .string, .stringKey: "String"
         case .bool: "Boolean"
-        case .int: "Int"
+        case .int, .image: "Int"
         case .double: "Double"
+        case .remoteImageLoader: "RemoteImageLoader"
+        case .action: "() -> Unit"
+        case .actionString: "(String) -> Unit"
         }
     }
 

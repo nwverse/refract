@@ -18,3 +18,4 @@ add to it when you hit something new: what happened, why, and what to do instead
 | Generated-code semantic and native compile review | `docs/lessons/generated-code-review.md` |
 | Android benchmarking | `docs/lessons/android.md` |
 | Native text input, focus and IME ownership | `docs/lessons/input-host.md` |
+| SwiftPM consumer integration | `docs/lessons/swiftpm.md` |

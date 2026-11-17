@@ -12,7 +12,7 @@ import RefractIR
         Issue.record("Expected a native text-input host")
         return
     }
-    #expect(component.arguments.map(\.parameterType) == [.string, .int, .actionString, .action])
+    #expect(component.arguments.map(\.type) == [.string, .int, .actionString, .action])
     #expect(component.arguments[2].expression.value == .reference("model.commitDraft"))
     #expect(component.arguments[3].expression.value == .reference("model.commit"))
 }

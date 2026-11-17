@@ -150,7 +150,7 @@ struct TextInputHostFrontend {
     }
 
     private func hostType(_ name: String, _ declaration: VariableDeclSyntax,
-                          _ binding: PatternBindingSyntax) -> ValueType? {
+                          _ binding: PatternBindingSyntax) -> NativeParameterType? {
         let type = binding.typeAnnotation?.type.trimmedDescription
         if name == "draft" {
             return declaration.attributes.trimmedDescription == "@Binding"

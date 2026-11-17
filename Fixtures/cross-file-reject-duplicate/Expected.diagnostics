@@ -1,0 +1,2 @@
+First.swift:3:8: error [RFVIEW007]: Declaration `Row` is ambiguous because it is declared in Second.swift. Suggestion: Give every generated View, model, item and enum one unique name in the explicit input set.
+Second.swift:3:8: error [RFVIEW007]: Declaration `Row` is ambiguous because it is declared in First.swift. Suggestion: Give every generated View, model, item and enum one unique name in the explicit input set.

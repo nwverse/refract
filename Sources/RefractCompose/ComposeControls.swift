@@ -130,9 +130,11 @@ extension ComposeBackend {
             onChange = "{ value -> \(name) = value }"
         case let .valueProperty(.binding(name)):
             onChange = "on\(name.uppercasingFirst())Change"
+        case let .valueProperty(.modelScalarBinding(binding)):
+            onChange = "{ value -> \(binding.model).\(binding.action)(value) }"
         default:
             throw Diagnostic(code: "state.invalid_projection",
-                             message: "A text field needs a String local state or parent binding.",
+                             message: "A text field needs a String local state, parent binding or explicit model setter.",
                              suggestion: "Use `text: $name` with String ownership.", location: value.location)
         }
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)

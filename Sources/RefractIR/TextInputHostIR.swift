@@ -1,9 +1,6 @@
 /// The bounded callback types of the native text-input host. These are declarations,
 /// never target-source templates or runtime-dispatched closures.
-public enum NativeParameterType: String, Codable, Sendable {
-    case string, bool, int, double
-    case action, actionString
-
+extension NativeParameterType {
     public var isAction: Bool { self == .action || self == .actionString }
 }
 

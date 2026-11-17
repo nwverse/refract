@@ -10,8 +10,11 @@ import RefractMapping
 public struct ComposeBackend: Sendable {
     public init() {}
 
-    public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        var context = Context(module: module, mapping: mapping)
+    public func generate(module: Module, mapping: Mapping = .empty, sources: NativeSourceSet? = nil) throws -> String {
+        let dependencies = sources ?? NativeSourceSet(modules: [module])
+        var context = Context(module: module, mapping: mapping,
+                              models: dependencies.models, itemTypes: dependencies.itemTypes,
+                              enums: dependencies.enums)
         // Native references validate both target signatures at each call site below.
         // Render the body first so we know which imports are needed.
         var bodyWriter = KotlinWriter()
@@ -113,7 +116,7 @@ public struct ComposeBackend: Sendable {
             case let .navigationPath(name, enumName, _):
                 parameters.append("on\(name.uppercasingFirst())Navigate: (\(enumName)) -> Unit")
             case let .model(reference, _):
-                if context.module.models.contains(where: {
+                if context.models.contains(where: {
                     $0.name == reference.protocolName && !$0.properties.isEmpty
                 }) {
                     context.imports.insert("androidx.compose.runtime.State")
@@ -333,6 +336,16 @@ public struct ComposeBackend: Sendable {
                                                      packageName: context.packageName) {
                 try renderExpression($0, context: &context)
             }
+        case let .imageResource(name):
+            guard let resourceClass = context.androidResourceClass, !name.isEmpty,
+                  name.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }) else {
+                throw Diagnostic(code: "RFMAP003",
+                                 message: "Native image resource `\(name)` requires an Android R class and a valid resource name.",
+                                 suggestion: "Declare the app R class and the same lowercase image resource on both platforms.",
+                                 location: expression.location)
+            }
+            context.imports.insert(resourceClass)
+            return "R.drawable.\(name)"
         case let .boolLiteral(value):
             return value ? "true" : "false"
         case let .numberLiteral(text):
@@ -349,6 +362,8 @@ public struct ComposeBackend: Sendable {
             return name
         case let .valueProperty(.model(model, property)):
             return "\(model).\(property).value"
+        case let .valueProperty(.modelScalarBinding(binding)):
+            return "\(binding.model).\(binding.property).value"
         case let .valueProperty(.itemBinding(binding)):
             return "\(binding.item).\(binding.property)"
         case let .interpolatedString(segments):
@@ -403,12 +418,19 @@ public struct ComposeBackend: Sendable {
         ]
         let mapping: Mapping
         let module: Module
+        let models: [ModelProtocol]
+        let itemTypes: [ItemType]
+        let enums: [EnumDeclaration]
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
 
-        init(module: Module, mapping: Mapping) {
+        init(module: Module, mapping: Mapping, models: [ModelProtocol]? = nil, itemTypes: [ItemType]? = nil,
+             enums: [EnumDeclaration]? = nil) {
             self.mapping = mapping
             self.module = module
+            self.models = models ?? module.models
+            self.itemTypes = itemTypes ?? module.itemTypes
+            self.enums = enums ?? module.enums
             self.androidResourceClass = mapping.android.resources.className
             if let packageName = mapping.android.output.packageName {
                 self.packageName = packageName

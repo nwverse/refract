@@ -85,6 +85,27 @@ import Testing
     #endif
 }
 
+@Test func cliPreservesScalarModelReadsInMappedComponents() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = try requireCLIExecutable()
+    let fixture = root.appendingPathComponent("Fixtures/mapping/model-scalars")
+    let temporary = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input", fixture.appendingPathComponent("Input.swift").path,
+        "--mapping", fixture.appendingPathComponent("refract.json").path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status == 0, Comment(rawValue: result.stderr))
+    #expect(try String(contentsOf: android.appendingPathComponent("Input.kt"), encoding: .utf8)
+        .contains("value = model.versionName.value"))
+    #expect(try String(contentsOf: harmony.appendingPathComponent("Input.ets"), encoding: .utf8)
+        .contains("value: this.model.versionName"))
+    #endif
+}
+
 @Test func cliReportsInputAndMappingFailuresWithNonzeroExit() throws {
     #if os(Linux) || os(macOS)
     let executable = try requireCLIExecutable()
@@ -194,4 +215,3 @@ private func builtCLIExecutable() -> URL {
     return URL(fileURLWithPath: CommandLine.arguments[0])
         .deletingLastPathComponent().appendingPathComponent("refract")
 }
-
