@@ -154,7 +154,12 @@ def check_ios_references() -> None:
             fail(f"iOS target does not reference {path}")
         if project.count(f"{name}.swift in Sources") < 2:
             fail(f"iOS target does not compile {path}")
-    print("iOS project references every shared Swift source in its Sources phase")
+    measurement = "../../../Fixtures/interop-native-measurement/Input.swift"
+    if project.count(measurement) != 1 or project.count("Input.swift in Sources") != 2:
+        fail("iOS target must type-check the canonical native measurement fixture itself")
+    if not (ROOT / "examples/ios/RefractExample/MeasurementDesignTokens.swift").is_file():
+        fail("iOS target is missing the measurement fixture's application-owned typography token")
+    print("iOS project references every shared source and the canonical measurement fixture in Sources")
 
 
 def main() -> int:
