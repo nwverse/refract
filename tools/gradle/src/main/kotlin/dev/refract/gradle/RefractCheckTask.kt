@@ -3,10 +3,8 @@ package dev.refract.gradle
 import java.io.ByteArrayOutputStream
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.IgnoreEmptyDirectories
 import org.gradle.api.tasks.InputDirectory
-import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
@@ -21,9 +19,6 @@ abstract class RefractCheckTask : RefractTask() {
     @get:IgnoreEmptyDirectories
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val harmonyCommittedOutputDirectory: DirectoryProperty
-
-    @get:Internal
-    abstract val verificationMarker: RegularFileProperty
 
     @TaskAction
     fun check() {
@@ -54,6 +49,5 @@ abstract class RefractCheckTask : RefractTask() {
                     output.toString(Charsets.UTF_8),
             )
         }
-        verificationMarker.get().asFile.writeText("verified\n")
     }
 }

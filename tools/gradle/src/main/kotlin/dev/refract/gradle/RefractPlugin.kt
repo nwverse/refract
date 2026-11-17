@@ -1,6 +1,6 @@
 package dev.refract.gradle
 
-import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import com.android.build.api.variant.AndroidComponentsExtension
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -21,7 +21,7 @@ class RefractPlugin : Plugin<Project> {
         )
 
         project.pluginManager.withPlugin("com.android.application") {
-            val androidComponents = project.extensions.getByType(ApplicationAndroidComponentsExtension::class.java)
+            val androidComponents = project.extensions.getByType(AndroidComponentsExtension::class.java)
             androidComponents.onVariants(androidComponents.selector().all()) { variant ->
                 val suffix = variant.name.replaceFirstChar { it.uppercase() }
                 val generate = project.tasks.register("generate${suffix}Refract") {
@@ -67,24 +67,28 @@ class RefractPlugin : Plugin<Project> {
                         resources.from(source.resources)
                         committedOutputDirectory.convention(source.committedOutputDirectory)
                         harmonyCommittedOutputDirectory.convention(source.harmonyCommittedOutputDirectory)
-                        verificationMarker.convention(
-                            project.layout.buildDirectory.file("refract/check/$taskName/verified.txt"),
-                        )
                     }
                     check.configure { dependsOn(verification) }
                 }
             }
         }
-        // Plain JVM consumers can use the same task type explicitly; Android uses variant wiring above.
         project.tasks.register("generateRefract") {
             group = "refract"
             description = "Generate Android sources for every Android application variant."
-            dependsOn(project.tasks.matching { it.name.startsWith("generate") && it.name.endsWith("Refract") && it.name != "generateRefract" })
+            dependsOn(
+                project.tasks.matching {
+                    it.name.startsWith("generate") && it.name.endsWith("Refract") && it.name != "generateRefract"
+                },
+            )
         }
         project.tasks.register("checkRefract") {
             group = "verification"
             description = "Check Android sources for every Android application variant."
-            dependsOn(project.tasks.matching { it.name.startsWith("check") && it.name.endsWith("Refract") && it.name != "checkRefract" })
+            dependsOn(
+                project.tasks.matching {
+                    it.name.startsWith("check") && it.name.endsWith("Refract") && it.name != "checkRefract"
+                },
+            )
         }
     }
 }

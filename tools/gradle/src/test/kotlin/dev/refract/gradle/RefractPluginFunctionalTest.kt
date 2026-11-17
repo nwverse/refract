@@ -58,8 +58,9 @@ class RefractPluginFunctionalTest {
                 sources.register("screens") {
                     inputs.from(layout.projectDirectory.file("Screen.swift"))
                     mapping.set(layout.projectDirectory.file("refract.json"))
-                    resources.from(layout.projectDirectory.file("strings.xml"))
+                    resources.from(layout.projectDirectory.file("res/values/strings.xml"))
                     committedOutputDirectory.set(layout.projectDirectory.dir("committed"))
+                    harmonyCommittedOutputDirectory.set(layout.projectDirectory.dir("harmony"))
                 }
             }
             android {
@@ -68,16 +69,18 @@ class RefractPluginFunctionalTest {
                 compileSdkMinor = 2
                 defaultConfig { minSdk = 26 }
                 buildFeatures { compose = true }
+                sourceSets.getByName("main").res.directories.add("res")
             }
             dependencies {
                 implementation(platform("androidx.compose:compose-bom:2026.09.00"))
                 implementation("androidx.compose.ui:ui")
+                implementation("androidx.compose.material3:material3")
             }
             tasks.register("sharedGeneration", RefractGenerateTask::class) {
                 executable.from(refract.executable)
                 swiftInputs.from(layout.projectDirectory.file("Screen.swift"))
                 mapping.set(layout.projectDirectory.file("refract.json"))
-                resources.from(layout.projectDirectory.file("strings.xml"))
+                resources.from(layout.projectDirectory.file("res/values/strings.xml"))
                 outputDirectory.set(layout.buildDirectory.dir("generated/shared"))
             }
             """.trimIndent(),
@@ -100,7 +103,7 @@ class RefractPluginFunctionalTest {
                 "output": { "directory": "generated", "packageName": "refract.generated" },
                 "imports": [], "components": {}, "nativeComponents": {}, "modifiers": {},
                 "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
-                "resources": { "className": "example.consumer.R", "catalog": "strings.xml", "strings": { "example.hello": "example_hello" } }
+                "resources": { "className": "example.consumer.R", "catalog": "res/values/strings.xml", "strings": { "example.hello": "example_hello" } }
               },
               "harmonyOS": {
                 "output": { "directory": "generated" },
@@ -111,7 +114,8 @@ class RefractPluginFunctionalTest {
             }
             """.trimIndent(),
         )
-        File(project, "strings.xml").writeText(
+        File(project, "res/values").mkdirs()
+        File(project, "res/values/strings.xml").writeText(
             "<resources><string name=\"example_hello\">Hello</string></resources>\n",
         )
         File(project, "string.json").writeText(
@@ -124,7 +128,7 @@ class RefractPluginFunctionalTest {
         val first = run("generateDebugScreensRefract", "compileDebugKotlin")
         assertEquals(TaskOutcome.SUCCESS, first.task(":generateDebugScreensRefract")?.outcome)
         assertEquals(TaskOutcome.SUCCESS, first.task(":compileDebugKotlin")?.outcome)
-        val output = File(project, "build/generated/refract/screens/Debug/Screen.kt")
+        val output = File(project, "build/generated/java/generateDebugScreensRefract/Screen.kt")
         assertTrue(output.isFile)
         val initial = output.readBytes()
 
@@ -145,19 +149,27 @@ class RefractPluginFunctionalTest {
 
     @Test
     fun missingToolAndInvalidInputFailWithoutPublishingOutput() {
+        File(project, "custom.gradle").writeText(
+            """
+            refract.executable.set(layout.projectDirectory.file("missing-cli"))
+            """.trimIndent(),
+        )
         File(project, "build.gradle.kts").appendText(
-            "\ntasks.named<RefractGenerateTask>(\"generateDebugScreensRefract\") { executable.from(files(\"missing-cli\")) }\n",
+            "\napply(from = \"custom.gradle\")\n",
         )
         val missing = runAndFail("generateDebugScreensRefract")
         assertTrue(missing.output, missing.output.contains("Refract CLI is not an executable file"))
-        assertFalse(File(project, "build/generated/refract/screens/Debug/Screen.kt").exists())
+        assertFalse(File(project, "build/generated/java/generateDebugScreensRefract/Screen.kt").exists())
 
-        File(project, "build.gradle.kts").appendText(
-            "\ntasks.named<RefractGenerateTask>(\"generateDebugScreensRefract\") { executable.from(refract.executable) }\n",
-        )
+        File(project, "custom.gradle").writeText("")
         assertEquals(TaskOutcome.SUCCESS, run("generateDebugScreensRefract").task(":generateDebugScreensRefract")?.outcome)
-        val output = File(project, "build/generated/refract/screens/Debug/Screen.kt")
-        val previous = output.readBytes()
+        File(project, "Screen.swift").appendText("\n// Restore the valid CLI.\n")
+        val generated = run("generateDebugScreensRefract")
+        assertEquals(generated.output, TaskOutcome.SUCCESS, generated.task(":generateDebugScreensRefract")?.outcome)
+        val previous = requireNotNull(File(project, "build/generated/java/generateDebugScreensRefract/Screen.kt").takeIf { it.isFile }) {
+            "Expected successful generation output. Gradle output:\n${generated.output}"
+        }.readBytes()
+        val output = File(project, "build/generated/java/generateDebugScreensRefract/Screen.kt")
         File(project, "Screen.swift").appendText("\nthis is not Swift\n")
         val invalid = runAndFail("generateDebugScreensRefract")
         assertTrue(invalid.output, invalid.output.contains("existing generated and committed outputs were not changed"))
@@ -168,7 +180,7 @@ class RefractPluginFunctionalTest {
     fun sharedTaskInvalidatesForSwiftMappingAndResourceChanges() {
         assertEquals(TaskOutcome.SUCCESS, run("sharedGeneration").task(":sharedGeneration")?.outcome)
         assertEquals(TaskOutcome.UP_TO_DATE, run("sharedGeneration").task(":sharedGeneration")?.outcome)
-        for (path in listOf("Screen.swift", "refract.json", "strings.xml")) {
+        for (path in listOf("Screen.swift", "refract.json", "res/values/strings.xml")) {
             File(project, path).appendText(if (path.endsWith(".json")) "\n" else "\n// input changed\n")
             assertEquals(path, TaskOutcome.SUCCESS, run("sharedGeneration").task(":sharedGeneration")?.outcome)
             assertEquals(path, TaskOutcome.UP_TO_DATE, run("sharedGeneration").task(":sharedGeneration")?.outcome)
@@ -178,16 +190,22 @@ class RefractPluginFunctionalTest {
     @Test
     fun staleOutputFailsThroughTheRealCliWithoutWriting() {
         val committed = File(project, "committed/Screen.kt")
+        val harmony = File(project, "harmony/Screen.ets")
+        harmony.parentFile.mkdirs()
+        harmony.writeText("stale\n")
         committed.parentFile.mkdirs()
         committed.writeText("stale\n")
         val before = committed.readBytes()
+        val harmonyBefore = harmony.readBytes()
         val failure = runAndFail("checkDebugScreensRefract")
         assertTrue(failure.output, failure.output.contains("Refract committed-output check failed"))
         assertTrue(before.contentEquals(committed.readBytes()))
+        assertTrue(harmonyBefore.contentEquals(harmony.readBytes()))
 
-        val generated = File(project, "build/generated/refract/screens/Debug/Screen.kt")
+        val generated = File(project, "build/generated/java/generateDebugScreensRefract/Screen.kt")
         run("generateDebugScreensRefract")
         committed.writeBytes(generated.readBytes())
+        harmony.writeBytes(File(project, "build/tmp/generateDebugScreensRefract/cli/harmony/Screen.ets").readBytes())
         assertEquals(TaskOutcome.SUCCESS, run("checkDebugScreensRefract").task(":checkDebugScreensRefract")?.outcome)
     }
 

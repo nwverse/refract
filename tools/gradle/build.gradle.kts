@@ -18,7 +18,7 @@ kotlin {
 }
 
 dependencies {
-    compileOnly("com.android.tools.build:gradle:9.5.0")
+    implementation("com.android.tools.build:gradle-api:9.5.0")
     testImplementation(gradleTestKit())
     testImplementation("junit:junit:4.13.2")
 }

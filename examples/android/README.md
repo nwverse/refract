@@ -98,7 +98,8 @@ keeps the existing unmapped CLI behavior for `IdentifiedList`. `REFRACT_CLI_PATH
 without a machine-global path. An application may instead set `refract.executable`; the plugin never runs an implicit
 Swift build. There is no Refract runtime dependency or application start-up hook.
 
-`:app:generateDebugRefract` generates both groups below `app/build/generated/refract/`. Android's per-variant
+`:app:generateDebugRefract` generates both groups below the variant's build-owned `generated/refract/` directory.
+AGP exposes the compiled files below `build/generated/java/<generation-task>/`. Android's per-variant
 `addGeneratedSourceDirectory` connects these task outputs to `compileDebugKotlin`, so compilation depends on
 generation without eagerly realizing tasks. `:app:compileDebugKotlin` is the normal consumer entry point. Run it
 twice: the second build reports both generation tasks `UP-TO-DATE`. Changing a Swift input, mapping, declared

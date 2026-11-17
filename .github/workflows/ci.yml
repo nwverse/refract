@@ -150,6 +150,11 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ./gradlew --no-daemon :app:checkDebugRefract :app:compileDebugKotlin
+      - name: Exercise incremental generation in a real Android consumer
+        working-directory: tools/gradle
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ../../examples/android/gradlew --no-daemon test
       - name: Stage the canonical fixture corpus through the CLI
         run: python3 scripts/check_fixture_compilation.py
       - name: Compile the canonical fixture corpus
