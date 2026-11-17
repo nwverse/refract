@@ -98,6 +98,8 @@ def regenerate_and_stage(fixture: str) -> None:
                 f"{fixture}: regenerated Kotlin differs from {expected_kt.relative_to(ROOT)}; "
                 "regenerate and review it"
             )
+    stage_generated(expected_kt, fixture, fixture.replace("/", "-"))
+
 
 def regenerate_and_stage_multiple(fixture: str, fixture_dir: Path, inputs: list[Path],
                                   mapping_json: Path, strings_xml: Path) -> None:
