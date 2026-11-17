@@ -36,6 +36,12 @@ public struct MappedExpression {
             return reference
         case let .numberLiteral(value): return value
         case let .boolLiteral(value): return value ? "true" : "false"
+        case let .valueProperty(.model(model, property)):
+            return "\(model).\(property).value"
+        case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
+            return name
+        case let .valueProperty(.itemBinding(binding)):
+            return "\(binding.item).\(binding.property)"
         case .platformValue:
             throw Diagnostic(code: "componentArgument", message: "This mapped value needs a scalar platform selection.",
                              suggestion: "Use the interop scalar lowering for this argument.", location: expression.location)
@@ -79,6 +85,12 @@ public struct MappedExpression {
             return reference
         case let .numberLiteral(value): return value
         case let .boolLiteral(value): return value ? "true" : "false"
+        case let .valueProperty(.model(model, property)):
+            return "this.\(model).\(property)"
+        case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
+            return "this.\(name)"
+        case let .valueProperty(.itemBinding(binding)):
+            return "\(binding.item).\(binding.property)"
         default:
             throw Diagnostic(code: "componentArgument", message: "This expression is not supported as a mapped value.",
                              suggestion: "Use a scalar, resource key or declared token.", location: expression.location)
