@@ -22,6 +22,7 @@ export struct ReferenceSettingsScreen {
               onChange: (value: boolean): void => this.model.setEnabled(row.id, value),
             })
           }
+          .reuse({ reuseId: () => 'setting' })
         }, (row: SettingRow): string => String(row.id))
       }
       .id('settings_list')

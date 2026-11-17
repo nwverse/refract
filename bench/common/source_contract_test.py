@@ -40,6 +40,7 @@ class BenchmarkSourceContractTest(unittest.TestCase):
         self.assertIn("LazyForEach", reference)
         self.assertIn("String(row.id)", reference)
         self.assertIn(".accessibilityText(this.title)", reference)
+        self.assertIn(".reuse({ reuseId: () => 'setting' })", reference)
         page = (self.harmony / "entry/src/main/ets/pages/BenchmarkPage.ets").read_text(encoding="utf-8")
         self.assertIn("SettingsScreen({ model: this.model })", page)
         self.assertIn("ReferenceSettingsScreen({ model: this.model })", page)

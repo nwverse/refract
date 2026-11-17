@@ -31,7 +31,8 @@ without `--check` updates only the reviewed benchmark ArkTS output, never #166's
 imports `AppTypography` from the app-owned `../native/AppTypography` module; its exact module and `Font` typing still
 needs a native compiler pass. The handwritten
 `ReferenceSettingsScreen.ets` does not call the generated row. Both use the same 200-row `@ObservedV2` model and typed
-`BasicDataSource<SettingRow>`, stable identity and immutable row replacement with `notifyDataChange(index)`.
+`BasicDataSource<SettingRow>`, stable identity, the same `setting` reuse identity and immutable row replacement with
+`notifyDataChange(index)`.
 
 These files are source-prepared only: project/build manifests, entry ability, native page, typography and independent
 reference. Their exact ArkUI APIs, decorator semantics, build configuration and module imports have **not** been

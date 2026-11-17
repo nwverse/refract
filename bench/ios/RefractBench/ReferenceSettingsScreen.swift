@@ -44,9 +44,9 @@ private struct ReferenceSettingRow: View {
                     .font(.caption)
             }
             .layoutPriority(1)
-            Toggle(title, isOn: Binding(get: { enabled }, set: { value in
-                    Task { @MainActor in onChange(value) }
-                }))
+            Toggle(title, isOn: Binding(get: { enabled }, set: { @MainActor value in
+                onChange(value)
+            }))
                 .labelsHidden()
                 .accessibilityLabel(Text(title))
         }
