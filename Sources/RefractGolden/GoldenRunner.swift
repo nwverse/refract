@@ -39,7 +39,7 @@ public enum GoldenRunner {
         let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: fixture.input), mapping: mapping)
         // When the mapping-aware pass also rejects the source, retain independent model-input
         // errors from the first pass. A successful mapped pass is the only valid source of truth.
-        if unit.hasErrors {
+        if unit.hasErrors || (!diagnostics.isEmpty && unit.module.screens.isEmpty) {
             // Without a mapping, a custom view is only a native-view candidate. Once the mapping-aware
             // pass classifies it as a component or a resource expression, that candidate is not an error.
             let nativeCandidates = mapping == .empty ? diagnostics : diagnostics.filter { $0.code != "RFNATIVE001" }
@@ -48,7 +48,9 @@ public enum GoldenRunner {
         } else {
             diagnostics = unit.diagnostics
         }
-        guard !unit.hasErrors else { return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics) }
+        guard !unit.hasErrors, diagnostics.isEmpty else {
+            return GoldenResult(kotlin: nil, arkTS: nil, diagnostics: diagnostics)
+        }
         do {
             // Resolve every localized value before either backend emits. This catches a missing second-platform
             // resource instead of returning one successful output followed by a late backend error.

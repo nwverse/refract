@@ -154,15 +154,31 @@ def check_ios_references() -> None:
             fail(f"iOS target does not reference {path}")
         if project.count(f"{name}.swift in Sources") < 2:
             fail(f"iOS target does not compile {path}")
-    for case in ("interop-native-measurement", "interop-platform-value", "interop-platform-view"):
-        source = f"../../../Fixtures/{case}/Input.swift"
-        if project.count(source) != 1:
-            fail(f"iOS target must reference canonical {case} source")
-    if project.count("Input.swift in Sources") != 6:
-        fail("iOS target must type-check each canonical interop fixture exactly once")
+    # Unique on-disk basenames avoid Xcode's shared Input.stringsdata output.
+    # These are source-only compiler inputs, never independently generated screens.
+    compiler_inputs = {
+        "InteropNativeMeasurement": "interop-native-measurement",
+        "InteropPlatformValue": "interop-platform-value",
+        "InteropPlatformView": "interop-platform-view",
+        "StateCounter": "state-counter",
+        "ParentBinding": "parent-binding",
+        "ModelInterface": "model-interface",
+        "AccessibilityDynamicType": "accessibility-dynamic-type",
+        "StackLayout": "v0-stack-layout",
+    }
+    for name, case in compiler_inputs.items():
+        path = f"../shared/{name}.swift"
+        if project.count(path) != 1 or project.count(f"{name}.swift in Sources") != 2:
+            fail(f"iOS target must compile the uniquely named {name} source exactly once")
+        shared = ROOT / "examples/shared" / f"{name}.swift"
+        canonical = ROOT / "Fixtures" / case / "Input.swift"
+        if shared.read_bytes() != canonical.read_bytes():
+            fail(f"{path} must remain byte-identical to the canonical {case} fixture")
+    if project.count("Input.swift") or "Fixtures/" in project:
+        fail("iOS target must not compile multiple canonical files named Input.swift")
     if not (ROOT / "examples/ios/RefractExample/MeasurementDesignTokens.swift").is_file():
         fail("iOS target is missing the measurement fixture's application-owned typography token")
-    print("iOS project references every shared source and all three canonical interop fixtures in Sources")
+    print("iOS project compiles every shared source and eight unique, byte-identical compiler inputs")
 
 
 def main() -> int:
