@@ -85,21 +85,13 @@ public struct NativeSourceSet: Sendable {
             }
         }
         var references: [String: String] = [:]
-        for (name, location) in names {
+        for (name, _) in names {
             if let file = screens[name] ?? items[name] ?? modelFiles[name] ?? enumFiles[name],
                file != module.sourceFile {
                 references[name] = file
-                continue
             }
-            // Local declarations are emitted in this file, not imported from a sibling.
-            if module.screens.contains(where: { $0.name == name }) ||
-                module.itemTypes.contains(where: { $0.name == name }) ||
-                module.models.contains(where: { $0.name == name }) ||
-                module.enums.contains(where: { $0.name == name }) { continue }
-            throw Diagnostic(code: "RFVIEW007",
-                message: "Declaration `\(name)` is not defined in the explicit input set.",
-                suggestion: "Supply the file declaring this type as another --input, or declare a mapped native component.",
-                location: location)
+            // Other types belong to the application's existing native boundary or
+            // a frontend diagnostic; this import pass does not guess their module.
         }
         return NativeSource(references: references)
     }

@@ -194,6 +194,16 @@ struct Parent: View {
     #expect(ark.contains("(row: StringRow)"))
 }
 
+@Test func nativeSourceSetLeavesApplicationOwnedTypesToInterop() throws {
+    let module = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "Profile", parameters: [ScreenParameter(name: "url", type: .string)],
+               states: [.model(ModelReference(propertyName: "loader", protocolName: "RemoteImageLoader"), location: nil)],
+               body: .text(Expression(.reference("url")), modifiers: [], location: nil)),
+    ])
+    let source = try NativeSourceSet(modules: [module]).source(for: module)
+    #expect(try source.arkImport(for: "RemoteImageLoader") == nil)
+}
+
 @Test func arkCrossFileImportsRequireFlatExplicitSiblingPaths() throws {
     let module = Module(sourceFile: "Folder/Parent.swift", screens: [
         Screen(name: "Parent", body: .child(ChildView(name: "Child"), location: nil)),
