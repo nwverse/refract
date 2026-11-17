@@ -198,6 +198,30 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "navigation-host",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-native-destination",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-reject-dynamic",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-reject-missing",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-reject-native-mapping",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-reject-payload",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "parent-binding",
       "implementationStatus": "ready"
     },

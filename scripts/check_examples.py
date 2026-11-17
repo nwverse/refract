@@ -23,7 +23,7 @@ def fail(message: str) -> None:
 
 def regenerate_hello() -> None:
     outputs = {
-        "kotlin": ROOT / "examples/android/app/src/main/java/refract/generated",
+        "kotlin": ROOT / "examples/android/app/refract/generated/screens",
         "arkts": ROOT / "examples/harmony/entry/src/main/ets/generated",
     }
     sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift")
@@ -52,7 +52,7 @@ def regenerate_hello() -> None:
 
 def regenerate_identified_list() -> None:
     outputs = {
-        "android": ROOT / "examples/android/app/src/main/java/refract/generated/IdentifiedList.kt",
+        "android": ROOT / "examples/android/app/refract/generated/screens/IdentifiedList.kt",
         "harmony": ROOT / "examples/harmony/entry/src/main/ets/generated/IdentifiedList.ets",
     }
     source = ROOT / "examples/shared/IdentifiedList.swift"
@@ -63,6 +63,7 @@ def regenerate_identified_list() -> None:
         output = Path(temporary)
         subprocess.run([
             str(ROOT / ".build/debug/refract"), "generate", "--input", str(source),
+            "--mapping", str(ROOT / "examples/refract.json"),
             "--android-out", str(output / "android"), "--harmony-out", str(output / "harmony"),
         ], cwd=ROOT, check=True)
         for platform, expected in outputs.items():
@@ -72,7 +73,7 @@ def regenerate_identified_list() -> None:
                     f"regenerated identified-list {platform} differs from "
                     f"{expected.relative_to(ROOT)}; regenerate and review it"
                 )
-    print("Identified-list Kotlin/ArkTS are identical to actual regenerated canonical output")
+    print("Identified-list Kotlin/ArkTS are identical to actual regenerated project-mapped output")
 
 
     source = ROOT / "examples/shared/SettingsScreen.swift"

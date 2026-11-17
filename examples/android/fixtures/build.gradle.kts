@@ -58,8 +58,9 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
+    implementation("androidx.navigation:navigation-compose:2.9.8")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation("org.robolectric:robolectric:4.18")
     testImplementation("androidx.test.ext:junit:1.3.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
 }

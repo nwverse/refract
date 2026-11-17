@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": ["example.native.NativeDetail"],
+    "components": {},
+    "nativeComponents": {
+      "NativeDetail": {
+        "parameters": [],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeDetail",
+        "argumentStyle": "named",
+        "arguments": [],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "strings": { "navigation.open": "navigation_open" }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [
+      { "module": "example.native", "symbols": ["NativeDetail"] }
+    ],
+    "components": {},
+    "nativeComponents": {
+      "NativeDetail": {
+        "parameters": [],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeDetail",
+        "argumentStyle": "object",
+        "arguments": [],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": { "navigation.open": "navigation_open" }
+    }
+  }
+}

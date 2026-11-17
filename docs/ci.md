@@ -69,20 +69,25 @@ macOS CI verifies generator portability; it does not constitute an iOS device or
 ## Android generated-code compile and JVM behavior gate
 
 The `android-compile` job proves that the committed generated Kotlin compiles with the documented Android
-toolchain on every pull request and on every push to `main`. A generator change can pass the golden tests while
-producing Kotlin that no longer builds; this job catches that at CI time. It also runs the native animation
-lifecycle tests on the JVM.
+toolchain on every pull request and on every push to `main`. It also runs the opt-in Gradle generation and
+committed-output check against the actual CLI, plus native animation lifecycle tests on the JVM. A generator change
+can pass the golden tests while producing Kotlin that no longer builds; this job catches that at CI time.
 
 The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 
 1. Build the `refract` CLI with the same locked dependencies as the Swift job.
-2. Run `python3 scripts/check_examples.py` to regenerate the example sources through the actual CLI and reject
-   stale committed Kotlin/ArkTS. `git diff --exit-code` over the generated directories then fails on any drift
-   the script did not catch.
+2. Run `refract check` over every shared example input and both committed native output directories. This generates
+   only in memory and rejects missing, stale or unexpected Kotlin/ArkTS files without writing to the checkout.
+   Run `python3 scripts/check_examples.py` to independently regenerate the example sources through the actual CLI,
+   validate resource catalogs and confirm the shared iOS source set. The final unexpected-file check rejects any
+   unexpected drift.
 3. Install JDK 21 (Temurin) and a pinned Android SDK: platform `android-37.2`, build tools `37.0.0`, and the
    command-line tools zip whose SHA-256 is recorded in the workflow. The pinned toolchain mirrors the documented
    values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
-4. Run `./gradlew --no-daemon :app:compileDebugKotlin` from `examples/android/`. The checked-in Gradle wrapper
+4. Export the built CLI as `REFRACT_CLI_PATH`, then run `./gradlew --no-daemon :app:checkDebugRefract
+   :app:compileDebugKotlin` from `examples/android/`. The Gradle plugin in `tools/gradle/` registers per-variant
+   generation through Android's generated-source API. It compiles the fresh output under `app/build/generated/`,
+   while `checkDebugRefract` invokes the CLI's read-only committed-output check. The checked-in Gradle wrapper
    (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle
    through `services.gradle.org`. Android Gradle Plugin, Kotlin and the Compose BOM are pinned in the same
    Gradle scripts; no version is left to resolve at CI time.
@@ -99,21 +104,37 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
    exactly as the fixtures reference. Adding a fixture to the compile set is a manifest-only change; there is no
    skip list, so a new compile failure must be fixed in the same PR.
-8. Run `./gradlew --no-daemon :fixtures:testDebugUnitTest`. Robolectric 4.16 and the Compose test rule execute the
-   unmodified generated save-confirmation caller with a test-provided `MotionDurationScale`. The tests cover running
-   versus idle native transition states, identity replacement during an in-flight transition, exit removal, zero
-   scale and leaving composition. The app-owned implementation is added to the fixture module through the AGP
-   `kotlin` source-set directory; `java` source-set additions do not feed AGP 9's built-in Kotlin compilation.
-9. Reject any untracked files left in the checkout after compilation and tests.
+8. Run `./gradlew --no-daemon :fixtures:testDebugUnitTest`. Robolectric 4.18 and the Compose test rule execute the
+   unmodified generated save-confirmation caller with a test-provided `MotionDurationScale`. The tests cover the
+   generated call's final stable state, identity replacement, exit removal, zero scale and leaving composition.
+   The app-owned implementation is added to the fixture module through the AGP `kotlin` source-set directory;
+   `java` source-set additions do not feed AGP 9's built-in Kotlin compilation. The injected scale is not a
+   physical-device reduced-motion settings test.
+9. Run `./gradlew --no-daemon :app:testDebugUnitTest` from `examples/android/`. The `src/test` source set invokes
+   the same CLI-generated `SettingsScreen.kt` that the compile gate checks, in the real application resource package.
+   This is essential: an Android library's local test APK does not include a dependent application's resource table,
+   so numeric `R` IDs can otherwise resolve to unrelated dependency strings. Tests first verify the actual localized
+   strings. Robolectric 4.18 and Compose UI tests run against Android API 35 with native graphics in a fixed 400×800dp
+   window. Tests inspect visible section and row labels, the notification label's bounds relative to its switch,
+   `Role.Switch`, toggle and click actions, state updates, text input and the save callback. A recording
+   implementation of the generated `SettingsModel` supplies native state; no hand-written replacement screen is used.
+10. Upload `app/build/reports/native-jvm-compose/` and the JUnit HTML reports as the
+    `native-jvm-compose-settings` artifact. It contains explicitly labelled Native JVM Compose light/dark PNG captures
+    and the observed dark-mode semantics tree. This is rendering and interaction evidence only: **it is not an
+    emulator, a device screenshot, a cross-platform visual-parity result or a performance measurement.** The captures
+    must be inspected rather than inferred from a green test. Tests and their dependencies are confined to the app's
+    test source set and add no runtime dependency to generated code or consumers.
+11. Reject any untracked files left in the checkout after compilation and tests.
 
-Compilation and these JVM behavior tests produce no APK, emulator or device run, physical accessibility-setting test
-or performance measurement; `docs/GOALS.md` goal 2 is not exercised by this job and no such claim may be inferred
-from it. Robolectric verifies the component's use of the public `MotionDurationScale`, not the system settings
-integration on a physical device. HarmonyOS remains unverified in CI until a Linux-compatible hvigor toolchain is
-obtained; that gap is tracked separately and is not hidden by this job. To run the same check locally, follow
-`examples/android/README.md`: build the CLI, run `scripts/check_examples.py` and
-`scripts/check_fixture_compilation.py`, then `./gradlew :app:compileDebugKotlin :fixtures:testDebugUnitTest` with
-`ANDROID_HOME` and a JDK 21 on `PATH`.
+The `:app:compileDebugKotlin` and `:fixtures:compileDebugKotlin` gates are compile-only. They produce no APK, no
+emulator or device run, and no performance measurement; `docs/GOALS.md` goal 2 is not exercised by those jobs and no
+such claim may be inferred from them. The separate JVM tests do not close that gap. HarmonyOS remains unverified in
+CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not hidden by this
+job. To run the same checks locally, follow `examples/android/README.md`: build the CLI, run
+`scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, set `REFRACT_CLI_PATH`, then
+`./gradlew :app:checkDebugRefract :app:compileDebugKotlin :fixtures:compileDebugKotlin :fixtures:testDebugUnitTest
+:app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21 on `PATH`. Run the `tools/gradle/` functional tests as
+documented in the example README to cover incremental generation and missing-tool behavior.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or
 changes the Android toolchain must update the generated files or the toolchain pins in the same change rather than

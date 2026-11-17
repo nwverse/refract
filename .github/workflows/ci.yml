@@ -92,12 +92,18 @@ jobs:
           fi
       - name: Build the generator CLI with locked dependencies
         run: swift build --disable-automatic-resolution
-      - name: Regenerate examples and reject stale committed output
+      - name: Check committed native outputs without writing
         run: |
-          python3 scripts/check_examples.py
-          git diff --exit-code -- \
-            examples/android/app/src/main/java/refract/generated \
-            examples/harmony/entry/src/main/ets/generated
+          .build/debug/refract check \
+            --input examples/shared/Hello.swift \
+            --input examples/shared/NativeComponentScreen.swift \
+            --input examples/shared/IdentifiedList.swift \
+            --input examples/shared/SettingsScreen.swift \
+            --mapping examples/refract.json \
+            --android-out examples/android/app/refract/generated/screens \
+            --harmony-out examples/harmony/entry/src/main/ets/generated
+      - name: Regenerate examples and verify resource catalogs
+        run: python3 scripts/check_examples.py
       - name: Select JDK 21 for the Android toolchain
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
@@ -138,14 +144,23 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: refract-android-${{ runner.os }}-${{ hashFiles('examples/android/gradle/wrapper/gradle-wrapper.properties', 'examples/android/build.gradle.kts', 'examples/android/app/build.gradle.kts', 'examples/android/fixtures/build.gradle.kts', 'examples/android/settings.gradle.kts') }}
+          key: refract-android-${{ runner.os }}-${{ hashFiles('examples/android/gradle/wrapper/gradle-wrapper.properties', 'examples/android/build.gradle.kts', 'examples/android/app/build.gradle.kts', 'examples/android/fixtures/build.gradle.kts', 'examples/android/settings.gradle.kts', 'tools/gradle/build.gradle.kts', 'tools/gradle/src/**') }}
           restore-keys: |
             refract-android-${{ runner.os }}-
+      - name: Show the Gradle executable contract
+        run: |
+          test -x .build/debug/refract
+          printf 'REFRACT_CLI_PATH=%s/refract\n' "$PWD/.build/debug" >> "$GITHUB_ENV"
       - name: Compile generated Kotlin with the checked-in wrapper
         working-directory: examples/android
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
-        run: ./gradlew --no-daemon :app:compileDebugKotlin
+        run: ./gradlew --no-daemon :app:checkDebugRefract :app:compileDebugKotlin
+      - name: Exercise incremental generation in a real Android consumer
+        working-directory: tools/gradle
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ../../examples/android/gradlew --no-daemon test
       - name: Stage the canonical fixture corpus through the CLI
         run: python3 scripts/check_fixture_compilation.py
       - name: Compile the canonical fixture corpus
@@ -158,6 +173,21 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ./gradlew --no-daemon :fixtures:testDebugUnitTest
+      - name: Render and test the generated settings screen on Native JVM Compose
+        working-directory: examples/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+      - name: Publish Native JVM Compose captures and test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-jvm-compose-settings
+          path: |
+            examples/android/app/build/reports/native-jvm-compose/
+            examples/android/app/build/reports/tests/
+          if-no-files-found: error
+          retention-days: 14
       - name: Reject unexpected files left in the checkout
         shell: bash
         run: |

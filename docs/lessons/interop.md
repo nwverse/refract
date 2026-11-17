@@ -9,6 +9,19 @@
   use the ordinary action/label pair with `Text(verbatim:)` and reject the invalid initializer with a source-located
   diagnostic. The typed interop helpers above are different: they carry declared platform-only semantics while
   preserving the receiver's native iOS view behavior.
+- An iOS-only native body may read accessibility preferences without adding them to the generated interface. The
+  narrowly accepted `accessibilityReduceMotion` environment property is not an argument; do not turn it into a shared
+  animation flag or allow arbitrary property wrappers to bypass native-signature validation.
+- Test observation must not alter the generated interface. A host `CompositionLocal` around the unmodified generated
+  caller can supply an app-owned observer; rewriting generated Kotlin to add a test callback would no longer test the
+  actual contract. Compose transition assertions should inspect public transition/idle state, not an invented
+  semantics-alpha property.
+- AGP 9's built-in Kotlin support does not automatically consume a custom `sourceSets.main.java` directory. Register
+  an application-owned Kotlin implementation through `sourceSets.main.kotlin.directories` when compiling a fixture
+  import; adding only a dependency or generated import does not put its source on the compiler input list.
+- A mapping may use the normalized native-only compatibility form. The fixture compilation script must use the same
+  `refract.generated` default package as the Compose backend rather than indexing a full mapping's `android.output`
+  unconditionally.
 - Keep IR independent of mapping and backends. Interop lowering helpers belong in `RefractMapping` or a backend;
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.
 - A native view argument needs its label and source type, not only an expression. Unknown reference types must not be
@@ -28,6 +41,15 @@
   native metadata typed until its emitter can place the modifier on Switch/Toggle itself.
 - Retained callback keys include every captured stable value. A source action name is a discriminator, not a
   substitute for the current model or the list item's declared `Identifiable` id.
+- A generated child call needs an ordered typed argument list with the child's label and the caller's expression.
+- Typed navigation must not synthesize a second back stack. `@State [Route]` owns the iOS path, while generated
+  Android/HarmonyOS roots expose a finite-enum navigation callback and the host owns its controller/stack. Compile a
+  real `NavHost` host alongside the generated two-screen components; merely finding `NavController` in documentation
+  proves nothing. A generated link is a child of its root container: forward the host modifier only to that container,
+  not to every nested Button/Text, and scope each link callback to its own path rather than the first navigation
+  screen in the module. Keep the destination component's model parameters in the root screen's scope, not all module screens.
+  When native destinations live in IR rather than ordinary `.native` nodes, collect their typed imports before the
+  ArkUI header is emitted, and include them in the platform compiler's fixture manifest.
 - A generated child call needs an ordered typed argument list with the child's label and the caller's expression.
   Kotlin named arguments use `label = value`, not Swift's `label: value`; ArkTS uses `label: value` in its object
   literal. Golden text alone does not catch that distinction, so compile a child call whose model label differs
