@@ -120,7 +120,7 @@ such claim may be inferred from them. The separate JVM tests do not close that g
 CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not hidden by this
 job. To run the same checks locally, follow `examples/android/README.md`: build the CLI, run
 `scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, then `./gradlew :app:compileDebugKotlin
-:fixtures:compileDebugKotlin :render-check:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21 on `PATH`.
+:fixtures:compileDebugKotlin :app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21 on `PATH`.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or
 changes the Android toolchain must update the generated files or the toolchain pins in the same change rather than

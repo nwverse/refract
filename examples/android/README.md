@@ -80,11 +80,11 @@ observes the label and control as separate semantics nodes; the test does not ad
 behavior that the generator did not emit.
 
 Light and dark captures and the dark-mode semantics tree are written to
-`render-check/build/reports/native-jvm-compose/`. **These are Native JVM Compose captures, not device or emulator
+`app/build/reports/native-jvm-compose/`. **These are Native JVM Compose captures, not device or emulator
 screenshots.** They are not visual-parity or performance measurements and must be visually inspected. CI publishes
-them and the JUnit HTML reports as `native-jvm-compose-settings`. The test-only module is not part of the example APK
-and adds no runtime library to generated code or consuming apps. Large-text behavior is tracked separately by the
-accessibility workstream and is not claimed by this check.
+them and the JUnit HTML reports as `native-jvm-compose-settings`. Tests and their dependencies are confined to the
+application's test source set and add no runtime library to the example APK, generated code or consuming apps.
+Large-text behavior is tracked separately by the accessibility workstream and is not claimed by this check.
 
 ## CI compile gate
 

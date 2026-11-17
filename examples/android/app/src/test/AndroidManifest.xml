@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity
-            android:name=".rendercheck.RenderCheckActivity"
+            android:name="com.example.refract.rendercheck.RenderCheckActivity"
             android:exported="true"
             android:theme="@style/Theme.RefractExample" />
     </application>

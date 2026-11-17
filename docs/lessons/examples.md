@@ -44,8 +44,9 @@ that refers to the application's numeric `R` IDs can then silently render unrela
 the real generated layout and native controls are present. Run Robolectric in the application's own `src/test` source
 set, assert the actual localized strings before rendering, and inspect the resulting PNGs rather than accepting
 nonblank pixels as UI evidence. A test-only Activity supplies a native host; it must never replace the generated
-composable. Use the merged unit-test manifest explicitly when Robolectric does not discover it automatically, and
-resolve its exact Android runtime through Gradle rather than a second implicit repository downloader.
+composable. Keep the standard AGP `test_config.properties` and binary-resource path, and use a direct
+`Robolectric.buildActivity` controller for the empty host when a test-only manifest overlay is not registered. Resolve
+the exact Android runtime through Gradle rather than a second implicit repository downloader.
 
 ## Real SwiftUI compilation and simulator ownership
 

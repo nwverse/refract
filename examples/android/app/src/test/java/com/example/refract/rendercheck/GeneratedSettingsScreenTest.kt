@@ -26,7 +26,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsToggleable
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -36,7 +36,6 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.printToString
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.platform.app.InstrumentationRegistry
 import com.example.refract.R
 import java.io.File
 import java.io.FileOutputStream
@@ -45,7 +44,9 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestRule
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -65,7 +66,19 @@ import refract.generated.SettingsScreen
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class GeneratedSettingsScreenTest {
     @get:Rule
-    val compose = createAndroidComposeRule<RenderCheckActivity>()
+    val compose = AndroidComposeTestRule(
+        activityRule = TestRule { base, _ -> base },
+        activityProvider = {
+            Robolectric.buildActivity(RenderCheckActivity::class.java)
+                .create()
+                .start()
+                .postCreate(null)
+                .resume()
+                .visible()
+                .windowFocusChanged(true)
+                .get()
+        },
+    )
 
     private lateinit var model: RecordingSettingsModel
     private var darkTheme by mutableStateOf(false)
@@ -73,8 +86,6 @@ class GeneratedSettingsScreenTest {
     @Test
     fun generatedScreenUsesTheRealApplicationResources() {
         val resources = ApplicationProvider.getApplicationContext<Application>().resources
-        println("NATIVE_JVM_APPLICATION_PACKAGE=" + ApplicationProvider.getApplicationContext<Application>().packageName)
-        println("NATIVE_JVM_TARGET_PACKAGE=" + InstrumentationRegistry.getInstrumentation().targetContext.packageName)
         assertEquals("Profile", resources.getString(R.string.settings_profile))
         assertEquals("Notifications", resources.getString(R.string.settings_notifications))
         assertEquals("Save", resources.getString(R.string.settings_save))
@@ -120,7 +131,10 @@ class GeneratedSettingsScreenTest {
         // The row's Text and Switch remain separate semantics nodes. This is an
         // observation for the accessibility workstream, not a test-side merger.
         assertNotEquals(labelNode.id, switchNode.id)
-        assertTrue(labelNode.config.any { entry -> entry.value == "Notifications" })
+        assertEquals(
+            listOf("Notifications"),
+            labelNode.config.getOrNull(SemanticsProperties.Text)?.map { it.text },
+        )
     }
 
     @Test
@@ -154,7 +168,7 @@ class GeneratedSettingsScreenTest {
         val semantics = compose.onRoot().printToString(maxDepth = Int.MAX_VALUE)
         File(outputDirectory(), "native-jvm-compose-dark-semantics.txt").writeText(semantics)
         assertTrue(semantics.contains("Role = 'Switch'"))
-        assertTrue(semantics.contains("ToggleableState = Off"))
+        assertTrue(semantics.contains("ToggleableState = 'Off'"))
         assertTrue(semantics.contains("Text = '[Notifications]'"))
     }
 
