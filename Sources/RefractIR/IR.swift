@@ -47,6 +47,7 @@ public struct Expression: Codable, Equatable, Sendable {
         case verbatimText(String)
         case stringKey(String)
         case localizedText(LocalizedText)
+        case imageResource(String)
         case boolLiteral(Bool)
         case numberLiteral(String)
         case layoutSpacing(LayoutSpacing)
@@ -226,9 +227,25 @@ public struct Module: Codable, Equatable, Sendable {
 public struct TranslationUnit: Codable, Equatable, Sendable {
     public let module: Module
     public let diagnostics: [Diagnostic]
-    public init(module: Module, diagnostics: [Diagnostic] = []) {
+    /// Lowering-only type declarations from the same explicit input set. Unlike
+    /// `module.models` and `module.itemTypes`, these are never emitted by this file.
+    public let resolvedModels: [ModelProtocol]
+    public let resolvedItemTypes: [ItemType]
+    public init(module: Module, diagnostics: [Diagnostic] = [],
+                resolvedModels: [ModelProtocol]? = nil, resolvedItemTypes: [ItemType]? = nil) {
         self.module = module
         self.diagnostics = diagnostics
+        self.resolvedModels = resolvedModels ?? module.models
+        self.resolvedItemTypes = resolvedItemTypes ?? module.itemTypes
+    }
+
+    private enum CodingKeys: String, CodingKey { case module, diagnostics, resolvedModels, resolvedItemTypes }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        module = try values.decode(Module.self, forKey: .module)
+        diagnostics = try values.decode([Diagnostic].self, forKey: .diagnostics)
+        resolvedModels = try values.decodeIfPresent([ModelProtocol].self, forKey: .resolvedModels) ?? module.models
+        resolvedItemTypes = try values.decodeIfPresent([ItemType].self, forKey: .resolvedItemTypes) ?? module.itemTypes
     }
 
     public var hasErrors: Bool { diagnostics.contains { $0.severity == .error } }

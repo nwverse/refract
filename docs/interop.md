@@ -220,7 +220,18 @@ For every native call, before either backend writes output, the frontend/lowerin
 - The symbol and module are explicit identifiers, not arbitrary code. Imports are deterministic and deduplicated.
 
 The v0 value boundary is `String`, `Bool`, `Int` and `Double`, plus expressions supported by the state/model
-contract. Closures and arbitrary Swift objects are rejected until their typed native representation is specified;
+contract. Native component declarations additionally accept `Image` and `LocalizedStringKey` for app-owned static
+image resources and localized text, and the explicitly bounded `RemoteImageLoader` service protocol. `Image` arguments
+must be literal `Image("lowercase_resource_name")` expressions; string keys must resolve in both resource catalogs.
+A `RemoteImageLoader` must be injected as an explicitly typed screen input and cannot be constructed in the view.
+These native-only parameter types are not model, state, binding or arbitrary object values. The bounded remote-image
+lifecycle, URL policy and platform verification limits are specified in `docs/remote-images.md`.
+A native component can declare a zero-argument `() -> Void` callback. Its only accepted closure body is one checked
+no-argument model method such as `{ model.closePreview() }`; Compose emits a `() -> Unit` lambda and ArkTS emits a
+`() => void` lambda. Arbitrary closures, function values and parameterized callbacks remain diagnostics. The typed
+document preview boundary, its app-owned URI/permission/decode/lifecycle ownership, and synthetic Native JVM evidence
+are specified in `docs/document-preview.md`.
+Other closures and arbitrary Swift objects are otherwise rejected until their typed native representation is specified;
 they are never converted to untyped target expressions.
 
 The accepted target-type mappings are:
@@ -231,6 +242,7 @@ The accepted target-type mappings are:
 | `Bool` | `Boolean` | `boolean` |
 | `Int` | `Int` | `number` |
 | `Double` | `Double` | `number` |
+| `() -> Void` (one checked model action) | `() -> Unit` | `() => void` |
 
 `Int` values must be integral when emitted for ArkTS. The generator does not silently round, coerce or add a cast.
 

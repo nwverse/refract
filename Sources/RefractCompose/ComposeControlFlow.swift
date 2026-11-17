@@ -65,7 +65,7 @@ extension ComposeBackend {
 
     func emitEnumSwitch(subject: Expression, enumName: String, cases: [SwitchCase], isRoot: Bool,
                         location: SourceLocation?, into out: inout KotlinWriter, context: inout Context) throws {
-        guard let declaration = context.module.enums.first(where: { $0.name == enumName }),
+        guard let declaration = context.enums.first(where: { $0.name == enumName }),
               cases.map(\.name).sorted() == declaration.cases.sorted(), Set(cases.map(\.name)).count == cases.count else {
             throw Diagnostic(code: "RF-C001", message: "A native switch must contain each declared enum case exactly once.",
                              suggestion: "Validate enum exhaustiveness in the frontend.", location: location)

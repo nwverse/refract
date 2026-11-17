@@ -89,6 +89,9 @@ public struct ImageSource: Codable, Equatable, Sendable {
 /// A lazy collection already exposed by the application model as an ArkUI-compatible data source.
 public struct ListItems: Codable, Equatable, Sendable {
     public let collection: Expression
+    /// The frontend-resolved protocol that owns this collection, not a name guessed
+    /// from a property shared by two models.
+    public let modelType: String?
     public let itemName: String
     public let itemType: String
     public let key: String
@@ -98,8 +101,10 @@ public struct ListItems: Codable, Equatable, Sendable {
     public let location: SourceLocation?
 
     public init(collection: Expression, itemName: String, itemType: String, key: String = "id",
-                keyType: ValueType, content: ViewNode, contentType: String? = nil, location: SourceLocation? = nil) {
+                keyType: ValueType, content: ViewNode, contentType: String? = nil,
+                modelType: String? = nil, location: SourceLocation? = nil) {
         self.collection = collection
+        self.modelType = modelType
         self.itemName = itemName
         self.itemType = itemType
         self.key = key
@@ -109,11 +114,12 @@ public struct ListItems: Codable, Equatable, Sendable {
         self.location = location
     }
 
-    private enum CodingKeys: String, CodingKey { case collection, itemName, itemType, key, keyType, content, contentType, location }
+    private enum CodingKeys: String, CodingKey { case collection, modelType, itemName, itemType, key, keyType, content, contentType, location }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         collection = try values.decode(Expression.self, forKey: .collection)
+        modelType = try values.decodeIfPresent(String.self, forKey: .modelType)
         itemName = try values.decode(String.self, forKey: .itemName)
         itemType = try values.decode(String.self, forKey: .itemType)
         key = try values.decode(String.self, forKey: .key)
