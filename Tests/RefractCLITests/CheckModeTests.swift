@@ -36,6 +36,16 @@ import Foundation
     try JSONSerialization.data(withJSONObject: mappingJSON).write(to: mapping)
     let arguments = ["--input", first.path, "--input", second.path, "--mapping", mapping.path,
                      "--android-out", android.path, "--harmony-out", harmony.path]
+    let malformed = temporary.appendingPathComponent("Malformed.swift")
+    try Data("struct Malformed: View { var body: some View { Text(verbatim: \"broken\") }".utf8)
+        .write(to: malformed)
+    let invalid = try runCheckCLI(["check", "--input", malformed.path,
+                                   "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(invalid.status != 0)
+    #expect(invalid.stderr.contains("[RFSYN001]"))
+    #expect(!invalid.stderr.contains("missing committed output"))
+    #expect(!FileManager.default.fileExists(atPath: android.path))
+    #expect(!FileManager.default.fileExists(atPath: harmony.path))
 
     let missing = try runCheckCLI(["check"] + arguments, executable: executable)
     #expect(missing.status != 0)
