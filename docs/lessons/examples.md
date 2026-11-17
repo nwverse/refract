@@ -37,6 +37,17 @@ content receiver. Only real Android compilation catches this; inspecting an expe
 
 ## Test what the example actually compiles
 
+## Native JVM Compose uses the application's real resource package
+
+An Android library's local unit-test APK does not include a dependent application's resource table. Generated Kotlin
+that refers to the application's numeric `R` IDs can then silently render unrelated dependency strings even though
+the real generated layout and native controls are present. Run Robolectric in the application's own `src/test` source
+set, assert the actual localized strings before rendering, and inspect the resulting PNGs rather than accepting
+nonblank pixels as UI evidence. A test-only Activity supplies a native host; it must never replace the generated
+composable. Keep the standard AGP `test_config.properties` and binary-resource path, and use a direct
+`Robolectric.buildActivity` controller for the empty host when a test-only manifest overlay is not registered. Resolve
+the exact Android runtime through Gradle rather than a second implicit repository downloader.
+
 ## Real SwiftUI compilation and simulator ownership
 
 A SwiftUI source file must import SwiftUI unless another language-supported import supplies it; parsing successfully

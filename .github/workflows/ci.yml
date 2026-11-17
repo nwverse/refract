@@ -168,6 +168,21 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ./gradlew --no-daemon :fixtures:compileDebugKotlin
+      - name: Render and test the generated settings screen on Native JVM Compose
+        working-directory: examples/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+      - name: Publish Native JVM Compose captures and test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-jvm-compose-settings
+          path: |
+            examples/android/app/build/reports/native-jvm-compose/
+            examples/android/app/build/reports/tests/
+          if-no-files-found: error
+          retention-days: 14
       - name: Reject unexpected files left in the checkout
         shell: bash
         run: |

@@ -34,7 +34,8 @@ its design-system components and tokens, its model implementations and its nativ
 | `RefractMapping` | Loads and validates `refract.json`: design-system components and tokens per platform, string resources, native component declarations |
 | `RefractCompose` | IR → idiomatic Jetpack Compose source |
 | `RefractArkUI` | IR → idiomatic ArkUI (ArkTS) source |
-| `RefractCLI` | The `refract` executable: `generate`, `check`, `explain <diagnostic>` |
+| `RefractOutput` | Locked, staged generated-file publication with rollback; no frontend or backend dependencies |
+| `RefractCLI` | The `refract` executable: `generate`, `check`, `explain <diagnostic>`; see `docs/cli.md` |
 
 Later: a SwiftPM build-tool plugin, a Gradle plugin and an hvigor plugin that run `refract generate` and the
 regenerate-and-diff check, so generation fits each platform's normal build.
@@ -145,6 +146,12 @@ The initial parser deliberately supports only `VStack`, `HStack`, `Text`, and st
 action. Other IR cases define the next typed boundaries and are not a claim that those features already parse or
 generate. New views and expressions extend these types with explicit ownership and source locations; no backend may
 introduce a second Swift parser.
+
+Typed navigation adds the bounded `NavigationStack(path:)`, no-payload `Hashable` destination enum and
+`navigationDestination` contract in `docs/navigation.md`. The source path belongs to SwiftUI on iOS. Generated
+Android/HarmonyOS roots expose a typed navigation callback and an ordinary destination component; the application's
+native host owns its controller/stack, back and lifecycle. No runtime router, destination registry or second stack
+is generated. Cross-file destination declarations remain separate from this same-file boundary.
 
 ## Open decisions
 
