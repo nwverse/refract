@@ -14,7 +14,7 @@ Opt in independently in each platform's existing `resources` object:
 "android": {
   "resources": {
     "className": "example.app.R",
-    "catalog": "res/values/strings.xml",
+    "catalog": "values/strings.xml",
     "assetCatalog": "res",
     "strings": { "assets.logo.description": "assets_logo_description" }
   }
@@ -146,6 +146,8 @@ Run the actual resource and Kotlin compilation plus the labelled Native JVM test
 
 ```sh
 python3 -I scripts/check_fixture_compilation.py
+# The example Gradle plugin discovers the built CLI through this environment variable.
+REFRACT_CLI_PATH="$PWD/.build/debug/refract" \
 examples/android/gradlew -p examples/android --no-daemon \
   :fixtures:compileDebugKotlin :app:compileDebugKotlin \
   :app:testDebugUnitTest --tests example.app.TypedAssetTest
