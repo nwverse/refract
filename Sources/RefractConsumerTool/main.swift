@@ -77,8 +77,11 @@ func resolve(_ path: String, relativeTo directory: URL, description: String) thr
         throw ConsumerError("Unsafe or empty path component for \(description): \(path).")
     }
     let url = components.reduce(directory) { $0.appendingPathComponent(String($1)) }
+    guard url.standardizedFileURL.path.hasPrefix(directory.standardizedFileURL.path + "/") else {
+        throw ConsumerError("\(description) escapes the consuming package: \(path).")
+    }
     let root = directory.resolvingSymlinksInPath().path
-    guard url.resolvingSymlinksInPath().path.hasPrefix(root + "/") else {
+    guard url.deletingLastPathComponent().resolvingSymlinksInPath().path.hasPrefix(root + "/") else {
         throw ConsumerError("\(description) escapes the consuming package: \(path).")
     }
     var ancestor = url.deletingLastPathComponent()

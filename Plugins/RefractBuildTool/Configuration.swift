@@ -70,9 +70,15 @@ struct ConsumerConfiguration: Decodable {
             throw PluginError(message: "Unsafe or empty path component for \(description): \(path).")
         }
         let url = components.reduce(package) { $0.appendingPathComponent(String($1)) }
-        let packagePath = package.resolvingSymlinksInPath().path
-        let resolvedPath = url.resolvingSymlinksInPath().path
-        guard resolvedPath.hasPrefix(packagePath + "/") else {
+        let packagePath = package.standardizedFileURL.path
+        guard url.standardizedFileURL.path.hasPrefix(packagePath + "/") else {
+            throw PluginError(message: "\(description) escapes the consuming package: \(path).")
+        }
+        // A missing output need not resolve symlinks: Darwin canonicalizes such
+        // URLs differently. Check the real parent chain for sandbox containment.
+        let existingParent = url.deletingLastPathComponent().resolvingSymlinksInPath().path
+        let resolvedPackage = package.resolvingSymlinksInPath().path
+        guard existingParent.hasPrefix(resolvedPackage + "/") else {
             throw PluginError(message: "\(description) resolves outside the consuming package: \(path).")
         }
         var ancestor = url
