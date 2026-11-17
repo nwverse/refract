@@ -50,6 +50,10 @@ extension ComposeBackend {
         case let .textInput(placeholder, value, modifiers, location):
             try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
                               location: location, into: &out, context: &context)
+        case let .secureInput(placeholder, value, reveal, modifiers, location):
+            try emitSecureInput(placeholder: placeholder, value: value, reveal: reveal,
+                                modifiers: modifiers, isRoot: isRoot, location: location,
+                                into: &out, context: &context)
         case .stack, .text, .button, .toggle, .native, .nativeModifier, .child, .component, .platformView,
              .conditional, .optionalBinding, .switchExpression, .navigationLink, .navigationStack:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
@@ -167,6 +171,10 @@ extension ComposeBackend {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .textInput(_, value, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .secureInput(_, value, _, _, _) = child, case let .valueProperty(.state(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .secureInput(_, value, _, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .toggle(_, value, _, _, _, _) = child, case let .valueProperty(.state(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .toggle(_, value, _, _, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
@@ -226,6 +234,7 @@ extension ComposeBackend {
         case .label: return "Label"
         case .toggle: return "Toggle"
         case .textInput: return "TextInput"
+        case .secureInput: return "SecureInput"
         case .divider: return "Divider"
         case .layout, .stack, .nativeModifier: return "Container"
         case .native: return "Native"

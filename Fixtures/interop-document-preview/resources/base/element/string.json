@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "document_loading", "value": "Loading document" },
+    { "name": "document_close", "value": "Close document" },
+    { "name": "document_cancel", "value": "Cancel document" },
+    { "name": "document_missing", "value": "Document is missing" },
+    { "name": "document_unsupported", "value": "Document format is unsupported" },
+    { "name": "document_cancelled", "value": "Document opening was cancelled" },
+    { "name": "document_closed", "value": "Document is closed" }
+  ]
+}

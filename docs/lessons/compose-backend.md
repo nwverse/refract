@@ -13,6 +13,12 @@ Compose examples, and add to it when something surprises you.
   skip. When the body is anything more, wrap in `remember(keys) { { … } }`.
 - **`font` and `foregroundColor` are `Text` parameters, not modifiers.** Emitting them as `Modifier.*` calls does
   not compile. The split is part of the IR lowering, not a formatting choice.
+- **`KeyboardOptions(autoCorrect = ...)` is deprecated in recent Compose BOMs.** The constructor warns at
+  `:fixtures:compileDebugKotlin`. Use `autoCorrectEnabled = false` for the password keyboard on `SecureField`;
+  the previous spelling still compiles but adds a deprecation warning to every consumer.
+- **`SecureField` must stay a native `TextField`, not a custom composable.** Wrapping a basic `TextField` in a
+  hand-rolled "secure" composable duplicates autofill and IME wiring that the platform already owns. The
+  generator's job is `visualTransformation` and `keyboardOptions`, not a parallel secret input pipeline.
 - **Typed pattern lowering needs an explicit native scope.** Optional scalar aliases and single-payload enum cases
   are branch-local immutable values. Compose uses smart casts on a captured `when` subject; ArkTS uses documented
   null/undefined checks or class-union `instanceof` narrowing. Do not accept optional chaining, object payloads,

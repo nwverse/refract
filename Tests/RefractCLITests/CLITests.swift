@@ -228,15 +228,33 @@ private func builtCLIExecutable() -> URL {
     #endif
 }
 
-private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {
+private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stdout: String, stderr: String) {
     let process = Process()
     process.executableURL = executable
     process.arguments = arguments
     let stderr = Pipe()
+    let stdout = Pipe()
     process.standardError = stderr
-    process.standardOutput = Pipe()
+    process.standardOutput = stdout
     try process.run()
     process.waitUntilExit()
     return (process.terminationStatus,
+            String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
             String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+}
+
+@Test func cliReportsPackagedVersionAndRejectsOtherVersionArguments() throws {
+    #if os(Linux) || os(macOS)
+    let executable = builtCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let result = try runCLI(["--version"], executable: executable)
+    #expect(result.status == 0)
+    #expect(result.stderr.isEmpty)
+    #expect(result.stdout.contains("refract 0.1.0 ("))
+    #expect(try runCLI(["version"], executable: executable).stdout == result.stdout)
+    #expect(try runCLI(["--version", "extra"], executable: executable).status != 0)
+    #endif
 }
