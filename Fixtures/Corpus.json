@@ -154,6 +154,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "list-paged-search",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-reject-eager-foreach",
       "implementationStatus": "ready"
     },

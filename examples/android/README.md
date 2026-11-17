@@ -155,6 +155,22 @@ The same staging and `:fixtures:testDebugUnitTest` commands above compile the re
 Native JVM Compose document tests: ready/close/disposal, missing/unsupported and cancellation with no stale ready
 result. These are source and Native JVM results only, not emulator, device, iOS or HarmonyOS verification.
 
+### Incremental search model tests
+
+`list-paged-search` compiles the actual dual-backend fixture output and the app-owned
+`IncrementalSearchResultsModel` together. The model is application code, not generated output or a Refract runtime.
+Its JUnit tests run on the host JVM with a scripted in-memory transport and cover append/replacement identity,
+duplicate/out-of-order response rejection, cancellation, loading/empty state and error retry. Run them with the same
+fixture staging step followed by:
+
+```sh
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.search.IncrementalSearchResultsModelTest
+```
+
+This is native model JVM evidence only. It performs no network request, renders no UI and supplies no emulator,
+device, ArkTS compiler, runtime observation or performance evidence. A HarmonyOS implementation must provide the
+corresponding app-owned data-source notifications and lifecycle cancellation described in `docs/state-and-models.md`.
+
 ## Opt-in Gradle generation
 
 The repository's `tools/gradle/` build supplies the `dev.refract.generator` plugin. `app/build.gradle.kts` opts in
