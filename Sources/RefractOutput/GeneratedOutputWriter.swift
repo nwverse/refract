@@ -19,12 +19,12 @@ public struct GeneratedOutput: Equatable, Sendable {
 
 public enum GeneratedOutputError: Error, CustomStringConvertible, Equatable {
     case message(String)
+    case cleanup(String)
     case rollback(String)
 
     public var description: String {
         switch self {
-        case let .message(message): message
-        case let .rollback(message): message
+        case let .message(message), let .cleanup(message), let .rollback(message): message
         }
     }
 }
@@ -58,6 +58,7 @@ public enum GeneratedOutputWriter {
 
         let directories = Dictionary(grouping: plans, by: { $0.directory.resolvingSymlinksInPath().path })
         var transaction = Transaction()
+        defer { transaction.removeCreatedDirectories() }
         do {
             for (_, group) in directories.sorted(by: { $0.key < $1.key }) {
                 let directory = group[0].directory
@@ -91,19 +92,26 @@ public enum GeneratedOutputWriter {
                 plan.staged = nil
                 plan.replaced = true
             }
-            for plan in plans {
-                if let backup = plan.backup {
-                    try files.removeItem(at: backup)
-                    plan.backup = nil
-                }
-            }
-            transaction.releaseLocks()
         } catch {
             let rollbackError = transaction.rollback(plans: plans)
             if let rollbackError {
                 throw GeneratedOutputError.rollback("\(error) The previous outputs could not be fully restored: \(rollbackError) Inspect the reported paths before regenerating.")
             }
             throw error
+        }
+        var cleanupErrors: [String] = []
+        for plan in plans {
+            if let backup = plan.backup {
+                do {
+                    try files.removeItem(at: backup)
+                    plan.backup = nil
+                } catch { cleanupErrors.append("\(backup.path): \(error.localizedDescription)") }
+            }
+        }
+        let lockError = transaction.releaseLocks()
+        guard cleanupErrors.isEmpty, lockError == nil else {
+            let details = (cleanupErrors + [lockError].compactMap { $0 }).joined(separator: "; ")
+            throw GeneratedOutputError.cleanup("Generated outputs were published, but temporary-file cleanup failed: \(details) Remove only the named temporary paths after checking that no other generator is using them.")
         }
     }
 
@@ -143,9 +151,21 @@ public enum GeneratedOutputWriter {
         var locks: [URL] = []
         var createdDirectories: [URL] = []
 
-        mutating func releaseLocks() {
-            for lock in locks.reversed() { try? FileManager.default.removeItem(at: lock) }
+        mutating func releaseLocks() -> String? {
+            var errors: [String] = []
+            for lock in locks.reversed() {
+                do { try FileManager.default.removeItem(at: lock) }
+                catch { errors.append("\(lock.path): \(error.localizedDescription)") }
+            }
             locks.removeAll()
+            return errors.isEmpty ? nil : errors.joined(separator: "; ")
+        }
+
+        func removeCreatedDirectories() {
+            for directory in createdDirectories.reversed() {
+                guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directory.path), contents.isEmpty else { continue }
+                try? FileManager.default.removeItem(at: directory)
+            }
         }
 
         func rollback(plans: [Plan]) -> String? {
@@ -172,10 +192,6 @@ public enum GeneratedOutputWriter {
             for lock in locks.reversed() {
                 do { try FileManager.default.removeItem(at: lock) }
                 catch { errors.append("\(lock.path): \(error.localizedDescription)") }
-            }
-            for directory in createdDirectories.reversed() {
-                guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directory.path), contents.isEmpty else { continue }
-                try? FileManager.default.removeItem(at: directory)
             }
             return errors.isEmpty ? nil : errors.joined(separator: "; ")
         }

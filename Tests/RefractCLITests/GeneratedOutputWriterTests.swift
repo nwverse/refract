@@ -17,7 +17,7 @@ struct GeneratedOutputWriterTests {
             GeneratedOutput(directory: android.path, filename: "Screen.kt", contents: "new Kotlin"),
             GeneratedOutput(directory: harmony.path, filename: "Screen.ets", contents: "new ArkTS"),
         ]
-        #expect(throws: (any Error).self) {
+        #expect(throws: TestError.injected) {
             try GeneratedOutputWriter.commit(outputs, lockTimeout: 0.1, lockPollInterval: 0.001) {
                 throw TestError.injected
             }
@@ -38,7 +38,7 @@ struct GeneratedOutputWriterTests {
             GeneratedOutput(directory: root.path, filename: "Existing.kt", contents: "new"),
             GeneratedOutput(directory: root.path, filename: "Added.kt", contents: "new"),
         ]
-        #expect(throws: (any Error).self) {
+        #expect(throws: TestError.injected) {
             try GeneratedOutputWriter.commit(outputs, lockTimeout: 0.1, lockPollInterval: 0.001) {
                 throw TestError.injected
             }
@@ -69,6 +69,41 @@ struct GeneratedOutputWriterTests {
         #expect(error?.description.contains("Screen.ets") == true)
         #expect(try String(contentsOfFile: blocked + "/keep.txt", encoding: .utf8) == "keep this")
         #expect(!FileManager.default.fileExists(atPath: android.path))
+    }
+
+    @Test func symbolicLinkDestinationIsNotFollowedOrRemoved() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = root.appendingPathComponent("handwritten.kt")
+        let link = root.appendingPathComponent("Screen.kt")
+        try write("keep", to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let error = #expect(throws: GeneratedOutputError.self) {
+            try GeneratedOutputWriter.commit([
+                GeneratedOutput(directory: root.path, filename: "Screen.kt", contents: "generated"),
+            ])
+        }
+        #expect(error?.description.contains("symbolic link") == true)
+        #expect(try contents(of: target) == "keep")
+        #expect(FileManager.default.fileExists(atPath: link.path))
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == target.path)
+    }
+
+    @Test func lockFailureDoesNotLeaveAnEarlierNewOutputDirectory() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let android = root.appendingPathComponent("android")
+        let harmony = root.appendingPathComponent("harmony")
+        try FileManager.default.createDirectory(at: harmony, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: harmony.appendingPathComponent(".refract-generate.lock"), withIntermediateDirectories: false)
+        #expect(throws: GeneratedOutputError.self) {
+            try GeneratedOutputWriter.commit([
+                GeneratedOutput(directory: android.path, filename: "Screen.kt", contents: "Kotlin"),
+                GeneratedOutput(directory: harmony.path, filename: "Screen.ets", contents: "ArkTS"),
+            ], lockTimeout: 0.01, lockPollInterval: 0.001)
+        }
+        #expect(!FileManager.default.fileExists(atPath: android.path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: harmony.path) == [".refract-generate.lock"])
     }
 
     @Test func staleLockReturnsActionableErrorAndRetriesAfterRelease() throws {
@@ -125,4 +160,4 @@ struct GeneratedOutputWriterTests {
     private func contents(of url: URL) throws -> String { try String(contentsOf: url, encoding: .utf8) }
 }
 
-private enum TestError: Error { case injected }
+private enum TestError: Error, Equatable { case injected }

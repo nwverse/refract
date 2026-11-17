@@ -42,7 +42,9 @@ import Foundation
         .contains("stringResource(example.resources.R.string.hello_title)"))
     #expect(try String(contentsOf: temporary.appendingPathComponent("harmony/Input.ets"), encoding: .utf8)
         .contains("$r('app.string.hello_title')"))
-    #expect(try runCLI(["check", "--input", input.path, "--mapping", mapping.path], executable: executable).status == 0)
+    #expect(try runCLI(["check", "--input", input.path, "--mapping", mapping.path,
+                        "--android-out", temporary.appendingPathComponent("android").path,
+                        "--harmony-out", temporary.appendingPathComponent("harmony").path], executable: executable).status == 0)
 
     let rejection = try runCLI(["generate", "--input",
                                 root.appendingPathComponent("Fixtures/rejected-image/Input.swift").path,
@@ -191,7 +193,8 @@ private func builtCLIExecutable() -> URL {
     #expect(!FileManager.default.fileExists(atPath: android.path))
     #expect(!FileManager.default.fileExists(atPath: harmony.path))
 
-    let checked = try runCLI(["check", "--input", malformed.path], executable: executable)
+    let checked = try runCLI(["check", "--input", malformed.path,
+                              "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
     #expect(checked.status != 0)
     #expect(checked.stderr.contains("[RFSYN001]"))
     #endif
@@ -320,7 +323,8 @@ private func builtCLIExecutable() -> URL {
     let result = try runCLI(["generate", "--input", missing.path, "--android-out", android.path,
                              "--harmony-out", harmony.path], executable: executable)
     #expect(result.status == 1)
-    #expect(result.stderr.contains("Missing.swift"))
+    #expect(result.stderr.contains("cannot read Swift input"))
+    #expect(result.stderr.contains("Provide a readable UTF-8 source file"))
     #expect(!FileManager.default.fileExists(atPath: android.path))
     #expect(!FileManager.default.fileExists(atPath: harmony.path))
 
