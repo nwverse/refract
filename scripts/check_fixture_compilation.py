@@ -135,29 +135,42 @@ def regenerate_and_stage(fixture: str) -> None:
                 fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-    if fixture == "interop-remote-image":
+    if fixture in ("interop-remote-image", "adaptive-window-size"):
         # Native JVM tests need the app's real resource table, not a library's
         # isolated test APK. Stage the exact generated call and its resources.
-        for base in (APP_TEST_JAVA, APP_TEST_RES):
+        for base in (APP_TEST_JAVA / fixture, APP_TEST_RES / fixture):
             if base.exists():
                 shutil.rmtree(base)
-        target_package = APP_TEST_JAVA.joinpath(*package.split("."))
+        target_package = (APP_TEST_JAVA / fixture).joinpath(*package.split("."))
         target_package.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(target, target_package / f"{fixture}.kt")
         generated_test = target_package / f"{fixture}.kt"
         generated_test.write_text(
-            generated_test.read_text(encoding="utf-8").replace("refract.generated.R", "com.example.refract.R"),
+            generated_test.read_text(encoding="utf-8").replace(f"{package}.R", "com.example.refract.R"),
             encoding="utf-8",
         )
         for source in sorted(resources.rglob("*")):
             if source.is_file():
                 relative = source.relative_to(resources)
-                destination = APP_TEST_RES / relative
+                destination = APP_TEST_RES / fixture / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, destination)
-        destination = APP_TEST_RES / "values/strings.xml"
+        destination = APP_TEST_RES / fixture / "values/strings.xml"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(strings_xml, destination)
+        if fixture == "adaptive-window-size":
+            app_strings = ROOT / "examples/android/app/src/main/res/values/strings.xml"
+            shared = {child.attrib["name"]: (child.text or "").strip()
+                      for child in ET.parse(app_strings).getroot().findall("string")}
+            required = {child.attrib["name"]: (child.text or "").strip()
+                        for child in ET.parse(strings_xml).getroot().findall("string")}
+            if any(shared.get(name) != value for name, value in required.items() if name != "adaptive_open"):
+                fail(f"{fixture}: app and fixture shared settings strings differ")
+            root = ET.Element("resources")
+            ET.SubElement(root, "string", name="adaptive_open").text = required["adaptive_open"]
+            ET.indent(root, space="  ")
+            ET.ElementTree(root).write(destination, encoding="utf-8", xml_declaration=True)
+        else:
+            shutil.copyfile(strings_xml, destination)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:
@@ -202,7 +215,7 @@ def main() -> int:
         fixtures = read_manifest()
         # Start with a clean staging area so a fixture removed from the manifest
         # cannot leave stale Kotlin behind for Gradle to compile.
-        for path in (STAGING_JAVA, STAGING_RES):
+        for path in (STAGING_JAVA, STAGING_RES, APP_TEST_JAVA, APP_TEST_RES):
             if path.exists():
                 shutil.rmtree(path)
         for fixture in fixtures:

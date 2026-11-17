@@ -124,6 +124,13 @@ final class Builder: SyntaxVisitor {
             member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
                 .as(ArrayTypeSyntax.self) != nil
         }
+        if members.contains(where: { member in
+            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+        }), isNavigationRoot {
+            error("RFADAPT003", "An adaptive layout cannot own the native navigation path or resize a pushed destination.",
+                  "Keep NavigationStack in the host and place the adaptive settings content in a sibling root", at: node.name)
+            return .skipChildren
+        }
         if isNavigationRoot {
             // The navigation parser below validates the path and model inputs together.
         } else if hasItemInputs {
@@ -134,9 +141,17 @@ final class Builder: SyntaxVisitor {
         if hasDeclaredModelInputs(node) && !hasTypedInputs(members) {
             guard localStateDeclarations(node) != nil else { return .skipChildren }
         } else if hasTypedInputs(members) {
-            guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
-            screens.append(body)
-            return .skipChildren
+            let isWidthClassSettings = members.contains { member in
+                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+            }
+            if isWidthClassSettings {
+                guard localStateDeclarations(node) != nil else { return .skipChildren }
+                parameters = []
+            } else {
+                guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
+                screens.append(body)
+                return .skipChildren
+            }
         }
         guard let body = node.memberBlock.members.first(where: {
             $0.decl.as(VariableDeclSyntax.self)?.bindings.first?.pattern
@@ -155,6 +170,13 @@ final class Builder: SyntaxVisitor {
             return .visitChildren
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
+        if members.contains(where: { member in
+            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+        }) {
+            guard let screen = statefulWidthClassScreen(node, members: members) else { return .skipChildren }
+            screens.append(screen)
+            return .skipChildren
+        }
         currentStates = states
         currentModels = states.compactMap {
             guard case let .model(reference, _) = $0 else { return nil }

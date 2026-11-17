@@ -70,6 +70,11 @@ extension ComposeBackend {
             throw Diagnostic(code: "RF-C001", message: "A native switch must contain each declared enum case exactly once.",
                              suggestion: "Validate enum exhaustiveness in the frontend.", location: location)
         }
+        if declaration.isWidthSizeClass {
+            try emitWidthSizeClassSwitch(subject: subject, cases: cases, isRoot: isRoot,
+                                         into: &out, context: &context)
+            return
+        }
         if isRoot {
             context.imports.insert("androidx.compose.foundation.layout.Box")
             out.open("Box(modifier = modifier)")

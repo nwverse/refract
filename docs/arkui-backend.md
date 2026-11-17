@@ -45,6 +45,8 @@ In particular, a lazy list is not moved into `Column` or `ForEach`, which would 
 scrollable list must have one `Scroll` owner. Spacer and scrolling-axis behavior require explicit support in the
 subset rather than an approximate generated layout.
 
+`WidthSizeClass` is the bounded exception to ordinary enum lowering: the component receives `@Param widthSizeClass` and selects compact/expanded with the shared switch IR. The app's native `GridRow` owns breakpoint observation and maps it to that input. No device-name test or generated listener is emitted. The source-only host and explicit lack of compiler/render evidence are in `docs/adaptive-layout.md`.
+
 ## Modifiers
 
 Modifiers become chained ArkUI attribute methods after the view's closing parenthesis or child block. Their source

@@ -6,6 +6,26 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "adaptive-reject-branches",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-reject-input",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-reject-navigation",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-reject-size-class",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-window-size",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "benchmark-settings",
       "implementationStatus": "ready"
     },

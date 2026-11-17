@@ -18,7 +18,7 @@ public struct ComposeBackend: Sendable {
         if module.models.contains(where: { !$0.properties.isEmpty }) {
             context.imports.insert("androidx.compose.runtime.State")
         }
-        try emitEnumDeclarations(module.enums, into: &bodyWriter)
+        try emitEnumDeclarations(module.enums.filter { !$0.isWidthSizeClass }, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
         for screen in module.screens {
@@ -102,7 +102,11 @@ public struct ComposeBackend: Sendable {
         var parameters: [String] = []
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
-            parameters.append("\(input.name): \(input.itemType ?? input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
+            let type = input.itemType ?? input.enumName ?? kotlinType(input.type)
+            if input.enumName == "WidthSizeClass" {
+                context.imports.insert("androidx.compose.material3.windowsizeclass.WindowWidthSizeClass")
+            }
+            parameters.append("\(input.name): \(type == "WidthSizeClass" ? "WindowWidthSizeClass" : type)\(input.isOptional ? "?" : "")")
         }
         for state in screen.states {
             switch state {

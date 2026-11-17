@@ -229,6 +229,10 @@ equality/ordering of typed scalar values. Optional unwrapping,
 implicit casts and arbitrary predicates are rejected. `if` content is a view branch, never a statement that
 mutates state during composition.
 
+### Bounded window-width alternatives
+
+`docs/adaptive-layout.md` defines the typed `WidthSizeClass` compact/expanded input. The shared enum/switch Builder and IR preserve one model and screen-local state across native host resizes; a draft that must survive navigation is host-owned through an ordinary binding. Compose receives its native `WindowWidthSizeClass`, while HarmonyOS receives the finite enum. Device detection, font-scale branching and second navigation ownership are diagnostics, not approximate native fallbacks.
+
 ## 5. State and model boundary
 
 The source remains ordinary SwiftUI. `RefractModel` is an empty marker protocol declared by the consuming iOS
@@ -325,6 +329,8 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNAV001` | NavigationStack, NavigationLink or destination registration is outside the bounded host contract | Use the explicit forms in docs/navigation.md |
 | `RFNAV002` | Navigation path/identity has invalid ownership or payload values | Use an empty `[Route]` @State and no-payload Hashable enum |
 | `RFNAV003` | Destination coverage, identity or typed model/native view is invalid | Register every case with a same-file typed model destination or declared native component |
+| `RFADAPT001` | WidthSizeClass declaration, host input or bounded alternatives are malformed | Declare compact/expanded and switch the native-host widthSizeClass input |
+| `RFADAPT003` | Adaptive width input shares the native navigation path owner | Keep NavigationStack in the host and adaptive settings in a sibling root |
 | `unsupportedViewBody` | Mutation or another statement prevents the required single expression-bodied `body` | Move mutation into a control action and return one supported view |
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |
