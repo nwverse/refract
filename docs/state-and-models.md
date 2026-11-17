@@ -109,8 +109,7 @@ observer registry, per-row binding adapter or synthetic model mutation is genera
 
 The second is a String `TextField` whose getter reads one declared model String property and whose setter calls the
 corresponding `set<Property>` action with one String parameter on that same model. `$model.searchText` is not accepted:
-the get-only protocol does not
-supply a SwiftUI writable projection. Use the valid explicit binding instead:
+the get-only protocol does not supply a SwiftUI writable projection. Use the valid explicit binding instead:
 
 ```swift
 TextField("search.results.placeholder", text: Binding(
@@ -129,9 +128,9 @@ there is no generated subscriber, writable-model fallback or paging adapter.
 `Fixtures/list-paged-search/` adds loading, error, empty and result branches around the same keyed lazy-list lowering.
 Loading and error indicators do not remove an existing list from the native composition; empty is a settled result,
 not a transient loading state. Its model actions are `setSearchText`, `loadNextPage` and `retry`; transport execution,
-remain native application code on every platform. A useful bounded implementation has one in-flight page, assigns a
-new generation and cancels the old request when the query changes, and accepts a completion only when its generation,
-query and page match that active request. A duplicate completion or a skipped page is ignored rather than merged.
+cancellation and page merging remain native application code on every platform. A useful bounded implementation has
+one in-flight page, assigns a new generation and cancels the old request when the query changes, and accepts a
+completion only when its generation, query and page match that active request. A duplicate completion or a skipped page is ignored rather than merged.
 Page zero replaces the snapshot; later pages append. Reusing an item id updates that logical row without creating a
 second native key. Failure keeps accepted rows and retry requests only the failed next page. These rules keep native
 keys stable, but do not imply transport retry, process persistence or a measured scrolling/performance result.
@@ -141,6 +140,7 @@ in-memory scripted transport: no network request or device behavior is part of t
 must similarly update an app-owned `BasicDataSource` and issue the appropriate insert/reload notifications; the
 ArkTS golden is source-only until the authorized HarmonyOS compiler and runtime are available. Native request
 callbacks must arrive serially on the platform UI owner after the request-start call returns, and the owner must
+cancel outstanding work when the model closes. No generated lifecycle or runtime registry supplies that ownership.
 Generation counters are an internal implementation detail (zero-based in the example), not an API exposed to the
 transport. Their equality, not a particular starting number, defines stale-response rejection.
 
