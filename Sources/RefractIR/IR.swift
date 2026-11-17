@@ -126,6 +126,11 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case toggle(title: Expression, value: Expression, modifiers: [Modifier], nativeModifiers: [NativeModifier] = [], labelsHidden: Bool = false, location: SourceLocation?)
     case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    /// Secure text entry (SwiftUI `SecureField`). Always obscured unless `reveal` is a projected Bool
+    /// state/binding selecting plain display. Backends must use native secure-input components and never
+    /// emit secret literals or log the bound value. See docs/subset.md "Sensitive text entry".
+    case secureInput(placeholder: Expression?, value: Expression, reveal: Expression?,
+                     modifiers: [Modifier], location: SourceLocation?)
     case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case divider(modifiers: [Modifier], location: SourceLocation?)
     case spacer(location: SourceLocation?)

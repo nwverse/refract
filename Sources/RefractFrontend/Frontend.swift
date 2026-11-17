@@ -215,6 +215,10 @@ final class Builder: SyntaxVisitor {
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }
+            // Toggle/TextField/SecureField were recognized above. If their guard failed they have
+            // already emitted a typed diagnostic; do not fall through to the component-mapping path.
+            if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text,
+               name == "Toggle" || name == "TextField" || name == "SecureField" { return nil }
             return view(call)
         }
         if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
@@ -229,6 +233,7 @@ final class Builder: SyntaxVisitor {
         if name == "navigationDestination" { return navigationDestination(call, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
+        if name == "secureReveal" { return secureReveal(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {

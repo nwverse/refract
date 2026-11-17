@@ -158,7 +158,7 @@ public struct ComposeBackend: Sendable {
         case let .stack(axis, children, modifiers, location):
             try emitStack(axis: axis, children: children, modifiers: modifiers, isRoot: isRoot,
                           parentAxis: parentAxis, location: location, into: &out, context: &context)
-        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput,
+        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput, .secureInput,
              .label, .divider, .spacer:
             try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):

@@ -66,6 +66,9 @@ public enum LocalizationResourceValidator {
                 }
             case let .textInput(placeholder, value, modifiers, _):
                 return (placeholder.map { [$0] } ?? []) + [value] + modifiers.flatMap(\.arguments)
+            case let .secureInput(placeholder, value, reveal, modifiers, _):
+                return (placeholder.map { [$0] } ?? []) + [value] + (reveal.map { [$0] } ?? [])
+                    + modifiers.flatMap(\.arguments)
             case let .label(title, _, modifiers, _):
                 return [title] + modifiers.flatMap(\.arguments)
             case let .divider(modifiers, _):

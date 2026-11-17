@@ -74,6 +74,8 @@ same parameters as the Swift view. Full examples are in the linked fixtures.
 | `Button { model.save() } label: { Label(...) }` | `Button(onClick = { model.save() }) { Label(...) }` | `Button() { Label(...) }.onClick(() => { this.model.save() })` | Supported label forms are `Text`, `Image` and `Label`. An action cannot capture arbitrary values or run general Swift code. |
 | `Toggle("settings.enabled", isOn: $enabled)` | `Row { Text(text = stringResource(R.string.settings_enabled)); Spacer(...); Switch(checked = enabled, onCheckedChange = { enabled = it }) }` | `Row() { Text($r('app.string.settings_enabled')); Blank(); Toggle({ type: ToggleType.Switch, isOn: this.enabled }).onChange((value: boolean) => { this.enabled = value }) }` | The localized title remains visible beside the native boolean control. A binding is native value + change callback; there is no two-way-binding runtime. ArkUI V2 does not support `$$`; use `onChange`. |
 | `TextField("settings.display.name", text: $name)` | `TextField(value = name, onValueChange = { name = it }, label = { Text(text = stringResource(R.string.settings_display_name)) })` | `TextInput({ placeholder: $r('app.string.settings_display_name'), text: this.name }).onChange((value: string) => { this.name = value })` | Text updates use the declared local/binding write. In ArkUI V2 `TextInput` keeps one explicit change path; no polling or framework adapter. |
+| `SecureField("settings.password", text: $password)` | `TextField(value = password, onValueChange = { password = it }, label = { Text(text = stringResource(R.string.settings_password)) }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false))` | `TextInput({ placeholder: $r('app.string.settings_password'), text: this.password }).type(InputType.Password).onChange((value: string) => { this.password = value })` | Native secure entry. Obscured by default; the platform IME/autofill keeps ownership of the secret. No secret literal, log or `Text` echo appears in the generated source. See "Sensitive text entry" below. |
+| `SecureField("settings.token", text: $token).secureReveal($isRevealed)` | `visualTransformation = if (isRevealed) VisualTransformation.None else PasswordVisualTransformation()` (other parameters as above) | `.type(this.isRevealed ? InputType.Normal : InputType.Password)` (other parameters as above) | Explicit opt-in reveal through a typed Bool `@State`/`@Binding`. `.secureReveal(.constant(true))`, literals and non-`SecureField` receivers are `RFSECURE001` errors. |
 | `Label("settings.profile", systemImage: "person")` | `Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(...); Text(...) }` | `Row({ space: 8 }) { Image(...); Text(...) }` | Equivalent to the labeled icon/text pair, with an explicit accessibility label for a standalone image only when declared. |
 | `Divider()` | `HorizontalDivider()` | `Divider()` | Native decoration; color/thickness only through supported token modifiers. |
 | `Spacer()` | `Spacer(modifier = Modifier.weight(1f))` | `Blank()` | Inside a stack only. Expanding whitespace must not change the item count or insert arbitrary fixed dimensions. |
@@ -154,6 +156,33 @@ replaces a native control with a static visual approximation.
 `docs/performance.md` is the performance-rule catalog. The structural requirements for these examples are stable
 leaf inputs, narrow state reads, remembered scroll/list state, direct modifiers, and no repeated screen-level work.
 Any later benchmark result must identify its environment and is not inferred from fixture correctness.
+
+### Sensitive text entry
+
+`SecureField` lowers to the platform's native secure-input control. Obscured display, keyboard and autofill ownership
+belong to the platform toolkit; Refract only selects the password keyboard and visual transformation. The generator
+never introduces a runtime secret store, an observer that mirrors the bound value, or a wrapper that formats the
+secret into another view.
+
+- **Negative disclosure.** Generated Kotlin and ArkTS for a `SecureField` contain no secret literal, no `println` /
+  `print` / `Log.` / `console.` / `hilog` call inside the control's builder or `onChange` callback, and no `Text`
+  rendering of the bound `String`. The placeholder is a localized resource key resolved through the usual
+  string-resource path; it never carries the secret. The negative-disclosure unit tests
+  (`composeSecureInputNeverDisclosesSecret`, `arkUISecureInputNeverDisclosesSecret`) pin this contract on every PR.
+- **Reveal is explicit and typed.** `.secureReveal($isRevealed)` accepts exactly one projected Bool `@State` or
+  `@Binding`. `.secureReveal(.constant(true))`, literals, non-`SecureField` receivers and repeated application are
+  `RFSECURE001` errors, so "always reveal" cannot be smuggled in through a constant. Reveal state is ordinary
+  SwiftUI ownership; the generator does not impose its own timeout, biometric gate or auto-hide — applications
+  that need those wrap the binding in their own model.
+- **Autofill ownership.** On Android, Material 3 `TextField` with `KeyboardType.Password` keeps the IME, autofill
+  framework and password managers in platform hands; Refract does not register its own autofill service or
+  intercept autofill callbacks. On HarmonyOS, `InputType.Password` gives the same ownership to ArkUI. No secret
+  ever crosses the Refract boundary in either direction.
+- **Source-only evidence and platform limits.** The Android side is verified by `:fixtures:compileDebugKotlin`
+  on every PR (JVM, not device). The ArkTS side is verified by golden fixtures only — the HarmonyOS toolchain is
+  not available on the generator devbox, so the contract is the documented ArkUI V2 API and the committed
+  Expected.ets. The iOS side compiles as ordinary SwiftUI `SecureField` on macOS; not verified on this devbox.
+  No device or emulator screenshot or trace is claimed. See `docs/production-readiness.md`.
 
 ## 4. Lists, identity and control flow
 
@@ -357,6 +386,8 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNATIVE001` | Native component declaration is missing | Declare the application view and both typed platform implementations |
 | `RFMAP003` | Native component parameters disagree with the Swift declaration or platform binding | Match every parameter label and supported type in declaration order |
 | `RFNATIVE003` | Platform-value declaration is malformed or incomplete | Declare one typed value for every required platform |
+| `RFSECURE001` | `.secureReveal` argument is not a projected Bool state/binding, or the modifier is misapplied | Pass `.secureReveal($isRevealed)` once, directly on a `SecureField`, with a declared Bool @State or @Binding |
+| `RFSECURE002` | `SecureField` title or `text:` argument is outside the typed contract | Use `SecureField("settings.password", text: $password)` with a canonical resource key and String state/binding |
 
 ## 7. Corpus coverage
 
@@ -372,6 +403,7 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `local-state` | Local scalar state and toggle |
 | `binding-state` | Hoisted value plus native change callback |
 | `text-input` | Localized text-field placeholder and state writes |
+| `secure-input` | Obscured native secure entry with an explicit typed reveal binding |
 | `model-screen` | Observable application-owned model boundary |
 | `styled-text` | Typography, semantic colors, padding and dimensions |
 | `static-list` | Native lazy static rows and sections |
@@ -397,6 +429,8 @@ Every case directory has the `v0-` prefix. The manifest is the authoritative lis
 | `reject-native-missing` | Missing native declaration |
 | `reject-native-type` | Native parameter mismatch |
 | `reject-platform-if` | Free-form platform conditional |
+| `reject-secure-input-literal` | Hardcoded secret passed to `SecureField.text:` |
+| `reject-secure-reveal-literal` | Non-projected argument passed to `.secureReveal` |
 
 Backend and feature issues may add focused cases, but must not create a competing semantics corpus. A correction to
 source meaning, diagnostics or golden performance behavior is coordinated on issue #2 and documented here.
