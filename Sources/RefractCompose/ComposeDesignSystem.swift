@@ -9,11 +9,11 @@ struct ComposeDesignSystem {
         var arguments: [String] = []
         for binding in declaration.arguments {
             guard let parameter = declaration.parameters.first(where: { $0.label == binding.source }),
-                  let argument = supplied[binding.source] else {
+                  let argument = supplied[binding.source], let expression = argument.expression else {
                 throw Diagnostic(code: "componentArgument", message: "Component `\(component.name)` has an unbound argument.",
                                  suggestion: "Bind every required source argument in refract.json.", location: location)
             }
-            let value = try MappedExpression.compose(argument.expression, mapping: mapping, expected: parameter.type)
+            let value = try MappedExpression.compose(expression, mapping: mapping, expected: parameter.type)
             if parameter.type == .stringKey {
                 addImport("androidx.compose.ui.res.stringResource")
                 if let className = mapping.android.resources.className { addImport(className) }
