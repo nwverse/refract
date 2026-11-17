@@ -384,23 +384,44 @@ final class Builder: SyntaxVisitor {
                       "Use the memberwise SwiftUI initializer signature", at: argument)
                 return nil
             }
-            let nativeType = NativeParameterType(rawValue: parameter.type.rawValue)
-            let value: TypedExpression?
+            let parsed: NativeArgument?
             switch parameter.type {
             case .image:
-                value = nativeImageResource(argument.expression)
+                parsed = nativeImageResource(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression, type: .image,
+                                   location: location(of: argument))
+                }
             case .stringKey:
-                value = nativeLocalizedText(argument.expression)
+                parsed = nativeLocalizedText(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression, type: .stringKey,
+                                   location: location(of: argument))
+                }
+            case .remoteImageLoader:
+                parsed = nativeImageLoader(argument.expression, label: label)
             case .string, .bool, .int, .double:
-                value = scalar(argument.expression)
+                parsed = scalar(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression,
+                                   type: $0.type.flatMap { NativeParameterType(rawValue: $0.rawValue) },
+                                   location: location(of: argument))
+                }
             }
-            guard let value else { return nil }
-            let type = parameter.type.scalar == nil ? nativeType
-                : value.expression.type.flatMap { NativeParameterType(rawValue: $0.rawValue) }
-            return NativeArgument(label: label, expression: value.expression,
-                                  type: type, location: location(of: argument))
+            guard let parsed else { return nil }
+            return parsed
         }
         return diagnostics.count == before ? NativeComponent(name: name, arguments: arguments) : nil
+    }
+
+    private func nativeImageLoader(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let reference = expression.as(DeclReferenceExprSyntax.self),
+              parameters.contains(where: {
+                  $0.name == reference.baseName.text && $0.itemType == "RemoteImageLoader"
+              }) else {
+            error("RFNATIVE002", "A RemoteImageLoader argument must be an explicitly declared screen input.",
+                  "Inject the app-owned RemoteImageLoader into this screen", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, expression: Expression(.reference(reference.baseName.text)),
+                              type: .remoteImageLoader, location: location(of: expression))
     }
 
     private func nativeImageResource(_ expression: ExprSyntax) -> TypedExpression? {

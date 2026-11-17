@@ -8,12 +8,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import example.app.RemoteImage
+import example.app.RemoteImageLoader
 import refract.generated.R
 
 @Composable
 public fun ProfileImage(
     url: String,
+    loader: RemoteImageLoader,
     modifier: Modifier = Modifier,
 ) {
-    RemoteImage(url = url, placeholder = R.drawable.profile_placeholder, failure = R.drawable.profile_unavailable, contentDescription = stringResource(R.string.profile_photo_description))
+    RemoteImage(url = url, placeholder = R.drawable.profile_placeholder, failure = R.drawable.profile_unavailable, contentDescription = stringResource(R.string.profile_photo_description), loader = loader)
 }

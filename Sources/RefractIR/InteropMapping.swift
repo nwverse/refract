@@ -147,6 +147,7 @@ public enum InteropMapping {
             case .string, .stringKey: "string"
             case .bool: "boolean"
             case .int, .double, .image: "number"
+            case .remoteImageLoader: "RemoteImageLoader"
             }
         }
         return switch type {
@@ -154,6 +155,7 @@ public enum InteropMapping {
         case .bool: "Boolean"
         case .int, .image: "Int"
         case .double: "Double"
+        case .remoteImageLoader: "RemoteImageLoader"
         }
     }
 

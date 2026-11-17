@@ -32,6 +32,9 @@ struct Generation {
         var emittedImports: Set<String> = []
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
+            for parameter in screen.parameters where parameter.itemType == "RemoteImageLoader" {
+                emittedImports.insert("RemoteImageLoader")
+            }
         }
         for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module })
             where declaration.symbols.contains(where: emittedImports.contains) {

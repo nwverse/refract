@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="example.app.RemoteImageTestActivity"
+            android:exported="false" />
+    </application>
+</manifest>

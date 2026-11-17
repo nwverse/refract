@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "android": {
     "output": { "directory": "generated", "packageName": "refract.generated" },
-    "imports": ["example.app.RemoteImage"],
+    "imports": ["example.app.RemoteImage", "example.app.RemoteImageLoader"],
     "components": {},
     "nativeComponents": {
       "RemoteImage": {
@@ -10,7 +10,8 @@
           { "label": "url", "type": "string", "required": true },
           { "label": "placeholder", "type": "image", "required": true },
           { "label": "failure", "type": "image", "required": true },
-          { "label": "contentDescription", "type": "stringKey", "required": true }
+          { "label": "contentDescription", "type": "stringKey", "required": true },
+          { "label": "loader", "type": "remoteImageLoader", "required": true }
         ],
         "content": "none",
         "modifiers": [],
@@ -20,7 +21,8 @@
           { "source": "url", "target": "url" },
           { "source": "placeholder", "target": "placeholder" },
           { "source": "failure", "target": "failure" },
-          { "source": "contentDescription", "target": "contentDescription" }
+          { "source": "contentDescription", "target": "contentDescription" },
+          { "source": "loader", "target": "loader" }
         ],
         "attributes": {}
       }
@@ -35,7 +37,7 @@
   },
   "harmonyOS": {
     "output": { "directory": "generated" },
-    "imports": [{ "module": "example.app", "symbols": ["RemoteImage"] }],
+    "imports": [{ "module": "example.app", "symbols": ["RemoteImage", "RemoteImageLoader"] }],
     "components": {},
     "nativeComponents": {
       "RemoteImage": {
@@ -43,7 +45,8 @@
           { "label": "url", "type": "string", "required": true },
           { "label": "placeholder", "type": "image", "required": true },
           { "label": "failure", "type": "image", "required": true },
-          { "label": "contentDescription", "type": "stringKey", "required": true }
+          { "label": "contentDescription", "type": "stringKey", "required": true },
+          { "label": "loader", "type": "remoteImageLoader", "required": true }
         ],
         "content": "none",
         "modifiers": [],
@@ -53,7 +56,8 @@
           { "source": "url", "target": "url" },
           { "source": "placeholder", "target": "placeholder" },
           { "source": "failure", "target": "failure" },
-          { "source": "contentDescription", "target": "contentDescription" }
+          { "source": "contentDescription", "target": "contentDescription" },
+          { "source": "loader", "target": "loader" }
         ],
         "attributes": {}
       }

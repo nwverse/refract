@@ -1,3 +1,4 @@
-Input.swift:18:26: error [RFNATIVE002]: A native image argument requires `Image("resource_name")` with one application resource literal. Suggestion: Use Image("asset_name") for placeholder and failure resources
-Input.swift:19:22: error [RFNATIVE002]: A native image argument requires `Image("resource_name")` with one application resource literal. Suggestion: Use Image("asset_name") for placeholder and failure resources
-Input.swift:20:33: error [RFNATIVE002]: A native LocalizedStringKey argument requires a literal localization key. Suggestion: Use a canonical lowercase dot-separated key declared in both string catalogs
+Input.swift:19:26: error [RFNATIVE002]: A native image argument requires `Image("resource_name")` with one application resource literal. Suggestion: Use Image("asset_name") for placeholder and failure resources
+Input.swift:20:22: error [RFNATIVE002]: A native image argument requires `Image("resource_name")` with one application resource literal. Suggestion: Use Image("asset_name") for placeholder and failure resources
+Input.swift:21:33: error [RFNATIVE002]: A native LocalizedStringKey argument requires a literal localization key. Suggestion: Use a canonical lowercase dot-separated key declared in both string catalogs
+Input.swift:22:21: error [RFNATIVE002]: A RemoteImageLoader argument must be an explicitly declared screen input. Suggestion: Inject the app-owned RemoteImageLoader into this screen

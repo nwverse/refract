@@ -5,6 +5,7 @@ struct RemoteImage: RefractNativeView {
     let placeholder: Image
     let failure: Image
     let contentDescription: LocalizedStringKey
+    let loader: RemoteImageLoader
 
     var body: some View {
         // The app may replace this native implementation without changing the screen.
@@ -35,13 +36,15 @@ struct RemoteImage: RefractNativeView {
 
 struct ProfileImage: View {
     let url: String
+    let loader: RemoteImageLoader
 
     var body: some View {
         RemoteImage(
             url: url,
             placeholder: Image("profile_placeholder"),
             failure: Image("profile_unavailable"),
-            contentDescription: "profile.photo.description"
+            contentDescription: "profile.photo.description",
+            loader: loader
         )
     }
 }

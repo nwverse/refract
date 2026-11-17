@@ -26,6 +26,7 @@ interop-native-measurement
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type
+interop-remote-image
 accessibility-dynamic-type
 state-counter
 parent-binding

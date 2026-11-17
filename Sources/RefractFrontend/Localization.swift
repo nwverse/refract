@@ -125,6 +125,14 @@ extension Builder {
                                                   location: location(of: identifier)))
                 continue
             }
+            if type.trimmedDescription == "RemoteImageLoader",
+               interop.declarations.contains(where: {
+                   $0.parameters.contains { $0.type == .remoteImageLoader }
+               }) {
+                parameters.append(ScreenParameter(name: identifier.text, type: .string, itemType: "RemoteImageLoader",
+                                                  location: location(of: identifier)))
+                continue
+            }
             guard let valueType = ValueType(frontendName: type.trimmedDescription) else {
                 error("RFSEM001", "View inputs must use a supported scalar, optional scalar or declared enum type.",
                       "Declare a supported immutable input type explicitly", at: member)
