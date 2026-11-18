@@ -26,21 +26,51 @@ private func deepExpression(text: String = "leaf", differentLocationAt depth: In
         if level.isMultiple(of: 2) {
             expression = Expression(.presence(expression), type: .bool, location: location)
         } else {
-            expression = Expression(.interpolatedString([.literal("value: "), .expression(expression)]),
-                                    type: .string, location: location)
+            expression = Expression(
+                .interpolatedString([.literal("value: "), .expression(expression)]),
+                type: .string, location: location)
         }
     }
     return expression
 }
 
-@Test func deeplyNestedViewsCompareEveryFieldWithoutRecursiveEquality() {
-    #expect(deepView() == deepView())
-    #expect(deepView() != deepView(text: "different"))
-    #expect(deepView() != deepView(differentLocationAt: 417))
+// These six deliberately deep values live until this short-lived test process exits.
+// The bounded arena never grows with corpus seeds, production IR, or repeated assertions.
+// In particular, no test-local value is the last owner of a recursive value chain.
+private actor DeepViewTestArena {
+    private var retained: [ViewNode] = []
+
+    func compare(lhs: consuming ViewNode, rhs: consuming ViewNode) -> Bool {
+        let result = lhs == rhs
+        precondition(retained.count <= 4)
+        retained.append(lhs)
+        retained.append(rhs)
+        return result
+    }
 }
 
-@Test func deeplyNestedExpressionsCompareEveryFieldWithoutRecursiveEquality() {
-    #expect(deepExpression() == deepExpression())
-    #expect(deepExpression() != deepExpression(text: "different"))
-    #expect(deepExpression() != deepExpression(differentLocationAt: 417))
+private let deepViewTestArena = DeepViewTestArena()
+
+@Suite(.serialized)
+struct DeepViewEqualityTests {
+    @Test func deeplyNestedViewsCompareEveryFieldWithoutRecursiveEquality() async {
+        let equal = await deepViewTestArena.compare(lhs: deepView(), rhs: deepView())
+        #expect(equal)
+
+        let differentLeaf = await deepViewTestArena.compare(
+            lhs: deepView(), rhs: deepView(text: "different"))
+        #expect(!differentLeaf)
+
+        let differentLocation = await deepViewTestArena.compare(
+            lhs: deepView(), rhs: deepView(differentLocationAt: 417))
+        #expect(!differentLocation)
+    }
+
+    @Test func ordinaryAndDeepExpressionsCompareEveryField() {
+        let lhs = deepExpression()
+        let rhs = deepExpression()
+        #expect(lhs == rhs)
+        #expect(deepExpression() != deepExpression(text: "different"))
+        #expect(deepExpression() != deepExpression(differentLocationAt: 417))
+    }
 }

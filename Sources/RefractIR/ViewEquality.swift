@@ -46,7 +46,9 @@ extension ViewNode {
                       append(lhsAlternatives.harmonyOS, rhsAlternatives.harmonyOS, to: &pending) else { return false }
             case let (.conditional(lhsBranches, _), .conditional(rhsBranches, _)):
                 guard lhsBranches.count == rhsBranches.count else { return false }
-                for (lhsBranch, rhsBranch) in zip(lhsBranches, rhsBranches) {
+                for index in lhsBranches.indices {
+                    let lhsBranch = lhsBranches[index]
+                    let rhsBranch = rhsBranches[index]
                     guard append(lhsBranch.condition, rhsBranch.condition, to: &pending),
                           append(lhsBranch.children, rhsBranch.children, to: &pending) else { return false }
                 }
@@ -58,7 +60,9 @@ extension ViewNode {
             case let (.switchExpression(lhsSubject, lhsEnum, lhsCases, _),
                       .switchExpression(rhsSubject, rhsEnum, rhsCases, _)):
                 guard lhsSubject == rhsSubject, lhsEnum == rhsEnum, lhsCases.count == rhsCases.count else { return false }
-                for (lhsCase, rhsCase) in zip(lhsCases, rhsCases) {
+                for index in lhsCases.indices {
+                    let lhsCase = lhsCases[index]
+                    let rhsCase = rhsCases[index]
                     guard lhsCase.name == rhsCase.name, lhsCase.binding == rhsCase.binding,
                           append(lhsCase.children, rhsCase.children, to: &pending) else { return false }
                 }
@@ -139,8 +143,8 @@ extension Expression {
                       append(lhsText.arguments, rhsText.arguments, to: &pending) else { return false }
             case let (.interpolatedString(lhsSegments), .interpolatedString(rhsSegments)):
                 guard lhsSegments.count == rhsSegments.count else { return false }
-                for (lhsSegment, rhsSegment) in zip(lhsSegments, rhsSegments) {
-                    switch (lhsSegment, rhsSegment) {
+                for index in lhsSegments.indices {
+                    switch (lhsSegments[index], rhsSegments[index]) {
                     case let (.literal(lhsText), .literal(rhsText)):
                         guard lhsText == rhsText else { return false }
                     case let (.expression(lhsExpression), .expression(rhsExpression)):
@@ -170,7 +174,7 @@ extension Expression {
 private func append(_ lhs: [ViewNode], _ rhs: [ViewNode],
                     to pending: inout [(ViewNode, ViewNode)]) -> Bool {
     guard lhs.count == rhs.count else { return false }
-    for (lhs, rhs) in zip(lhs, rhs) { pending.append((lhs, rhs)) }
+    for index in lhs.indices { pending.append((lhs[index], rhs[index])) }
     return true
 }
 
@@ -186,6 +190,6 @@ private func append(_ lhs: Expression?, _ rhs: Expression?,
 private func append(_ lhs: [Expression], _ rhs: [Expression],
                     to pending: inout [(Expression, Expression)]) -> Bool {
     guard lhs.count == rhs.count else { return false }
-    for (lhs, rhs) in zip(lhs, rhs) { pending.append((lhs, rhs)) }
+    for index in lhs.indices { pending.append((lhs[index], rhs[index])) }
     return true
 }
