@@ -135,6 +135,19 @@ extension ComposeBackend {
             onChange = "{ value -> \(name) = value }"
         case let .valueProperty(.binding(name)):
             onChange = "on\(name.uppercasingFirst())Change"
+        case let .formField(form, field):
+            guard let declaration = context.form(named: form), declaration.field(named: field) != nil else {
+                throw Diagnostic(code: "RFFORM002", message: "Unknown form field `\(form).\(field)`.",
+                                 suggestion: "Declare the field in refractForm.", location: value.location)
+            }
+            let name = "\(form)\(field.uppercasingFirst())"
+            let isBinding = context.module.screens.contains { screen in
+                screen.states.contains {
+                    if case let .form(.binding, declared, _) = $0 { return declared.name == form }
+                    return false
+                }
+            }
+            onChange = isBinding ? "on\(name.uppercasingFirst())Change" : "{ value -> \(name) = value }"
         case let .valueProperty(.modelScalarBinding(binding)):
             onChange = "{ value -> \(binding.model).\(binding.action)(value) }"
         default:
@@ -150,6 +163,60 @@ extension ComposeBackend {
         out.line("value = \(checked),")
         out.line("onValueChange = \(onChange),")
         out.line("label = { Text(text = \(label)) },")
+        out.line("modifier = \(modifierChain),")
+        out.depth -= 1
+        out.line(")")
+    }
+
+    /// Native secure text entry. Material 3 `TextField` keeps platform IME/autofill ownership;
+    /// we only select the password keyboard, disable autocorrect and apply the password visual
+    /// transformation. The bound String is never written to logs, string resources or composed
+    /// into a `Text` label — only the localized placeholder is.
+    func emitSecureInput(placeholder: Expression?, value: Expression, reveal: Expression?,
+                         modifiers: [Modifier], isRoot: Bool, location: SourceLocation?,
+                         into out: inout KotlinWriter, context: inout Context) throws {
+        guard let placeholder, case .localizedText = placeholder.value else {
+            throw Diagnostic(code: "RFSECURE002",
+                             message: "A SecureField needs a localized placeholder key.",
+                             suggestion: "Use a canonical settings.* key.", location: location)
+        }
+        let label = try LocalizedTextEmitter.compose(placeholder, mapping: context.mapping,
+                                                      packageName: context.packageName) {
+            try renderExpression($0, context: &context)
+        }
+        let checked = try renderExpression(value, context: &context)
+        let onChange: String
+        switch value.value {
+        case let .valueProperty(.state(name)):
+            onChange = "{ value -> \(name) = value }"
+        case let .valueProperty(.binding(name)):
+            onChange = "on\(name.uppercasingFirst())Change"
+        default:
+            throw Diagnostic(code: "RFSECURE002",
+                             message: "A SecureField needs a String local state or parent binding.",
+                             suggestion: "Use `text: $name` with String ownership.", location: value.location)
+        }
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        context.imports.insert("androidx.compose.foundation.text.KeyboardOptions")
+        context.imports.insert("androidx.compose.material3.Text")
+        context.imports.insert("androidx.compose.material3.TextField")
+        context.imports.insert("androidx.compose.ui.res.stringResource")
+        context.imports.insert("androidx.compose.ui.text.input.KeyboardType")
+        context.imports.insert("androidx.compose.ui.text.input.PasswordVisualTransformation")
+        context.imports.insert("androidx.compose.ui.text.input.VisualTransformation")
+        let transformation: String
+        if let reveal {
+            let rendered = try renderExpression(reveal, context: &context)
+            transformation = "if (\(rendered)) VisualTransformation.None else PasswordVisualTransformation()"
+        } else {
+            transformation = "PasswordVisualTransformation()"
+        }
+        out.open("TextField(")
+        out.line("value = \(checked),")
+        out.line("onValueChange = \(onChange),")
+        out.line("label = { Text(text = \(label)) },")
+        out.line("visualTransformation = \(transformation),")
+        out.line("keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),")
         out.line("modifier = \(modifierChain),")
         out.depth -= 1
         out.line(")")

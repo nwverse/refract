@@ -10,6 +10,10 @@ extension ComposeBackend {
         while index < modifiers.count {
             let modifier = modifiers[index]
             switch modifier.name {
+            case "disabled":
+                // The button/toggle emitters turn this into their native enabled parameter.
+                index += 1
+                continue
             case "layoutPriority":
                 guard parentAxis == .horizontal, !sawLayoutPriority, modifier.arguments.count == 1,
                       case let .numberLiteral(priority) = modifier.arguments[0].value, priority == "1" else {

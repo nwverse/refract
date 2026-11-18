@@ -1,0 +1,1 @@
+Input.swift:8:8: error [RFMSG001]: ChatMessage must be an immutable Identifiable snapshot with String id, UInt64 revision, [ChatBlock] blocks and Bool finalized. Suggestion: Declare `let id: String`, `let revision: UInt64`, `let blocks: [ChatBlock]`, `let finalized: Bool`; ChatBlock stores String id and text

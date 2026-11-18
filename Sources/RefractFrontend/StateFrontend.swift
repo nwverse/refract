@@ -37,6 +37,11 @@ extension Builder {
             guard let declaration = member.decl.as(VariableDeclSyntax.self),
                   declaration.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body"
             else { continue }
+            if let form = formState(declaration) {
+                states.append(form)
+                continue
+            }
+            if diagnostics.contains(where: { $0.code.hasPrefix("RFFORM") }) { return nil }
             if let annotation = declaration.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self) {
                 guard declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.attributes.count == 1,
                       declaration.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State",
@@ -82,13 +87,30 @@ extension Builder {
                   declaration.bindingSpecifier.tokenKind == .keyword(.var),
                   declaration.bindings.count == 1, let binding = declaration.bindings.first,
                   let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
-                  let typeName = binding.typeAnnotation?.type.trimmedDescription,
-                  let type = scalarType(typeName) else {
+                  let typeName = binding.typeAnnotation?.type.trimmedDescription else {
                 error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
                       "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
                 return nil
             }
             let ownership = attribute.attributeName.trimmedDescription
+            if let tabEnum = enums.first(where: { $0.name == typeName }), scalarType(typeName) == nil {
+                guard ownership == "State", tabEnum.isNavigationDestination, tabEnum.payloadTypes.isEmpty,
+                      declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }),
+                      let initial = binding.initializer,
+                      let member = initial.value.as(MemberAccessExprSyntax.self),
+                      member.base == nil, tabEnum.cases.contains(member.declName.baseName.text) else {
+                    error("RFNAV402", "A tab selection must be `@State private var tab: Tab = .home` over a no-payload Hashable enum.",
+                          "Use one static enum case as the initial selection; the native host owns the selected tab", at: member)
+                    return nil
+                }
+                states.append(.tabSelection(name: name, enumName: tabEnum.name, location: location(of: declaration)))
+                continue
+            }
+            guard let type = scalarType(typeName) else {
+                error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
+                      "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
+                return nil
+            }
             if ownership == "Binding" {
                 guard binding.initializer == nil else {
                     error("state.binding_initializer", "@Binding property `\(name)` cannot have an independent initializer.",
@@ -109,6 +131,33 @@ extension Builder {
             states.append(.state(name: name, type: type, initialValue: value, location: location(of: declaration)))
         }
         return states
+    }
+
+    /// `@State private var form = refractForm { ... }` or `@Binding var form: RefractForm`.
+    /// Both ownerships lower the draft to per-field native values; only the write path differs.
+    private func formState(_ declaration: VariableDeclSyntax) -> StateDeclaration? {
+        guard declaration.bindingSpecifier.tokenKind == .keyword(.var),
+              declaration.attributes.count == 1,
+              let attribute = declaration.attributes.first?.as(AttributeSyntax.self),
+              ["State", "Binding"].contains(attribute.attributeName.trimmedDescription),
+              declaration.bindings.count == 1, let binding = declaration.bindings.first,
+              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else { return nil }
+        let ownership = attribute.attributeName.trimmedDescription
+        let isFormCall = binding.initializer?.value.as(FunctionCallExprSyntax.self)?
+            .calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractForm"
+        let isFormType = binding.typeAnnotation?.type.trimmedDescription == "RefractForm"
+        guard isFormCall || isFormType else { return nil }
+        guard ownership != "Binding" || isFormType, ownership != "State" || isFormCall,
+              declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }) == (ownership == "State"),
+              attribute.arguments == nil else {
+            error("state.invalid_declaration", "A form uses `@State private var form = refractForm { ... }` or `@Binding var form: RefractForm`.",
+                  "Keep the draft in local state or pass the parent-owned form declaration", at: declaration)
+            return nil
+        }
+        let initializer = binding.initializer?.value ?? ExprSyntax(DeclReferenceExprSyntax(baseName: .identifier("refractForm")))
+        guard let declaration = formDeclaration(named: name, initializer: initializer, at: declaration) else { return nil }
+        return .form(ownership: ownership == "State" ? .state : .binding, declaration: declaration,
+                     location: declaration.location)
     }
 
     func stateText(_ expression: ExprSyntax) -> Expression? {
@@ -138,6 +187,11 @@ extension Builder {
 
     func localStateAction(_ closure: ClosureExprSyntax?) -> StateAction? {
         guard let closure, !closure.statements.isEmpty else { return nil }
+        if closure.statements.count == 1, let expression = closure.statements.first?.item.as(ExprSyntax.self),
+           let action = formSubmit(expression) {
+            return action
+        }
+        if diagnostics.contains(where: { $0.code == "RFFORM004" }) { return nil }
         if closure.statements.count == 1, let expression = closure.statements.first?.item.as(ExprSyntax.self),
            let action = modelAction(expression) {
             return action
@@ -221,6 +275,10 @@ extension Builder {
         case .int:
             guard let value = expression.as(IntegerLiteralExprSyntax.self) else { return nil }
             return Expression(.numberLiteral(value.literal.text), location: at)
+        case .revision:
+            error("RFMSG001", "A revision literal belongs only in the application's validated message projection.",
+                  "Store the UInt64 revision in the ChatMessage item, not a generic scalar action", at: expression)
+            return nil
         case .double:
             if let value = expression.as(FloatLiteralExprSyntax.self) {
                 return Expression(.numberLiteral(value.literal.text), location: at)

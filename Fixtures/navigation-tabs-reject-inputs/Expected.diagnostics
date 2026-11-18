@@ -1,0 +1,1 @@
+Input.swift:25:13: error [RFNAV403]: A tab destination must be a zero-argument same-file generated View. Suggestion: Use `HomeScreen()`; give the tab its own declared model or no inputs

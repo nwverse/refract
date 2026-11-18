@@ -39,6 +39,8 @@ public struct Diagnostic: Codable, Error, Hashable, Sendable {
 
 public enum ValueType: String, Codable, Sendable {
     case string, bool, double, int
+    /// A bounded UInt64 revision stored only by the ChatMessage projection item.
+    case revision
 }
 
 public struct Expression: Codable, Equatable, Sendable {
@@ -56,6 +58,12 @@ public struct Expression: Codable, Equatable, Sendable {
         case valueProperty(ValueProperty)
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
+        /// `form.email`: a typed draft value owned by native state.
+        case formField(form: String, field: String)
+        /// `refractPresent(model.submissionError)`: a null check on a declared optional model text.
+        case presence(Expression)
+        /// The checked guard of a form's declared field rules, lowered to native comparisons.
+        case formValid(FormDeclaration)
     }
 
     public let value: Value
@@ -108,6 +116,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case button(label: ViewNode, action: StateAction?, modifiers: [Modifier], location: SourceLocation?)
     case navigationLink(title: Expression, pathName: String, enumName: String, destination: String, location: SourceLocation?)
     case navigationStack(NavigationStackNode, location: SourceLocation?)
+    case tabView(TabViewNode, location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
     case nativeModifier(child: ViewNode, operations: [NativeModifier], location: SourceLocation?)
     case component(ComponentReference, location: SourceLocation?)
@@ -120,12 +129,19 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
     case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    /// A bounded non-scrolling ForEach inside one ChatMessage lazy row.
+    case messageBlocks(NestedListItems, location: SourceLocation?)
     case section(header: Expression?, children: [ViewNode], location: SourceLocation?)
     case listItem(child: ViewNode, location: SourceLocation?)
     case forEach(ListItems, location: SourceLocation?)
     case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case toggle(title: Expression, value: Expression, modifiers: [Modifier], nativeModifiers: [NativeModifier] = [], labelsHidden: Bool = false, location: SourceLocation?)
     case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    /// Secure text entry (SwiftUI `SecureField`). Always obscured unless `reveal` is a projected Bool
+    /// state/binding selecting plain display. Backends must use native secure-input components and never
+    /// emit secret literals or log the bound value. See docs/subset.md "Sensitive text entry".
+    case secureInput(placeholder: Expression?, value: Expression, reveal: Expression?,
+                     modifiers: [Modifier], location: SourceLocation?)
     case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case divider(modifiers: [Modifier], location: SourceLocation?)
     case spacer(location: SourceLocation?)
@@ -146,7 +162,14 @@ public enum StateDeclaration: Codable, Equatable, Sendable {
     case state(name: String, type: ValueType, initialValue: Expression?, location: SourceLocation?)
     case binding(name: String, type: ValueType, location: SourceLocation?)
     case navigationPath(name: String, enumName: String, location: SourceLocation?)
+    case tabSelection(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
+    /// A `refractForm` declaration on local @State or a parent @Binding.
+    case form(ownership: FormOwnership, declaration: FormDeclaration, location: SourceLocation?)
+}
+
+public enum FormOwnership: String, Codable, Sendable {
+    case state, binding
 }
 
 public struct ModelReference: Codable, Equatable, Sendable {

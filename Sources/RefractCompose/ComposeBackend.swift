@@ -24,6 +24,7 @@ public struct ComposeBackend: Sendable {
         try emitEnumDeclarations(module.enums, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
             if case let .navigationStack(stack, _) = screen.body {
@@ -32,6 +33,9 @@ public struct ComposeBackend: Sendable {
                         .target(for: NativeComponent(name: destination.viewName), platform: .android, location: screen.location)
                 }
                 try emitNavigationDestinations(stack, into: &bodyWriter, context: &context)
+            }
+            if case let .tabView(tabs, _) = screen.body {
+                try emitTabDestinations(tabs, into: &bodyWriter, context: &context)
             }
         }
 
@@ -119,6 +123,9 @@ public struct ComposeBackend: Sendable {
                 parameters.append("on\(name.uppercasingFirst())Change: (\(kotlinType(type))) -> Unit")
             case let .navigationPath(name, enumName, _):
                 parameters.append("on\(name.uppercasingFirst())Navigate: (\(enumName)) -> Unit")
+            case let .tabSelection(name, enumName, _):
+                parameters.append("\(name): \(enumName)")
+                parameters.append("on\(name.uppercasingFirst())Change: (\(enumName)) -> Unit")
             case let .model(reference, _):
                 if context.models.contains(where: {
                     $0.name == reference.protocolName && !$0.properties.isEmpty
@@ -126,7 +133,15 @@ public struct ComposeBackend: Sendable {
                     context.imports.insert("androidx.compose.runtime.State")
                 }
                 parameters.append("\(reference.propertyName): \(reference.protocolName)")
-            case .state:
+            case let .form(.binding, declaration, _):
+                context.imports.insert("androidx.compose.ui.Modifier")
+                for field in declaration.fields {
+                    let type = kotlinType(field.type)
+                    let name = "\(declaration.name)\(field.name.uppercasingFirst())"
+                    parameters.append("\(name): \(type)")
+                    parameters.append("on\(name.uppercasingFirst())Change: (\(type)) -> Unit")
+                }
+            case .state, .form:
                 // Local state is remembered inside the body, not a parameter.
                 continue
             }
@@ -140,11 +155,23 @@ public struct ComposeBackend: Sendable {
                 context.imports.insert("androidx.compose.runtime.getValue")
                 context.imports.insert("androidx.compose.runtime.setValue")
             }
+            if case .form(.state, _, _) = state {
+                context.imports.insert("androidx.compose.runtime.getValue")
+                context.imports.insert("androidx.compose.runtime.setValue")
+            }
             if case let .state(name, type, initial, _) = state {
                 context.imports.insert("androidx.compose.runtime.remember")
                 context.imports.insert("androidx.compose.runtime.mutableStateOf")
                 let initialText = try renderExpression(initial ?? defaultInitial(type), context: &context)
                 out.line("var \(name) by remember { mutableStateOf(\(initialText)) }")
+            }
+            if case let .form(.state, declaration, _) = state {
+                context.imports.insert("androidx.compose.runtime.remember")
+                context.imports.insert("androidx.compose.runtime.mutableStateOf")
+                for field in declaration.fields {
+                    let initialText = try renderExpression(field.initialValue, context: &context)
+                    out.line("var \(declaration.name)\(field.name.uppercasingFirst()) by remember { mutableStateOf(\(initialText)) }")
+                }
             }
         }
     }
@@ -154,6 +181,7 @@ public struct ComposeBackend: Sendable {
         case .string: return Expression(.stringLiteral(""))
         case .bool: return Expression(.boolLiteral(false))
         case .int, .double: return Expression(.numberLiteral("0"))
+        case .revision: return Expression(.numberLiteral("0"))
         }
     }
 
@@ -165,7 +193,7 @@ public struct ComposeBackend: Sendable {
         case let .stack(axis, children, modifiers, location):
             try emitStack(axis: axis, children: children, modifiers: modifiers, isRoot: isRoot,
                           parentAxis: parentAxis, location: location, into: &out, context: &context)
-        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput,
+        case .layout, .scroll, .list, .section, .listItem, .forEach, .image, .textInput, .secureInput,
              .label, .divider, .spacer:
             try emitTyped(node, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
@@ -182,6 +210,8 @@ public struct ComposeBackend: Sendable {
         case let .navigationLink(title, pathName, enumName, destination, location):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
                                    destination: destination, location: location, into: &out, context: &context)
+        case let .tabView(tabs, location):
+            try emitTabView(tabs, isRoot: isRoot, location: location, into: &out, context: &context)
         case let .native(component, location):
             try emitNative(component, location: location, isRoot: isRoot, into: &out, context: &context)
         case let .nativeModifier(child, operations, _):
@@ -189,6 +219,8 @@ public struct ComposeBackend: Sendable {
                                              into: &out, context: &context)
         case let .component(component, location):
             try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .messageBlocks(nested, _):
+            try emitMessageBlocks(nested, into: &out, context: &context)
         case let .child(child, _):
             let arguments = child.arguments.map { "\($0.label) = \($0.expression)" }
             out.line("\(child.name)(\(arguments.joined(separator: ", ")))")
@@ -235,7 +267,15 @@ public struct ComposeBackend: Sendable {
                           location: SourceLocation?, into out: inout KotlinWriter,
                           context: inout Context) throws {
         context.imports.insert("androidx.compose.material3.Text")
-        let text = try renderExpression(expression, context: &context)
+        var text = try renderExpression(expression, context: &context)
+        if case let .valueProperty(.model(model, property)) = expression.value,
+           context.module.models.contains(where: { contract in
+               contract.properties.contains { $0.effect == .text && $0.name == property }
+           }) {
+            // A declared optional model text has no smart-cast path through State<T>; the Elvis
+            // fallback is only Kotlin's nullability requirement, not generated error copy.
+            text = "\(model).\(property).value ?: \"\""
+        }
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, parentAxis: parentAxis, context: &context)
         let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
@@ -282,7 +322,15 @@ public struct ComposeBackend: Sendable {
         } else {
             onClick = "{ }"
         }
-        out.open("Button(onClick = \(onClick), modifier = \(modifierChain))")
+        var arguments = ["onClick = \(onClick)", "modifier = \(modifierChain)"]
+        for modifier in modifiers where modifier.name == "disabled" {
+            guard let argument = modifier.arguments.first else {
+                throw Diagnostic(code: "RFFORM007", message: "`.disabled` needs one Boolean model property.",
+                                 suggestion: "Use `.disabled(model.submitting)`.", location: modifier.location)
+            }
+            arguments.append("enabled = !(\(try renderExpression(argument, context: &context)))")
+        }
+        out.open("Button(\(arguments.joined(separator: ", ")))")
         try emit(label, into: &out, context: &context)
         out.close()
     }
@@ -378,7 +426,50 @@ public struct ComposeBackend: Sendable {
             return result + "\""
         case let .platformValue(alternatives):
             return try renderExpression(alternatives.android, context: &context)
+        case let .formField(form, field):
+            guard let declaration = context.form(named: form), declaration.field(named: field) != nil else {
+                throw Diagnostic(code: "RFFORM002", message: "Unknown form field `\(form).\(field)`.",
+                                 suggestion: "Declare the field in refractForm.", location: expression.location)
+            }
+            return "\(form)\(field.uppercasingFirst())"
+        case let .presence(subject):
+            return "\(try renderExpression(subject, context: &context)) != null"
+        case let .formValid(declaration):
+            return try formGuard(declaration, context: &context)
         }
+    }
+
+    /// The form's declared field rules become native comparisons; nothing else is evaluated here.
+    private func formGuard(_ declaration: FormDeclaration, context: inout Context) throws -> String {
+        var clauses: [String] = []
+        for field in declaration.fields {
+            let value = try renderExpression(Expression(.formField(form: declaration.name, field: field.name)),
+                                             context: &context)
+            for rule in field.rules {
+                switch rule {
+                case .nonEmpty:
+                    clauses.append("\(value).isNotEmpty()")
+                case let .equals(other):
+                    let sibling = try renderExpression(Expression(.formField(form: declaration.name, field: other)),
+                                                       context: &context)
+                    clauses.append("\(value) == \(sibling)")
+                }
+            }
+        }
+        return clauses.isEmpty ? "true" : clauses.joined(separator: " && ")
+    }
+
+    private func submitAction(_ submit: FormSubmit, context: inout Context) throws -> String {
+        guard let declaration = context.form(named: submit.form) else {
+            throw Diagnostic(code: "RFFORM001", message: "Unknown form `\(submit.form)`.",
+                             suggestion: "Declare the form in the view's state.", location: submit.location)
+        }
+        let arguments = try submit.arguments.map { argument -> String in
+            let value = try renderExpression(Expression(.formField(form: submit.form, field: argument.field)),
+                                             context: &context)
+            return argument.label.map { "\($0) = \(value)" } ?? value
+        }.joined(separator: ", ")
+        return "if (\(try formGuard(declaration, context: &context))) { \(submit.model).\(submit.action)(\(arguments)) }"
     }
 
     func renderAction(_ action: StateAction, context: inout Context) throws -> String {
@@ -397,6 +488,8 @@ public struct ComposeBackend: Sendable {
                 return argument.label.map { "\($0) = \(value)" } ?? value
             }.joined(separator: ", ")
             return "\(model).\(name)(\(arguments))"
+        case let .submit(submit):
+            return try submitAction(submit, context: &context)
         }
     }
 
@@ -405,6 +498,7 @@ public struct ComposeBackend: Sendable {
         case .string: return "String"
         case .bool: return "Boolean"
         case .int: return "Int"
+        case .revision: return "Long"
         case .double: return "Double"
         }
     }
@@ -425,6 +519,15 @@ public struct ComposeBackend: Sendable {
         let enums: [EnumDeclaration]
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
+
+        func form(named name: String) -> FormDeclaration? {
+            for screen in module.screens {
+                for state in screen.states {
+                    if case let .form(_, declaration, _) = state, declaration.name == name { return declaration }
+                }
+            }
+            return nil
+        }
 
         init(module: Module, mapping: Mapping, models: [ModelProtocol]? = nil, itemTypes: [ItemType]? = nil,
              enums: [EnumDeclaration]? = nil) {
@@ -480,9 +583,15 @@ struct KotlinWriter {
         }
     }
 
-    mutating func close() {
+    mutating func close(suffix: String = "") {
         depth -= 1
-        line("}")
+        line("}" + suffix)
+    }
+
+    /// Closes a parenthesized argument list opened with `open("Name(")`.
+    mutating func closeParen(suffix: String = "") {
+        depth -= 1
+        line(")" + suffix)
     }
 
     mutating func append(_ other: String) {
