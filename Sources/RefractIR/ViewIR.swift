@@ -86,6 +86,27 @@ public struct ImageSource: Codable, Equatable, Sendable {
     }
 }
 
+/// A finite category projection over an identified item collection. The iOS support
+/// declaration returns the already filtered and sorted array; no runtime descriptor exists.
+public struct CollectionProjection: Codable, Equatable, Sendable {
+    public let name: String
+    public let categoryProperty: String
+    public let categoryEnum: String
+    public let categoryParameter: String
+    public let sortProperty: String
+    public let ascending: Bool
+
+    public init(name: String, categoryProperty: String, categoryEnum: String, categoryParameter: String,
+                sortProperty: String, ascending: Bool) {
+        self.name = name
+        self.categoryProperty = categoryProperty
+        self.categoryEnum = categoryEnum
+        self.categoryParameter = categoryParameter
+        self.sortProperty = sortProperty
+        self.ascending = ascending
+    }
+}
+
 /// A lazy collection already exposed by the application model as an ArkUI-compatible data source.
 public struct ListItems: Codable, Equatable, Sendable {
     public let collection: Expression
@@ -98,11 +119,12 @@ public struct ListItems: Codable, Equatable, Sendable {
     public let keyType: ValueType
     public let content: ViewNode
     public let contentType: String?
+    public let projection: CollectionProjection?
     public let location: SourceLocation?
 
     public init(collection: Expression, itemName: String, itemType: String, key: String = "id",
                 keyType: ValueType, content: ViewNode, contentType: String? = nil,
-                modelType: String? = nil, location: SourceLocation? = nil) {
+                projection: CollectionProjection? = nil, modelType: String? = nil, location: SourceLocation? = nil) {
         self.collection = collection
         self.modelType = modelType
         self.itemName = itemName
@@ -111,10 +133,11 @@ public struct ListItems: Codable, Equatable, Sendable {
         self.keyType = keyType
         self.content = content
         self.contentType = contentType
+        self.projection = projection
         self.location = location
     }
 
-    private enum CodingKeys: String, CodingKey { case collection, modelType, itemName, itemType, key, keyType, content, contentType, location }
+    private enum CodingKeys: String, CodingKey { case collection, modelType, itemName, itemType, key, keyType, content, contentType, projection, location }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -126,6 +149,7 @@ public struct ListItems: Codable, Equatable, Sendable {
         keyType = try values.decode(ValueType.self, forKey: .keyType)
         content = try values.decode(ViewNode.self, forKey: .content)
         contentType = try values.decodeIfPresent(String.self, forKey: .contentType)
+        projection = try values.decodeIfPresent(CollectionProjection.self, forKey: .projection)
         location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
@@ -133,7 +157,16 @@ public struct ListItems: Codable, Equatable, Sendable {
 public struct ItemProperty: Codable, Equatable, Sendable {
     public let name: String
     public let type: ValueType
-    public init(name: String, type: ValueType) { self.name = name; self.type = type }
+    public let enumName: String?
+    public init(name: String, type: ValueType, enumName: String? = nil) {
+        self.name = name; self.type = type; self.enumName = enumName
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        type = try values.decode(ValueType.self, forKey: .type)
+        enumName = try values.decodeIfPresent(String.self, forKey: .enumName)
+    }
 }
 
 public struct ItemType: Codable, Equatable, Sendable {

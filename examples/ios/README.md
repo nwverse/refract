@@ -1,5 +1,9 @@
 # iOS shared-source example
 
+The source prelude includes the zero-effect `Array.refractProjection(name:)` support declaration used by typed
+filter/sort projections. It returns the already-filtered/sorted array unchanged; the same source has no Refract
+runtime dependency. This declaration is source evidence here, not a new iOS compilation claim.
+
 `RefractExampleApp.swift` contains hand-written navigation, native settings and rollback screens. Shared
 `Hello.swift`, `SettingsScreen.swift` and `NativeComponentScreen.swift` compile directly as SwiftUI. The app-local
 `RefractModel` / `RefractNativeView` declarations and `AppSettingsModel` implement the same typed model boundary;

@@ -3,6 +3,14 @@ import SwiftUI
 public protocol RefractModel {}
 public protocol RefractNativeView: View {}
 
+public extension Array {
+    /// The SwiftUI source already performs the bounded filter and sort; naming the
+    /// projection for native generation must not change its iOS value or ordering.
+    @inlinable
+    @inline(__always)
+    func refractProjection(name: String) -> Self { self }
+}
+
 /// Typed design spacing for the shared source's named container-spacing values.
 public struct RefractSpacing: Sendable {
     public let value: CGFloat

@@ -222,6 +222,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "list-reject-projection-sort",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-typed-projection",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "localization/formatted",
       "implementationStatus": "ready"
     },

@@ -24,6 +24,7 @@ public struct ComposeBackend: Sendable {
         try emitEnumDeclarations(module.enums, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
             if case let .navigationStack(stack, _) = screen.body {

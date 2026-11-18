@@ -1,5 +1,9 @@
 # SwiftSyntax frontend
 
+- SwiftParser leaves unparenthesized comparison/boolean chains as a flat `SequenceExprSyntax`, not an
+  `InfixOperatorExprSyntax`. A bounded filter/sort grammar must check the exact element count and every operator/member
+  position. Do not broaden it to arbitrary expressions; print the real AST once, then preserve the negative cases.
+
 - Unknown accessor or signature "effects" such as `{ get refractText }` or `func f() refractAsync` are not syntax
   SwiftParser accepts: they produce a recovered tree with `UnexpectedNodesSyntax`, so the source can never be valid
   SwiftUI. Compile-time-only markers belong in custom attributes (`@refractText`, `@refractAsync`), which parse
