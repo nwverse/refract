@@ -36,6 +36,7 @@ cross-file-enum-switch
 cross-file-two-models
 interop-remote-image
 navigation-host
+navigation-deep-restoration
 navigation-native-destination
 navigation-tabs-menu
 accessibility-dynamic-type

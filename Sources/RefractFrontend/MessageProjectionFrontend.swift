@@ -207,10 +207,10 @@ extension Builder {
             if let index = screens.firstIndex(where: { $0.name == pending.screen }) {
                 let original = screens[index]
                 screens[index] = Screen(name: original.name, parameters: original.parameters, states: original.states,
-                                        body: pending.body, location: original.location)
+                                        navigation: original.navigation, body: pending.body, location: original.location)
             } else if let original = pendingMessageOwners[pending.screen] {
                 screens.append(Screen(name: original.name, parameters: original.parameters, states: original.states,
-                                      body: pending.body, location: original.location))
+                                      navigation: original.navigation, body: pending.body, location: original.location))
             }
         }
         pendingMessageSources.removeAll()
