@@ -46,17 +46,20 @@ class GeneratedMessageProjectionTest {
     }
 
     @Test
-    fun messageBlocksPreserveMessageOrderAndOmitEmptyParents() = runAndroidComposeUiTest<ComponentActivity> {
+    fun messageBlocksPreserveTheWholeParentRowIncludingEmptyMessages() = runAndroidComposeUiTest<ComponentActivity> {
         val projection = MessageProjection(3, 2)
         projection.create("m1", 1, listOf(ChatBlockFixtures.block("b1", "A"), ChatBlockFixtures.block("b2", "B")))
         projection.create("empty", 1)
         projection.create("m2", 1, listOf(ChatBlockFixtures.block("b3", "C")))
         setContent { ConversationScreen(model = projection) }
-        val nodes = listOf("m1", "A", "B", "m2", "C").map { expected ->
+        val orderedText = listOf("m1", "A", "B", "empty", "m2", "C").map { expected ->
             onNodeWithText(expected).fetchSemanticsNode().boundsInRoot.top
         }
-        assertTrue(nodes.zipWithNext().all { (top, next) -> top < next })
-        onNodeWithText("empty").assertDoesNotExist()
+        assertTrue(orderedText.zipWithNext().all { (top, next) -> top < next })
+        onNodeWithText("empty").assertExists()
+        val footers = onAllNodesWithText("Row footer").fetchSemanticsNodes()
+        assertEquals(3, footers.size)
+        assertTrue(footers.map { it.boundsInRoot.top }.zipWithNext().all { (top, next) -> top < next })
     }
 
     @Test

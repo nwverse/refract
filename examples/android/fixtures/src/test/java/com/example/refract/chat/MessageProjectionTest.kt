@@ -57,6 +57,9 @@ class MessageProjectionTest {
         projection.finalize("m1", 2)
         assertSame(finalized, projection.snapshot)
         assertTrue(projection.snapshot.single().finalized)
+        assertRejected(ProjectionRejection.STALE_REVISION, projection) {
+            projection.update("m1", 1, block("b1", "reopened"))
+        }
         assertRejected(ProjectionRejection.ALREADY_FINAL, projection) {
             projection.update("m1", 3, block("b1", "reopened"))
         }
@@ -69,25 +72,80 @@ class MessageProjectionTest {
     }
 
     @Test
-    fun finalizedReplayUsesRevisionBeforeTerminalBarrierAndKeepsExactDuplicateNoOp() {
-        val projection = MessageProjection(1, 3)
-        projection.create("m1", 1, listOf(block("b1", "text")))
+    fun onlyTheLastAcceptedOperationCanReplayAtTheCurrentRevision() {
+        val projection = MessageProjection(1, 2)
+        projection.create("m1", 1, listOf(block("b1", "accepted")))
         projection.finalize("m1", 2)
         val finalized = projection.snapshot
-        projection.append("m1", 2, listOf(block("b1", "text")))
+        projection.finalize("m1", 2)
         assertSame(finalized, projection.snapshot)
-        projection.update("m1", 2, block("b1", "text"))
-        assertSame(finalized, projection.snapshot)
+        // Earlier operations are stale even if their content still appears in the terminal snapshot.
         assertRejected(ProjectionRejection.STALE_REVISION, projection) {
-            projection.update("m1", 1, block("b1", "text"))
+            projection.append("m1", 1, listOf(block("b1", "accepted")))
+        }
+        assertRejected(ProjectionRejection.STALE_REVISION, projection) {
+            projection.update("m1", 1, block("b1", "accepted"))
         }
         assertRejected(ProjectionRejection.ALREADY_FINAL, projection) {
             projection.append("m1", 3, listOf(block("b2", "new")))
         }
-        // An empty append has no identical prior payload; the same revision conflicts before the terminal barrier.
+        // An empty append is not the accepted finalize operation at this revision.
         assertRejected(ProjectionRejection.CONFLICTING_REVISION, projection) {
             projection.append("m1", 2, emptyList())
         }
+    }
+
+    @Test
+    fun oldPayloadReplayAfterProgressCannotReuseBlockContentAsOperationIdentity() {
+        val projection = MessageProjection(1, 2)
+        projection.create("m1", 1)
+        projection.append("m1", 2, listOf(block("b1", "accepted")))
+        projection.append("m1", 3, listOf(block("b2", "new")))
+        val accepted = projection.snapshot
+        assertRejected(ProjectionRejection.STALE_REVISION, projection) {
+            projection.append("m1", 2, listOf(block("b1", "accepted")))
+        }
+        // A suffix or equal element in the current blocks does not identify the earlier append.
+        assertSame(accepted, projection.snapshot)
+        projection.update("m1", 4, block("b1", "accepted"))
+        projection.update("m1", 4, block("b1", "accepted"))
+        assertRejected(ProjectionRejection.CONFLICTING_REVISION, projection) {
+            projection.append("m1", 4, listOf(block("b2", "new")))
+        }
+    }
+
+    @Test
+    fun fullCapacityDoesNotAuthorizeAnOldAppendReplay() {
+        val projection = MessageProjection(1, 1)
+        projection.create("m1", 1)
+        projection.append("m1", 2, listOf(block("b1", "accepted")))
+        val accepted = projection.snapshot
+        projection.append("m1", 2, listOf(block("b1", "accepted")))
+        assertSame(accepted, projection.snapshot)
+        assertRejected(ProjectionRejection.CAPACITY, projection) {
+            projection.append("m1", 3, listOf(block("b2", "new")))
+        }
+        assertRejected(ProjectionRejection.CONFLICTING_REVISION, projection) {
+            projection.append("m1", 2, listOf(block("b2", "different operation")))
+        }
+        projection.update("m1", 3, block("b1", "accepted"))
+        assertRejected(ProjectionRejection.STALE_REVISION, projection) {
+            projection.append("m1", 2, listOf(block("b1", "accepted")))
+        }
+    }
+
+    @Test
+    fun historicalReplayIsStaleAfterALaterAcceptedUpdate() {
+        val projection = MessageProjection(1, 2)
+        projection.create("m1", 1, listOf(block("b1", "original")))
+        projection.update("m1", 2, block("b1", "updated"))
+        val updated = projection.snapshot
+        assertRejected(ProjectionRejection.STALE_REVISION, projection) {
+            projection.update("m1", 1, block("b1", "original"))
+        }
+        assertSame(updated, projection.snapshot)
+        projection.update("m1", 2, block("b1", "updated"))
+        assertSame(updated, projection.snapshot)
     }
 
     @Test

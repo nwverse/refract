@@ -47,9 +47,9 @@ extension ComposeBackend {
                              message: "Dynamic list lowering requires the resolved model collection contract.",
                              suggestion: "Declare an Identifiable item with a stable String or Int id through the model interface.",
                              location: location ?? items.location)
-        case let .messageBlocks(_, location):
-            throw Diagnostic(code: "RFMSG001", message: "Message blocks must follow their checked parent row in one LazyColumn.",
-                             suggestion: "Put ForEach(message.blocks) directly inside the ChatMessage row.", location: location)
+        case .messageBlocks:
+            throw Diagnostic(code: "RFMSG001", message: "Message blocks must be emitted inside their checked parent row.",
+                             suggestion: "Use ForEach(message.blocks) in the ChatMessage row's non-scrolling content.", location: node.sourceLocation)
         case let .textInput(placeholder, value, modifiers, location):
             try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
                               location: location, into: &out, context: &context)

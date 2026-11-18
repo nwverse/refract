@@ -54,10 +54,6 @@ extension ComposeBackend {
     func emitDynamicListItems(_ items: ListItems, into out: inout KotlinWriter,
                               context: inout Context) throws {
         try dynamicListItems(items, context: &context)
-        if items.messageBlocks != nil {
-            try emitMessageRows(items, into: &out, context: &context)
-            return
-        }
         let collection = try renderExpression(items.collection, context: &context)
         let item = items.itemName
         let key = "\(item).\(items.key)"

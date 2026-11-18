@@ -39,6 +39,7 @@ struct MessageRow: View {
             ForEach(message.blocks) { block in
                 MessageBlock(message: message, block: block)
             }
+            Text(verbatim: "Row footer")
         }
     }
 }

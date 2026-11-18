@@ -66,6 +66,10 @@ internal class MessageProjection(
     // A block permanently belongs to its first message, including after its content is replaced.
     private val blockOwners = mutableMapOf<String, String>()
 
+    // Only the complete last accepted operation can replay at the published revision.
+    // Block suffixes or equal content elsewhere in the snapshot are not operation identity.
+    private val lastMutations = mutableMapOf<String, MessageMutation>()
+
     val snapshot: List<ChatMessage> get() = messages.value
 
     fun create(messageID: String, revision: Long, blocks: List<ChatBlock> = emptyList()) {
@@ -99,34 +103,16 @@ internal class MessageProjection(
         if (mutation.revision < current.revision) {
             throw ProjectionException(ProjectionRejection.STALE_REVISION)
         }
-        if (current.finalized && mutation !is FinalizeMessage) {
-            if (mutation.revision == current.revision) {
-                val duplicate = when (mutation) {
-                    is AppendBlocks -> mutation.blocks.isNotEmpty() &&
-                        current.blocks.takeLast(mutation.blocks.size) == mutation.blocks
-                    is UpdateBlock -> current.blocks.any { it == mutation.block }
-                    is FinalizeMessage -> false
-                }
-                if (duplicate) return
+        if (mutation.revision == current.revision) {
+            if (lastMutations[mutation.messageID] == mutation) return
+            throw ProjectionException(ProjectionRejection.CONFLICTING_REVISION)
+        }
+        if (current.finalized) {
+            if (mutation is FinalizeMessage) {
                 throw ProjectionException(ProjectionRejection.CONFLICTING_REVISION)
             }
             throw ProjectionException(ProjectionRejection.ALREADY_FINAL)
         }
-        if (mutation.revision == current.revision && current.finalized && mutation is FinalizeMessage) return
-        if (mutation.revision == current.revision) {
-            val duplicate = when (mutation) {
-                is AppendBlocks -> mutation.blocks.isNotEmpty() &&
-                    current.blocks.takeLast(mutation.blocks.size) == mutation.blocks
-                is UpdateBlock -> current.blocks.any { it == mutation.block }
-                is FinalizeMessage -> false
-            }
-            if (duplicate) return
-            throw ProjectionException(ProjectionRejection.CONFLICTING_REVISION)
-        }
-        if (current.finalized && mutation is FinalizeMessage && mutation.revision > current.revision) {
-            throw ProjectionException(ProjectionRejection.CONFLICTING_REVISION)
-        }
-        if (current.finalized) throw ProjectionException(ProjectionRejection.ALREADY_FINAL)
         val updated = when (mutation) {
             is AppendBlocks -> {
                 if (mutation.blocks.isEmpty()) throw ProjectionException(ProjectionRejection.DUPLICATE_APPEND)
@@ -149,6 +135,7 @@ internal class MessageProjection(
         // Validate the whole candidate before mutating ownership or publishing, including append atomicity.
         validate(next)
         blockOwners.putAll(updated.blocks.map { it.id to updated.id })
+        lastMutations[updated.id] = mutation
         mutableMessages.value = next
     }
 

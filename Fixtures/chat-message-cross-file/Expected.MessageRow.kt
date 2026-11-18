@@ -5,39 +5,14 @@
 package refract.generated.chatcrossfile
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 
 public interface ConversationModel {
     public val messages: State<List<ChatMessage>>
-}
-
-internal fun refractMessageBlockKey(messageID: String, blockID: String): String {
-    return "${messageID.length}:$messageID${blockID.length}:$blockID"
-}
-
-internal fun LazyListScope.refractMessageRows(
-    messages: List<ChatMessage>,
-    messageContent: @Composable (ChatMessage) -> Unit,
-    blockContent: @Composable (ChatMessage, ChatBlock) -> Unit,
-) {
-    for (chatMessage in messages) {
-        if (chatMessage.blocks.isEmpty()) continue
-        item(key = chatMessage.id, contentType = "ChatMessage") {
-            messageContent(chatMessage)
-        }
-        items(
-            items = chatMessage.blocks,
-            key = { block -> refractMessageBlockKey(chatMessage.id, block.id) },
-            contentType = { "ChatBlock" },
-        ) { block ->
-            blockContent(chatMessage, block)
-        }
-    }
 }
 
 @Composable
@@ -61,5 +36,13 @@ public fun MessageRow(
 ) {
     Column(modifier = modifier) {
         Text(text = message.id)
+        Column {
+            message.blocks.forEach { block ->
+                key(message.id, block.id) {
+                    MessageBlock(message = message, block = block)
+                }
+            }
+        }
+        Text(text = "Row footer")
     }
 }

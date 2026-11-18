@@ -46,9 +46,11 @@ application code compiled against the generated model. It is not generated outpu
 
 - Message ids and block ids are independent stable `String` values. A block permanently belongs to one message;
   equal block ids in different messages are not a move operation.
-- Every mutation carries a whole-message revision. Lower revisions are stale. An identical revision and identical
-  append/update payload is a no-op; an identical revision with different payload is rejected. A conflicting higher
-  revision after finalization cannot reopen or change the terminal payload.
+- Every mutation carries a whole-message revision. Lower revisions are stale. The projection remembers the last
+  accepted operation type and complete payload for each message: only an exact replay at the current published
+  revision is a no-op. Replaying an older operation after later progress is stale, even if its blocks or content
+  still appear in the snapshot. A different operation or payload at the current revision is rejected. A conflicting
+  higher revision after finalization cannot reopen or change the terminal payload.
 - Append preserves the supplied block order and rejects repeated ids. Update replaces exactly one existing block
   in place; it cannot append a missing block or transfer it to another message.
 - Finalize is terminal and idempotent. Repeating the accepted terminal revision and payload is a no-op; a later
@@ -68,13 +70,13 @@ behavior are not supplied or verified by this slice.
 
 ## Native rendering and identity
 
-Compose emits a `@Immutable ChatMessage` containing a `List<ChatBlock>`. `LazyColumn.items` uses `message.id`.
-The bounded blocks become additional items in the **same** `LazyColumn` builder, keyed by a private typed
-`refractMessageBlockKey(message.id, block.id)`, a Bundle-compatible String with length-prefixed UTF-16 ids, not a nested vertical `LazyColumn`. A `LazyListScope` builder helper
-visits snapshots in source order and registers each nonempty message container followed by that message's blocks.
-It does not create a flattened pair list or register lazy items from inside a composable item-content lambda.
-A snapshot with no blocks contributes no empty parent container. `MessageBlock` remains an ordinary public
-composable with explicit typed inputs.
+Compose emits a `@Immutable ChatMessage` containing a `List<ChatBlock>`. `LazyColumn.items` uses `message.id` and
+calls the complete generated `MessageRow` once for every snapshot, including a snapshot with no blocks. The original
+non-block content, source order and row container remain intact. Inside that row, a non-scrolling `Column` iterates
+the bounded `message.blocks`; `key(message.id, block.id)` scopes block identity to its permanent parent without a
+custom saved-state key or another scrolling list. `MessageBlock` remains an ordinary public composable with explicit
+typed inputs. There is no shared model-specific `LazyListScope` helper to place in a sibling generation unit. This
+structure proves source preservation and native keying, not a generated-versus-handwritten performance result.
 
 ArkUI emits a typed `BasicDataSource<ChatMessage>` model property, a keyed outer `LazyForEach`, and a bounded
 non-scrolling `ForEach(message.blocks)` within the row. `block.id` keys that inner loop. The source includes the
@@ -93,12 +95,13 @@ not add a selection callback ABI or claim native selection/lifecycle verificatio
   byte-identical `examples/shared/ChatMessageProjection.swift` iOS target input when that target is built.
 - `scripts/check_fixture_compilation.py` stages the real generated Kotlin and `./gradlew :fixtures:compileDebugKotlin`
   compiles it against the pinned Android dependencies. This is native compilation, not a device result.
-- Plain Native JVM tests cover ordered append/update, duplicate no-ops, stale/conflicting revisions, terminal
-  idempotence, atomic append/capacity rejection, block ownership, empty ids and the positive `Long` revision range.
+- Plain Native JVM tests cover ordered append/update, exact last-operation replay, stale/conflicting revisions,
+  terminal idempotence, atomic append/capacity rejection, block ownership, empty ids and the positive `Long`
+  revision range. Older payload replays remain stale even when their content matches the current snapshot.
 - Native JVM Compose and TextView tests exercise the actual generated block child, appended/updated/finalized
-  content, message/block ordering, empty-parent omission and native text display. Robolectric is a host-JVM
-  environment, not an emulator, device or performance measurement. It does not establish IME, TalkBack or gesture
-  parity, and no selection/lifecycle assertion is made by this slice.
+  content, message/block ordering and retained empty-message rows. Robolectric is a host-JVM environment, not an
+  emulator, device or performance measurement. It does not establish IME, TalkBack or gesture parity, and no
+  selection/lifecycle assertion is made by this slice.
 - The `chat-message-reject-revision` golden and parameterized frontend tests reject invalid revision and collection
   declarations. They do not turn runtime projection failures into Swift diagnostics: those are native application
   errors with the documented atomic behavior.

@@ -44,10 +44,12 @@ private func projectionUnit(replacing old: String? = nil, with new: String = "")
     let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
     #expect(kotlin.contains("public val revision: Long"))
     #expect(kotlin.contains("public val blocks: List<ChatBlock>"))
-    #expect(kotlin.contains("item(key = chatMessage.id, contentType = \"ChatMessage\")"))
-    #expect(kotlin.contains("key = { block -> refractMessageBlockKey(chatMessage.id, block.id) }"))
-    #expect(kotlin.contains("items = chatMessage.blocks,"))
-    #expect(!kotlin.contains("refractMessageEntries"))
+    #expect(kotlin.contains("items = model.messages.value,"))
+    #expect(kotlin.contains("key = { message -> message.id }"))
+    #expect(kotlin.contains("message.blocks.forEach { block ->"))
+    #expect(kotlin.contains("key(message.id, block.id)"))
+    #expect(!kotlin.contains("refractMessageRows"))
+    #expect(!kotlin.contains("LazyListScope"))
     #expect(kotlin.contains("if (message.finalized)"))
     #expect(kotlin.contains("MessageBlock(message = message, block = block)"))
     #expect(!kotlin.contains("LazyColumn(modifier = Modifier) {\n                    LazyColumn"))
@@ -75,19 +77,29 @@ func messageProjectionRejectsInvalidSource(replacement: String, with new: String
             Comment(rawValue: unit.diagnostics.map(\.rendered).joined(separator: "\n")))
 }
 
-@Test func messageProjectionPreservesMessageThenBlockOrderAndSkipsOnlyEmptyParentRows() throws {
+@Test func messageProjectionPreservesTheCompleteParentRowIncludingEmptyMessages() throws {
     let unit = try projectionUnit(replacing: "List(model.messages) { message in\n            MessageRow(message: message)\n        }",
                                   with: "List { ForEach(model.messages) { message in\n            MessageRow(message: message)\n        } }")
     #expect(unit.diagnostics.isEmpty, Comment(rawValue: unit.diagnostics.map(\.rendered).joined(separator: "\n")))
     let kotlin = try ComposeBackend().generate(module: unit.module)
-    #expect(kotlin.contains("for (chatMessage in messages)"))
-    #expect(kotlin.contains("if (chatMessage.blocks.isEmpty()) continue"))
-    #expect(kotlin.contains("item(key = chatMessage.id, contentType = \"ChatMessage\")"))
-    #expect(kotlin.contains("items = chatMessage.blocks,"))
-    #expect(!kotlin.contains("flatMap"))
-    let first = try #require(kotlin.range(of: "if (chatMessage.blocks.isEmpty()) continue"))
-    let blocks = try #require(kotlin.range(of: "items = chatMessage.blocks,"))
-    #expect(first.lowerBound < blocks.lowerBound)
+    #expect(kotlin.contains("items = model.messages.value,"))
+    #expect(kotlin.contains("MessageRow(message = message)"))
+    #expect(kotlin.contains("message.blocks.forEach { block ->"))
+    #expect(!kotlin.contains("chatMessage.blocks.isEmpty"))
+    #expect(!kotlin.contains("refractMessageRows"))
+    #expect(!kotlin.contains("LazyListScope"))
+    let title = try #require(kotlin.range(of: "Text(text = message.id)"))
+    let blocks = try #require(kotlin.range(of: "message.blocks.forEach { block ->"))
+    #expect(title.lowerBound < blocks.lowerBound)
+}
+
+@Test func messageProjectionKeepsNonBlockContentInSourceOrder() throws {
+    let unit = try projectionUnit()
+    #expect(unit.diagnostics.isEmpty, Comment(rawValue: unit.diagnostics.map(\.rendered).joined(separator: "\n")))
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let blocks = try #require(kotlin.range(of: "message.blocks.forEach { block ->"))
+    let after = try #require(kotlin.range(of: "Text(text = \"Row footer\")"))
+    #expect(blocks.lowerBound < after.lowerBound)
 }
 
 @Test func messageProjectionSupportsSplitDeclarationFilesAndSiblingParameters() throws {
@@ -108,9 +120,20 @@ func messageProjectionRejectsInvalidSource(replacement: String, with new: String
     for unit in units {
         #expect(unit.diagnostics.isEmpty, Comment(rawValue: unit.diagnostics.map(\.rendered).joined(separator: "\n")))
     }
+    let nativeSources = NativeSourceSet(modules: units.map(\.module))
+    for unit in units {
+        let kotlin = try ComposeBackend().generate(module: unit.module, sources: nativeSources)
+        #expect(!kotlin.contains("refractMessageRows"))
+        #expect(!kotlin.contains("LazyListScope"))
+        if unit.module.screens.contains(where: { $0.name == "MessageRow" }) {
+            #expect(kotlin.contains("message.blocks.forEach { block ->"))
+            #expect(kotlin.contains("key(message.id, block.id)"))
+        }
+    }
     let conversation = try #require(units.last)
-    let kotlin = try ComposeBackend().generate(module: conversation.module, sources: NativeSourceSet(modules: units.map(\.module)))
-    #expect(kotlin.contains("refractMessageRows("))
+    let kotlin = try ComposeBackend().generate(module: conversation.module, sources: nativeSources)
+    #expect(kotlin.contains("items = model.messages.value,"))
+    #expect(kotlin.contains("MessageRow(message = message)"))
 }
 
 @Test func doubleActionsStillAcceptIntegerLiterals() throws {

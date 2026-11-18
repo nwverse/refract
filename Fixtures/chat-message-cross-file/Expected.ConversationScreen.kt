@@ -16,14 +16,12 @@ public fun ConversationScreen(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier = modifier) {
-        refractMessageRows(
-            messages = model.messages.value,
-            messageContent = { message ->
-                MessageRow(message = message)
-            },
-            blockContent = { message, block ->
-                MessageBlock(message = message, block = block)
-            },
-        )
+        items(
+            items = model.messages.value,
+            key = { message -> message.id },
+            contentType = { "ChatMessage" },
+        ) { message ->
+            MessageRow(message = message)
+        }
     }
 }

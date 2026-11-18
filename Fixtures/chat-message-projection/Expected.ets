@@ -56,6 +56,7 @@ export struct MessageRow {
       ForEach(message.blocks, (block: ChatBlock) => {
         MessageBlock({ message: message, block: block })
       }, (block: ChatBlock): string => block.id)
+      Text('Row footer')
     }
   }
 }
