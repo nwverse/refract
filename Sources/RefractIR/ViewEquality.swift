@@ -88,8 +88,12 @@ extension ViewNode {
                       lhsItems.itemName == rhsItems.itemName, lhsItems.itemType == rhsItems.itemType,
                       lhsItems.key == rhsItems.key, lhsItems.keyType == rhsItems.keyType,
                       lhsItems.contentType == rhsItems.contentType,
-                      lhsItems.projection == rhsItems.projection,
-                      append(lhsItems.messageBlocks?.content, rhsItems.messageBlocks?.content, to: &pending) else { return false }
+                      lhsItems.projection == rhsItems.projection else { return false }
+                switch (lhsItems.messageBlocks?.content, rhsItems.messageBlocks?.content) {
+                case (nil, nil): break
+                case let (lhsContent?, rhsContent?): pending.append((lhsContent, rhsContent))
+                default: return false
+                }
                 pending.append((lhsItems.content, rhsItems.content))
             case let (.messageBlocks(lhsNested, _), .messageBlocks(rhsNested, _)):
                 guard lhsNested.parent == rhsNested.parent,
