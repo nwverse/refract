@@ -10,6 +10,18 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "chat-message-cross-file",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "chat-message-projection",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "chat-message-reject-revision",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "child-view-foreach-content-type",
       "implementationStatus": "ready"
     },
@@ -95,6 +107,22 @@
     },
     {
       "path": "cross-file-two-models",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "form-reject-presence-type",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "form-reject-submit-binding",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "form-reject-unknown-rule",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "form-validation",
       "implementationStatus": "ready"
     },
     {
@@ -203,6 +231,14 @@
     },
     {
       "path": "list-reject-nested-foreach",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-reject-projection-sort",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-typed-projection",
       "implementationStatus": "ready"
     },
     {

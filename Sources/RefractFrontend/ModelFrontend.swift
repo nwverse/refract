@@ -62,7 +62,19 @@ extension Builder {
     }
 
     private func modelProperty(_ declaration: VariableDeclSyntax) -> ModelProperty? {
-        guard declaration.attributes.isEmpty, declaration.modifiers.isEmpty,
+        let attributes = declaration.attributes.compactMap { $0.as(AttributeSyntax.self) }
+        var effect: ModelPropertyEffect?
+        for attribute in attributes {
+            guard attribute.attributeName.trimmedDescription == ModelPropertyEffect.text.rawValue,
+                  attribute.arguments == nil, effect == nil else {
+                error("model.invalid_property", "Model property attribute `@\(attribute.attributeName.trimmedDescription)` is not supported.",
+                      "Use `@refractText` for an optional native error text, or no attribute", at: attribute)
+                return nil
+            }
+            effect = .text
+        }
+        guard attributes.count == declaration.attributes.count,
+              declaration.modifiers.isEmpty,
               declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.bindings.count == 1,
               let binding = declaration.bindings.first,
               let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
@@ -79,8 +91,17 @@ extension Builder {
                   "Declare `{ get }` and keep computation in the native implementation", at: accessors)
             return nil
         }
+        if effect == .text {
+            guard binding.typeAnnotation?.type.trimmedDescription == "String", (collection ?? nil) == nil else {
+                error("model.invalid_property",
+                      "`@refractText` applies only to a get-only String property such as an error message.",
+                      "Declare `@refractText var submissionError: String { get }`; other types keep a plain `{ get }`",
+                      at: declaration)
+                return nil
+            }
+        }
         return ModelProperty(name: name, type: scalarType(binding.typeAnnotation?.type.trimmedDescription ?? "") ?? .string,
-                             collection: collection, location: location(of: declaration))
+                             collection: collection ?? nil, effect: effect, location: location(of: declaration))
     }
 
     private func modelCollection(_ annotation: TypeSyntax?) -> ModelCollection?? {
@@ -98,12 +119,25 @@ extension Builder {
     }
 
     private func modelAction(_ function: FunctionDeclSyntax) -> ModelAction? {
-        guard function.attributes.isEmpty, function.modifiers.isEmpty,
+        var effect: ModelActionEffect?
+        let attributes = function.attributes.compactMap { $0.as(AttributeSyntax.self) }
+        guard attributes.count == function.attributes.count else { return nil }
+        for attribute in attributes {
+            guard attribute.attributeName.trimmedDescription == ModelActionEffect.asyncAttempt.rawValue,
+                  attribute.arguments == nil, effect == nil else {
+                error("model.invalid_action", "Model action attribute `@\(attribute.attributeName.trimmedDescription)` is not supported.",
+                      "Use `@refractAsync` to declare a native asynchronous attempt, or no attribute", at: attribute)
+                return nil
+            }
+            effect = .asyncAttempt
+        }
+        guard function.modifiers.isEmpty,
               function.genericParameterClause == nil, function.genericWhereClause == nil,
               function.signature.effectSpecifiers == nil, function.body == nil,
               function.signature.returnClause == nil || function.signature.returnClause?.type.trimmedDescription == "Void" else {
             error("model.invalid_action", "Model action `\(function.name.text)` must be a synchronous, nonthrowing Void requirement.",
-                  "Use a nongeneric method with scalar parameters and no async or throws effect", at: function)
+                  "Use a nongeneric method with scalar parameters and no async or throws effect; `@refractAsync` declares a native async attempt",
+                  at: function)
             return nil
         }
         var parameters: [ModelParameter] = []
@@ -120,7 +154,18 @@ extension Builder {
             parameters.append(ModelParameter(externalName: external,
                                               localName: (parameter.secondName ?? parameter.firstName).text, type: type))
         }
-        return ModelAction(name: function.name.text, parameters: parameters, location: location(of: function))
+        return ModelAction(name: function.name.text, parameters: parameters, effect: effect,
+                           location: location(of: function))
+    }
+
+    func itemCollection(_ expression: ExprSyntax) -> TypedExpression? {
+        guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+              let base = member.base?.as(DeclReferenceExprSyntax.self), let item = currentListItem,
+              base.baseName.text == item, let type = currentListItemType,
+              let property = type.properties.first(where: { $0.name == member.declName.baseName.text }),
+              property.collection != nil else { return nil }
+        return TypedExpression(Expression(.reference(expression.trimmedDescription),
+                                         location: location(of: expression)), nil)
     }
 
     func modelProperty(_ expression: ExprSyntax) -> Expression? {
@@ -146,14 +191,27 @@ extension Builder {
             return TypedExpression(Expression(.reference("\(item).\(property.name)"),
                                              type: property.type, location: location(of: expression)), property.type)
         }
+        if let names = currentMessageBlockNames,
+           let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self), base.baseName.text == names.block,
+           currentListItem == names.parent, currentListItemType?.name == "ChatMessage",
+           let block = itemTypes.first(where: { $0.name == "ChatBlock" }),
+           let property = block.properties.first(where: { $0.name == member.declName.baseName.text }) {
+            return TypedExpression(Expression(.reference("\(names.block).\(property.name)"), type: property.type,
+                                             location: location(of: expression)), property.type)
+        }
         guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let contract = models.first(where: { $0.name == reference.protocolName }),
-              let property = contract.properties.first(where: { $0.name == member.declName.baseName.text }) else { return nil }
+              let property = contract.properties.first(where: { $0.name == member.declName.baseName.text }) else {
+            if let collection = itemCollection(expression) { return collection }
+            return nil
+        }
         return TypedExpression(Expression(.valueProperty(.model(model: reference.propertyName,
                                                                property: member.declName.baseName.text)),
-                                         location: location(of: expression)), property.collection == nil ? property.type : nil)
+                                         location: location(of: expression)),
+                               property.effect == .text ? .string : property.collection == nil ? property.type : nil)
     }
 
     func modelAction(_ expression: ExprSyntax) -> StateAction? {

@@ -1,0 +1,1 @@
+Input.swift:12:16: error [RFFORM006]: `refractPresent` requires a property declared with `@refractText`. Suggestion: Declare `@refractText var submissionError: String { get }` on the model
