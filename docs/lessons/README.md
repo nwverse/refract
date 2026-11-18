@@ -19,3 +19,4 @@ add to it when you hit something new: what happened, why, and what to do instead
 | Android benchmarking | `docs/lessons/android.md` |
 | Local CLI packaging | `docs/lessons/packaging.md` |
 | SwiftPM consumer integration | `docs/lessons/swiftpm.md` |
+| Paired native performance evidence | `docs/lessons/performance.md` |

@@ -52,6 +52,16 @@ jobs:
           printf 'bin_path=%s\n' "$(swift build --show-bin-path --disable-automatic-resolution)" >> "$GITHUB_OUTPUT"
       - name: Build with locked dependencies
         run: swift build --disable-automatic-resolution
+      - name: Configure XCTest runtime paths on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform="$(xcrun --show-sdk-platform-path)"
+          test -d "$platform/Developer/Library/Frameworks/XCTest.framework"
+          test -f "$platform/Developer/usr/lib/libXCTestSwiftSupport.dylib"
+          printf 'DYLD_FRAMEWORK_PATH=%s\n' "$platform/Developer/Library/Frameworks" >> "$GITHUB_ENV"
+          printf 'DYLD_LIBRARY_PATH=%s\n' "$platform/Developer/usr/lib" >> "$GITHUB_ENV"
       - name: Run the complete test suite
         env:
           REFRACT_CLI_PATH: ${{ steps.swift.outputs.bin_path }}/refract
@@ -111,6 +121,8 @@ jobs:
             --mapping examples/refract.json \
             --android-out examples/android/app/refract/generated/screens \
             --harmony-out examples/harmony/entry/src/main/ets/generated
+      - name: Verify committed benchmark ArkTS against actual CLI generation
+        run: python3 -I bench/harmony/generate.py --check
       - name: Regenerate examples and verify resource catalogs
         run: python3 scripts/check_examples.py
       - name: Select JDK 21 for the Android toolchain
@@ -220,6 +232,11 @@ jobs:
         run: python3 -I scripts/test/test_privacy_check.py
       - name: Test the documentation checker
         run: python3 -I scripts/test/test_doc_paths.py --self-test
+      - name: Validate paired benchmark source contracts and evidence policy
+        run: |
+          python3 -I bench/common/source_contract_test.py
+          python3 -I bench/common/report_test.py
+          python3 -I scripts/test/test_fixture_output_isolation.py
       - name: Check public repository content and paths
         # Hosted CI has the built-in rules; the local hooks additionally use machine-specific private values.
         run: python3 scripts/privacy_check.py
