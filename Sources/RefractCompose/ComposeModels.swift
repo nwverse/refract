@@ -33,7 +33,7 @@ func emitComposeItemTypes(_ items: [ItemType], into out: inout KotlinWriter,
         out.line("@Immutable")
         out.open("public data class \(item.name)(")
         for property in item.properties {
-            out.line("public val \(property.name): \(try composeModelType(property.type)),")
+            out.line("public val \(property.name): \(try property.enumName ?? composeModelType(property.type)),")
         }
         out.depth -= 1
         out.line(")")

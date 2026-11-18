@@ -63,6 +63,7 @@ struct Generation {
         try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
             if case let .navigationStack(stack, _) = screen.body {
                 try emitNavigationDestinations(stack, into: &writer)

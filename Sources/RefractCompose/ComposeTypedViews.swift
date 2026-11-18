@@ -92,6 +92,9 @@ extension ComposeBackend {
                                 into out: inout KotlinWriter, context: inout Context) throws {
         context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
         context.imports.insert("androidx.compose.foundation.lazy.items")
+        if let projection = items.projection {
+            out.line("val \(projection.name) = \(try projectedCollectionExpression(items, context: &context))")
+        }
         out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
         try emitDynamicListItems(items, into: &out, context: &context)
         out.close()
