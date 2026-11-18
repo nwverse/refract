@@ -26,6 +26,7 @@ class RefractPluginFunctionalTest {
     private val version = requireNotNull(System.getProperty("refract.test.version")) {
         "Run refract --version and pass REFRACT_REQUIRED_VERSION to the functional tests."
     }
+    private val versionLiteral = version.replace("$", "\\$")
 
     @Before
     fun setUp() {
@@ -58,7 +59,7 @@ class RefractPluginFunctionalTest {
             }
             refract {
                 executable.set(layout.projectDirectory.file("${executable.invariantSeparatorsPath}"))
-                requiredVersion.set("$version")
+                requiredVersion.set("$versionLiteral")
                 sources.register("screens") {
                     inputs.from(layout.projectDirectory.file("Screen.swift"))
                     mapping.set(layout.projectDirectory.file("refract.json"))
@@ -225,7 +226,7 @@ class RefractPluginFunctionalTest {
             }
             refract {
                 executable.set(layout.projectDirectory.file("${executable.invariantSeparatorsPath}"))
-                requiredVersion.set("$version")
+                requiredVersion.set("$versionLiteral")
                 sources.register("screens") {
                     inputs.from(layout.projectDirectory.file("Screen.swift"))
                     mapping.set(layout.projectDirectory.file("refract.json"))
