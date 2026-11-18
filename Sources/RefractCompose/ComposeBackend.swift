@@ -342,11 +342,19 @@ public struct ComposeBackend: Sendable {
         var arguments = try InteropEmission.arguments(for: component, target: target) {
             try renderExpression($0, context: &context)
         } renderAction: { action in
-            guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
-                throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
-                                 location: location)
+            guard case let .modelMethod(_, _, arguments) = action else {
+                throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
             }
-            return "{ \(try renderAction(action, context: &context)) }"
+            if arguments.isEmpty { return "{ \(try renderAction(action, context: &context)) }" }
+            guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
+                return try emitComposeSelectionAction(action)
+            }
+            guard case let .modelMethod(model, name, _) = action else {
+                throw Diagnostic(code: "RFSELECTION006", message: "Link activation requires a declared model method.", location: location)
+            }
+            return "{ destination -> \(model).\(name)(destination) }"
+        } renderSelection: { content in
+            try emitComposeSelectionContent(content)
         }
         if isRoot, let modifier = resolver.nativeComponent(for: component, platform: .android)?.modifierParameter {
             arguments.append("\(modifier) = modifier")

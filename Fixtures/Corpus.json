@@ -382,6 +382,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "selection-link-context",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "selection-link-context-reject",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "selection-reject-uri-payload",
       "implementationStatus": "ready"
     },

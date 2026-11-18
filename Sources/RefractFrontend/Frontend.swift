@@ -501,6 +501,12 @@ final class Builder: SyntaxVisitor {
                 }
             case .remoteImageLoader:
                 parsed = nativeImageLoader(argument.expression, label: label)
+            case .selectionContent:
+                parsed = nativeSelectionContent(argument.expression, label: label)
+            case .selectionContextAction:
+                parsed = nativeSelectionContextAction(argument.expression, label: label)
+            case .actionString:
+                parsed = nativeStringAction(argument.expression, label: label)
             case .action:
                 parsed = nativeAction(argument.expression, label: label)
             case .string, .bool, .int, .double:
