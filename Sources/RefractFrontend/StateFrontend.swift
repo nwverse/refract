@@ -275,6 +275,10 @@ extension Builder {
         case .int:
             guard let value = expression.as(IntegerLiteralExprSyntax.self) else { return nil }
             return Expression(.numberLiteral(value.literal.text), location: at)
+        case .revision:
+            error("RFMSG001", "A revision literal belongs only in the application's validated message projection.",
+                  "Store the UInt64 revision in the ChatMessage item, not a generic scalar action", at: expression)
+            return nil
         case .double:
             if let value = expression.as(FloatLiteralExprSyntax.self) {
                 return Expression(.numberLiteral(value.literal.text), location: at)

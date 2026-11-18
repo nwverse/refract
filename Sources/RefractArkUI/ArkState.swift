@@ -58,6 +58,9 @@ private func stateType(_ type: ValueType) throws -> String {
     case .string: "string"
     case .bool: "boolean"
     case .int, .double: "number"
+    case .revision:
+        throw Diagnostic(code: "RFMSG001", message: "A message revision is item data, not mutable local state.",
+                         suggestion: "Keep the UInt64 revision in the application-owned ChatMessage snapshot")
     }
 }
 

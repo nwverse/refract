@@ -53,3 +53,8 @@
   action on the model. Otherwise `get: { model.otherText }` can silently write `searchText`. The closed
   `set<Property>` convention, owner/type/label checks and a mismatched-property negative test keep this source path
   faithful without inventing a writable projection on a get-only protocol.
+- Nested typed scopes need an explicit owner. A message row and its block can have distinct identities even when their
+  Swift closure parameters have the same spelling. Capture the checked parent when entering `ForEach(message.blocks)`,
+  initialize the block declaration's scope before parsing its body, and restore both scopes on exit. Parsing the child
+  call twice in different scopes produces misleading duplicate diagnostics. Do not pass arbitrary sibling item values
+  through the general single-item `ChildView` path.

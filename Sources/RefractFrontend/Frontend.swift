@@ -16,6 +16,7 @@ public struct Frontend {
         let resolver = CompilationInputResolver(sources: sources)
         let duplicateDiagnostics = resolver.duplicateDiagnostics()
         var units: [TranslationUnit] = []
+        var pendingMessageBuilders: [Builder] = []
         for file in resolver.files {
             guard file.parserDiagnostics.isEmpty else {
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
@@ -34,8 +35,10 @@ public struct Frontend {
                                 itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
                                 enums: builder.enums.filter { $0.location?.file == file.source.path })
             if sources.count == 1 { builder.validateChildViewGraph(module) }
+            pendingMessageBuilders.append(builder)
             builder.validateNavigationDeclarations(module)
             builder.validateRowContentTypes(module)
+            builder.validateMessageProjection(module)
             let diagnostics = duplicateDiagnostics[file.source.path, default: []] + builder.diagnostics
             if hasDuplicateGeneratedDeclaration || duplicateDiagnostics[file.source.path]?.isEmpty == false {
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
@@ -45,6 +48,17 @@ public struct Frontend {
             units.append(TranslationUnit(module: module, diagnostics: diagnostics,
                                          resolvedModels: builder.models,
                                          resolvedItemTypes: builder.itemTypes))
+        }
+        let allScreens = units.flatMap(\.module.screens)
+        for builder in pendingMessageBuilders { builder.linkMessageProjection(siblingScreens: allScreens) }
+        units = units.map { unit in
+            guard let builder = pendingMessageBuilders.first(where: { $0.file == unit.module.sourceFile }),
+                  !builder.pendingMessageBodies.isEmpty else { return unit }
+            let module = Module(sourceFile: builder.file, screens: builder.screens,
+                                nativeDeclarations: unit.module.nativeDeclarations,
+                                models: unit.module.models, itemTypes: unit.module.itemTypes, enums: unit.module.enums)
+            return TranslationUnit(module: module, diagnostics: unit.diagnostics,
+                                   resolvedModels: unit.resolvedModels, resolvedItemTypes: unit.resolvedItemTypes)
         }
         if sources.count > 1, let cycle = CompilationInputResolver.declarationCycleDiagnostic(units: units) {
             units = units.map { unit in
@@ -76,6 +90,11 @@ final class Builder: SyntaxVisitor {
     var currentModels: [ModelReference] = []
     var currentListItem: String?
     var currentListItemType: ItemType?
+    var currentMessageParent: (name: String, type: ItemType)?
+    var currentMessageBlockNames: (parent: String, block: String)?
+    var pendingMessageSources: [(outer: Expression, content: ViewNode, screen: String, modelType: String)] = []
+    var pendingMessageBodies: [(screen: String, body: ViewNode)] = []
+    var pendingMessageOwners: [String: Screen] = [:]
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
@@ -108,7 +127,6 @@ final class Builder: SyntaxVisitor {
         }
         if let compilationContext {
             models = compilationContext.models + models
-            itemTypes = compilationContext.itemTypes + itemTypes
             enums = compilationContext.enums + enums
             var modelKeys: Set<String> = []
             models = models.filter { modelKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
@@ -233,6 +251,7 @@ final class Builder: SyntaxVisitor {
 
     func view(_ expression: ExprSyntax) -> ViewNode? {
         if let call = expression.as(FunctionCallExprSyntax.self), forEachCall(expression) != nil {
+            if currentListItemType?.name == "ChatMessage" { return messageBlocks(call) }
             error("RFLIST003", "ForEach must be the sole dynamic child directly owned by List, not nested or eagerly rendered.",
                   "Use List { ForEach(model.items) { item in ... } } with a stable stored id", at: call)
             return nil

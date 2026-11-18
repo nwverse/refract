@@ -7,9 +7,9 @@
 is part of this target. The Xcode project references those shared files explicitly; do not replace them with copied
 platform-specific screens.
 
-The target also compiles eight source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
+The target also compiles nine source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
 `InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift`,
-`ModelInterface.swift`, `AccessibilityDynamicType.swift` and `StackLayout.swift` in `examples/shared/`. Their unique
+`ModelInterface.swift`, `AccessibilityDynamicType.swift`, `StackLayout.swift` and `ChatMessageProjection.swift` in `examples/shared/`. Their unique
 on-disk basenames avoid Xcode's duplicate `Input.stringsdata` output; `scripts/check_examples.py` requires each to
 stay byte-identical to its named canonical fixture. They exercise `Binding(get:set:)`, typed platform selection,
 native measurement, directional padding, named stack spacing, accessibility labels and ordinary SwiftUI action/label

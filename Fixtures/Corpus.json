@@ -10,6 +10,18 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "chat-message-cross-file",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "chat-message-projection",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "chat-message-reject-revision",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "child-view-foreach-content-type",
       "implementationStatus": "ready"
     },

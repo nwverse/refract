@@ -33,7 +33,11 @@ func emitComposeItemTypes(_ items: [ItemType], into out: inout KotlinWriter,
         out.line("@Immutable")
         out.open("public data class \(item.name)(")
         for property in item.properties {
-            out.line("public val \(property.name): \(try composeModelType(property.type)),")
+            if let collection = property.collection {
+                out.line("public val \(property.name): List<\(collection.itemType)>,")
+            } else {
+                out.line("public val \(property.name): \(try composeModelType(property.type)),")
+            }
         }
         out.depth -= 1
         out.line(")")
@@ -45,6 +49,7 @@ func composeModelType(_ type: ValueType) throws -> String {
     case .string: "String"
     case .bool: "Boolean"
     case .int: "Int"
+    case .revision: "Long"
     case .double: "Double"
     }
 }

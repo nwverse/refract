@@ -39,6 +39,8 @@ public struct Diagnostic: Codable, Error, Hashable, Sendable {
 
 public enum ValueType: String, Codable, Sendable {
     case string, bool, double, int
+    /// A bounded UInt64 revision stored only by the ChatMessage projection item.
+    case revision
 }
 
 public struct Expression: Codable, Equatable, Sendable {
@@ -127,6 +129,8 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
     case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    /// A bounded non-scrolling ForEach inside one ChatMessage lazy row.
+    case messageBlocks(NestedListItems, location: SourceLocation?)
     case section(header: Expression?, children: [ViewNode], location: SourceLocation?)
     case listItem(child: ViewNode, location: SourceLocation?)
     case forEach(ListItems, location: SourceLocation?)

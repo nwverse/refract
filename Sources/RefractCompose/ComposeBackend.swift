@@ -24,6 +24,11 @@ public struct ComposeBackend: Sendable {
         try emitEnumDeclarations(module.enums, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
+        if containsMessageBlocks(module.screens.map(\.body)) {
+            context.imports.insert("androidx.compose.foundation.lazy.LazyListScope")
+            context.imports.insert("androidx.compose.foundation.lazy.items")
+            emitComposeMessageKey(into: &bodyWriter)
+        }
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
             if case let .navigationStack(stack, _) = screen.body {
@@ -180,6 +185,7 @@ public struct ComposeBackend: Sendable {
         case .string: return Expression(.stringLiteral(""))
         case .bool: return Expression(.boolLiteral(false))
         case .int, .double: return Expression(.numberLiteral("0"))
+        case .revision: return Expression(.numberLiteral("0"))
         }
     }
 
@@ -217,6 +223,9 @@ public struct ComposeBackend: Sendable {
                                              into: &out, context: &context)
         case let .component(component, location):
             try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case .messageBlocks:
+            // emitDynamicListItems emits this through a LazyListScope helper.
+            break
         case let .child(child, _):
             let arguments = child.arguments.map { "\($0.label) = \($0.expression)" }
             out.line("\(child.name)(\(arguments.joined(separator: ", ")))")
@@ -494,6 +503,7 @@ public struct ComposeBackend: Sendable {
         case .string: return "String"
         case .bool: return "Boolean"
         case .int: return "Int"
+        case .revision: return "Long"
         case .double: return "Double"
         }
     }

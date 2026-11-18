@@ -269,6 +269,10 @@ struct Generation {
                 }
                 writer.line(".reuse({ reuseId: () => '\(contentType)' })")
             }
+        case let .messageBlocks(nested, location):
+            try emitMessageBlocks(nested, into: &writer, parent: item, location: location,
+                                  mapping: mapping, resolver: resolver)
+
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
             try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
                                      labelsHidden: labelsHidden, location: location),
@@ -287,6 +291,7 @@ struct Generation {
         switch type {
         case .string: "string"
         case .int, .double: "number"
+        case .revision: "bigint"
         case .bool: "boolean"
         }
     }
