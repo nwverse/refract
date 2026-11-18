@@ -50,6 +50,7 @@ export ANDROID_HOME=/path/to/android-sdk
 export JAVA_HOME=/path/to/jdk21
 swift build --package-path ../..
 export REFRACT_CLI_PATH="$PWD/../../.build/debug/refract"
+export REFRACT_REQUIRED_VERSION="$($REFRACT_CLI_PATH --version)"
 ./gradlew -p examples/android :app:assembleDebug
 ./gradlew -p examples/android :app:checkDebugRefract
 
@@ -195,8 +196,10 @@ compilation are not claimed by this host-JVM test.
 
 The repository's `tools/gradle/` build supplies the `dev.refract.generator` plugin. `app/build.gradle.kts` opts in
 and declares the four shared Swift inputs as the `screens` group, using the shared mapping and both resource
-catalogs. `REFRACT_CLI_PATH` supplies a version-matched CLI
-without a machine-global path. An application may instead set `refract.executable`; the plugin never runs an implicit
+catalogs. `REFRACT_CLI_PATH` supplies a version-matched CLI and `REFRACT_REQUIRED_VERSION` pins its exact
+`refract --version` output before generation or publication. The existing debug/release source-group roots remain the
+reviewed production outputs. To bind debug, internal and release to separate output roots, publish
+them explicitly and check both native backends, see `../../docs/generation-configurations.md`. An application may instead set `refract.executable`; the plugin never runs an implicit
 Swift build. There is no Refract runtime dependency or application start-up hook.
 
 `:app:generateDebugRefract` generates the group below the variant's build-owned `generated/refract/` directory.
