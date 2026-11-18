@@ -7,8 +7,9 @@ extension Builder {
         guard let closure = expression.as(ClosureExprSyntax.self),
               let parameter = closure.signature?.parameterClause?.as(ClosureShorthandParameterListSyntax.self),
               parameter.count == 1, parameter.first?.name.text == "destination",
-              closure.signature?.capture == nil, closure.signature?.returnClause == nil,
-              closure.signature?.attributes == nil, closure.signature?.effects == nil,
+              closure.signature?.capture == nil,
+              closure.signature?.returnClause.map({ $0.type.trimmedDescription == "Void" }) != false,
+              closure.signature?.attributes.isEmpty != false, closure.signature?.effectSpecifiers == nil,
               closure.statements.count == 1,
               let body = closure.statements.first?.item.as(ExprSyntax.self),
               let action = modelAction(body) else {
@@ -146,8 +147,9 @@ extension Builder {
         guard let closure = expression.as(ClosureExprSyntax.self),
               let parameter = closure.signature?.parameterClause?.as(ClosureShorthandParameterListSyntax.self),
               parameter.count == 1, parameter.first?.name.text == "context",
-              closure.signature?.capture == nil, closure.signature?.returnClause == nil,
-              closure.signature?.attributes == nil, closure.signature?.effects == nil,
+              closure.signature?.capture == nil,
+              closure.signature?.returnClause.map({ $0.type.trimmedDescription == "Void" }) != false,
+              closure.signature?.attributes.isEmpty != false, closure.signature?.effectSpecifiers == nil,
               closure.statements.count == 1,
               let body = closure.statements.first?.item.as(ExprSyntax.self),
               let action = modelAction(body) else {

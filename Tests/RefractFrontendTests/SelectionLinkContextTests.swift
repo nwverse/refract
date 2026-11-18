@@ -77,7 +77,16 @@ func invalidSelectionRangesAndDestinationsAreDiagnostics(content: String) {
 }
 
 @Test func selectionContentRoundTripsLiteralUnicodeAndEmptyRange() throws {
-    let content = SelectionContent(text: "🌸", links: [])
-    #expect(content.text.utf16.count == 2)
+    let content = SelectionContent(text: "🌸", links: [
+        SelectionLink(range: SelectionRange(start: 0, end: 2), destination: "https://example.test"),
+    ])
+    let decoded = try JSONDecoder().decode(SelectionContent.self,
+        from: JSONEncoder().encode(content))
+    #expect(decoded == content)
+    #expect(decoded.text.utf16.count == 2)
     #expect(SelectionRange(start: 2, end: 2).start == 2)
+    let argument = NativeArgument(label: "content", selection: content, type: .selectionContent)
+    let decodedArgument = try JSONDecoder().decode(NativeArgument.self,
+        from: JSONEncoder().encode(argument))
+    #expect(decodedArgument == argument)
 }
