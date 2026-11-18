@@ -6,12 +6,20 @@ func emitArkItemTypes(_ items: [ItemType], into writer: inout ArkWriter) throws 
         writer.line("@ObservedV2")
         writer.open("export class \(item.name)")
         for property in item.properties {
-            let type = try property.collection.map { "\($0.itemType)[]" } ?? arkModelType(property.type)
+            let type = if let collection = property.collection {
+                "\(collection.itemType)[]"
+            } else {
+                try property.enumName ?? arkModelType(property.type)
+            }
             writer.line("@Trace \(property.name): \(type);")
         }
         writer.line()
         let parameters = try item.properties.map { property in
-            let type = try property.collection.map { "\($0.itemType)[]" } ?? arkModelType(property.type)
+            let type = if let collection = property.collection {
+                "\(collection.itemType)[]"
+            } else {
+                try property.enumName ?? arkModelType(property.type)
+            }
             return "\(property.name): \(type)"
         }.joined(separator: ", ")
         writer.open("constructor(\(parameters))")
@@ -38,6 +46,10 @@ func emitArkModels(_ models: [ModelProtocol], into writer: inout ArkWriter) thro
                 try property.collection.map { "BasicDataSource<\($0.itemType)>" } ?? arkModelType(property.type)
             }
             writer.line("\(property.name): \(type);")
+        }
+        for property in model.projectedCollections {
+            guard let item = model.properties.compactMap(\.collection).first?.itemType else { continue }
+            writer.line("\(property): BasicDataSource<\(item)>;")
         }
         for action in model.actions {
             let parameters = try action.parameters.map {

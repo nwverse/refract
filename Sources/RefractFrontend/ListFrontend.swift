@@ -67,8 +67,9 @@ extension Builder {
         if owner == "ChatMessage", typeName == "UInt64", name == "revision" {
             return ItemProperty(name: name, type: .revision, declaredType: typeName)
         }
-        guard let type = scalarType(typeName) else { return nil }
-        return ItemProperty(name: name, type: type, declaredType: typeName)
+        let enumName = enums.contains(where: { $0.name == typeName && $0.payloadTypes.isEmpty }) ? typeName : nil
+        guard let type = scalarType(typeName) ?? (enumName == nil ? nil : .string) else { return nil }
+        return ItemProperty(name: name, type: type, declaredType: typeName, enumName: enumName)
     }
 
     func dynamicList(_ call: FunctionCallExprSyntax) -> ViewNode? {
@@ -88,8 +89,8 @@ extension Builder {
             return nil
         }
         guard let collectionExpression = call.arguments.first?.expression,
-              let collection = modelCollectionProperty(collectionExpression),
-              let member = collectionExpression.as(MemberAccessExprSyntax.self),
+              let (collection, projection) = projectedCollection(collectionExpression),
+              let member = sourceCollectionMember(collectionExpression),
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let model = models.first(where: { $0.name == reference.protocolName }),
@@ -131,8 +132,8 @@ extension Builder {
         }
         let items = ListItems(collection: collection, itemName: itemName, itemType: descriptor.itemType,
                               key: descriptor.key, keyType: descriptor.keyType, content: content,
-                              contentType: rowContentType(content), modelType: reference.protocolName,
-                              location: location(of: call))
+                              contentType: rowContentType(content), projection: projection,
+                              modelType: reference.protocolName, location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [], location: location(of: call))
     }
 
@@ -184,6 +185,14 @@ extension Builder {
             return nil
         }
         let (collection, item, modelType) = descriptor
+        let projection: CollectionProjection?
+        if let projected = projectedCollection(collectionExpression), projected.1 != nil {
+            projection = projected.1
+        } else if collectionExpression.as(MemberAccessExprSyntax.self) != nil {
+            projection = nil
+        } else {
+            return nil
+        }
         if call.arguments.count == 2, let identity = call.arguments.last?.expression,
            !isDeclaredStoredID(identity, item: item) {
             error("RFLIST002", "ForEach identity must be the item's declared stable stored id.",
@@ -208,7 +217,7 @@ extension Builder {
         }
         let items = ListItems(collection: collection, itemName: itemName, itemType: item.name,
                               key: item.identity.name, keyType: item.identity.type, content: content,
-                              contentType: rowContentType(content), modelType: modelType,
+                              contentType: rowContentType(content), projection: projection, modelType: modelType,
                               location: location(of: call))
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [],
                      location: location(of: owner))
@@ -222,8 +231,8 @@ extension Builder {
         return property.declName.baseName.text == item.identity.name
     }
 
-    private func modelCollectionDescriptor(_ expression: ExprSyntax) -> (Expression, ItemType, String)? {
-        guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+    func modelCollectionDescriptor(_ expression: ExprSyntax) -> (Expression, ItemType, String)? {
+        guard let member = sourceCollectionMember(expression), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let model = models.first(where: { $0.name == reference.protocolName }),
@@ -236,7 +245,7 @@ extension Builder {
     }
 
     private func modelCollectionProperty(_ expression: ExprSyntax) -> Expression? {
-        guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+        guard let member = sourceCollectionMember(expression), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let model = models.first(where: { $0.name == reference.protocolName }),
@@ -245,6 +254,19 @@ extension Builder {
         return Expression(.valueProperty(.model(model: reference.propertyName,
                                                 property: member.declName.baseName.text)),
                           location: location(of: expression))
+    }
+
+    func validateCollectionProjections() {
+        func visit(_ node: ViewNode) {
+            if case let .forEach(items, _) = node, let projection = items.projection,
+               let modelName = items.modelType,
+               let index = models.firstIndex(where: { $0.name == modelName }),
+               !models[index].projectedCollections.contains(projection.name) {
+                models[index].projectedCollections.append(projection.name)
+            }
+            for child in node.children { visit(child) }
+        }
+        for screen in screens { visit(screen.body) }
     }
 
     func validateRowContentTypes(_ module: Module) {

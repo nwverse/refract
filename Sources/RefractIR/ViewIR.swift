@@ -86,6 +86,27 @@ public struct ImageSource: Codable, Equatable, Sendable {
     }
 }
 
+/// A finite category projection over an identified item collection. The iOS support
+/// declaration returns the already filtered and sorted array; no runtime descriptor exists.
+public struct CollectionProjection: Codable, Equatable, Sendable {
+    public let name: String
+    public let categoryProperty: String
+    public let categoryEnum: String
+    public let categoryParameter: String
+    public let sortProperty: String
+    public let ascending: Bool
+
+    public init(name: String, categoryProperty: String, categoryEnum: String, categoryParameter: String,
+                sortProperty: String, ascending: Bool) {
+        self.name = name
+        self.categoryProperty = categoryProperty
+        self.categoryEnum = categoryEnum
+        self.categoryParameter = categoryParameter
+        self.sortProperty = sortProperty
+        self.ascending = ascending
+    }
+}
+
 /// A lazy collection already exposed by the application model as an ArkUI-compatible data source.
 public struct ListItems: Codable, Equatable, Sendable {
     public let collection: Expression
@@ -100,11 +121,13 @@ public struct ListItems: Codable, Equatable, Sendable {
     public let contentType: String?
     /// The bounded message child identity; its content belongs to the outer ListItems.
     public let messageBlocks: MessageBlockIdentity?
+    public let projection: CollectionProjection?
     public let location: SourceLocation?
 
     public init(collection: Expression, itemName: String, itemType: String, key: String = "id",
                 keyType: ValueType, content: ViewNode, contentType: String? = nil,
-                modelType: String? = nil, messageBlocks: MessageBlockIdentity? = nil, location: SourceLocation? = nil) {
+                projection: CollectionProjection? = nil, modelType: String? = nil,
+                messageBlocks: MessageBlockIdentity? = nil, location: SourceLocation? = nil) {
         self.collection = collection
         self.modelType = modelType
         self.itemName = itemName
@@ -114,10 +137,11 @@ public struct ListItems: Codable, Equatable, Sendable {
         self.content = content
         self.contentType = contentType
         self.messageBlocks = messageBlocks
+        self.projection = projection
         self.location = location
     }
 
-    private enum CodingKeys: String, CodingKey { case collection, modelType, itemName, itemType, key, keyType, content, contentType, messageBlocks, location }
+    private enum CodingKeys: String, CodingKey { case collection, modelType, itemName, itemType, key, keyType, content, contentType, messageBlocks, projection, location }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -130,6 +154,7 @@ public struct ListItems: Codable, Equatable, Sendable {
         content = try values.decode(ViewNode.self, forKey: .content)
         contentType = try values.decodeIfPresent(String.self, forKey: .contentType)
         messageBlocks = try values.decodeIfPresent(MessageBlockIdentity.self, forKey: .messageBlocks)
+        projection = try values.decodeIfPresent(CollectionProjection.self, forKey: .projection)
         location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
@@ -188,15 +213,18 @@ public struct ItemProperty: Codable, Equatable, Sendable {
     public let collection: ItemCollection?
     /// The exact source spelling, retained for a bounded projection declaration.
     public let declaredType: String?
+    public let enumName: String?
 
-    public init(name: String, type: ValueType, collection: ItemCollection? = nil, declaredType: String? = nil) {
+    public init(name: String, type: ValueType, collection: ItemCollection? = nil,
+                declaredType: String? = nil, enumName: String? = nil) {
         self.name = name
         self.type = type
         self.collection = collection
         self.declaredType = declaredType
+        self.enumName = enumName
     }
 
-    private enum CodingKeys: String, CodingKey { case name, type, collection, declaredType }
+    private enum CodingKeys: String, CodingKey { case name, type, collection, declaredType, enumName }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -204,6 +232,7 @@ public struct ItemProperty: Codable, Equatable, Sendable {
         type = try values.decode(ValueType.self, forKey: .type)
         collection = try values.decodeIfPresent(ItemCollection.self, forKey: .collection)
         declaredType = try values.decodeIfPresent(String.self, forKey: .declaredType)
+        enumName = try values.decodeIfPresent(String.self, forKey: .enumName)
     }
 }
 

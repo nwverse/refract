@@ -29,6 +29,7 @@ public struct Frontend {
             builder.rejectDuplicateGeneratedDeclarations(file.tree)
             let hasDuplicateGeneratedDeclaration = builder.hasDuplicateGeneratedDeclaration
             builder.walk(file.tree)
+            builder.validateCollectionProjections()
             let module = Module(sourceFile: file.source.path, screens: builder.screens,
                                 nativeDeclarations: builder.interop.declarations,
                                 models: builder.models.filter { $0.location?.file == file.source.path },

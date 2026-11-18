@@ -36,7 +36,7 @@ func emitComposeItemTypes(_ items: [ItemType], into out: inout KotlinWriter,
             if let collection = property.collection {
                 out.line("public val \(property.name): List<\(collection.itemType)>,")
             } else {
-                out.line("public val \(property.name): \(try composeModelType(property.type)),")
+                out.line("public val \(property.name): \(try property.enumName ?? composeModelType(property.type)),")
             }
         }
         out.depth -= 1
