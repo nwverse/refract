@@ -241,6 +241,11 @@ extension Generation {
 
 enum ArkValueType {
     static func emit(_ type: ValueType) -> String {
-        switch type { case .string: "string"; case .bool: "boolean"; case .double, .int: "number" }
+        switch type {
+        case .string: "string"
+        case .bool: "boolean"
+        case .double, .int: "number"
+        case .revision: "bigint"
+        }
     }
 }

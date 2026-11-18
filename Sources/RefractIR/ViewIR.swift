@@ -119,12 +119,15 @@ public struct ListItems: Codable, Equatable, Sendable {
     public let keyType: ValueType
     public let content: ViewNode
     public let contentType: String?
+    /// The bounded message child identity; its content belongs to the outer ListItems.
+    public let messageBlocks: MessageBlockIdentity?
     public let projection: CollectionProjection?
     public let location: SourceLocation?
 
     public init(collection: Expression, itemName: String, itemType: String, key: String = "id",
                 keyType: ValueType, content: ViewNode, contentType: String? = nil,
-                projection: CollectionProjection? = nil, modelType: String? = nil, location: SourceLocation? = nil) {
+                projection: CollectionProjection? = nil, modelType: String? = nil,
+                messageBlocks: MessageBlockIdentity? = nil, location: SourceLocation? = nil) {
         self.collection = collection
         self.modelType = modelType
         self.itemName = itemName
@@ -133,11 +136,12 @@ public struct ListItems: Codable, Equatable, Sendable {
         self.keyType = keyType
         self.content = content
         self.contentType = contentType
+        self.messageBlocks = messageBlocks
         self.projection = projection
         self.location = location
     }
 
-    private enum CodingKeys: String, CodingKey { case collection, modelType, itemName, itemType, key, keyType, content, contentType, projection, location }
+    private enum CodingKeys: String, CodingKey { case collection, modelType, itemName, itemType, key, keyType, content, contentType, messageBlocks, projection, location }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -149,22 +153,85 @@ public struct ListItems: Codable, Equatable, Sendable {
         keyType = try values.decode(ValueType.self, forKey: .keyType)
         content = try values.decode(ViewNode.self, forKey: .content)
         contentType = try values.decodeIfPresent(String.self, forKey: .contentType)
+        messageBlocks = try values.decodeIfPresent(MessageBlockIdentity.self, forKey: .messageBlocks)
         projection = try values.decodeIfPresent(CollectionProjection.self, forKey: .projection)
         location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
+    }
+}
+
+/// The bounded child content of a message list, without a recursive ListItems ownership cycle.
+public struct MessageBlockIdentity: Codable, Equatable, Sendable {
+    public let content: ViewNode
+    public let parent: String
+    public let blockName: String
+    public let blockArgument: ChildView.Argument
+
+    public init(content: ViewNode, parent: String, blockName: String, blockArgument: ChildView.Argument) {
+        self.content = content
+        self.parent = parent
+        self.blockName = blockName
+        self.blockArgument = blockArgument
+    }
+}
+
+/// A bounded direct ForEach nested in one ChatMessage row's non-scrolling content.
+public struct NestedListItems: Codable, Equatable, Sendable {
+    public let items: ListItems
+    /// The caller's parent expression, distinct from the child's `message` parameter name.
+    public let parent: String?
+    /// The checked message input of the nested presentation child.
+    public let message: ChildView.Argument?
+    /// The checked block input of the nested presentation child.
+    public let block: ChildView.Argument?
+
+    public init(_ items: ListItems, parent: String? = nil,
+                message: ChildView.Argument? = nil, block: ChildView.Argument? = nil) {
+        self.items = items
+        self.parent = parent
+        self.message = message
+        self.block = block
+    }
+}
+
+/// One bounded, immutable collection owned by a ChatMessage item snapshot.
+/// The projection contract resolves it to an app-owned native ForEach.
+public struct ItemCollection: Codable, Equatable, Sendable {
+    public let itemType: String
+    public let owner: String
+    public let property: String
+
+    public init(itemType: String, owner: String = "", property: String = "") {
+        self.itemType = itemType
+        self.owner = owner
+        self.property = property
     }
 }
 
 public struct ItemProperty: Codable, Equatable, Sendable {
     public let name: String
     public let type: ValueType
+    public let collection: ItemCollection?
+    /// The exact source spelling, retained for a bounded projection declaration.
+    public let declaredType: String?
     public let enumName: String?
-    public init(name: String, type: ValueType, enumName: String? = nil) {
-        self.name = name; self.type = type; self.enumName = enumName
+
+    public init(name: String, type: ValueType, collection: ItemCollection? = nil,
+                declaredType: String? = nil, enumName: String? = nil) {
+        self.name = name
+        self.type = type
+        self.collection = collection
+        self.declaredType = declaredType
+        self.enumName = enumName
     }
+
+    private enum CodingKeys: String, CodingKey { case name, type, collection, declaredType, enumName }
+
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         name = try values.decode(String.self, forKey: .name)
         type = try values.decode(ValueType.self, forKey: .type)
+        collection = try values.decodeIfPresent(ItemCollection.self, forKey: .collection)
+        declaredType = try values.decodeIfPresent(String.self, forKey: .declaredType)
         enumName = try values.decodeIfPresent(String.self, forKey: .enumName)
     }
 }
@@ -174,12 +241,27 @@ public struct ItemType: Codable, Equatable, Sendable {
     public let identity: ItemProperty
     public let properties: [ItemProperty]
     public let location: SourceLocation?
+    /// The bounded message/block declarations own their source revision and collection semantics.
+    public let messageProjection: Bool
 
-    public init(name: String, identity: ItemProperty, properties: [ItemProperty], location: SourceLocation? = nil) {
+    public init(name: String, identity: ItemProperty, properties: [ItemProperty], location: SourceLocation? = nil,
+                messageProjection: Bool = false) {
         self.name = name
         self.identity = identity
         self.properties = properties
         self.location = location
+        self.messageProjection = messageProjection
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, identity, properties, location, messageProjection }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        identity = try values.decode(ItemProperty.self, forKey: .identity)
+        properties = try values.decode([ItemProperty].self, forKey: .properties)
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
+        messageProjection = try values.decodeIfPresent(Bool.self, forKey: .messageProjection) ?? false
     }
 }
 
@@ -199,6 +281,7 @@ public extension ViewNode {
         case let .section(_, children, _): children
         case let .component(component, _): component.children
         case let .forEach(items, _): [items.content]
+        case let .messageBlocks(nested, _): [nested.items.content]
         case let .conditional(branches, _): branches.flatMap(\.children)
         case let .optionalBinding(_, _, children, otherwise, _): children + otherwise
         case let .switchExpression(_, _, cases, _): cases.flatMap(\.children)
@@ -220,6 +303,7 @@ public extension ViewNode {
              let .secureInput(_, _, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
              let .switchExpression(_, _, _, location), let .optionalBinding(_, _, _, _, location),
+             let .messageBlocks(_, location),
              let .navigationLink(_, _, _, _, location), let .navigationStack(_, location), let .tabView(_, location): location
         }
     }

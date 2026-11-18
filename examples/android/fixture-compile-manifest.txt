@@ -48,3 +48,5 @@ mapping/model-scalars
 v0-text-input
 v0-secure-input
 form-validation
+chat-message-projection
+chat-message-cross-file

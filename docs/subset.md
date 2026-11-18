@@ -406,6 +406,7 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFLIST001` | Collection lacks a stable, typed identity | Use `Identifiable` with a stored String or Int id |
 | `RFLIST002` | Index, object identity or generated UUID is used as a key | Use the item's stable stored id |
 | `RFLIST003` | Dynamic rows are misplaced, nested, eagerly rendered, or mixed with static rows | Use the sole `ForEach(model.items)` child of `List`, or canonical `List(model.items)` |
+| `RFMSG001` | A bounded message/block snapshot, parent scope, collection or revision is invalid | Use the exact `ChatMessage`/`ChatBlock` declarations in `docs/message-projection.md` |
 | `state.invalid_declaration` | Property wrapper or stored input is outside the supported ownership contract | Use @State, @Binding or a plain let model input as documented |
 | `state.missing_initializer` | Local state lacks a supported literal initializer | Initialize state with a Bool, Int, Double or String literal |
 | `state.binding_initializer` | Binding has an initializer or unsupported ownership | Pass an initialized binding from the parent with a supported scalar type |

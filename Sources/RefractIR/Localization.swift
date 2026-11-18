@@ -76,6 +76,8 @@ extension ValueType {
         case .int: "d"
         case .double: "f"
         case .bool: ""
+        case .revision: ""
+
         }
     }
 }

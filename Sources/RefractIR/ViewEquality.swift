@@ -87,8 +87,18 @@ extension ViewNode {
                 guard lhsItems.collection == rhsItems.collection, lhsItems.modelType == rhsItems.modelType,
                       lhsItems.itemName == rhsItems.itemName, lhsItems.itemType == rhsItems.itemType,
                       lhsItems.key == rhsItems.key, lhsItems.keyType == rhsItems.keyType,
-                      lhsItems.contentType == rhsItems.contentType else { return false }
+                      lhsItems.contentType == rhsItems.contentType,
+                      lhsItems.projection == rhsItems.projection else { return false }
+                switch (lhsItems.messageBlocks?.content, rhsItems.messageBlocks?.content) {
+                case (nil, nil): break
+                case let (lhsContent?, rhsContent?): pending.append((lhsContent, rhsContent))
+                default: return false
+                }
                 pending.append((lhsItems.content, rhsItems.content))
+            case let (.messageBlocks(lhsNested, _), .messageBlocks(rhsNested, _)):
+                guard lhsNested.parent == rhsNested.parent,
+                      lhsNested.message == rhsNested.message, lhsNested.block == rhsNested.block else { return false }
+                pending.append((.forEach(lhsNested.items, location: nil), .forEach(rhsNested.items, location: nil)))
             case let (.image(lhsSource, lhsModifiers, _), .image(rhsSource, rhsModifiers, _)):
                 guard lhsSource == rhsSource, lhsModifiers == rhsModifiers else { return false }
             case let (.toggle(lhsTitle, lhsValue, lhsModifiers, lhsNativeModifiers, lhsLabelsHidden, _),

@@ -19,18 +19,16 @@ extension Builder {
                       let binding = declaration.bindings.first,
                       binding.initializer == nil, binding.accessorBlock == nil,
                       let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
-                      let annotation = binding.typeAnnotation?.type.trimmedDescription else {
+                      let annotation = binding.typeAnnotation?.type,
+                      let property = itemProperty(name: name, annotation: annotation, owner: node.name.text) else {
                     error("RFLIST001", "Identifiable item fields must be stored scalar let properties.",
-                          "Use String, Int, Double or Bool stored fields", at: member)
+                          "Use String, Int, Double or Bool stored fields; a ChatMessage may also declare its bounded blocks and UInt64 revision", at: member)
+                    if ["ChatMessage", "ChatBlock"].contains(node.name.text) {
+                        error("RFMSG001", "A message snapshot has an invalid field, revision, identity or block collection.",
+                              "Use the exact ChatMessage/ChatBlock field declarations in docs/message-projection.md", at: member)
+                    }
                     return
                 }
-                let enumName = enums.contains(where: { $0.name == annotation && $0.payloadTypes.isEmpty }) ? annotation : nil
-                guard let type = scalarType(annotation) ?? (enumName == nil ? nil : .string) else {
-                    error("RFLIST001", "Identifiable item fields must be stored scalar or finite enum let properties.",
-                          "Use String, Int, Double, Bool, or a declared no-payload enum stored field", at: member)
-                    return
-                }
-                let property = ItemProperty(name: name, type: type, enumName: enumName)
                 properties.append(property)
                 if name == "id" {
                     identity = property
@@ -46,19 +44,42 @@ extension Builder {
                 if let declaration = identityDeclaration {
                     error("RFLIST001", "Identifiable item `\(node.name.text)` has an unsupported identity type.",
                           "Use a stored String or Int id", at: declaration)
+                    if ["ChatMessage", "ChatBlock"].contains(node.name.text) {
+                        error("RFMSG001", "Message and block identities must be independent stored String ids.",
+                              "Declare `let id: String` on both snapshot types", at: declaration)
+                    }
                 }
                 return
             }
             itemTypes.append(ItemType(name: node.name.text, identity: identity, properties: properties,
-                                      location: location(of: node.name)))
+                                      location: location(of: node.name),
+                                      messageProjection: node.name.text == "ChatMessage" || node.name.text == "ChatBlock"))
         }
+    }
+
+    private func itemProperty(name: String, annotation: TypeSyntax, owner: String) -> ItemProperty? {
+        let typeName = annotation.trimmedDescription
+        if owner == "ChatMessage", typeName == "[ChatBlock]", name == "blocks" {
+            return ItemProperty(name: name, type: .string,
+                                collection: ItemCollection(itemType: "ChatBlock", owner: owner, property: name),
+                                declaredType: typeName)
+        }
+        if owner == "ChatMessage", typeName == "UInt64", name == "revision" {
+            return ItemProperty(name: name, type: .revision, declaredType: typeName)
+        }
+        let enumName = enums.contains(where: { $0.name == typeName && $0.payloadTypes.isEmpty }) ? typeName : nil
+        guard let type = scalarType(typeName) ?? (enumName == nil ? nil : .string) else { return nil }
+        return ItemProperty(name: name, type: type, declaredType: typeName, enumName: enumName)
     }
 
     func dynamicList(_ call: FunctionCallExprSyntax) -> ViewNode? {
         if currentListItem != nil {
-            error("RFLIST003", "A dynamic List cannot be nested inside another dynamic row.",
-                  "Expose a separate screen or a flat model collection with stable identity", at: call)
-            return nil
+            guard currentListItemType?.name == "ChatMessage" else {
+                error("RFLIST003", "A dynamic List cannot be nested inside another dynamic row.",
+                      "Expose a separate screen or a flat model collection with stable identity", at: call)
+                return nil
+            }
+            return messageBlocks(call)
         }
         if call.arguments.count == 2, call.arguments[call.arguments.index(after: call.arguments.startIndex)].label?.text == "id" {
             let argument = call.arguments[call.arguments.index(after: call.arguments.startIndex)]
@@ -102,6 +123,13 @@ extension Builder {
                   "Wrap multiple row views in one supported container", at: closure)
             return nil
         }
+        if descriptor.itemType == "ChatMessage" {
+            guard isMessageCollection(collectionExpression) else { return nil }
+            pendingMessageSources.append((collection, content, currentViewName ?? "", reference.protocolName))
+            pendingMessageOwners[currentViewName ?? ""] = Screen(name: currentViewName ?? "",
+                parameters: parameters, states: currentStates, body: content)
+            return nil
+        }
         let items = ListItems(collection: collection, itemName: itemName, itemType: descriptor.itemType,
                               key: descriptor.key, keyType: descriptor.keyType, content: content,
                               contentType: rowContentType(content), projection: projection,
@@ -113,6 +141,15 @@ extension Builder {
         guard let call = expression.as(FunctionCallExprSyntax.self),
               call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "ForEach" else { return nil }
         return call
+    }
+
+    func isMessageCollection(_ expression: ExprSyntax?) -> Bool {
+        guard let expression,
+              let member = expression.as(MemberAccessExprSyntax.self),
+              let base = member.base?.as(DeclReferenceExprSyntax.self),
+              let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
+              let model = models.first(where: { $0.name == reference.protocolName }) else { return false }
+        return model.properties.first(where: { $0.name == member.declName.baseName.text })?.collection?.itemType == "ChatMessage"
     }
 
     func forEachList(_ call: FunctionCallExprSyntax, owner: FunctionCallExprSyntax) -> ViewNode? {
@@ -258,7 +295,7 @@ extension Builder {
         return nil
     }
 
-    private func closureItemName(_ closure: ClosureExprSyntax) -> String? {
+    func closureItemName(_ closure: ClosureExprSyntax) -> String? {
         guard let parameters = closure.signature?.parameterClause?.as(ClosureShorthandParameterListSyntax.self),
               parameters.count == 1 else { return nil }
         return parameters.first?.name.text
