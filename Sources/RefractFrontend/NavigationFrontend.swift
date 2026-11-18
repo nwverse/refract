@@ -39,7 +39,7 @@ extension Builder {
         guard currentStates.allSatisfy({ state in
             switch state {
             case .model, .navigationPath: true
-            case .state, .binding: false
+            case .state, .binding, .form, .tabSelection: false
             }
         }), currentStates.filter({ if case .navigationPath = $0 { true } else { false } }).count == 1 else {
             error("RFNAV002", "A navigation root accepts only declared model inputs and one destination path.",

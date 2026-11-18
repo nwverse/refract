@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": {
+      "directory": "generated",
+      "packageName": "refract.generated"
+    },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {},
+      "color": {}
+    },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "strings": {
+        "settings.email": "settings_email",
+        "settings.password": "settings_password",
+        "settings.confirmation": "settings_confirmation",
+        "settings.submit": "settings_submit",
+        "settings.retry": "settings_retry"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": {
+      "directory": "generated"
+    },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {},
+      "color": {}
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": {
+        "settings.email": "settings_email",
+        "settings.password": "settings_password",
+        "settings.confirmation": "settings_confirmation",
+        "settings.submit": "settings_submit",
+        "settings.retry": "settings_retry"
+      }
+    }
+  }
+}

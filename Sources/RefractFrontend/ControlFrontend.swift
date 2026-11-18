@@ -162,7 +162,8 @@ extension Builder {
               let projection = call.arguments.last?.expression else {
             error("state.invalid_projection",
                   "TextField requires a localized title and a supported String binding.",
-                  "Use `text: $name`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })", at: call)
+                  "Use `text: $name`, `text: $form.email`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })",
+                  at: call)
             return nil
         }
         let value: Expression
@@ -170,12 +171,21 @@ extension Builder {
            reference.baseName.text.hasPrefix("$"),
            let property = controlTextBinding(named: String(reference.baseName.text.dropFirst())) {
             value = Expression(.valueProperty(property), location: location(of: projection))
+        } else if let member = projection.as(MemberAccessExprSyntax.self),
+                  member.base?.as(DeclReferenceExprSyntax.self)?.baseName.text.hasPrefix("$") == true,
+                  member.declName.argumentNames == nil,
+                  let base = member.base?.as(DeclReferenceExprSyntax.self),
+                  let declaration = form(named: String(base.baseName.text.dropFirst())),
+                  let field = declaration.field(named: member.declName.baseName.text) {
+            value = Expression(.formField(form: declaration.name, field: field.name), type: .string,
+                               location: location(of: member))
         } else if let binding = modelTextBinding(projection) {
             value = binding
         } else {
             error("state.invalid_projection",
-                  "TextField requires a local/parent String binding or an explicit model String property and setter.",
-                  "Use `text: $name`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })", at: projection)
+                  "TextField requires a local/parent String binding, a declared form field or an explicit model String property and setter.",
+                  "Use `text: $name`, `text: $form.email`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })",
+                  at: projection)
             return nil
         }
         let placeholder = Expression(.localizedText(LocalizedText(key: key)), type: .string,

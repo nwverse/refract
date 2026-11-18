@@ -179,6 +179,19 @@ This is native model JVM evidence only. It performs no network request, renders 
 device, ArkTS compiler, runtime observation or performance evidence. A HarmonyOS implementation must provide the
 corresponding app-owned data-source notifications and lifecycle cancellation described in `docs/state-and-models.md`.
 
+### Typed projection tests
+
+`list-typed-projection` compiles the actual generated Compose pure projection. Its Native JVM test covers empty input,
+finite category filtering, `.all` reset, descending Int rank, ascending Int id ties and original item instance identity:
+
+```sh
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.projection.CatalogProjectionTest
+```
+
+The generated list retains original item ids. The reviewed ArkUI output exports the pure function and consumes the
+app-owned projected `BasicDataSource`; it has no runtime mirror or synchronization adapter. ArkTS, iOS and device
+compilation are not claimed by this host-JVM test.
+
 ## Opt-in Gradle generation
 
 The repository's `tools/gradle/` build supplies the `dev.refract.generator` plugin. `app/build.gradle.kts` opts in

@@ -55,6 +55,8 @@ public enum LocalizationResourceValidator {
                 return visit(child)
             case let .forEach(items, _):
                 return [items.collection] + visit(items.content)
+            case let .messageBlocks(nested, _):
+                return [nested.items.collection] + visit(nested.items.content)
             case let .image(_, modifiers, _):
                 return modifiers.flatMap(\.arguments)
             case let .toggle(title, value, modifiers, nativeModifiers, _, _):
@@ -77,6 +79,9 @@ public enum LocalizationResourceValidator {
                 return [title]
             case let .navigationStack(stack, _):
                 return stack.content.flatMap(visit)
+            case let .tabView(tabs, _):
+                return tabs.destinations.map(\.title) + tabs.menuActions.map(\.title)
+                    + (tabs.menuTitle.map { [$0] } ?? [])
             case .spacer:
                 return []
             }

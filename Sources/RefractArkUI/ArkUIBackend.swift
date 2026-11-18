@@ -63,6 +63,7 @@ struct Generation {
         try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
             if case let .navigationStack(stack, _) = screen.body {
                 try emitNavigationDestinations(stack, into: &writer)
@@ -81,6 +82,9 @@ struct Generation {
             }
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
+            }
+            if case let .tabView(tabs, _) = screen.body {
+                try emitTabHelpers(tabs, into: &writer)
             }
             // Local-state emission already supplies the separator before build().
             if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
@@ -139,6 +143,13 @@ struct Generation {
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
+            for modifier in modifiers where modifier.name == "disabled" {
+                guard let argument = modifier.arguments.first else {
+                    throw Diagnostic(code: "RFFORM007", message: "`.disabled` needs one Boolean model property.",
+                                     suggestion: "Use `.disabled(model.submitting)`.", location: modifier.location)
+                }
+                writer.line(".enabled(!(\(try emitLocalExpression(argument, item: item, mapping: mapping))))")
+            }
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .conditional(branches, location):
             guard !branches.isEmpty, branches[0].condition != nil,
@@ -171,6 +182,8 @@ struct Generation {
         case let .navigationLink(title, pathName, enumName, destination, _):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
                                    destination: destination, into: &writer, mapping: mapping)
+        case let .tabView(tabs, _):
+            try emitTabView(tabs, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):
             // Selection editing, drag and drop wrap the child in dedicated constructs.
             if let selection = operations.first(where: { if case .textSelection = $0.operation { true } else { false } }),
@@ -257,6 +270,10 @@ struct Generation {
                 }
                 writer.line(".reuse({ reuseId: () => '\(contentType)' })")
             }
+        case let .messageBlocks(nested, location):
+            try emitMessageBlocks(nested, into: &writer, parent: item, location: location,
+                                  mapping: mapping, resolver: resolver)
+
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
             try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
                                      labelsHidden: labelsHidden, location: location),
@@ -275,6 +292,7 @@ struct Generation {
         switch type {
         case .string: "string"
         case .int, .double: "number"
+        case .revision: "bigint"
         case .bool: "boolean"
         }
     }
@@ -490,7 +508,7 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location): location
+             let .navigationPath(_, _, location), let .form(_, _, location), let .tabSelection(_, _, location): location
         }
     }
 }
