@@ -36,6 +36,7 @@ public struct Frontend {
                                 itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
                                 enums: builder.enums.filter { $0.location?.file == file.source.path })
             if sources.count == 1 { builder.validateChildViewGraph(module) }
+            builder.bindNavigationDestinations(module)
             pendingMessageBuilders.append(builder)
             builder.validateNavigationDeclarations(module)
             builder.validateRowContentTypes(module)
@@ -46,7 +47,12 @@ public struct Frontend {
                                              diagnostics: diagnostics))
                 continue
             }
-            units.append(TranslationUnit(module: module, diagnostics: diagnostics,
+            let boundModule = Module(sourceFile: file.source.path, screens: builder.screens,
+                                     nativeDeclarations: builder.interop.declarations,
+                                     models: builder.models.filter { $0.location?.file == file.source.path },
+                                     itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
+                                     enums: builder.enums.filter { $0.location?.file == file.source.path })
+            units.append(TranslationUnit(module: boundModule, diagnostics: diagnostics,
                                          resolvedModels: builder.models,
                                          resolvedItemTypes: builder.itemTypes))
         }
@@ -118,14 +124,7 @@ final class Builder: SyntaxVisitor {
         itemTypes = compilationContext?.allItemTypes ?? []
         collectItemTypes(tree)
         collectModels(tree)
-        for statement in tree.statements {
-            if let declaration = statement.item.as(StructDeclSyntax.self),
-               declaration.inheritanceClause?.inheritedTypes.contains(where: {
-                   $0.type.trimmedDescription == "View"
-               }) == true {
-                viewDeclarations[declaration.name.text] = declaration
-            }
-        }
+        collectDeclaredViews(tree)
         if let compilationContext {
             models = compilationContext.models + models
             enums = compilationContext.enums + enums
@@ -281,11 +280,6 @@ final class Builder: SyntaxVisitor {
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
             if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
-                guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
-                    error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
-                          "Use `NavigationStack(path: $path)` and a no-payload Hashable destination enum", at: call)
-                    return nil
-                }
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }

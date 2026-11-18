@@ -1,6 +1,12 @@
 import RefractIR
 import RefractMapping
 
+func emitNavigationOperation(_ operation: NavigationOperation, into writer: inout ArkWriter) throws {
+    let name = operation.pathName
+    writer.line("@Event on\(name.prefix(1).uppercased())\(name.dropFirst())Navigate: (destination: \(operation.enumName)) => void = (destination: \(operation.enumName)): void => {};")
+    writer.line()
+}
+
 func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWriter) throws {
     if case let .model(reference, _) = declaration {
         writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName);")

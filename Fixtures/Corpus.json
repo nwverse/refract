@@ -286,11 +286,19 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "navigation-deep-restoration",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "navigation-host",
       "implementationStatus": "ready"
     },
     {
       "path": "navigation-native-destination",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "navigation-reject-child-untyped",
       "implementationStatus": "ready"
     },
     {
