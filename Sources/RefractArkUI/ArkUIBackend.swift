@@ -83,11 +83,14 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
+            if let navigation = screen.navigation {
+                try emitNavigationOperation(navigation, into: &writer)
+            }
             if case let .tabView(tabs, _) = screen.body {
                 try emitTabHelpers(tabs, into: &writer)
             }
             // Local-state emission already supplies the separator before build().
-            if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
+            if screen.states.isEmpty, screen.navigation == nil, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
             let previousItemParameters = screenItemTypes
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
