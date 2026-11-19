@@ -19,3 +19,14 @@
 - **Coordinate a shared diagnostic renderer before writing golden errors.** The exact prefix and suggestion wording
   are generator-owned. Derive reviewed diagnostic expectations from the implemented contract, not from an earlier
   issue comment that proposed a different rendering.
+- **Render resources, do not embed target expressions in mapping strings.** A `{ "resource": "name" }` declaration
+  lets each backend produce its typed `R.color` or `$r` reference. Restrict resolver and symbol references to
+  qualified identifiers, and give state arguments explicit Boolean types rather than native interaction-source
+  objects whose ownership is unknown.
+- **Audit generated imports as native code.** A Kotlin `R` reference needs an import even when the class is in the
+  generated package; an external package keeps its qualifier. For ArkUI, `AppInteractionColors.resolve` needs the
+  exported `AppInteractionColors` symbol, not an import of the whole member expression. Compile the exact golden
+  Kotlin after regeneration; a successful CLI run alone does not catch a stale or malformed import.
+- **Report project-reference checks without claiming compilation.** Byte-identical shared Swift files and Xcode
+  project references prove source wiring, not SwiftUI type checking. Keep `not verified on macOS` explicit when
+  Xcode was not run, and do not let a success message imply otherwise.

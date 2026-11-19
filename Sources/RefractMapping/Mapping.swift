@@ -119,7 +119,7 @@ public struct Mapping: Codable, Equatable, Sendable {
     }
 
     public func token(_ key: String, category: TokenCategory, platform: Platform,
-                      location: SourceLocation? = nil) throws -> String {
+                      location: SourceLocation? = nil) throws -> TokenMapping {
         if let value = self.platform(platform).tokens[category][key] { return value }
         throw Diagnostic(code: "missingTokenMapping",
             message: "The \(category.rawValue) token `\(key)` has no \(platform.displayName) mapping.",
@@ -332,6 +332,8 @@ public struct Parameter: Codable, Equatable, Sendable {
 public enum ParameterType: String, Codable, CaseIterable, Sendable {
     case string, bool, int, double, length, color, font, image, stringKey, rawAsset
     case action, actionString, actionBool, actionInt, actionDouble
+    /// Closed literal text/range values for an app-owned native selection host.
+    case selectionContent, selectionContextAction
     /// The app-owned native loading interface; no implementation is generated.
     case remoteImageLoader
 
@@ -385,13 +387,13 @@ public struct ModifierSignature: Codable, Equatable, Sendable {
 }
 
 public struct TokenSet: Codable, Equatable, Sendable {
-    public var spacing: [String: String]
-    public var radius: [String: String]
-    public var font: [String: String]
-    public var color: [String: String]
+    public var spacing: [String: TokenMapping]
+    public var radius: [String: TokenMapping]
+    public var font: [String: TokenMapping]
+    public var color: [String: TokenMapping]
 
-    public init(spacing: [String: String] = [:], radius: [String: String] = [:],
-                font: [String: String] = [:], color: [String: String] = [:]) {
+    public init(spacing: [String: TokenMapping] = [:], radius: [String: TokenMapping] = [:],
+                font: [String: TokenMapping] = [:], color: [String: TokenMapping] = [:]) {
         self.spacing = spacing
         self.radius = radius
         self.font = font
@@ -399,7 +401,7 @@ public struct TokenSet: Codable, Equatable, Sendable {
     }
 
     public static let empty = TokenSet()
-    public subscript(_ category: TokenCategory) -> [String: String] {
+    public subscript(_ category: TokenCategory) -> [String: TokenMapping] {
         switch category {
         case .spacing: spacing
         case .radius: radius

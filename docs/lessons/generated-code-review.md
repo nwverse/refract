@@ -120,3 +120,18 @@ Treat generation, semantic fidelity, pending coverage and native compilation as 
 golden can preserve an incorrect translation; a handwritten golden can itself be syntactically or semantically
 wrong. Keep pending explicit, diagnose unsupported input before writing output, rebuild the CLI after every relevant
 merge, and attach compile evidence to the specific generated files actually compiled.
+
+## Interaction state and resource configuration
+
+A token resolver alone does not demonstrate interaction semantics. The native control and the observations passed
+to generated arguments must share the same interaction source; creating a separate source just for color selection
+is not equivalent. Exercise real touch/focus changes and check disabled precedence during an already held native
+press, not only a caller-set Boolean with no interaction lifecycle.
+
+On Native JVM Compose, replacing `LocalContext` with a configured `ContextThemeWrapper` selects Android resources
+such as `values-night`, but does not by itself change Compose's `LocalDensity`. Supply the corresponding
+`LocalDensity.fontScale` as Android does for a configuration change, then measure the real text bounds and inspect
+captures. `Activity.applyOverrideConfiguration` after resources are initialized throws, so a configured wrapper is
+the appropriate JVM host boundary. These are explicit Native JVM configuration tests, not physical device settings,
+screen-reader, HarmonyOS or performance evidence. Keep test dependencies in the fixture's `testImplementation` and
+publish the labelled captures rather than inferring rendering from compilation.

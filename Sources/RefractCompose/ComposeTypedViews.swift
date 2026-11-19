@@ -58,6 +58,9 @@ extension ComposeBackend {
                              message: "Dynamic list lowering requires the resolved model collection contract.",
                              suggestion: "Declare an Identifiable item with a stable String or Int id through the model interface.",
                              location: location ?? items.location)
+        case .messageBlocks:
+            throw Diagnostic(code: "RFMSG001", message: "Message blocks must be emitted inside their checked parent row.",
+                             suggestion: "Use ForEach(message.blocks) in the ChatMessage row's non-scrolling content.", location: node.sourceLocation)
         case let .textInput(placeholder, value, modifiers, location):
             try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
                               location: location, into: &out, context: &context)
@@ -103,6 +106,9 @@ extension ComposeBackend {
                                 into out: inout KotlinWriter, context: inout Context) throws {
         context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
         context.imports.insert("androidx.compose.foundation.lazy.items")
+        if let projection = items.projection {
+            out.line("val \(projection.name) = \(try projectedCollectionExpression(items, context: &context))")
+        }
         out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
         try emitDynamicListItems(items, into: &out, context: &context)
         out.close()

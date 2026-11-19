@@ -150,6 +150,9 @@ public enum InteropMapping {
             case .rawAsset: "Resource"
             case .remoteImageLoader: "RemoteImageLoader"
             case .action: "() => void"
+            case .actionString: "(string) => void"
+            case .selectionContent: "RefractSelectionContent"
+            case .selectionContextAction: "(context: RefractSelectionContext) => void"
             }
         }
         return switch type {
@@ -159,6 +162,9 @@ public enum InteropMapping {
         case .double: "Double"
         case .remoteImageLoader: "RemoteImageLoader"
         case .action: "() -> Unit"
+        case .actionString: "(String) -> Unit"
+        case .selectionContent: "RefractSelectionContent"
+        case .selectionContextAction: "(RefractSelectionContext) -> Unit"
         }
     }
 

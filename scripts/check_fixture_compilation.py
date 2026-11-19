@@ -76,8 +76,9 @@ def regenerate_and_stage(fixture: str) -> None:
         if not path.is_file():
             fail(f"{fixture}: missing required file {path.relative_to(ROOT)}")
 
-    # A corpus subdirectory is not a single path component; TemporaryDirectory creates its parents and returns
-    # only the leaf. Use a flat, unique label so nested fixtures use the same lifecycle as top-level ones.
+    # Mapping output directories are relative to the invocation's working
+    # directory, not to refract.json. Never let a fixture's `generated` path
+    # escape into the checkout: use an isolated cwd and explicit staged outputs.
     with tempfile.TemporaryDirectory(prefix=f"refract-fixture-{fixture.replace('/', '-')}-") as tmp:
         out = Path(tmp)
         subprocess.run(
@@ -89,7 +90,7 @@ def regenerate_and_stage(fixture: str) -> None:
                 "--android-out", str(out / "android"),
                 "--harmony-out", str(out / "harmony"),
             ],
-            cwd=ROOT,
+            cwd=out,
             check=True,
         )
         regenerated = out / "android/Input.kt"
@@ -116,7 +117,7 @@ def regenerate_and_stage_multiple(fixture: str, fixture_dir: Path, inputs: list[
             arguments += ["--input", str(input_path)]
         arguments += ["--mapping", str(mapping_json), "--android-out", str(out / "android"),
                       "--harmony-out", str(out / "harmony")]
-        subprocess.run(arguments, cwd=ROOT, check=True)
+        subprocess.run(arguments, cwd=out, check=True)
         for input_path in inputs:
             name = input_path.stem
             regenerated = out / "android" / f"{name}.kt"
@@ -174,10 +175,7 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
             shutil.copyfile(source, destination)
     if fixture in {"interop-remote-image", "resource-typed-assets"}:
         # Native JVM tests need the app's real resource table, not a library's
-        # isolated test APK. Stage the exact generated call and its resources.
-        for base in (APP_TEST_JAVA, APP_TEST_RES):
-            if base.exists():
-                shutil.rmtree(base)
+        # isolated test APK. Keep every manifest fixture's generated entry point and resources.
         target_package = APP_TEST_JAVA.joinpath(*package.split("."))
         target_package.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(target, target_package / f"{fixture}.kt")
@@ -199,7 +197,7 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
             shutil.copyfile(native_target, app_native)
         destination = APP_TEST_RES / "values/strings.xml"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(strings_xml, destination)
+        merge_strings(strings_xml, destination, fixture)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:
@@ -244,7 +242,7 @@ def main() -> int:
         fixtures = read_manifest()
         # Start with a clean staging area so a fixture removed from the manifest
         # cannot leave stale Kotlin behind for Gradle to compile.
-        for path in (STAGING_JAVA, STAGING_RES):
+        for path in (STAGING_JAVA, STAGING_RES, APP_TEST_JAVA, APP_TEST_RES):
             if path.exists():
                 shutil.rmtree(path)
         for fixture in fixtures:

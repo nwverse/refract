@@ -5,5 +5,9 @@
             android:name="androidx.activity.ComponentActivity"
             android:exported="false"
             android:theme="@style/NativeAnimationTestTheme" />
+        <activity
+            android:name="example.native.NavigationDeepHostActivity"
+            android:exported="false"
+            android:theme="@style/NativeAnimationTestTheme" />
     </application>
 </manifest>

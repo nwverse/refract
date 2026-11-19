@@ -52,6 +52,16 @@ jobs:
           printf 'bin_path=%s\n' "$(swift build --show-bin-path --disable-automatic-resolution)" >> "$GITHUB_OUTPUT"
       - name: Build with locked dependencies
         run: swift build --disable-automatic-resolution
+      - name: Configure XCTest runtime paths on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform="$(xcrun --show-sdk-platform-path)"
+          test -d "$platform/Developer/Library/Frameworks/XCTest.framework"
+          test -f "$platform/Developer/usr/lib/libXCTestSwiftSupport.dylib"
+          printf 'DYLD_FRAMEWORK_PATH=%s\n' "$platform/Developer/Library/Frameworks" >> "$GITHUB_ENV"
+          printf 'DYLD_LIBRARY_PATH=%s\n' "$platform/Developer/usr/lib" >> "$GITHUB_ENV"
       - name: Run the complete test suite
         env:
           REFRACT_CLI_PATH: ${{ steps.swift.outputs.bin_path }}/refract
@@ -111,6 +121,8 @@ jobs:
             --mapping examples/refract.json \
             --android-out examples/android/app/refract/generated/screens \
             --harmony-out examples/harmony/entry/src/main/ets/generated
+      - name: Verify committed benchmark ArkTS against actual CLI generation
+        run: python3 -I bench/harmony/generate.py --check
       - name: Regenerate examples and verify resource catalogs
         run: python3 scripts/check_examples.py
       - name: Select JDK 21 for the Android toolchain
@@ -153,13 +165,14 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: refract-android-${{ runner.os }}-${{ hashFiles('examples/android/gradle/wrapper/gradle-wrapper.properties', 'examples/android/build.gradle.kts', 'examples/android/app/build.gradle.kts', 'examples/android/fixtures/build.gradle.kts', 'examples/android/settings.gradle.kts', 'tools/gradle/build.gradle.kts', 'tools/gradle/src/**') }}
+          key: refract-android-${{ runner.os }}-${{ hashFiles('examples/android/gradle/wrapper/gradle-wrapper.properties', 'examples/android/build.gradle.kts', 'examples/android/app/build.gradle.kts', 'examples/android/fixtures/build.gradle.kts', 'examples/android/theme-fixture/build.gradle.kts', 'examples/android/settings.gradle.kts', 'tools/gradle/build.gradle.kts', 'tools/gradle/src/**') }}
           restore-keys: |
             refract-android-${{ runner.os }}-
       - name: Show the Gradle executable contract
         run: |
           test -x .build/debug/refract
           printf 'REFRACT_CLI_PATH=%s/refract\n' "$PWD/.build/debug" >> "$GITHUB_ENV"
+          printf 'REFRACT_REQUIRED_VERSION=%s\n' "$(.build/debug/refract --version)" >> "$GITHUB_ENV"
       - name: Compile generated Kotlin with the checked-in wrapper
         working-directory: examples/android
         env:
@@ -170,13 +183,21 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ../../examples/android/gradlew --no-daemon test
+      - name: Publish TestKit failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-testkit-test-results
+          path: tools/gradle/build/test-results/test/
+          if-no-files-found: error
+          retention-days: 14
       - name: Stage the canonical fixture corpus through the CLI
         run: python3 scripts/check_fixture_compilation.py
       - name: Compile the canonical fixture corpus
         working-directory: examples/android
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
-        run: ./gradlew --no-daemon :fixtures:compileDebugKotlin
+        run: ./gradlew --no-daemon :fixtures:compileDebugKotlin :theme-fixture:compileDebugKotlin
       - name: Run native animation lifecycle tests on the JVM
         working-directory: examples/android
         env:
@@ -187,6 +208,21 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ./gradlew --no-daemon :app:testDebugUnitTest
+      - name: Render and test semantic theme interaction on Native JVM Compose
+        working-directory: examples/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+        run: ./gradlew --no-daemon :theme-fixture:testDebugUnitTest
+      - name: Publish semantic theme interaction Native JVM captures and test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-jvm-compose-theme-interaction
+          path: |
+            examples/android/theme-fixture/build/reports/native-jvm-theme/
+            examples/android/theme-fixture/build/reports/tests/
+          if-no-files-found: error
+          retention-days: 14
       - name: Publish Native JVM Compose captures and test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -195,6 +231,16 @@ jobs:
           path: |
             examples/android/app/build/reports/native-jvm-compose/
             examples/android/app/build/reports/tests/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish Native JVM Compose theme captures and test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-jvm-compose-theme
+          path: |
+            examples/android/fixtures/build/reports/native-jvm-compose/
+            examples/android/fixtures/build/reports/tests/
           if-no-files-found: error
           retention-days: 14
       - name: Reject unexpected files left in the checkout
@@ -220,6 +266,11 @@ jobs:
         run: python3 -I scripts/test/test_privacy_check.py
       - name: Test the documentation checker
         run: python3 -I scripts/test/test_doc_paths.py --self-test
+      - name: Validate paired benchmark source contracts and evidence policy
+        run: |
+          python3 -I bench/common/source_contract_test.py
+          python3 -I bench/common/report_test.py
+          python3 -I scripts/test/test_fixture_output_isolation.py
       - name: Check public repository content and paths
         # Hosted CI has the built-in rules; the local hooks additionally use machine-specific private values.
         run: python3 scripts/privacy_check.py

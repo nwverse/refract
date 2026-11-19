@@ -143,18 +143,31 @@ extension ArkModifiers {
     }
 
     private static func color(_ expression: Expression, item: String? = nil, mapping: Mapping) throws -> String {
+        if case .interactionColor = expression.value {
+            return try token(expression, category: .color, mapping: mapping)
+        }
         if case let .reference(name) = expression.value,
            mapping.harmonyOS.tokens.color[name] != nil {
             return try mapping.token(name, category: .color, platform: .harmonyOS, location: expression.location)
+                .compose(location: expression.location)
         }
         return try ArkExpression.emit(expression, item: item, mapping: mapping)
     }
 
     private static func token(_ expression: Expression, category: TokenCategory, mapping: Mapping) throws -> String {
+        if case let .interactionColor(value) = expression.value {
+            guard category == .color else {
+                throw Diagnostic(code: "interactionToken", message: "An interaction token can only be used as a color.",
+                    suggestion: "Use a static spacing, radius or font token for this modifier.", location: expression.location)
+            }
+            return try MappedExpression.interactionColor(value, mapping: mapping, platform: .harmonyOS,
+                renderState: { try emitLocalExpression($0, mapping: mapping) }, location: expression.location)
+        }
         guard case let .reference(name) = expression.value, name.contains(".") else {
             throw Diagnostic(code: "RFVIEW003", message: "This modifier requires a declared design token.",
                              suggestion: "Use a token in the mapping's \(category.rawValue) category.", location: expression.location)
         }
         return try mapping.token(name, category: category, platform: .harmonyOS, location: expression.location)
+            .compose(location: expression.location)
     }
 }

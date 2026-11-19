@@ -39,6 +39,8 @@ public struct Diagnostic: Codable, Error, Hashable, Sendable {
 
 public enum ValueType: String, Codable, Sendable {
     case string, bool, double, int
+    /// A bounded UInt64 revision stored only by the ChatMessage projection item.
+    case revision
 }
 
 public struct Expression: Codable, Equatable, Sendable {
@@ -58,6 +60,13 @@ public struct Expression: Codable, Equatable, Sendable {
         case valueProperty(ValueProperty)
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
+        case interactionColor(InteractionColorValue)
+        /// `form.email`: a typed draft value owned by native state.
+        case formField(form: String, field: String)
+        /// `refractPresent(model.submissionError)`: a null check on a declared optional model text.
+        case presence(Expression)
+        /// The checked guard of a form's declared field rules, lowered to native comparisons.
+        case formValid(FormDeclaration)
     }
 
     public let value: Value
@@ -123,6 +132,8 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
     case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    /// A bounded non-scrolling ForEach inside one ChatMessage lazy row.
+    case messageBlocks(NestedListItems, location: SourceLocation?)
     case section(header: Expression?, children: [ViewNode], location: SourceLocation?)
     case listItem(child: ViewNode, location: SourceLocation?)
     case forEach(ListItems, location: SourceLocation?)
@@ -156,6 +167,12 @@ public enum StateDeclaration: Codable, Equatable, Sendable {
     case navigationPath(name: String, enumName: String, location: SourceLocation?)
     case tabSelection(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
+    /// A `refractForm` declaration on local @State or a parent @Binding.
+    case form(ownership: FormOwnership, declaration: FormDeclaration, location: SourceLocation?)
+}
+
+public enum FormOwnership: String, Codable, Sendable {
+    case state, binding
 }
 
 public struct ModelReference: Codable, Equatable, Sendable {
@@ -180,14 +197,16 @@ public struct Screen: Codable, Equatable, Sendable {
     public let name: String
     public let parameters: [ScreenParameter]
     public let states: [StateDeclaration]
+    public let navigation: NavigationOperation?
     public let body: ViewNode
     public let location: SourceLocation?
 
     public init(name: String, parameters: [ScreenParameter] = [], states: [StateDeclaration] = [],
-                body: ViewNode, location: SourceLocation? = nil) {
+                navigation: NavigationOperation? = nil, body: ViewNode, location: SourceLocation? = nil) {
         self.name = name
         self.parameters = parameters
         self.states = states
+        self.navigation = navigation
         self.body = body
         self.location = location
     }
@@ -197,6 +216,7 @@ public struct Screen: Codable, Equatable, Sendable {
         name = try container.decode(String.self, forKey: .name)
         parameters = try container.decodeIfPresent([ScreenParameter].self, forKey: .parameters) ?? []
         states = try container.decode([StateDeclaration].self, forKey: .states)
+        navigation = try container.decodeIfPresent(NavigationOperation.self, forKey: .navigation)
         body = try container.decode(ViewNode.self, forKey: .body)
         location = try container.decodeIfPresent(SourceLocation.self, forKey: .location)
     }

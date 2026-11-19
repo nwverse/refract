@@ -34,7 +34,13 @@ extension Generation {
                                  suggestion: "Move the dynamic rows into a List, not a stack or ScrollView.",
                                  location: location)
             }
-            writer.open("LazyForEach(\(try ArkExpression.emit(items.collection, mapping: mapping)), (\(items.itemName): \(items.itemType)) =>")
+            let source: String
+            if let projection = items.projection, case let .valueProperty(.model(model, _)) = items.collection.value {
+                source = "this.\(model).\(projection.name)"
+            } else {
+                source = try ArkExpression.emit(items.collection, mapping: mapping)
+            }
+            writer.open("LazyForEach(\(source), (\(items.itemName): \(items.itemType)) =>")
             writer.open("ListItem()")
             try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver,
                      itemTypeName: items.itemType)
@@ -135,6 +141,17 @@ extension Generation {
                 writer.line("this.\(name) = value;")
             case let .valueProperty(.binding(name)):
                 writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            case let .formField(form, field):
+                let name = form + field.prefix(1).uppercased() + field.dropFirst()
+                let isBinding = module.screens.flatMap(\.states).contains { state in
+                    if case let .form(.binding, declared, _) = state { return declared.name == form }
+                    return false
+                }
+                if isBinding {
+                    writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+                } else {
+                    writer.line("this.\(name) = value;")
+                }
             case let .valueProperty(.modelScalarBinding(binding)):
                 writer.line("this.\(binding.model).\(binding.action)(value);")
             default:
@@ -232,6 +249,11 @@ extension Generation {
 
 enum ArkValueType {
     static func emit(_ type: ValueType) -> String {
-        switch type { case .string: "string"; case .bool: "boolean"; case .double, .int: "number" }
+        switch type {
+        case .string: "string"
+        case .bool: "boolean"
+        case .double, .int: "number"
+        case .revision: "bigint"
+        }
     }
 }
