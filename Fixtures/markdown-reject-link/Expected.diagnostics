@@ -1,0 +1,2 @@
+Input.swift:12:76: error [RFMD015]: The HTTPS link destination is outside the bounded public-address syntax. Suggestion: Use a public DNS hostname, port 443 and an ASCII path without userinfo, query, fragment or control characters.
+Input.swift:12:17: error [RFMD012]: A link needs a plain `.localized(...)` or `.text(verbatim: ...)` label and a typed HTTPS destination. Suggestion: Use `.link(label: ..., destination: .https(host: "example.com", path: "/docs"))`.
