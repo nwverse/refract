@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="synthetic_notification_id">Synthetic request: %1$s</string>
+    <string name="synthetic_notification_confirm">Confirm synthetic request</string>
+    <string name="synthetic_notification_present">Present synthetic request</string>
+    <string name="synthetic_notification_cancel">Cancel synthetic request</string>
+</resources>

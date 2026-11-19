@@ -1,0 +1,8 @@
+{
+  "string": [
+    { "name": "synthetic_work_id", "value": "Synthetic work: %1$s" },
+    { "name": "synthetic_work_confirm", "value": "Confirm synthetic work" },
+    { "name": "synthetic_work_schedule", "value": "Schedule synthetic work" },
+    { "name": "synthetic_work_cancel", "value": "Cancel synthetic work" }
+  ]
+}

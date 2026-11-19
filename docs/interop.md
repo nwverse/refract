@@ -566,6 +566,14 @@ navigation callback; a separate destination component calls same-file typed mode
 second navigation stack, runtime registry or untyped destination object is generated. Android generated output and
 its real native host compile together; iOS/ArkTS compilation and device lifecycle remain explicitly unverified here.
 
+## Native lifecycle, notification and deferred-work hosts
+
+`docs/native-hosts.md` defines closed lifecycle, notification and background-work host roles. Generated screens
+accept typed app-owned interfaces and complete correlated event values, not system-service views. The app alone
+owns permission, scheduling, delivery, cancellation, stale-event handling and confirmation. A request returning
+`Void` cannot claim scheduling or execution. Kotlin/ArkTS golden fixtures and synthetic Native JVM tests verify
+the boundary without sending real notifications or running real background jobs.
+
 ## Verification and trade-offs
 
 Golden fixtures cover a native call, native callers of a generated component, scalar selection, view/modifier

@@ -150,11 +150,19 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-native-background-work",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-callers",
       "implementationStatus": "ready"
     },
     {
       "path": "interop-native-component",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-native-lifecycle",
       "implementationStatus": "ready"
     },
     {
@@ -167,6 +175,10 @@
     },
     {
       "path": "interop-native-missing",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-native-notification",
       "implementationStatus": "ready"
     },
     {
