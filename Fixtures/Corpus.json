@@ -170,6 +170,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-media-capabilities",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-media-capability-reject",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-animation",
       "implementationStatus": "ready"
     },

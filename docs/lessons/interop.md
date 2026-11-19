@@ -104,6 +104,12 @@
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
   select the node that defines `SemanticsActions.Dismiss`, not an arbitrary `onRoot()`.
+- A media capability ABI is not a media implementation. Keep permission/approval/cancellation as explicit app-owned
+  states and checked model actions; absence branches must not place a native player, camera or share component.
+  Compact native-component mappings accept scalar parameters only: a checked no-argument action requires the schema-1
+  `type: action` declaration and its exact target arguments. Resource keys accept only lowercase ASCII letters/digits
+  in dot-separated segments, with underscores produced by normalization. Let the real CLI reject invalid mapping forms
+  before reviewing or staging generated output; never widen the schema to hide a fixture mistake.
 - Selection editing and drag/drop payloads on a `TextField`/view go through the closed `NativeModifier.Operation`
   set, not through a generic native component. The Compose drag-and-drop API lives in
   `androidx.compose.foundation.draganddrop` for the `Modifier` extensions but in

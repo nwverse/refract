@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_playback_unavailable">Playback capability unavailable</string>
+    <string name="media_playback_permissionrequired">Playback permission requires app handling</string>
+    <string name="media_playback_permissiondenied">Playback permission denied</string>
+    <string name="media_playback_approvalrequired">Playback approval required</string>
+    <string name="media_playback_approve">Request synthetic playback approval</string>
+    <string name="media_playback_cancel">Cancel synthetic playback</string>
+    <string name="media_playback_cancelled">Synthetic playback cancelled</string>
+    <string name="media_camera_unavailable">Camera capability unavailable</string>
+    <string name="media_camera_permissionrequired">Camera permission requires app handling</string>
+    <string name="media_camera_permissiondenied">Camera permission denied</string>
+    <string name="media_camera_approvalrequired">Camera approval required</string>
+    <string name="media_camera_approve">Request synthetic camera approval</string>
+    <string name="media_camera_cancel">Cancel synthetic camera</string>
+    <string name="media_camera_cancelled">Synthetic camera cancelled</string>
+    <string name="media_share_unavailable">Share capability unavailable</string>
+    <string name="media_share_permissionrequired">Share permission requires app handling</string>
+    <string name="media_share_permissiondenied">Share permission denied</string>
+    <string name="media_share_approvalrequired">Share approval required</string>
+    <string name="media_share_approve">Request synthetic share approval</string>
+    <string name="media_share_cancel">Cancel synthetic share</string>
+    <string name="media_share_cancelled">Synthetic share cancelled</string>
+</resources>

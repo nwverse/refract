@@ -32,6 +32,7 @@ interop-native-animation
 interop-text-input-host
 interop-native-state-transition
 interop-document-preview
+interop-media-capabilities
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type

@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {
+      "NativePlaybackCapability": {
+        "kind": "composable", "module": "com.example.refract.media", "target": "NativePlaybackCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "named", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      },
+      "NativeCameraCapability": {
+        "kind": "composable", "module": "com.example.refract.media", "target": "NativeCameraCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "named", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      },
+      "NativeShareCapability": {
+        "kind": "composable", "module": "com.example.refract.media", "target": "NativeShareCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "named", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R", "catalog": "values/strings.xml",
+      "strings": {
+        "media.playback.unavailable": "media_playback_unavailable",
+        "media.playback.permissionrequired": "media_playback_permissionrequired",
+        "media.playback.permissiondenied": "media_playback_permissiondenied",
+        "media.playback.approvalrequired": "media_playback_approvalrequired",
+        "media.playback.approve": "media_playback_approve",
+        "media.playback.cancel": "media_playback_cancel",
+        "media.playback.cancelled": "media_playback_cancelled",
+        "media.camera.unavailable": "media_camera_unavailable",
+        "media.camera.permissionrequired": "media_camera_permissionrequired",
+        "media.camera.permissiondenied": "media_camera_permissiondenied",
+        "media.camera.approvalrequired": "media_camera_approvalrequired",
+        "media.camera.approve": "media_camera_approve",
+        "media.camera.cancel": "media_camera_cancel",
+        "media.camera.cancelled": "media_camera_cancelled",
+        "media.share.unavailable": "media_share_unavailable",
+        "media.share.permissionrequired": "media_share_permissionrequired",
+        "media.share.permissiondenied": "media_share_permissiondenied",
+        "media.share.approvalrequired": "media_share_approvalrequired",
+        "media.share.approve": "media_share_approve",
+        "media.share.cancel": "media_share_cancel",
+        "media.share.cancelled": "media_share_cancelled"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [
+      { "module": "example.media", "symbols": ["NativePlaybackCapability", "NativeCameraCapability", "NativeShareCapability"] }
+    ],
+    "components": {},
+    "nativeComponents": {
+      "NativePlaybackCapability": {
+        "kind": "component", "module": "example.media", "target": "NativePlaybackCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "object", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      },
+      "NativeCameraCapability": {
+        "kind": "component", "module": "example.media", "target": "NativeCameraCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "object", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      },
+      "NativeShareCapability": {
+        "kind": "component", "module": "example.media", "target": "NativeShareCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "object", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app", "stringTable": "string", "catalog": "resources/base/element/string.json",
+      "strings": {
+        "media.playback.unavailable": "media_playback_unavailable",
+        "media.playback.permissionrequired": "media_playback_permissionrequired",
+        "media.playback.permissiondenied": "media_playback_permissiondenied",
+        "media.playback.approvalrequired": "media_playback_approvalrequired",
+        "media.playback.approve": "media_playback_approve",
+        "media.playback.cancel": "media_playback_cancel",
+        "media.playback.cancelled": "media_playback_cancelled",
+        "media.camera.unavailable": "media_camera_unavailable",
+        "media.camera.permissionrequired": "media_camera_permissionrequired",
+        "media.camera.permissiondenied": "media_camera_permissiondenied",
+        "media.camera.approvalrequired": "media_camera_approvalrequired",
+        "media.camera.approve": "media_camera_approve",
+        "media.camera.cancel": "media_camera_cancel",
+        "media.camera.cancelled": "media_camera_cancelled",
+        "media.share.unavailable": "media_share_unavailable",
+        "media.share.permissionrequired": "media_share_permissionrequired",
+        "media.share.permissiondenied": "media_share_permissiondenied",
+        "media.share.approvalrequired": "media_share_approvalrequired",
+        "media.share.approve": "media_share_approve",
+        "media.share.cancel": "media_share_cancel",
+        "media.share.cancelled": "media_share_cancelled"
+      }
+    }
+  }
+}
