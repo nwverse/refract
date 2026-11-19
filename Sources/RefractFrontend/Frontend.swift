@@ -131,6 +131,15 @@ final class Builder: SyntaxVisitor {
         collectModels(tree)
         collectNativeHosts(tree)
         collectDeclaredViews(tree)
+        // Native event wrappers are validated declarations, not View bodies.
+        // Keep them in the same declaration table used by lifecycle parsing.
+        for statement in tree.statements {
+            guard let declaration = statement.item.as(StructDeclSyntax.self),
+                  declaration.inheritanceClause?.inheritedTypes.contains(where: { inherited in
+                      NativeValueKind.allCases.contains(where: { $0.typeName == inherited.type.trimmedDescription })
+                  }) == true else { continue }
+            viewDeclarations[declaration.name.text] = declaration
+        }
         if let compilationContext {
             models = compilationContext.models + models
             enums = compilationContext.enums + enums
