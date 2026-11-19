@@ -67,7 +67,8 @@ android {
     // The fixture compiler stages the exact remote-image CLI output and its
     // app-owned resources here for Native JVM tests in the real R namespace.
     sourceSets.getByName("test").kotlin.directories.add("src/fixtureTest/java")
-    sourceSets.getByName("main").res.directories.add("src/fixtureTest/res/interop-remote-image")
+    // Shared and adaptive catalogs are sibling resource roots, never nested source sets.
+    sourceSets.getByName("main").res.directories.add("src/fixtureTest/res/shared")
     sourceSets.getByName("main").res.directories.add("src/fixtureTest/res/adaptive-window-size")
 }
 

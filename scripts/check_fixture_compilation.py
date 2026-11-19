@@ -208,10 +208,10 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
                 for source in sorted(resources.rglob("*")):
                     if source.is_file():
                         relative = source.relative_to(resources)
-                        destination = APP_TEST_RES / relative
+                        destination = APP_TEST_RES / "shared" / relative
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copyfile(source, destination)
-            destination = APP_TEST_RES / "values/strings.xml"
+            destination = APP_TEST_RES / "shared/values/strings.xml"
             destination.parent.mkdir(parents=True, exist_ok=True)
             merge_strings(strings_xml, destination, fixture)
 
