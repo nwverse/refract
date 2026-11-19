@@ -49,7 +49,8 @@ extension Builder {
         screens = module.screens.map { screen in
             guard containsNavigationLink(screen.body) else {
                 return Screen(name: screen.name, parameters: screen.parameters, states: screen.states,
-                              navigation: bindings[screen.name], body: screen.body, location: screen.location)
+                              navigation: bindings[screen.name], body: screen.body,
+                              nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
             }
             if let operation = bindings[screen.name] {
                 func validate(_ node: ViewNode) {
@@ -72,7 +73,8 @@ extension Builder {
                     location: screen.location))
             }
             return Screen(name: screen.name, parameters: screen.parameters, states: screen.states,
-                   navigation: bindings[screen.name], body: screen.body, location: screen.location)
+                          navigation: bindings[screen.name], body: screen.body,
+                          nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
         }
     }
 

@@ -18,7 +18,10 @@ import Testing
     ], body: .button(label: .text(Expression(.verbatimText("Cancel")), modifiers: [], location: nil),
                      action: action, modifiers: [], location: nil), nativeValues: [value])], nativeHosts: [host])
     let encoded = try JSONEncoder().encode(module)
-    #expect(try JSONDecoder().decode(Module.self, from: encoded) == module)
+    let decoded = try JSONDecoder().decode(Module.self, from: encoded)
+    #expect(decoded.screens.map(\.nativeValues) == module.screens.map(\.nativeValues))
+    #expect(decoded.nativeHosts == module.nativeHosts)
+    #expect(decoded == module)
     #expect(NativeValueKind.notificationEvent.states.contains("unavailable"))
     #expect(NativeValueKind.notificationEvent.states.contains("stale"))
     #expect(NativeValueKind.backgroundWorkEvent.states.contains("confirmationRequired"))
