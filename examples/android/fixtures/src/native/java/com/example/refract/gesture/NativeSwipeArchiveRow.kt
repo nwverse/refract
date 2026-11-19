@@ -13,9 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,8 +57,24 @@ fun NativeSwipeArchiveRow(
     }
     val dismissState = rememberSwipeToDismissBoxState()
     var pending by remember(identifier) { mutableStateOf<String?>(null) }
+    var pendingGeneration by remember(identifier) { mutableIntStateOf(0) }
+    var generation by remember { mutableIntStateOf(0) }
     var menuExpanded by remember(identifier) { mutableStateOf(false) }
     val observer = LocalSwipeArchiveObserver.current
+
+    DisposableEffect(identifier) {
+        val ownedGeneration = pendingGeneration
+        onDispose {
+            if (pendingGeneration == ownedGeneration) {
+                val cancelled = pending != null
+                pendingGeneration = ownedGeneration + 1
+                generation += 1
+                pending = null
+                // The existing app-owned action clears only this obsolete pending request.
+                if (cancelled) onCancel()
+            }
+        }
+    }
 
     fun settle(target: SwipeToDismissBoxValue) {
         observer.onSettle(identifier, target, motionEnabled)
@@ -72,6 +90,7 @@ fun NativeSwipeArchiveRow(
         // A revealed action and the menu share this exact pending path.
         if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) settle(SwipeToDismissBoxValue.Settled)
         pending = identifier
+        pendingGeneration = generation
         onRequest(identifier)
     }
 
@@ -135,29 +154,48 @@ fun NativeSwipeArchiveRow(
     pending?.let { selected ->
         AlertDialog(
             onDismissRequest = {
+                val cancelled = pending != null
                 pending = null
                 settle(SwipeToDismissBoxValue.Settled)
-                onCancel()
+                if (cancelled) onCancel()
             },
             title = { Text("Archive this item?") },
             text = { Text("The app will archive the selected item after confirmation.") },
             confirmButton = {
                 TextButton(onClick = {
-                    pending = null
-                    settle(SwipeToDismissBoxValue.Settled)
-                    onConfirm(selected)
+                    if (canConfirmSwipeArchive(
+                        pendingIdentifier = pending,
+                        currentIdentifier = identifier,
+                        pendingGeneration = pendingGeneration,
+                        currentGeneration = generation,
+                    )) {
+                        pending = null
+                        settle(SwipeToDismissBoxValue.Settled)
+                        onConfirm(selected)
+                    } else {
+                        pending = null
+                        settle(SwipeToDismissBoxValue.Settled)
+                    }
                 }) { Text("Archive item") }
             },
             dismissButton = {
                 TextButton(onClick = {
+                    val cancelled = pending != null
                     pending = null
                     settle(SwipeToDismissBoxValue.Settled)
-                    onCancel()
+                    if (cancelled) onCancel()
                 }) { Text("Cancel") }
             },
         )
     }
 }
+
+internal fun canConfirmSwipeArchive(
+    pendingIdentifier: String?,
+    currentIdentifier: String,
+    pendingGeneration: Int,
+    currentGeneration: Int,
+): Boolean = pendingIdentifier == currentIdentifier && pendingGeneration == currentGeneration
 
 internal interface SwipeArchiveObserver {
     fun onSettle(identifier: String, target: SwipeToDismissBoxValue, animated: Boolean)

@@ -19,9 +19,11 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.v2.runAndroidComposeUiTest
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.runtime.CompositionLocalProvider
+
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -111,7 +113,11 @@ class NativeSwipeArchiveRowTest {
         onNodeWithText("Archive this item?").assertIsDisplayed()
         runOnIdle { identity = "second" }
         onNodeWithText("Archive this item?").assertDoesNotExist()
-        assertEquals(listOf("request:first"), model.calls)
+        assertEquals(listOf("request:first", "cancel"), model.calls)
+        onNodeWithContentDescription("Row actions").performClick()
+        onNodeWithText("Archive").performClick()
+        onNodeWithText("Archive item").performClick()
+        assertEquals(listOf("request:first", "cancel", "request:second", "archive:second"), model.calls)
     }
 
     @Test
@@ -128,7 +134,34 @@ class NativeSwipeArchiveRowTest {
         onNodeWithText("Archive this item?").assertIsDisplayed()
         runOnIdle { show = false }
         onNodeWithText("Archive this item?").assertDoesNotExist()
-        assertEquals(listOf("request:first"), model.calls)
+        assertEquals(listOf("request:first", "cancel"), model.calls)
+    }
+
+    @Test
+    fun leavingAndReturningCancelsPendingWithoutReplayingConfirmation() = runSwipeTest {
+        val model = FakeArchiveModel()
+        var show by mutableStateOf(true)
+        setContent {
+            if (show) {
+                ArchiveListScreen(model = model)
+            }
+        }
+        onNodeWithContentDescription("Row actions").performClick()
+        onNodeWithText("Archive").performClick()
+        onNodeWithText("Archive this item?").assertIsDisplayed()
+        runOnIdle { show = false }
+        onNodeWithText("Archive this item?").assertDoesNotExist()
+        runOnIdle { show = true }
+        onNodeWithText("Archive item").assertDoesNotExist()
+        assertEquals(listOf("request:first", "cancel"), model.calls)
+    }
+
+    @Test
+    fun staleConfirmationGateRejectsReplacementButAcceptsCurrentIdentity() {
+        assertFalse(canConfirmSwipeArchive("first", "second", 0, 0))
+        assertFalse(canConfirmSwipeArchive("first", "first", 0, 1))
+        assertFalse(canConfirmSwipeArchive(null, "first", 0, 0))
+        assertTrue(canConfirmSwipeArchive("first", "first", 0, 0))
     }
 
     @Test
