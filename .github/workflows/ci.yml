@@ -183,6 +183,14 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ../../examples/android/gradlew --no-daemon test
+      - name: Publish TestKit failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-testkit-test-results
+          path: tools/gradle/build/test-results/test/
+          if-no-files-found: error
+          retention-days: 14
       - name: Stage the canonical fixture corpus through the CLI
         run: python3 scripts/check_fixture_compilation.py
       - name: Compile the canonical fixture corpus
