@@ -44,7 +44,7 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
     let modalFixture = navigationFixture.deletingLastPathComponent().appendingPathComponent("modal-native-host")
     let modalMapping = try Mapping.load(data: Data(contentsOf: modalFixture.appendingPathComponent("refract.json")),
                                        file: "refract.json", resourceBaseURL: modalFixture)
-    let resources = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let resources = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     defer { try? FileManager.default.removeItem(at: resources) }
     try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
     let androidCatalog = try XMLDocument(contentsOf: navigationFixture.appendingPathComponent("values/strings.xml"))
@@ -68,6 +68,9 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
     harmonyOS.resources.catalog = "string.json"
     harmonyOS.resources.strings.merge(modalMapping.harmonyOS.resources.strings) { _, modal in modal }
     let mapping = Mapping(android: android, harmonyOS: harmonyOS, resourceBaseURL: resources)
+    #expect(FileManager.default.fileExists(atPath: resources.appendingPathComponent("strings.xml").path))
+    #expect(FileManager.default.fileExists(atPath: resources.appendingPathComponent("string.json").path))
+    _ = try StringResourceLoader.load(android: "strings.xml", harmony: "string.json", base: resources)
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     enum Route: Hashable {
         case detail
