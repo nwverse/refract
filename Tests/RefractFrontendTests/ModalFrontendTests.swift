@@ -9,6 +9,16 @@ import Testing
 private let modalRepository = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
+@Test func screenRoundTripRetainsModalAndNavigationOperations() throws {
+    let modal = ModalPresentation(kind: .sheet, stateName: "visible", isBinding: false,
+                                  content: [.text(Expression(.verbatimText("Sheet")), modifiers: [], location: nil)])
+    let screen = Screen(name: "Screen", modals: [modal], navigation: NavigationOperation(enumName: "Route"),
+                        body: .text(Expression(.verbatimText("Root")), modifiers: [], location: nil))
+    let module = Module(sourceFile: "Input.swift", screens: [screen])
+    let decoded = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(module))
+    #expect(decoded == module)
+}
+
 @Test func nativeModalHostsOwnPresentationAndTypedDismissal() throws {
     let fixture = modalRepository.appendingPathComponent("Fixtures/modal-native-host")
     let input = try String(contentsOf: fixture.appendingPathComponent("Input.swift"), encoding: .utf8)

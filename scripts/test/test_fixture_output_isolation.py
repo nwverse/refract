@@ -79,6 +79,37 @@ class FixtureOutputIsolationTest(unittest.TestCase):
             self.assertEqual(Path(observed["cwd"]), Path(observed["harmony"]).parent)
             self.assertFalse((module.ROOT / "generated").exists())
 
+    def test_fixture_test_cleanup_preserves_tracked_native_tests(self):
+        script = Path(__file__).resolve().parents[1] / "check_fixture_compilation.py"
+        spec = importlib.util.spec_from_file_location("check_fixture_compilation_for_test_cleanup", script)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory(prefix="refract-fixture-test-cleanup-") as temporary:
+            checkout = Path(temporary)
+            (checkout / "examples/android/fixture-compile-manifest.txt").parent.mkdir(parents=True)
+            (checkout / "examples/android/fixture-compile-manifest.txt").write_text(
+                "modal-native-host\nmodal-sheet-state\n", encoding="utf-8")
+            module.ROOT = checkout
+            module.MANIFEST = checkout / "examples/android/fixture-compile-manifest.txt"
+            module.STAGING_TEST = checkout / "examples/android/fixtures/src/test/java/example/native"
+            tracked = module.STAGING_TEST / "example/native/NavigationDeepRestorationTest.kt"
+            tracked.parent.mkdir(parents=True)
+            tracked.write_text("package example.native\nclass NavigationDeepRestorationTest\n", encoding="utf-8")
+            stale = module.STAGING_TEST / "example/native/NativeModalHostTest.kt"
+            stale.write_text("stale", encoding="utf-8")
+            regenerated = []
+
+            with mock.patch.object(module, "regenerate_and_stage",
+                                   side_effect=lambda fixture: regenerated.append(fixture)):
+                self.assertEqual(module.main(), 0)
+
+            self.assertEqual(tracked.read_text(encoding="utf-8"),
+                             "package example.native\nclass NavigationDeepRestorationTest\n")
+            self.assertFalse(stale.exists())
+            self.assertEqual(regenerated, ["modal-native-host", "modal-sheet-state"])
+
 
 if __name__ == "__main__":
     unittest.main()
