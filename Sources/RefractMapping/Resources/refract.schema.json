@@ -46,7 +46,7 @@
       "pattern": "^[a-z][a-z0-9_]*$"
     },
     "valueType": {
-      "enum": ["string", "bool", "int", "double", "length", "color", "font", "image", "stringKey", "remoteImageLoader", "action", "actionString", "actionBool", "actionInt", "actionDouble", "selectionContent", "selectionContextAction"]
+      "enum": ["string", "bool", "int", "double", "length", "color", "font", "image", "stringKey", "remoteImageLoader", "linkDestination", "linkPolicy", "linkHandoff", "action", "actionString", "actionBool", "actionInt", "actionDouble", "selectionContent", "selectionContextAction"]
     },
     "parameter": {
       "type": "object",

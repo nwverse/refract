@@ -469,6 +469,8 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNATIVE001` | Native component declaration is missing | Declare the application view and both typed platform implementations |
 | `RFMAP003` | Native component parameters disagree with the Swift declaration or platform binding | Match every parameter label and supported type in declaration order |
 | `RFNATIVE003` | Platform-value declaration is malformed or incomplete | Declare one typed value for every required platform |
+| `RFLINK001` | Link destination, policy, handoff declaration or constructor is outside the closed literal contract | Use `RefractLinkDestination.https/deepLink`, a literal exact allowlist and an injected `RefractLinkHandoff` |
+| `RFLINK002` | Link scheme/host/path is unsafe or outside the exact scheme/host allowlist | Use the bounded values and policy in `docs/link-handoff.md`; do not dispatch an arbitrary URL |
 | `RFSECURE001` | `.secureReveal` argument is not a projected Bool state/binding, or the modifier is misapplied | Pass `.secureReveal($isRevealed)` once, directly on a `SecureField`, with a declared Bool @State or @Binding |
 | `RFSECURE002` | `SecureField` title or `text:` argument is outside the typed contract | Use `SecureField("settings.password", text: $password)` with a canonical resource key and String state/binding |
 

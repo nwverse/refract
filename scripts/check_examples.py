@@ -166,6 +166,7 @@ def check_ios_references() -> None:
         "ParentBinding": "parent-binding",
         "ModelInterface": "model-interface",
         "AccessibilityDynamicType": "accessibility-dynamic-type",
+        "InteropLinkHandoff": "interop-link-handoff",
         "StackLayout": "v0-stack-layout",
         "InteropTextInputHost": "interop-text-input-host",
         "MarkdownConversation": "markdown-conversation",
@@ -187,7 +188,7 @@ def check_ios_references() -> None:
         fail("iOS target is missing the measurement fixture's application-owned typography token")
     if not (ROOT / "examples/ios/RefractExample/RefractMarkdownSource.swift").is_file():
         fail("iOS target is missing the typed Markdown source declarations")
-    print("iOS project references every shared source and thirteen unique, byte-identical compiler inputs")
+    print("iOS project references every shared source and fourteen unique, byte-identical compiler inputs")
 
 
 def main() -> int:
