@@ -43,7 +43,7 @@ public extension ViewNode {
             return .component(ComponentReference(name: component.name, arguments: component.arguments,
                 children: component.children, modifiers: component.modifiers + [modifier]), location: location)
         case .native, .nativeModifier, .child, .platformView, .conditional, .optionalBinding, .switchExpression,
-             .navigationLink, .navigationStack, .tabView, .section, .listItem, .forEach, .spacer:
+             .navigationLink, .navigationStack, .tabView, .section, .listItem, .forEach, .messageBlocks, .spacer:
             return nil
         }
     }

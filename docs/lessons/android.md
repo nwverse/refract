@@ -26,6 +26,13 @@ A TestKit runner uses the Gradle Tooling API and does not accept `--no-daemon` a
 application and require the same SDK as the examples, rather than claiming that a plain JVM project proves Android
 integration. Keep generated and reviewed Kotlin outside the default source set to avoid duplicate declarations.
 
+An explicit publication task must not declare the reviewed source directory as an output that Gradle also observes as
+another task's input. Gradle disables up-to-date when it sees that input/output overlap; a later publish can then be
+skipped and leave stale source in place. Publish on every explicit invocation, and let the CLI own source publication
+and rollback. Test the sequence clean → deliberately stale → failing check → explicit publish → clean check, so the
+fix cannot be hidden by an earlier no-op. Keep the Swift inputs, mapping, resources and exact CLI version identical
+across generation configurations; output roots, not runtime flags, select the consumer's variant.
+
 ## Match plugins to the Android Gradle Plugin version
 
 AGP 9 includes Kotlin Android support: applying `org.jetbrains.kotlin.android` as well is a configuration error.

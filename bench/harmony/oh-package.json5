@@ -1,0 +1,10 @@
+{
+  "name": "refract-benchmark",
+  "version": "1.0.0",
+  "description": "Source-prepared paired native ArkUI benchmark",
+  "main": "",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

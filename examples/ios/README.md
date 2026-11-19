@@ -1,5 +1,9 @@
 # iOS shared-source example
 
+The source prelude includes the zero-effect `Array.refractProjection(name:)` support declaration used by typed
+filter/sort projections. It returns the already-filtered/sorted array unchanged; the same source has no Refract
+runtime dependency. This declaration is source evidence here, not a new iOS compilation claim.
+
 `RefractExampleApp.swift` contains hand-written navigation, native settings and rollback screens. Shared
 `Hello.swift`, `SettingsScreen.swift` and `NativeComponentScreen.swift` compile directly as SwiftUI. The app-local
 `RefractModel` / `RefractNativeView` declarations and `AppSettingsModel` implement the same typed model boundary;
@@ -7,21 +11,23 @@
 is part of this target. The Xcode project references those shared files explicitly; do not replace them with copied
 platform-specific screens.
 
-The target also compiles nine source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
+The target also compiles twelve source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
 `InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift`,
-`ModelInterface.swift`, `AccessibilityDynamicType.swift`, `StackLayout.swift` and `MarkdownConversation.swift` in `examples/shared/`. Their unique
+`ModelInterface.swift`, `AccessibilityDynamicType.swift`, `StackLayout.swift`, `MarkdownConversation.swift`,
+`ThemedSettingsControl.swift`, `ChatMessageProjection.swift` and `SelectionLinkContext.swift` in `examples/shared/`. Their unique
 on-disk basenames avoid Xcode's duplicate `Input.stringsdata` output; `scripts/check_examples.py` requires each to
 stay byte-identical to its named canonical fixture. They exercise `Binding(get:set:)`, typed platform selection,
 native measurement, directional padding, named stack spacing, accessibility labels and ordinary SwiftUI action/label
 buttons through the real SwiftUI type checker. `RefractSourcePrelude.swift` supplies source-level, iOS-only
 declarations: `RefractSpacing` forwards to ordinary stack spacing, the native-modifier shim returns its receiver
-unchanged, and directional padding forwards to standard SwiftUI `EdgeInsets`. `MeasurementDesignTokens.swift` owns
-the iOS typography tokens. `RefractMarkdownSource.swift` owns the bounded typed Markdown AST and direct
-`AttributedString` construction; it does not parse Markdown at run time or import Refract. The conversation snippet
-is byte-identical to `Fixtures/markdown-conversation/Input.swift`. **The added Markdown source has not been compiled
-on macOS**; the checks here prove project wiring and source consistency only. Its native link and accessibility
-behavior require a real Apple-toolchain test, as documented in `docs/markdown.md`. None of these declarations
-performs runtime platform dispatch or links a Refract library.
+unchanged, and directional padding forwards to standard SwiftUI `EdgeInsets`. `DesignColorToken` owns the semantic
+normal/disabled/pressed/focused color mapping used by the themed settings component; its resolver does not discard
+state inputs. `MeasurementDesignTokens.swift` owns the iOS typography tokens. `RefractMarkdownSource.swift` owns the
+bounded typed Markdown AST and direct `AttributedString` construction; it does not parse Markdown at run time or
+import Refract. The conversation snippet is byte-identical to `Fixtures/markdown-conversation/Input.swift`. **The
+added Markdown source has not been compiled on macOS**; the checks here prove project wiring and source consistency
+only. Its native link and accessibility behavior require a real Apple-toolchain test, as documented in
+`docs/markdown.md`. None of these declarations performs runtime platform dispatch or links a Refract library.
 
 ## Build on macOS
 

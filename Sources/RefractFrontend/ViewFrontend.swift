@@ -126,6 +126,9 @@ extension Builder {
                       "Use List { ForEach(model.items) { item in ... } } alone, or a separate static List", at: forEach)
                 return nil
             }
+            if isMessageCollection(forEach.arguments.first?.expression) {
+                return dynamicList(forEach)
+            }
             return forEachList(forEach, owner: call)
         }
         guard let children = children(of: closure) else { return nil }

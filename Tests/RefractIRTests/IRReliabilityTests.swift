@@ -49,7 +49,35 @@ private struct IRCorpus {
 
     private mutating func view(depth: Int) -> ViewNode {
         let leafCount = 12
-        let selection = Int.random(in: 0..<(depth < 3 ? 23 : leafCount), using: &random)
+        // Navigation and message-block cases join the existing selector without pre-empting it.
+        let selection = Int.random(in: 0..<(depth < 3 ? 29 : leafCount + 3), using: &random)
+        switch selection {
+        case 24:
+            return .navigationLink(title: expression(), pathName: "path", enumName: "Route",
+                                   destination: "detail", location: location())
+        case 25:
+            return .navigationStack(NavigationStackNode(pathName: "path", enumName: "Route",
+                content: children(depth: depth), destinations: [
+                    NavigationDestination(caseName: "detail", viewName: "Detail"),
+                ]), location: location())
+        case 26, 27:
+            return .tabView(TabViewNode(selectionName: "tab", enumName: "Tab", destinations: [
+                TabDestination(caseName: "home", viewName: "Home", title: expression(), symbol: "house"),
+            ]), location: location())
+        case 28:
+            let inline = MarkdownDocument.Inline.strong(.link(MarkdownDocument.Link(
+                label: expression(),
+                destination: .init(scheme: "https", host: "example.com", path: "/docs"))))
+            return .markdown(MarkdownDocument(version: 1, blocks: [
+                .paragraph(.init(id: "answer.summary", content: [inline, .text(expression())], location: location())),
+                .codeBlock(.init(id: "answer.example", language: .swift,
+                    accessibilityLabel: LocalizedText(key: "conversation.code.label", arguments: [expression()]),
+                    code: "let answer = 42", location: location())),
+            ]), linkAction: MarkdownLinkAction(model: "model", method: "openLink", argumentLabel: "url"),
+               modifiers: modifiers(), location: location())
+        default:
+            break
+        }
         switch selection {
         case 0: return .stack(axis: axis(), children: children(depth: depth), modifiers: modifiers(), location: location())
         case 1: return .text(expression(), modifiers: modifiers(), location: location())
@@ -94,6 +122,13 @@ private struct IRCorpus {
         case 19: return .textInput(placeholder: expression(), value: expression(), modifiers: modifiers(), location: location())
         case 22: return .secureInput(placeholder: expression(), value: expression(), reveal: nil,
                                      modifiers: modifiers(), location: location())
+        case 23:
+            let items = ListItems(collection: Expression(.reference("message.blocks")), itemName: "block",
+                itemType: "ChatBlock", keyType: .string,
+                content: .text(expression(), modifiers: [], location: location()))
+            return .messageBlocks(NestedListItems(items, parent: "message",
+                message: .init(label: "message", expression: "message"),
+                block: .init(label: "block", expression: "block")), location: location())
         case 20: return .label(title: expression(), image: ImageSource(kind: .application, name: "logo", location: location()),
                                modifiers: modifiers(), location: location())
         case 21: return Bool.random(using: &random) ? .divider(modifiers: modifiers(), location: location()) : .spacer(location: location())
@@ -115,7 +150,7 @@ private struct IRCorpus {
 
     private mutating func expression() -> RefractIR.Expression {
         let value: IRExpression.Value
-        switch Int.random(in: 0..<12, using: &random) {
+        switch Int.random(in: 0..<16, using: &random) {
         case 0: value = .stringLiteral("value\(Int.random(in: 0...100, using: &random))")
         case 1: value = .verbatimText("literal")
         case 2: value = .stringKey("settings.title")
@@ -128,9 +163,19 @@ private struct IRCorpus {
         case 9: value = .valueProperty(.itemBinding(ItemBinding(model: "model", item: "row", property: "enabled", key: "id", action: "setEnabled")))
         case 10: let segments: [StringInterpolationSegment] = [.literal("Count: "), .expression(IRExpression(.reference("count"), type: .int))]
             value = .interpolatedString(segments)
-        default: value = .platformValue(PlatformAlternatives(
+        case 11: value = .interactionColor(InteractionColorValue(token: "DesignColors.action",
+            enabled: IRExpression(.valueProperty(.binding("enabled")), type: .bool),
+            pressed: IRExpression(.boolLiteral(false), type: .bool),
+            focused: IRExpression(.boolLiteral(true), type: .bool)))
+        case 12: value = .platformValue(PlatformAlternatives(
             ios: IRExpression(.stringLiteral("iOS")), android: IRExpression(.stringLiteral("Android")),
             harmonyOS: IRExpression(.stringLiteral("HarmonyOS"))))
+        case 13: value = .formField(form: "draft", field: "email")
+        case 14: value = .presence(IRExpression(.reference("model.error")))
+        default:
+            value = .formValid(FormDeclaration(name: "draft", fields: [
+                FormField(name: "email", initialValue: IRExpression(.stringLiteral("")), rules: [.nonEmpty]),
+            ]))
         }
         return IRExpression(value, type: [nil, .string, .bool, .double, .int].randomElement(using: &random)!, location: location())
     }
@@ -173,7 +218,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 24 public ViewNode cases and all 12 Expression.Value cases must actually occur.
+        // All 29 public ViewNode cases and all 16 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -192,16 +237,154 @@ struct IRReliabilityTests {
             var replay = IRCorpus(seed: seed)
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
-        #expect(seenViews.count == 24, "Visited view cases: \(seenViews.sorted())")
-        #expect(seenExpressions.count == 12, "Visited expression cases: \(seenExpressions.sorted())")
+        #expect(seenViews.count == 29, "Visited view cases: \(seenViews.sorted())")
+        #expect(seenExpressions.count == 16, "Visited expression cases: \(seenExpressions.sorted())")
     }
 
     private func collectCases(in node: ViewNode, views: inout Set<String>, expressions: inout Set<String>) {
         views.insert(String(describing: node).split(separator: "(").first.map(String.init) ?? "")
-        if case let .text(expression, _, _) = node {
-            expressions.insert(String(describing: expression.value).split(separator: "(").first.map(String.init) ?? "")
+        switch node {
+        case let .text(value, modifiers, _):
+            collectExpression(value, into: &expressions)
+            collect(modifiers, into: &expressions)
+        case let .markdown(document, _, modifiers, _):
+            collect(modifiers, into: &expressions)
+            for block in document.blocks {
+                switch block {
+                case let .paragraph(paragraph):
+                    for inline in paragraph.content { collectMarkdown(inline, into: &expressions) }
+                case let .codeBlock(code):
+                    for argument in code.accessibilityLabel.arguments {
+                        collectExpression(argument, into: &expressions)
+                    }
+                }
+            }
+        case let .button(_, action, modifiers, _):
+            collect(action, into: &expressions)
+            collect(modifiers, into: &expressions)
+        case let .navigationLink(title, _, _, _, _):
+            collectExpression(title, into: &expressions)
+        case let .section(header, _, _):
+            if let header { collectExpression(header, into: &expressions) }
+        case .navigationStack:
+            break
+        case let .tabView(tabs, _):
+            for destination in tabs.destinations { collectExpression(destination.title, into: &expressions) }
+            if let title = tabs.menuTitle { collectExpression(title, into: &expressions) }
+            for action in tabs.menuActions {
+                collectExpression(action.title, into: &expressions)
+                collect(action.action, into: &expressions)
+            }
+        case let .native(component, _):
+            collect(component.arguments, into: &expressions)
+        case let .nativeModifier(_, operations, _):
+            for operation in operations { collect(operation.operation, into: &expressions) }
+        case let .component(component, _):
+            collect(component.arguments, into: &expressions)
+            collect(component.modifiers, into: &expressions)
+        case let .conditional(branches, _):
+            for branch in branches {
+                if let condition = branch.condition { collectExpression(condition, into: &expressions) }
+            }
+        case let .optionalBinding(subject, _, _, _, _):
+            collectExpression(subject, into: &expressions)
+        case let .switchExpression(subject, _, _, _):
+            collectExpression(subject, into: &expressions)
+        case let .layout(layout, _, modifiers, _):
+            if let spacing = layout.spacing { collectExpression(spacing, into: &expressions) }
+            collect(modifiers, into: &expressions)
+        case let .stack(_, _, modifiers, _), let .scroll(_, _, modifiers, _),
+             let .list(_, modifiers, _), let .image(_, modifiers, _), let .divider(modifiers, _):
+            collect(modifiers, into: &expressions)
+        case let .forEach(items, _):
+            collectExpression(items.collection, into: &expressions)
+        case let .messageBlocks(nested, _):
+            collectExpression(nested.items.collection, into: &expressions)
+        case let .toggle(title, value, modifiers, nativeModifiers, _, _):
+            for value in [title, value] { collectExpression(value, into: &expressions) }
+            collect(modifiers, into: &expressions)
+            for operation in nativeModifiers { collect(operation.operation, into: &expressions) }
+        case let .textInput(placeholder, value, modifiers, _):
+            if let placeholder { collectExpression(placeholder, into: &expressions) }
+            collectExpression(value, into: &expressions)
+            collect(modifiers, into: &expressions)
+        case let .secureInput(placeholder, value, reveal, modifiers, _):
+            for value in [placeholder, reveal].compactMap({ $0 }) + [value] {
+                collectExpression(value, into: &expressions)
+            }
+            collect(modifiers, into: &expressions)
+        case let .label(title, _, modifiers, _):
+            collectExpression(title, into: &expressions)
+            collect(modifiers, into: &expressions)
+        case .child, .platformView, .listItem, .spacer:
+            break
         }
         for child in node.children { collectCases(in: child, views: &views, expressions: &expressions) }
+    }
+
+    private func collectExpression(_ expression: IRExpression, into expressions: inout Set<String>) {
+        expressions.insert(String(describing: expression.value).split(separator: "(").first.map(String.init) ?? "")
+        switch expression.value {
+        case let .interactionColor(value):
+            for state in [value.enabled, value.pressed, value.focused] { collectExpression(state, into: &expressions) }
+        case let .platformValue(alternatives):
+            for branch in [alternatives.ios, alternatives.android, alternatives.harmonyOS] {
+                collectExpression(branch, into: &expressions)
+            }
+        case let .presence(subject):
+            collectExpression(subject, into: &expressions)
+        case let .formValid(form):
+            for field in form.fields { collectExpression(field.initialValue, into: &expressions) }
+        default:
+            break
+        }
+    }
+
+    private func collectMarkdown(_ inline: MarkdownDocument.Inline, into expressions: inout Set<String>) {
+        switch inline {
+        case let .text(value): collectExpression(value, into: &expressions)
+        case let .strong(content), let .emphasis(content): collectMarkdown(content, into: &expressions)
+        case let .link(link): collectExpression(link.label, into: &expressions)
+        case .inlineCode: break
+        }
+    }
+
+    private func collect(_ modifiers: [Modifier], into expressions: inout Set<String>) {
+        for modifier in modifiers {
+            for argument in modifier.arguments { collectExpression(argument, into: &expressions) }
+        }
+    }
+
+    private func collect(_ arguments: [NativeArgument], into expressions: inout Set<String>) {
+        for argument in arguments {
+            if let expression = argument.expression { collectExpression(expression, into: &expressions) }
+            collect(argument.action, into: &expressions)
+        }
+    }
+
+    private func collect(_ action: StateAction?, into expressions: inout Set<String>) {
+        guard let action else { return }
+        switch action {
+        case let .assign(_, value), let .increment(_, value):
+            collectExpression(value, into: &expressions)
+        case let .modelMethod(_, _, arguments):
+            for argument in arguments { collectExpression(argument.value, into: &expressions) }
+        case let .submit(submit):
+            if let form = submit.declaration {
+                for field in form.fields { collectExpression(field.initialValue, into: &expressions) }
+            }
+        }
+    }
+
+    private func collect(_ operation: NativeModifier.Operation, into expressions: inout Set<String>) {
+        switch operation {
+        case let .testTag(value), let .contentDescription(value), let .dragPayload(_, value):
+            collectExpression(value, into: &expressions)
+        case let .textSelection(start, end, _):
+            for value in [start, end] { collectExpression(value, into: &expressions) }
+        case .retainCallback, .contentType, .dropTarget:
+            break
+        }
     }
 
     private func viewCount(in node: ViewNode) -> Int {

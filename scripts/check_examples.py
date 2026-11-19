@@ -168,6 +168,9 @@ def check_ios_references() -> None:
         "AccessibilityDynamicType": "accessibility-dynamic-type",
         "StackLayout": "v0-stack-layout",
         "MarkdownConversation": "markdown-conversation",
+        "ThemedSettingsControl": "theme-interaction-states",
+        "ChatMessageProjection": "chat-message-projection",
+        "SelectionLinkContext": "selection-link-context",
     }
     for name, case in compiler_inputs.items():
         path = f"../shared/{name}.swift"
@@ -183,7 +186,7 @@ def check_ios_references() -> None:
         fail("iOS target is missing the measurement fixture's application-owned typography token")
     if not (ROOT / "examples/ios/RefractExample/RefractMarkdownSource.swift").is_file():
         fail("iOS target is missing the typed Markdown source declarations")
-    print("iOS project compiles every shared source and nine unique, byte-identical compiler inputs")
+    print("iOS project references every shared source and twelve unique, byte-identical compiler inputs")
 
 
 def main() -> int:
