@@ -146,8 +146,11 @@ extension Expression {
                 guard lhsText == rhsText else { return false }
             case let (.nativeValueProperty(lhsValue), .nativeValueProperty(rhsValue)):
                 guard lhsValue == rhsValue else { return false }
-            case let (.imageResource(lhsName), .imageResource(rhsName)):
+            case let (.imageResource(lhsName), .imageResource(rhsName)),
+                 let (.rawAssetResource(lhsName), .rawAssetResource(rhsName)):
                 guard lhsName == rhsName else { return false }
+            case let (.fontAsset(lhsName, lhsSize), .fontAsset(rhsName, rhsSize)):
+                guard lhsName == rhsName, lhsSize == rhsSize else { return false }
             case let (.linkDestination(lhsDestination), .linkDestination(rhsDestination)):
                 guard lhsDestination == rhsDestination else { return false }
             case let (.linkPolicy(lhsPolicy), .linkPolicy(rhsPolicy)):

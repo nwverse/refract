@@ -183,6 +183,7 @@ public enum InteropMapping {
             case .string, .stringKey: "string"
             case .bool: "boolean"
             case .int, .double, .image: "number"
+            case .rawAsset: "Resource"
             case .remoteImageLoader: "RemoteImageLoader"
             case .linkDestination: "LinkDestination"
             case .linkPolicy: "LinkPolicy"
@@ -196,7 +197,7 @@ public enum InteropMapping {
         return switch type {
         case .string, .stringKey: "String"
         case .bool: "Boolean"
-        case .int, .image: "Int"
+        case .int, .image, .rawAsset: "Int"
         case .double: "Double"
         case .remoteImageLoader: "RemoteImageLoader"
         case .linkDestination: "LinkDestination"

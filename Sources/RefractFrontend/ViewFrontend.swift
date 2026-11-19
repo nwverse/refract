@@ -170,18 +170,43 @@ extension Builder {
     }
 
     private func image(_ call: FunctionCallExprSyntax) -> ViewNode? {
-        guard call.arguments.count == 1, let argument = call.arguments.first,
-              let name = stringLiteral(argument.expression), call.trailingClosure == nil else {
-            error("RFVIEW004", "Image requires one literal application asset name or `systemName`.",
-                  "Use Image(\"asset_name\") or Image(systemName: \"symbol\")", at: call)
+        guard call.arguments.count == 1 || call.arguments.count == 2,
+              let first = call.arguments.first, let name = stringLiteral(first.expression),
+              call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty else {
+            error("RFVIEW004", "Image requires a literal application asset name with an optional localized label.",
+                  "Use Image(\"asset_name\", label: Text(\"accessibility.key\")) or Image(systemName: \"symbol\")", at: call)
             return nil
         }
-        let kind: ImageSource.Kind = argument.label?.text == "systemName" ? .system : .application
-        guard kind == .system || argument.label == nil else {
-            error("RFVIEW004", "Image argument label is unsupported.", at: argument)
+        let kind: ImageSource.Kind = first.label?.text == "systemName" ? .system : .application
+        guard kind == .system || first.label == nil else {
+            error("RFVIEW004", "Image argument label is unsupported.", at: first)
             return nil
         }
-        return .image(source: ImageSource(kind: kind, name: name, location: location(of: call)), modifiers: [], location: location(of: call))
+        var description: Expression?
+        if call.arguments.count == 2 {
+            guard call.arguments.count == 2, kind == .application,
+                  let label = call.arguments.last, label.label?.text == "label",
+                  let text = label.expression.as(FunctionCallExprSyntax.self),
+                  text.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Text",
+                  text.arguments.count == 1, text.arguments.first?.label == nil,
+                  text.trailingClosure == nil else {
+                error("RFVIEW004", "Image accessibility requires a localized Text label.",
+                      "Use label: Text(\"canonical.accessibility.key\")", at: call)
+                return nil
+            }
+            var parser = LocalizationFrontend(file: file, converter: converter, scalar: {
+                TypedExpression(self.viewScalar($0), nil)
+            }, stateText: stateText)
+            guard let title = parser.localized(text.arguments.first!.expression) else {
+                diagnostics.append(contentsOf: parser.diagnostics)
+                return nil
+            }
+            diagnostics.append(contentsOf: parser.diagnostics)
+            description = title
+        }
+        return .image(source: ImageSource(kind: kind, name: name, location: location(of: call),
+                                         contentDescription: description),
+                      modifiers: [], location: location(of: call))
     }
 
     private func label(_ call: FunctionCallExprSyntax) -> ViewNode? {

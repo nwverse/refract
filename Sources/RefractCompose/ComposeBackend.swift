@@ -300,7 +300,10 @@ public struct ComposeBackend: Sendable {
         let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, parentAxis: parentAxis, into: &out, context: &context)
         let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
-        let styled = modifiers.contains { $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle" }
+        let styled = modifiers.contains {
+            if case .fontAsset = $0.arguments.first?.value { return true }
+            return $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle"
+        }
         if modifierChain != "Modifier" {
             if modifiers.contains(where: { $0.arguments.contains(where: {
                 if case .interactionColor = $0.value { return true }
@@ -315,7 +318,12 @@ public struct ComposeBackend: Sendable {
         }
         if styled {
             for modifier in modifiers where ["font", "foregroundStyle", "foregroundColor"].contains(modifier.name) {
-                let value = try composeToken(try ModifierArguments(modifier: modifier).one(),
+                let argument = try ModifierArguments(modifier: modifier).one()
+                if case .fontAsset = argument.value {
+                    arguments.append(contentsOf: try textSpecificModifiers([modifier], context: &context))
+                    continue
+                }
+                let value = try composeToken(argument,
                     category: modifier.name == "font" ? .font : .color, context: &context)
                 arguments.append("\(modifier.name == "font" ? "style" : "color") = \(value)")
             }
@@ -433,6 +441,9 @@ public struct ComposeBackend: Sendable {
         case let .linkPolicy(policy):
             return LinkHandoffEmission.compose(policy)
         case let .imageResource(name):
+            if context.mapping.android.resources.assetCatalog != nil {
+                return try composeResource(name, kind: .image, mapping: context.mapping, location: expression.location)
+            }
             guard let resourceClass = context.androidResourceClass, !name.isEmpty,
                   name.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }) else {
                 throw Diagnostic(code: "RFMAP003",
@@ -442,6 +453,10 @@ public struct ComposeBackend: Sendable {
             }
             context.imports.insert(resourceClass)
             return "R.drawable.\(name)"
+        case let .rawAssetResource(name):
+            return try composeResource(name, kind: .raw, mapping: context.mapping, location: expression.location)
+        case let .fontAsset(name, _):
+            return try composeFontFamily(name, mapping: context.mapping, location: expression.location, context: &context)
         case let .boolLiteral(value):
             return value ? "true" : "false"
         case let .numberLiteral(text):

@@ -173,10 +173,9 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
                 fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-    if fixture in {"interop-remote-image", "accessibility-actions-traversal"}:
+    if fixture in {"interop-remote-image", "accessibility-actions-traversal", "resource-typed-assets"}:
         # Native JVM tests need the app's real resource table, not a library's
-        # isolated test APK. Stage the exact generated call and its resources.
-        # The batch is cleaned once in main; individual fixtures only append.
+        # isolated test APK. Keep every manifest fixture's generated entry point and resources.
         target_package = APP_TEST_JAVA.joinpath(*package.split("."))
         target_package.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(target, target_package / f"{fixture}.kt")
@@ -192,6 +191,11 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
                     destination = APP_TEST_RES / relative
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(source, destination)
+        if fixture == "resource-typed-assets":
+            native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-NativeComponent.kt"
+            app_native = APP_TEST_JAVA / "example" / "app" / "AppPolicyDocument.kt"
+            app_native.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(native_target, app_native)
         destination = APP_TEST_RES / "values/strings.xml"
         destination.parent.mkdir(parents=True, exist_ok=True)
         merge_strings(strings_xml, destination, fixture)

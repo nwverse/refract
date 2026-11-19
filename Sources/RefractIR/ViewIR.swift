@@ -78,11 +78,15 @@ public struct ImageSource: Codable, Equatable, Sendable {
     public let kind: Kind
     public let name: String
     public let location: SourceLocation?
+    /// A resolved localized resource; nil means a deliberately decorative image.
+    public let contentDescription: Expression?
 
-    public init(kind: Kind, name: String, location: SourceLocation? = nil) {
+    public init(kind: Kind, name: String, location: SourceLocation? = nil,
+                contentDescription: Expression? = nil) {
         self.kind = kind
         self.name = name
         self.location = location
+        self.contentDescription = contentDescription
     }
 }
 
