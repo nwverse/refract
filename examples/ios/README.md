@@ -11,10 +11,10 @@ runtime dependency. This declaration is source evidence here, not a new iOS comp
 is part of this target. The Xcode project references those shared files explicitly; do not replace them with copied
 platform-specific screens.
 
-The target also compiles thirteen source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
+The target also compiles fourteen source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
 `InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift`,
 `ModelInterface.swift`, `AccessibilityDynamicType.swift`, `InteropLinkHandoff.swift`, `StackLayout.swift`,
-`MarkdownConversation.swift`,
+`InteropTextInputHost.swift`, `MarkdownConversation.swift`,
 `ThemedSettingsControl.swift`, `ChatMessageProjection.swift` and `SelectionLinkContext.swift` in `examples/shared/`. Their unique
 on-disk basenames avoid Xcode's duplicate `Input.stringsdata` output; `scripts/check_examples.py` requires each to
 stay byte-identical to its named canonical fixture. They exercise `Binding(get:set:)`, typed platform selection,

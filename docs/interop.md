@@ -36,6 +36,7 @@ generated input file.
 import SwiftUI
 
 public protocol RefractNativeView: View {}
+public protocol RefractTextInputHost: View {}
 
 public struct RefractSpacing: Sendable {
     public let value: CGFloat
@@ -344,6 +345,16 @@ change supplies no ArkTS implementation or compiler evidence; those remain unver
 The generated scalar argument path now preserves the declared type of a model property such as `model.identity`,
 using the same typed expression as existing model-backed views. Unknown model or item members remain `RFSEM001`
 diagnostics; no unknown type is silently inferred as `String`.
+
+## Native text input hosts
+
+`docs/text-input-host.md` defines the dedicated `RefractTextInputHost` boundary for committed drafts, focus
+requests, return-key submission and native IME ownership. It is not an expansion of ordinary generated `TextField`
+or the generic scalar/no-argument-action `RefractNativeView` ABI; the independently typed selection destination
+callback retains its separate contract. Android uses a real `EditText`/`InputConnection`;
+preedit remains in that native editor, and no Chinese composition is synthesized. Golden Kotlin and ArkTS, compiled
+Kotlin and labelled Native JVM tests cover the contract. Apple/HarmonyOS toolchains, third-party IMEs and devices
+retain their explicit verification boundaries.
 
 ## Per-platform values, modifiers and animations
 

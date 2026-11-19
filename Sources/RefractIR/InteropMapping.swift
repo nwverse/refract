@@ -58,9 +58,31 @@ public enum InteropMapping {
                 suggestion: "Declare a typed implementation with ordered parameters `\(signature(declaration.parameters))`.",
                 location: location ?? declaration.location)])
         }
-        let diagnostics = validate(target: target, declaration: declaration, platform: name, location: location)
+        let diagnostics = validateHost(declaration, platform: name, location: location)
+            + validate(target: target, declaration: declaration, platform: name, location: location)
         guard diagnostics.isEmpty else { throw InteropMappingError(diagnostics: diagnostics) }
         return target
+    }
+
+    private static let textInputHostParameters: [(String, NativeParameterType)] = [
+        ("draft", .string), ("focusRequest", .int), ("onDraftCommit", .string), ("onCommit", .string),
+    ]
+
+    private static func validateHost(_ declaration: NativeDeclaration, platform: String,
+                                     location: SourceLocation?) -> [Diagnostic] {
+        let expected = declaration.kind == .textInputHost ? textInputHostParameters : []
+        let valid = declaration.kind == .textInputHost
+            ? declaration.name == "NativeTextInputHost"
+                && declaration.parameters.map { ($0.label, $0.type) }.elementsEqual(expected, by: ==)
+            : declaration.parameters.allSatisfy { parameter in
+                parameter.type != .actionString || parameter.label == "onLink"
+            }
+        return valid ? [] : [Diagnostic(code: "RFINPUT003",
+            message: "Native component `\(declaration.name)` does not have a valid \(platform) text-input host ABI.",
+            suggestion: declaration.kind == .textInputHost
+                ? "Use draft: String, focusRequest: Int, onDraftCommit: (String) -> Void, onCommit: () -> Void."
+                : "Use the dedicated RefractTextInputHost marker for bounded text-input callbacks.",
+            location: location ?? declaration.location)]
     }
 
     /// Check both platforms together for declarations that have no call site.
@@ -105,8 +127,18 @@ public enum InteropMapping {
         } else {
             for (actual, expected) in zip(target.parameters, declaration.parameters) {
                 let expectedTargetType = targetType(expected.type, platform: platform)
+                let expectedType: NativeParameterType = if declaration.kind == .textInputHost {
+                    switch expected.label {
+                    case "onDraftCommit": .actionString
+                    case "onCommit": .action
+                    default: expected.type
+                    }
+                } else {
+                    expected.type
+                }
                 let actualTargetType = actual.targetType ?? actual.type.rawValue
-                if actual.label != expected.label || (actual.targetType == nil && actual.type != expected.type) || !actual.required {
+                let typesMatch = actual.targetType != nil || actual.type == expectedType
+                if actual.label != expected.label || !typesMatch || !actual.required {
                     diagnostics.append(Diagnostic(code: "RFMAP003",
                         message: "Native component `\(declaration.name)` expects Swift `\(expected.label): \(expected.type.rawValue)`, required; \(platform) mapping declares `\(actual.label): \(actualTargetType)`, required: \(actual.required).",
                         suggestion: "Match the stored-property signature in declaration order.",
