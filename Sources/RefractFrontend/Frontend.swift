@@ -132,12 +132,13 @@ final class Builder: SyntaxVisitor {
         collectModels(tree)
         collectNativeHosts(tree)
         collectDeclaredViews(tree)
-        // Native event wrappers are validated declarations, not View bodies.
-        // Keep them in the same declaration table used by lifecycle parsing.
+        // Native event wrappers and the dedicated text-input host share the declaration table.
         for statement in tree.statements {
             guard let declaration = statement.item.as(StructDeclSyntax.self),
                   declaration.inheritanceClause?.inheritedTypes.contains(where: { inherited in
-                      NativeValueKind.allCases.contains(where: { $0.typeName == inherited.type.trimmedDescription })
+                      let name = inherited.type.trimmedDescription
+                      return name == "RefractTextInputHost" ||
+                          NativeValueKind.allCases.contains(where: { $0.typeName == name })
                   }) == true else { continue }
             viewDeclarations[declaration.name.text] = declaration
         }
@@ -520,7 +521,9 @@ final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
-            if let declaration = viewDeclarations[name] {
+            if let declaration = viewDeclarations[name], interop.declarations.contains(where: {
+                $0.name == name && $0.kind == .textInputHost
+            }) == false {
                 return childView(call, declaration: declaration)
             }
             if interop.declarations.contains(where: { $0.name == name }) == false,
@@ -542,6 +545,21 @@ final class Builder: SyntaxVisitor {
 
     private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent? {
         let name = call.calledExpression.trimmedDescription
+        if let declaration = interop.declarations.first(where: { $0.name == name }),
+           declaration.kind == .textInputHost {
+            var valid = true
+            let arguments = call.arguments.compactMap { argument -> NativeArgument? in
+                let parser = TextInputHostFrontend(file: file, converter: converter)
+                guard let value = parser.argument(argument, in: self) else {
+                    valid = false
+                    error("RFINPUT002", "Text-input host argument `\(argument.label?.text ?? "unlabeled")` must use the declared binding and model callback contract.",
+                          "Pass `draft: $draft`, `focusRequest: focusRequest`, `onDraftCommit: { model.commitDraft($0) }`, and `onCommit: { model.commit() }`", at: argument)
+                    return nil
+                }
+                return value
+            }
+            return valid ? NativeComponent(name: name, arguments: arguments) : nil
+        }
         let before = diagnostics.count
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
             guard let label = argument.label?.text else {

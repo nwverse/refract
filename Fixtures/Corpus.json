@@ -230,6 +230,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-text-input-host",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-foreach",
       "implementationStatus": "ready"
     },

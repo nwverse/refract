@@ -48,12 +48,25 @@ public struct NativeParameter: Codable, Equatable, Sendable {
 public struct NativeDeclaration: Codable, Equatable, Sendable {
     public let name: String
     public let parameters: [NativeParameter]
+    public let kind: Kind
     public let location: SourceLocation?
 
-    public init(name: String, parameters: [NativeParameter], location: SourceLocation? = nil) {
+    public init(name: String, parameters: [NativeParameter], kind: Kind = .component,
+                location: SourceLocation? = nil) {
         self.name = name
         self.parameters = parameters
+        self.kind = kind
         self.location = location
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, parameters, kind, location }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        parameters = try values.decode([NativeParameter].self, forKey: .parameters)
+        kind = try values.decodeIfPresent(Kind.self, forKey: .kind) ?? .component
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
 

@@ -167,6 +167,7 @@ def check_ios_references() -> None:
         "ModelInterface": "model-interface",
         "AdaptiveSettings": "adaptive-window-size",
         "StackLayout": "v0-stack-layout",
+        "InteropTextInputHost": "interop-text-input-host",
         "MarkdownConversation": "markdown-conversation",
         "ThemedSettingsControl": "theme-interaction-states",
         "ChatMessageProjection": "chat-message-projection",

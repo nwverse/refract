@@ -2,6 +2,7 @@ import SwiftUI
 
 public protocol RefractModel {}
 public protocol RefractNativeView: View {}
+public protocol RefractTextInputHost: View {}
 
 public extension Array {
     /// The SwiftUI source already performs the bounded filter and sort; naming the
