@@ -43,11 +43,30 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
     let modalFixture = navigationFixture.deletingLastPathComponent().appendingPathComponent("modal-native-host")
     let modalMapping = try Mapping.load(data: Data(contentsOf: modalFixture.appendingPathComponent("refract.json")),
                                        file: "refract.json", resourceBaseURL: modalFixture)
+    let resources = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: resources) }
+    try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+    let androidCatalog = try XMLDocument(contentsOf: navigationFixture.appendingPathComponent("values/strings.xml"))
+    let modalAndroidCatalog = try XMLDocument(contentsOf: modalFixture.appendingPathComponent("values/strings.xml"))
+    for child in modalAndroidCatalog.rootElement()?.children ?? [] {
+        if let element = child as? XMLElement, let copy = element.copy() as? XMLElement {
+            androidCatalog.rootElement()?.addChild(copy)
+        }
+    }
+    try androidCatalog.xmlData.write(to: resources.appendingPathComponent("strings.xml"))
+    var harmonyCatalog = try JSONSerialization.jsonObject(
+        with: Data(contentsOf: navigationFixture.appendingPathComponent("string.json"))) as! [String: [[String: String]]]
+    let modalHarmonyCatalog = try JSONSerialization.jsonObject(
+        with: Data(contentsOf: modalFixture.appendingPathComponent("resources/base/element/string.json"))) as! [String: [[String: String]]]
+    harmonyCatalog["string", default: []].append(contentsOf: modalHarmonyCatalog["string"] ?? [])
+    try JSONSerialization.data(withJSONObject: harmonyCatalog).write(to: resources.appendingPathComponent("string.json"))
     var android = navigationMapping.android
+    android.resources.catalog = "strings.xml"
     android.resources.strings.merge(modalMapping.android.resources.strings) { _, modal in modal }
     var harmonyOS = navigationMapping.harmonyOS
+    harmonyOS.resources.catalog = "string.json"
     harmonyOS.resources.strings.merge(modalMapping.harmonyOS.resources.strings) { _, modal in modal }
-    let mapping = Mapping(android: android, harmonyOS: harmonyOS, resourceBaseURL: navigationFixture)
+    let mapping = Mapping(android: android, harmonyOS: harmonyOS, resourceBaseURL: resources)
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     enum Route: Hashable {
         case detail
