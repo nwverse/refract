@@ -140,8 +140,11 @@ extension Expression {
                  let (.reference(lhsText), .reference(rhsText)),
                  let (.binding(lhsText), .binding(rhsText)):
                 guard lhsText == rhsText else { return false }
-            case let (.imageResource(lhsName), .imageResource(rhsName)):
+            case let (.imageResource(lhsName), .imageResource(rhsName)),
+                 let (.rawAssetResource(lhsName), .rawAssetResource(rhsName)):
                 guard lhsName == rhsName else { return false }
+            case let (.fontAsset(lhsName, lhsSize), .fontAsset(rhsName, rhsSize)):
+                guard lhsName == rhsName, lhsSize == rhsSize else { return false }
             case let (.boolLiteral(lhsValue), .boolLiteral(rhsValue)):
                 guard lhsValue == rhsValue else { return false }
             case let (.layoutSpacing(lhsSpacing), .layoutSpacing(rhsSpacing)):
