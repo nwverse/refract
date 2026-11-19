@@ -188,10 +188,13 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
     public var tokens: TokenSet
     public var resources: Resources
     public var symbols: [String: SymbolMapping]
+    /// The lowest native SDK level the application compiles for; required by gated accessibility APIs.
+    public var minimumAPI: Int?
 
     public init(output: Output = .unspecified, imports: [NativeImport] = [], components: [String: Component] = [:],
                 nativeComponents: [String: Component] = [:], modifiers: [String: ModifierSignature] = [:],
-                tokens: TokenSet = .empty, resources: Resources = .empty, symbols: [String: SymbolMapping] = [:]) {
+                tokens: TokenSet = .empty, resources: Resources = .empty, symbols: [String: SymbolMapping] = [:],
+                minimumAPI: Int? = nil) {
         self.output = output
         self.imports = imports
         self.components = components
@@ -200,11 +203,12 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
         self.tokens = tokens
         self.resources = resources
         self.symbols = symbols
+        self.minimumAPI = minimumAPI
     }
 
     public static let empty = PlatformMapping()
 
-    enum CodingKeys: String, CodingKey { case output, imports, components, nativeComponents, modifiers, tokens, resources, symbols }
+    enum CodingKeys: String, CodingKey { case output, imports, components, nativeComponents, modifiers, tokens, resources, symbols, minimumAPI }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -216,6 +220,7 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
         tokens = try values.decode(TokenSet.self, forKey: .tokens)
         resources = try values.decode(Resources.self, forKey: .resources)
         symbols = try values.decodeIfPresent([String: SymbolMapping].self, forKey: .symbols) ?? [:]
+        minimumAPI = try values.decodeIfPresent(Int.self, forKey: .minimumAPI)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -228,6 +233,7 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
         try values.encode(tokens, forKey: .tokens)
         try values.encode(resources, forKey: .resources)
         if !symbols.isEmpty { try values.encode(symbols, forKey: .symbols) }
+        try values.encodeIfPresent(minimumAPI, forKey: .minimumAPI)
     }
 }
 

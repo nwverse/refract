@@ -5,7 +5,7 @@ extension Generation {
     func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
                       lazyOwner: Bool = false, mapping: Mapping = .empty,
                       resolver: InteropResolver? = nil, itemParameters: [String: String] = [:],
-                      itemTypeName: String? = nil) throws {
+                      itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
             try emitLayout(layout, children: children, modifiers: modifiers,
@@ -73,7 +73,7 @@ extension Generation {
             }
             for modifier in modifiers {
                 switch modifier.name {
-                case "accessibilityLabel", "nativeTestTag":
+                case "accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction", "accessibilityIdentifier", "nativeTestTag":
                     switchModifiers.append(modifier)
                 default:
                     rowModifiers.append(modifier)
@@ -109,7 +109,7 @@ extension Generation {
                                  suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)
             }
             writer.close(suffix: ")")
-            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping, traversal: traversal), unlessEmpty: true)
             writer.depth -= 1
             if !labelsHidden {
                 writer.close()

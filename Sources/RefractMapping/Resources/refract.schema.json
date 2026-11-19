@@ -300,6 +300,7 @@
         "modifiers": { "$ref": "#/$defs/modifiers" },
         "tokens": { "$ref": "#/$defs/tokens" },
         "symbols": { "$ref": "#/$defs/symbols" },
+        "minimumAPI": { "type": "integer", "minimum": 12 },
         "resources": { "$ref": "#/$defs/androidResources" }
       }
     },
@@ -324,6 +325,7 @@
         "modifiers": { "$ref": "#/$defs/modifiers" },
         "tokens": { "$ref": "#/$defs/tokens" },
         "symbols": { "$ref": "#/$defs/symbols" },
+        "minimumAPI": { "type": "integer", "minimum": 12 },
         "resources": { "$ref": "#/$defs/harmonyResources" }
       }
     }

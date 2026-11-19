@@ -8,7 +8,7 @@ extension ComposeBackend {
         case .horizontal: ("Row", "verticalAlignment", "horizontalArrangement")
         case .depth: ("Box", "contentAlignment", "")
         }
-        var arguments = ["modifier = \(try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, context: &context))"]
+        var arguments = ["modifier = \(try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context))"]
         if let alignment = layout.alignment {
             context.imports.insert("androidx.compose.ui.Alignment")
             arguments.append("\(container.1) = \(try composeAlignment(alignment, axis: layout.axis))")
@@ -39,9 +39,13 @@ extension ComposeBackend {
         context.imports.insert("androidx.compose.foundation.layout.\(container.0)")
         out.line("\(container.0)(\(arguments.joined(separator: ", "))) {")
         out.depth += 1
+        let traversal = try prepareComposeAccessibilityTraversal(modifiers, children: children)
+        let savedTraversal = context.accessibilityTraversal
+        context.accessibilityTraversal = traversal
         for child in children {
             try emit(child, parentAxis: layout.axis, into: &out, context: &context)
         }
+        context.accessibilityTraversal = savedTraversal
         out.close()
     }
 

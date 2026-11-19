@@ -150,7 +150,7 @@ private struct IRCorpus {
 
     private mutating func expression() -> RefractIR.Expression {
         let value: IRExpression.Value
-        switch Int.random(in: 0..<16, using: &random) {
+        switch Int.random(in: 0..<19, using: &random) {
         case 0: value = .stringLiteral("value\(Int.random(in: 0...100, using: &random))")
         case 1: value = .verbatimText("literal")
         case 2: value = .stringKey("settings.title")
@@ -172,9 +172,19 @@ private struct IRCorpus {
             harmonyOS: IRExpression(.stringLiteral("HarmonyOS"))))
         case 13: value = .formField(form: "draft", field: "email")
         case 14: value = .presence(IRExpression(.reference("model.error")))
-        default:
+        case 15:
             value = .formValid(FormDeclaration(name: "draft", fields: [
                 FormField(name: "email", initialValue: IRExpression(.stringLiteral("")), rules: [.nonEmpty]),
+            ]))
+        case 16:
+            value = .nativeValueProperty(NativeValueProperty(value: "scenePhase", field: .state))
+        case 17:
+            value = .accessibilityAction(AccessibilityCustomAction(
+                label: IRExpression(.localizedText(LocalizedText(key: "accessibility.sync.action"))),
+                action: .modelMethod(model: "model", name: "save", arguments: [])))
+        default:
+            value = .accessibilityTraversal(AccessibilityTraversal(steps: [
+                .init(name: "first"), .init(name: "second", after: "first"),
             ]))
         }
         return IRExpression(value, type: [nil, .string, .bool, .double, .int].randomElement(using: &random)!, location: location())
@@ -218,7 +228,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 29 public ViewNode cases and all 16 Expression.Value cases must actually occur.
+        // All 29 public ViewNode cases and all 19 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -238,7 +248,7 @@ struct IRReliabilityTests {
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
         #expect(seenViews.count == 29, "Visited view cases: \(seenViews.sorted())")
-        #expect(seenExpressions.count == 16, "Visited expression cases: \(seenExpressions.sorted())")
+        #expect(seenExpressions.count == 19, "Visited expression cases: \(seenExpressions.sorted())")
     }
 
     private func collectCases(in node: ViewNode, views: inout Set<String>, expressions: inout Set<String>) {
@@ -331,6 +341,9 @@ struct IRReliabilityTests {
             for branch in [alternatives.ios, alternatives.android, alternatives.harmonyOS] {
                 collectExpression(branch, into: &expressions)
             }
+        case let .accessibilityAction(value):
+            collectExpression(value.label, into: &expressions)
+            collect(value.action, into: &expressions)
         case let .presence(subject):
             collectExpression(subject, into: &expressions)
         case let .formValid(form):

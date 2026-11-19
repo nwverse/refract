@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "accessibility_sync_title", "value": "Synchronization" },
+    { "name": "accessibility_sync_status", "value": "Current status: %1$s" },
+    { "name": "accessibility_sync_now", "value": "Sync now" },
+    { "name": "accessibility_sync_label", "value": "Synchronize settings" },
+    { "name": "accessibility_sync_hint", "value": "Updates settings from the server" },
+    { "name": "accessibility_sync_action", "value": "Start synchronization" },
+    { "name": "accessibility_sync_details", "value": "Show synchronization details" }
+  ]
+}
