@@ -124,7 +124,10 @@ platform-view contracts, together with these declarations and the application-ow
 check requires those files to remain byte-identical to their canonical fixtures: unique basenames are necessary
 because Xcode otherwise merges several `Input.swift` inputs into one `Input.stringsdata` output. This covers the real
 `Binding(get:set:)` initializer, both typed platform-selection helpers, native measurement spellings and directional
-padding with SwiftUI's semantic type checker. Generator parsing alone is not evidence that these constructs compile.
+padding with SwiftUI's semantic type checker. The canonical platform-value fixture uses
+`Text(verbatim: refractValue(ios:android:harmonyOS:))` so the iOS-selected `String` flows through SwiftUI's
+`Text(verbatim:)` initializer — matching the verbatim literal emitted by both native backends. Generator parsing
+alone is not evidence that these constructs compile.
 
 ## Native components inside Refract
 
@@ -217,7 +220,18 @@ For every native call, before either backend writes output, the frontend/lowerin
 - The symbol and module are explicit identifiers, not arbitrary code. Imports are deterministic and deduplicated.
 
 The v0 value boundary is `String`, `Bool`, `Int` and `Double`, plus expressions supported by the state/model
-contract. Closures and arbitrary Swift objects are rejected until their typed native representation is specified;
+contract. Native component declarations additionally accept `Image` and `LocalizedStringKey` for app-owned static
+image resources and localized text, and the explicitly bounded `RemoteImageLoader` service protocol. `Image` arguments
+must be literal `Image("lowercase_resource_name")` expressions; string keys must resolve in both resource catalogs.
+A `RemoteImageLoader` must be injected as an explicitly typed screen input and cannot be constructed in the view.
+These native-only parameter types are not model, state, binding or arbitrary object values. The bounded remote-image
+lifecycle, URL policy and platform verification limits are specified in `docs/remote-images.md`.
+A native component can declare a zero-argument `() -> Void` callback. Its only accepted closure body is one checked
+no-argument model method such as `{ model.closePreview() }`; Compose emits a `() -> Unit` lambda and ArkTS emits a
+`() => void` lambda. Arbitrary closures, function values and parameterized callbacks remain diagnostics. The typed
+document preview boundary, its app-owned URI/permission/decode/lifecycle ownership, and synthetic Native JVM evidence
+are specified in `docs/document-preview.md`.
+Other closures and arbitrary Swift objects are otherwise rejected until their typed native representation is specified;
 they are never converted to untyped target expressions.
 
 The accepted target-type mappings are:
@@ -228,6 +242,13 @@ The accepted target-type mappings are:
 | `Bool` | `Boolean` | `boolean` |
 | `Int` | `Int` | `number` |
 | `Double` | `Double` | `number` |
+| `() -> Void` (one checked model action) | `() -> Unit` | `() => void` |
+| `RefractSelectionContent` (closed literal native host value) | `RefractSelectionContent` | `RefractSelectionContent` |
+| `(String) -> Void` (one checked model link activation) | `(String) -> Unit` | `(string) => void` |
+| `(RefractSelectionContext) -> Void` (one checked model snapshot action) | `(RefractSelectionContext) -> Unit` | `(RefractSelectionContext) => void` |
+
+The last three forms are restricted to the literal selection host in `docs/selection-link-context.md`; they are
+not general Screen closure parameters or arbitrary object payload support.
 
 `Int` values must be integral when emitted for ArkTS. The generator does not silently round, coerce or add a cast.
 
@@ -250,6 +271,80 @@ action appear in the message or suggestion.
 An error prevents both output files from being written. Refract never emits a comment, empty view, placeholder value
 or iOS expression in place of a missing target implementation.
 
+## Native animation, reduced motion and identity
+
+A native transition uses the same `RefractNativeView` boundary, not a shared animation description. Keep the source
+signature to the state needed by every implementation. The representative save confirmation in
+`Fixtures/interop-native-animation/` declares only `visible: Bool` and `identity: String`: no duration, curve, target
+code, arbitrary closure or animation object crosses the boundary.
+
+The declaration's body remains ordinary SwiftUI. It reads `@Environment(\.accessibilityReduceMotion)` and chooses
+`.identity` instead of `.opacity`; `.id(identity)` gives the content a stable identity. This environment property is
+an iOS-only implementation input, not a native-component argument. Other property wrappers are still
+`RFNATIVE001` diagnostics rather than an implicit expansion of the generated interface. The body is not translated.
+
+On Android, the application-owned `NativeSaveConfirmation` in
+`examples/android/app/src/main/java/com/example/refract/animation/` uses `AnimatedVisibility` and
+`MutableTransitionState`. `key(identity)` replaces the remembered transition when identity changes; the native
+composition disposes the old content. An exit removes its content only after the native transition finishes, and
+leaving the composition disposes it immediately. The component reads `MotionDurationScale` from the recomposer's
+coroutine context. At zero it uses `EnterTransition.None` and `ExitTransition.None`; otherwise it uses native fades.
+It does not run a parallel timer or translate a duration from another platform.
+
+On HarmonyOS, the mapping delegates to the application's typed `NativeSaveConfirmation` component. The implementation
+owns its equivalent native visibility transition, stable-key replacement, disposal and accessibility preference. It
+must not reuse the component's remembered state after an identity change, and reduced motion must produce the same
+final visibility without an animated transition. The golden ArkTS is a direct call with typed arguments, not a native
+implementation. No HarmonyOS compiler or runtime was available to verify this implementation contract.
+
+The optional Android observer is app-owned and supplied through a `CompositionLocal`; it is absent from both generated
+entry points. Its only purpose in the example is to let tests observe actual transition idle/running state and disposal.
+The test host injects the observer around the unmodified CLI-generated `SaveConfirmationScreen`; it does not add a
+test parameter by rewriting generated code.
+
+Run the Android behavior checks with `:fixtures:testDebugUnitTest` after staging the fixtures. The tests execute real
+Compose on Robolectric: an ordinary transition runs and settles, identity replacement disposes the old content during
+the transition, exit removes content, zero duration scale skips enter/exit motion, and leaving composition disposes
+content. They do not exercise a device, emulator, physical animation-duration setting or performance benchmark.
+SwiftUI behavior also requires an Apple toolchain; generator tests do not establish that evidence.
+
+### Stateful value transitions, interruption and replacement
+
+`Fixtures/interop-native-state-transition/` is a separate stateful case, not a duplicate of the save-confirmation
+visibility component. Its `NativeSelectionEmphasis` declaration accepts only `emphasized: Bool` and
+`identity: String`. The generated screen resolves the identity through the declared `SelectionEmphasisModel` and
+the Boolean through a typed binding. On iOS the declaration is an ordinary SwiftUI `Text` with `.id(identity)`, an
+emphasized opacity and `.animation(reduceMotion ? nil : .easeInOut, value: emphasized)`. Duration and animation
+objects do not cross the native interface. No Apple-toolchain compilation of this particular source was available in
+this change.
+
+On Android the separate application-owned `NativeSelectionEmphasis` uses `Animatable<Float>` and a native tween.
+The `LaunchedEffect` keyed by the remembered animation, target and native motion policy cancels the old animation
+when a target changes; `animateTo` then continues from its current value and velocity. `key(identity)` scopes the
+remembered animation and its effects, so replacement cannot inherit the old identity's progress or running job.
+`MotionDurationScale == 0` uses `snapTo`, including when the preference changes during an animation, so there is no
+intermediate progress on that path. Leaving composition cancels effects and disposes the identity. Per-frame alpha
+is read in `graphicsLayer`, rather than invalidating the parent composition on every frame. No timer, animation
+interpreter or shared target-language animation description is generated.
+
+`NativeSelectionEmphasisTest` runs the unmodified generated caller and the app-owned implementation on real
+Compose/Robolectric. Its six tests cover generated-call progress, a target reversal that stops at an intermediate
+value and resumes downwards from that value, identity replacement with old-content disposal and independent new
+progress, reducing motion during an animation, zero-scale targets without intermediate progress, and disposal when
+leaving composition. Frame advancement and observation are controlled by the test host; they are not a wall-clock
+performance measurement. This is **Native JVM evidence**, not an emulator, device, physical reduced-motion setting,
+or iOS test.
+
+On HarmonyOS, `Expected.ets` proves the typed object-literal call
+`NativeSelectionEmphasis({ emphasized: this.emphasized, identity: this.model.identity })`. An app-owned
+implementation must provide the equivalent native value transition, accessibility preference, target interruption,
+identity-scoped state and disposal. This
+change supplies no ArkTS implementation or compiler evidence; those remain unverified.
+
+The generated scalar argument path now preserves the declared type of a model property such as `model.identity`,
+using the same typed expression as existing model-backed views. Unknown model or item members remain `RFSEM001`
+diagnostics; no unknown type is silently inferred as `String`.
+
 ## Per-platform values, modifiers and animations
 
 Use `refractValue` for scalar values and tokens whose source types agree:
@@ -260,6 +355,26 @@ Text("Status")
 ```
 
 Compose receives `.padding(12.dp)` and ArkUI receives `.padding(12)`; no iOS branch appears in either output.
+
+For per-platform **literal text**, use `Text(verbatim: refractValue(ios:android:harmonyOS:))` with a string
+literal in every branch:
+
+```swift
+Text(verbatim: refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS"))
+```
+
+The generated Android call is `Text(text = "Android")` and the ArkUI call is `Text('HarmonyOS')`. On iOS the
+ordinary `refractValue<Value>` helper returns its `String` argument, which feeds SwiftUI's `Text(verbatim:)`
+initializer — the same verbatim, non-localized semantics as the two native backends. No runtime adapter or
+text-selection layer is involved.
+
+The unlabeled localized form `Text(refractValue(ios:android:harmonyOS:))` is **not** accepted: on iOS it would
+select SwiftUI's `Text(_: LocalizedStringKey)` initializer and reinterpret the iOS branch as a localization key,
+while the native backends already emit their branch as a verbatim literal. That source produces a build-time
+`R.string.unsupported_expression` diagnostic, names the divergence and points to the `Text(verbatim:)` form. A
+per-platform **localized** string is not a supported v0 contract; if a project genuinely needs different localized
+text per platform, use a single canonical key resolved through each platform's ordinary resource catalogs (see
+`docs/localization.md`).
 
 Use `refractView` when a view, modifier chain or animation differs. Each branch is a supported view subtree for the
 selected backend, while the iOS branch can use the ordinary SwiftUI subset accepted by that source file:

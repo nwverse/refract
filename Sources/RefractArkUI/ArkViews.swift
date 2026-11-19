@@ -34,7 +34,13 @@ extension Generation {
                                  suggestion: "Move the dynamic rows into a List, not a stack or ScrollView.",
                                  location: location)
             }
-            writer.open("LazyForEach(\(try ArkExpression.emit(items.collection, mapping: mapping)), (\(items.itemName): \(items.itemType)) =>")
+            let source: String
+            if let projection = items.projection, case let .valueProperty(.model(model, _)) = items.collection.value {
+                source = "this.\(model).\(projection.name)"
+            } else {
+                source = try ArkExpression.emit(items.collection, mapping: mapping)
+            }
+            writer.open("LazyForEach(\(source), (\(items.itemName): \(items.itemType)) =>")
             writer.open("ListItem()")
             try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver,
                      itemTypeName: items.itemType)
@@ -57,6 +63,11 @@ extension Generation {
                     throw Diagnostic(code: "RFNATIVE004",
                         message: "Row content type `\(value)` belongs on the generated child row, not its Toggle.",
                         suggestion: "Apply `.contentType` directly to the generated child inside a dynamic List",
+                        location: operation.location)
+                case .textSelection, .dragPayload, .dropTarget:
+                    throw Diagnostic(code: "RFNATIVE005",
+                        message: "Selection and drag/drop operations do not apply to a Toggle receiver.",
+                        suggestion: "Use a TextField for text selection and a Stack-style wrapper for drag/drop.",
                         location: operation.location)
                 }
             }
@@ -122,8 +133,55 @@ extension Generation {
                 writer.line("this.\(name) = value;")
             case let .valueProperty(.binding(name)):
                 writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            case let .formField(form, field):
+                let name = form + field.prefix(1).uppercased() + field.dropFirst()
+                let isBinding = module.screens.flatMap(\.states).contains { state in
+                    if case let .form(.binding, declared, _) = state { return declared.name == form }
+                    return false
+                }
+                if isBinding {
+                    writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+                } else {
+                    writer.line("this.\(name) = value;")
+                }
+            case let .valueProperty(.modelScalarBinding(binding)):
+                writer.line("this.\(binding.model).\(binding.action)(value);")
             default:
-                throw Diagnostic(code: "state.invalid_projection", message: "A text input needs a String local state or parent binding.",
+                throw Diagnostic(code: "state.invalid_projection", message: "A text input needs a String local state, parent binding or explicit model setter.",
+                                 suggestion: "Use `text: $name` with String @State or @Binding ownership.", location: value.location)
+            }
+            writer.close(suffix: ")")
+            writer.depth -= 1
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+        case let .secureInput(placeholder, value, reveal, modifiers, location):
+            var arguments = ["text: \(try emitLocalExpression(value, item: item, mapping: mapping))"]
+            if let placeholder {
+                guard case .localizedText = placeholder.value else {
+                    throw Diagnostic(code: "RFSECURE002", message: "A SecureField needs a localized placeholder key.",
+                                     suggestion: "Use a canonical settings.* key.", location: placeholder.location ?? location)
+                }
+                arguments.insert("placeholder: \(try ArkExpression.emit(placeholder, mapping: mapping))", at: 0)
+            }
+            writer.line("TextInput({ \(arguments.joined(separator: ", ")) })")
+            writer.depth += 1
+            // ArkUI secure input: InputType.Password masks glyphs, disables IME suggestions/learning and keeps
+            // autofill ownership with the system. Reveal uses InputType.Normal only when the source declared an
+            // explicit Bool reveal binding via `.secureReveal($isRevealed)`. The bound String is never logged,
+            // formatted into another view or echoed outside this control.
+            if let reveal {
+                let flag = try emitLocalExpression(reveal, item: item, mapping: mapping)
+                writer.line(".type(\(flag) ? InputType.Normal : InputType.Password)")
+            } else {
+                writer.line(".type(InputType.Password)")
+            }
+            writer.open(".onChange((value: string) =>")
+            switch value.value {
+            case let .valueProperty(.state(name)):
+                writer.line("this.\(name) = value;")
+            case let .valueProperty(.binding(name)):
+                writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
+            default:
+                throw Diagnostic(code: "RFSECURE002", message: "A SecureField needs a String local state or parent binding.",
                                  suggestion: "Use `text: $name` with String @State or @Binding ownership.", location: value.location)
             }
             writer.close(suffix: ")")
@@ -183,6 +241,11 @@ extension Generation {
 
 enum ArkValueType {
     static func emit(_ type: ValueType) -> String {
-        switch type { case .string: "string"; case .bool: "boolean"; case .double, .int: "number" }
+        switch type {
+        case .string: "string"
+        case .bool: "boolean"
+        case .double, .int: "number"
+        case .revision: "bigint"
+        }
     }
 }

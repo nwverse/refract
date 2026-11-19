@@ -5,7 +5,7 @@ enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty,
                      isText: Bool = false) throws -> String {
         let measurement = modifiers.filter { ["nativeTestTag", "accessibilityLabel", "retainCallback"].contains($0.name) }
-        let layout = modifiers.filter { !["nativeTestTag", "accessibilityLabel", "retainCallback"].contains($0.name) }
+        let layout = modifiers.filter { !["nativeTestTag", "accessibilityLabel", "retainCallback", "disabled"].contains($0.name) }
         if !measurement.isEmpty {
             let native = try measurement.map { modifier in
                 switch modifier.name {

@@ -5,11 +5,27 @@ import RefractIR
 public enum InteropEmission {
     public static func arguments(for component: NativeComponent, target: NativeTarget,
                           location: SourceLocation? = nil,
-                          render: (Expression) throws -> String) throws -> [String] {
+                          render: (Expression) throws -> String,
+                          renderAction: (StateAction) throws -> String,
+                          renderSelection: (SelectionContent) throws -> String) throws -> [String] {
         var diagnostics: [Diagnostic] = []
         var values: [String: String] = [:]
         for argument in component.arguments {
-            do { values[argument.label] = try render(argument.expression) }
+            do {
+                if argument.type == .action, let expression = argument.expression {
+                    values[argument.label] = try render(expression)
+                } else if let expression = argument.expression {
+                    values[argument.label] = try render(expression)
+                } else if let selection = argument.selection {
+                    values[argument.label] = try renderSelection(selection)
+                } else if let action = argument.action {
+                    values[argument.label] = try renderAction(action)
+                } else {
+                    throw Diagnostic(code: "RFNATIVE002",
+                        message: "Native component `\(component.name)` has no typed value for `\(argument.label)`.",
+                        suggestion: "Supply a scalar or a checked native action.", location: argument.location ?? location)
+                }
+            }
             catch let diagnostic as Diagnostic { diagnostics.append(diagnostic) }
         }
         guard diagnostics.isEmpty else { throw InteropMappingError(diagnostics: diagnostics) }

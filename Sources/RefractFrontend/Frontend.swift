@@ -7,28 +7,75 @@ public struct Frontend {
     public init() {}
 
     public static func parse(_ source: SourceFile, mapping: Mapping? = nil) -> TranslationUnit {
-        let tree = Parser.parse(source: source.contents)
-        let parserDiagnostics = ParserDiagnostics.validate(tree: tree, file: source.path)
-        guard parserDiagnostics.isEmpty else {
-            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
-                                   diagnostics: parserDiagnostics)
+        parse(sources: [source], mapping: mapping)[0]
+    }
+
+    /// Parses one explicit same-module input set. Each returned unit still owns only
+    /// the declarations in its own file, so native outputs remain one file per input.
+    public static func parse(sources: [SourceFile], mapping: Mapping? = nil) -> [TranslationUnit] {
+        let resolver = CompilationInputResolver(sources: sources)
+        let duplicateDiagnostics = resolver.duplicateDiagnostics()
+        var units: [TranslationUnit] = []
+        var pendingMessageBuilders: [Builder] = []
+        for file in resolver.files {
+            guard file.parserDiagnostics.isEmpty else {
+                units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
+                                             diagnostics: file.parserDiagnostics))
+                continue
+            }
+            let context = resolver.context(for: file)
+            let builder = Builder(file: file.source.path, tree: file.tree, mapping: mapping,
+                                  compilationContext: context)
+            builder.rejectDuplicateGeneratedDeclarations(file.tree)
+            let hasDuplicateGeneratedDeclaration = builder.hasDuplicateGeneratedDeclaration
+            builder.walk(file.tree)
+            builder.validateCollectionProjections()
+            let module = Module(sourceFile: file.source.path, screens: builder.screens,
+                                nativeDeclarations: builder.interop.declarations,
+                                models: builder.models.filter { $0.location?.file == file.source.path },
+                                itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
+                                enums: builder.enums.filter { $0.location?.file == file.source.path })
+            if sources.count == 1 { builder.validateChildViewGraph(module) }
+            builder.bindNavigationDestinations(module)
+            pendingMessageBuilders.append(builder)
+            builder.validateNavigationDeclarations(module)
+            builder.validateRowContentTypes(module)
+            builder.validateMessageProjection(module)
+            let diagnostics = duplicateDiagnostics[file.source.path, default: []] + builder.diagnostics
+            if hasDuplicateGeneratedDeclaration || duplicateDiagnostics[file.source.path]?.isEmpty == false {
+                units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
+                                             diagnostics: diagnostics))
+                continue
+            }
+            let boundModule = Module(sourceFile: file.source.path, screens: builder.screens,
+                                     nativeDeclarations: builder.interop.declarations,
+                                     models: builder.models.filter { $0.location?.file == file.source.path },
+                                     itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
+                                     enums: builder.enums.filter { $0.location?.file == file.source.path })
+            units.append(TranslationUnit(module: boundModule, diagnostics: diagnostics,
+                                         resolvedModels: builder.models,
+                                         resolvedItemTypes: builder.itemTypes))
         }
-        let builder = Builder(file: source.path, tree: tree, mapping: mapping)
-        builder.rejectDuplicateGeneratedDeclarations(tree)
-        builder.walk(tree)
-        let module = Module(sourceFile: source.path, screens: builder.screens,
-                            nativeDeclarations: builder.interop.declarations,
-                            models: builder.models, itemTypes: builder.itemTypes,
-                            enums: builder.enums)
-        builder.validateChildViewGraph(module)
-        builder.validateNavigationDeclarations(module)
-        builder.validateRowContentTypes(module)
-        if builder.hasDuplicateGeneratedDeclaration {
-            return TranslationUnit(module: Module(sourceFile: source.path, screens: []),
-                                   diagnostics: builder.diagnostics)
+        let allScreens = units.flatMap(\.module.screens)
+        for builder in pendingMessageBuilders { builder.linkMessageProjection(siblingScreens: allScreens) }
+        units = units.map { unit in
+            guard let builder = pendingMessageBuilders.first(where: { $0.file == unit.module.sourceFile }),
+                  !builder.pendingMessageBodies.isEmpty else { return unit }
+            let module = Module(sourceFile: builder.file, screens: builder.screens,
+                                nativeDeclarations: unit.module.nativeDeclarations,
+                                models: unit.module.models, itemTypes: unit.module.itemTypes, enums: unit.module.enums)
+            return TranslationUnit(module: module, diagnostics: unit.diagnostics,
+                                   resolvedModels: unit.resolvedModels, resolvedItemTypes: unit.resolvedItemTypes)
         }
-        return TranslationUnit(module: module,
-                               diagnostics: builder.diagnostics)
+        if sources.count > 1, let cycle = CompilationInputResolver.declarationCycleDiagnostic(units: units) {
+            units = units.map { unit in
+                guard unit.module.sourceFile == cycle.file else { return unit }
+                return TranslationUnit(module: unit.module, diagnostics: unit.diagnostics + [cycle.diagnostic],
+                                       resolvedModels: unit.resolvedModels,
+                                       resolvedItemTypes: unit.resolvedItemTypes)
+            }
+        }
+        return units
     }
 }
 
@@ -50,11 +97,16 @@ final class Builder: SyntaxVisitor {
     var currentModels: [ModelReference] = []
     var currentListItem: String?
     var currentListItemType: ItemType?
+    var currentMessageParent: (name: String, type: ItemType)?
+    var currentMessageBlockNames: (parent: String, block: String)?
+    var pendingMessageSources: [(outer: Expression, content: ViewNode, screen: String, modelType: String)] = []
+    var pendingMessageBodies: [(screen: String, body: ViewNode)] = []
+    var pendingMessageOwners: [String: Screen] = [:]
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
 
-    init(file: String, tree: SourceFileSyntax, mapping: Mapping?) {
+    init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil) {
         self.file = file
         self.converter = SourceLocationConverter(fileName: file, tree: tree)
         self.interop = InteropFrontend(file: file, converter: converter)
@@ -67,18 +119,28 @@ final class Builder: SyntaxVisitor {
                       $0.type.trimmedDescription == "RefractModel"
                   }) == true else { return nil }
             return declaration.name.text
-        })
+        }).union(compilationContext?.modelNames ?? [])
         collectEnums(tree)
+        itemTypes = compilationContext?.allItemTypes ?? []
         collectItemTypes(tree)
         collectModels(tree)
-        for statement in tree.statements {
-            if let declaration = statement.item.as(StructDeclSyntax.self),
-               declaration.inheritanceClause?.inheritedTypes.contains(where: {
-                   $0.type.trimmedDescription == "View"
-               }) == true {
-                viewDeclarations[declaration.name.text] = declaration
+        collectDeclaredViews(tree)
+        if let compilationContext {
+            models = compilationContext.models + models
+            enums = compilationContext.enums + enums
+            var modelKeys: Set<String> = []
+            models = models.filter { modelKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
+            var itemKeys: Set<String> = []
+            itemTypes = itemTypes.filter { itemKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
+            for (name, declaration) in compilationContext.views where viewDeclarations[name] == nil {
+                viewDeclarations[name] = declaration
             }
         }
+    }
+
+    private static func declarationKey(name: String, location: RefractIR.SourceLocation?) -> String {
+        guard let location else { return name }
+        return "\(location.file):\(location.line):\(location.column):\(name)"
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -160,6 +222,11 @@ final class Builder: SyntaxVisitor {
             guard case let .model(reference, _) = $0 else { return nil }
             return reference
         }
+        let forms = states.compactMap { state -> FormDeclaration? in
+            guard case let .form(_, declaration, _) = state else { return nil }
+            return declaration
+        }
+        guard validateForms(forms) else { return .skipChildren }
         parameters = []
         currentListItem = nil
         currentListItemType = nil
@@ -184,6 +251,7 @@ final class Builder: SyntaxVisitor {
 
     func view(_ expression: ExprSyntax) -> ViewNode? {
         if let call = expression.as(FunctionCallExprSyntax.self), forEachCall(expression) != nil {
+            if currentListItemType?.name == "ChatMessage" { return messageBlocks(call) }
             error("RFLIST003", "ForEach must be the sole dynamic child directly owned by List, not nested or eagerly rendered.",
                   "Use List { ForEach(model.items) { item in ... } } with a stable stored id", at: call)
             return nil
@@ -193,6 +261,9 @@ final class Builder: SyntaxVisitor {
             // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure
             // when classifying the inner call as a view or a modifier.
             if let base = call.calledExpression.as(FunctionCallExprSyntax.self) {
+                if base.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Form" {
+                    return formContainer(call)
+                }
                 var inner = base
                 inner.trailingClosure = call.trailingClosure
                 inner.additionalTrailingClosures = call.additionalTrailingClosures
@@ -205,16 +276,17 @@ final class Builder: SyntaxVisitor {
             if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
                 return extendedView(call)
             }
+            if call.calledExpression.trimmedDescription == "Form" { return formContainer(call) }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
+            if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
-                guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
-                    error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
-                          "Use `NavigationStack(path: $path)` and a no-payload Hashable destination enum", at: call)
-                    return nil
-                }
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }
+            // Toggle/TextField/SecureField were recognized above. If their guard failed they have
+            // already emitted a typed diagnostic; do not fall through to the component-mapping path.
+            if let name = call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text,
+               name == "Toggle" || name == "TextField" || name == "SecureField" { return nil }
             return view(call)
         }
         if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
@@ -229,7 +301,9 @@ final class Builder: SyntaxVisitor {
         if name == "navigationDestination" { return navigationDestination(call, on: node) }
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
+        if name == "secureReveal" { return secureReveal(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
+        if name == "disabled" { return disabledModifier(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
             if diagnostics.count > before { return nil }
@@ -301,14 +375,19 @@ final class Builder: SyntaxVisitor {
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
             let beforeText = diagnostics.count
-            if let argument = call.arguments.first, argument.label == nil,
-               let value = modelTypedProperty(argument.expression) {
-                guard value.type == .string else {
-                    error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
-                          "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
-                    return nil
+            if let argument = call.arguments.first, argument.label == nil {
+                if let field = formFieldReference(argument.expression) {
+                    guard field.type == .string else { return nil }
+                    return .text(field.expression, modifiers: [], location: nodeLocation)
                 }
-                return .text(value.expression, modifiers: [], location: nodeLocation)
+                if let value = modelTypedProperty(argument.expression) {
+                    guard value.type == .string else {
+                        error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
+                              "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
+                        return nil
+                    }
+                    return .text(value.expression, modifiers: [], location: nodeLocation)
+                }
             }
             if let argument = call.arguments.first, argument.label == nil,
                let reference = argument.expression.as(DeclReferenceExprSyntax.self),
@@ -380,25 +459,124 @@ final class Builder: SyntaxVisitor {
                 return nil
             }
             guard !interop.invalidDeclarations.contains(name) else { return nil }
-            let component = nativeComponent(call)
+            guard let component = nativeComponent(call) else { return nil }
             guard let declaration = interop.declarations.first(where: { $0.name == name }) else { return nil }
             diagnostics.append(contentsOf: interop.validate(component, declaration: declaration, location: nodeLocation))
             return .native(component, location: nodeLocation)
         }
     }
 
-    private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent {
+    private func nativeComponent(_ call: FunctionCallExprSyntax) -> NativeComponent? {
         let name = call.calledExpression.trimmedDescription
+        let before = diagnostics.count
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
-            guard let label = argument.label?.text, let value = scalar(argument.expression) else {
-                error("RFNATIVE002", "Native component arguments require explicit labels and supported scalar values.",
+            guard let label = argument.label?.text else {
+                error("RFNATIVE002", "Native component arguments require explicit labels and supported values.",
                       "Use the memberwise SwiftUI initializer signature", at: argument)
                 return nil
             }
-            return NativeArgument(label: label, expression: value.expression, type: value.type,
-                                  location: location(of: argument))
+            guard let declaration = interop.declarations.first(where: { $0.name == name }),
+                  let parameter = declaration.parameters.first(where: { $0.label == label }) else {
+                error("RFNATIVE002", "Native component argument `\(label)` is not declared by `\(name)`.",
+                      "Use the memberwise SwiftUI initializer signature", at: argument)
+                return nil
+            }
+            let parsed: NativeArgument?
+            switch parameter.type {
+            case .image:
+                parsed = nativeImageResource(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression, type: .image,
+                                   location: location(of: argument))
+                }
+            case .stringKey:
+                parsed = nativeLocalizedText(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression, type: .stringKey,
+                                   location: location(of: argument))
+                }
+            case .remoteImageLoader:
+                parsed = nativeImageLoader(argument.expression, label: label)
+            case .selectionContent:
+                parsed = nativeSelectionContent(argument.expression, label: label)
+            case .selectionContextAction:
+                parsed = nativeSelectionContextAction(argument.expression, label: label)
+            case .actionString:
+                parsed = nativeStringAction(argument.expression, label: label)
+            case .action:
+                parsed = nativeAction(argument.expression, label: label)
+            case .string, .bool, .int, .double:
+                parsed = scalar(argument.expression).map {
+                    NativeArgument(label: label, expression: $0.expression,
+                                   type: $0.type.flatMap { NativeParameterType(rawValue: $0.rawValue) },
+                                   location: location(of: argument))
+                }
+            }
+            guard let parsed else { return nil }
+            return parsed
         }
-        return NativeComponent(name: name, arguments: arguments)
+        return diagnostics.count == before ? NativeComponent(name: name, arguments: arguments) : nil
+    }
+
+    private func nativeImageLoader(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let reference = expression.as(DeclReferenceExprSyntax.self),
+              parameters.contains(where: {
+                  $0.name == reference.baseName.text && $0.itemType == "RemoteImageLoader"
+              }) else {
+            error("RFNATIVE002", "A RemoteImageLoader argument must be an explicitly declared screen input.",
+                  "Inject the app-owned RemoteImageLoader into this screen", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, expression: Expression(.reference(reference.baseName.text)),
+                              type: .remoteImageLoader, location: location(of: expression))
+    }
+
+    private func nativeImageResource(_ expression: ExprSyntax) -> TypedExpression? {
+        guard let call = expression.as(FunctionCallExprSyntax.self),
+              call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Image",
+              call.arguments.count == 1, call.arguments.first?.label == nil,
+              call.trailingClosure == nil,
+              let name = stringLiteral(call.arguments.first!.expression) else {
+            error("RFNATIVE002", "A native image argument requires `Image(\"resource_name\")` with one application resource literal.",
+                  "Use Image(\"asset_name\") for placeholder and failure resources", at: expression)
+            return nil
+        }
+        guard !name.isEmpty, name.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }) else {
+            error("RFNATIVE002", "Native image resource `\(name)` is not a lowercase ASCII resource identifier.",
+                  "Use the same app-owned lowercase resource name on Android and HarmonyOS", at: expression)
+            return nil
+        }
+        return TypedExpression(Expression(.imageResource(name), type: .string,
+                                         location: location(of: expression)), .string)
+    }
+
+    private func nativeLocalizedText(_ expression: ExprSyntax) -> TypedExpression? {
+        guard stringLiteral(expression) != nil else {
+            error("RFNATIVE002", "A native LocalizedStringKey argument requires a literal localization key.",
+                  "Use a canonical lowercase dot-separated key declared in both string catalogs", at: expression)
+            return nil
+        }
+        var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
+                                         typedScalar: modelTypedProperty, stateText: stateText)
+        let localized = parser.localized(expression)
+        diagnostics.append(contentsOf: parser.diagnostics)
+        guard let localized else { return nil }
+        return TypedExpression(localized, .string)
+    }
+
+    private func nativeAction(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let closure = expression.as(ClosureExprSyntax.self),
+              closure.signature == nil, closure.statements.count == 1,
+              let body = closure.statements.first?.item.as(ExprSyntax.self),
+              let action = modelAction(body) else {
+            error("RFNATIVE002", "A native action requires one checked no-argument model action.",
+                  "Use `onEvent: { model.event() }`; arbitrary closures, function values and arguments are not translated", at: expression)
+            return nil
+        }
+        guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
+            error("RFNATIVE002", "Only a no-argument model action matches this native `() -> Void` parameter.",
+                  "Declare a separate no-argument model method", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, action: action, type: .action, location: location(of: expression))
     }
 
     private func platformView(_ call: FunctionCallExprSyntax) -> ViewNode? {
@@ -422,6 +600,7 @@ final class Builder: SyntaxVisitor {
     }
 
     func scalar(_ expression: ExprSyntax) -> TypedExpression? {
+        if let field = formFieldReference(expression) { return field }
         if let string = stringLiteral(expression) {
             return TypedExpression(Expression(.stringLiteral(string), type: .string,
                                              location: location(of: expression)), .string)
@@ -438,6 +617,12 @@ final class Builder: SyntaxVisitor {
             return TypedExpression(Expression(.numberLiteral(literal.literal.text), type: .double,
                                              location: location(of: expression)), .double)
         }
+        if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self),
+           currentModels.contains(where: { $0.propertyName == base.baseName.text }),
+           let model = modelTypedProperty(expression) {
+            return model
+        }
         if expression.as(MemberAccessExprSyntax.self) != nil {
             return TypedExpression(Expression(.reference(expression.trimmedDescription),
                                              location: location(of: expression)), nil)
@@ -448,6 +633,18 @@ final class Builder: SyntaxVisitor {
                 return TypedExpression(Expression(.reference(name), type: binding,
                                                  location: location(of: expression)), binding)
             }
+            for declaration in currentStates {
+                switch declaration {
+                case let .state(declared, type, _, _) where declared == name:
+                    return TypedExpression(Expression(.valueProperty(.state(name)), type: type,
+                                                     location: location(of: expression)), type)
+                case let .binding(declared, type, _) where declared == name:
+                    return TypedExpression(Expression(.valueProperty(.binding(name)), type: type,
+                                                     location: location(of: expression)), type)
+                default: continue
+                }
+            }
+            if let model = modelTypedProperty(expression) { return model }
             // An enum is a finite control-flow subject, not a scalar text or formatting value.
             guard !parameters.contains(where: { $0.name == reference.baseName.text && $0.enumName != nil }) else {
                 error("RFSEM002", "An enum input cannot be used as a scalar expression.",

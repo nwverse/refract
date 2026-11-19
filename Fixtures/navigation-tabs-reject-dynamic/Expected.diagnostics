@@ -1,0 +1,1 @@
+Input.swift:18:28: error [RFNAV402]: TabView selection must be the declared local tab `@State` enum property. Suggestion: Use `@State private var tab: Tab = .home` with a no-payload `Hashable` enum

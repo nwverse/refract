@@ -1,0 +1,1 @@
+Input.swift:11:18: error [R.string.unsupported_expression]: Platform-selected text passed to Text(_:) would be treated as a localization key on iOS, diverging from the verbatim native output. Suggestion: Use Text(verbatim: refractValue(ios: "...", android: "...", harmonyOS: "...")) for per-platform literal text, or Text("key") with a canonical localization key.

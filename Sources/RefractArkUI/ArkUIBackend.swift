@@ -5,8 +5,12 @@ import RefractMapping
 public struct ArkUIBackend: Sendable {
     public init() {}
 
-    public func generate(module: Module, mapping: Mapping = .empty) throws -> String {
-        var generation = Generation(module: module, mapping: mapping)
+    public func generate(module: Module, mapping: Mapping = .empty, sources: NativeSourceSet? = nil) throws -> String {
+        let dependencies = sources ?? NativeSourceSet(modules: [module])
+        let nativeSource = try dependencies.source(for: module)
+        var generation = Generation(module: module, mapping: mapping, nativeSource: nativeSource,
+                                    models: dependencies.models, itemTypes: dependencies.itemTypes,
+                                    enums: dependencies.enums)
         return try generation.generate()
     }
 }
@@ -14,6 +18,10 @@ public struct ArkUIBackend: Sendable {
 struct Generation {
     let module: Module
     let mapping: Mapping
+    let nativeSource: NativeSource
+    let models: [ModelProtocol]
+    let itemTypes: [ItemType]
+    let enums: [EnumDeclaration]
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
 
@@ -32,6 +40,9 @@ struct Generation {
         var emittedImports: Set<String> = []
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
+            for parameter in screen.parameters where parameter.itemType == "RemoteImageLoader" {
+                emittedImports.insert("RemoteImageLoader")
+            }
             if case let .navigationStack(stack, _) = screen.body {
                 try collectImports(stack, resolver: resolver, into: &emittedImports)
             }
@@ -47,10 +58,12 @@ struct Generation {
                 importLines.append("import { \(target.symbol) } from '\(target.module)';")
             }
         }
+        for line in try ArkNativeImports.emit(module: module, nativeSource: nativeSource) { writer.line(line) }
         for line in importLines { writer.line(line) }
         try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
             if case let .navigationStack(stack, _) = screen.body {
                 try emitNavigationDestinations(stack, into: &writer)
@@ -70,8 +83,14 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
+            if let navigation = screen.navigation {
+                try emitNavigationOperation(navigation, into: &writer)
+            }
+            if case let .tabView(tabs, _) = screen.body {
+                try emitTabHelpers(tabs, into: &writer)
+            }
             // Local-state emission already supplies the separator before build().
-            if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
+            if screen.states.isEmpty, screen.navigation == nil, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
             let previousItemParameters = screenItemTypes
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
@@ -80,7 +99,7 @@ struct Generation {
             listItemTypes = [:]
             for state in screen.states {
                 if case let .model(reference, _) = state,
-                   let model = module.models.first(where: { $0.name == reference.protocolName }) {
+                   let model = models.first(where: { $0.name == reference.protocolName }) {
                     for property in model.properties {
                         if let collection = property.collection {
                             screenItemTypes[reference.propertyName] = collection.itemType
@@ -127,6 +146,13 @@ struct Generation {
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
             }
+            for modifier in modifiers where modifier.name == "disabled" {
+                guard let argument = modifier.arguments.first else {
+                    throw Diagnostic(code: "RFFORM007", message: "`.disabled` needs one Boolean model property.",
+                                     suggestion: "Use `.disabled(model.submitting)`.", location: modifier.location)
+                }
+                writer.line(".enabled(!(\(try emitLocalExpression(argument, item: item, mapping: mapping))))")
+            }
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .conditional(branches, location):
             guard !branches.isEmpty, branches[0].condition != nil,
@@ -159,7 +185,23 @@ struct Generation {
         case let .navigationLink(title, pathName, enumName, destination, _):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
                                    destination: destination, into: &writer, mapping: mapping)
+        case let .tabView(tabs, _):
+            try emitTabView(tabs, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):
+            // Selection editing, drag and drop wrap the child in dedicated constructs.
+            if let selection = operations.first(where: { if case .textSelection = $0.operation { true } else { false } }),
+               case let .textSelection(start, end, action) = selection.operation {
+                try emitArkSelectionField(child, start: start, end: end, action: action,
+                                          into: &writer, item: item, mapping: mapping)
+                return
+            }
+            let drag = operations.first { if case .dragPayload = $0.operation { true } else { false } }
+            let drop = operations.first { if case .dropTarget = $0.operation { true } else { false } }
+            if drag != nil || drop != nil {
+                try emitArkDragDrop(child, operations: operations,
+                                    into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+                return
+            }
             var modifiers: [Modifier] = []
             for operation in operations {
                 switch operation.operation {
@@ -178,6 +220,11 @@ struct Generation {
                     throw Diagnostic(code: "RFNATIVE004",
                         message: "HarmonyOS callback retention requires a typed callback-identity representation.",
                         suggestion: "Use a direct typed callback; do not discard the retention operation or add a runtime cache.",
+                        location: operation.location ?? location)
+                case .textSelection, .dragPayload, .dropTarget:
+                    throw Diagnostic(code: "RFNATIVE005",
+                        message: "Selection and drag/drop are handled above; this is an internal error.",
+                        suggestion: "Report this as a generator bug.",
                         location: operation.location ?? location)
                 }
             }
@@ -199,6 +246,17 @@ struct Generation {
             let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
             let arguments = try InteropEmission.arguments(for: component, target: target) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
+            } renderAction: { action in
+                guard case let .modelMethod(model, name, arguments) = action else {
+                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
+                }
+                if arguments.isEmpty { return "() => { \(try emitLocalAction(action)) }" }
+                guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
+                    return try emitArkSelectionAction(action)
+                }
+                return "(destination: string): void => { this.\(model).\(name)(destination); }"
+            } renderSelection: { content in
+                try emitArkSelectionContent(content)
             }
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):
@@ -220,6 +278,10 @@ struct Generation {
                 }
                 writer.line(".reuse({ reuseId: () => '\(contentType)' })")
             }
+        case let .messageBlocks(nested, location):
+            try emitMessageBlocks(nested, into: &writer, parent: item, location: location,
+                                  mapping: mapping, resolver: resolver)
+
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
             try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
                                      labelsHidden: labelsHidden, location: location),
@@ -238,6 +300,7 @@ struct Generation {
         switch type {
         case .string: "string"
         case .int, .double: "number"
+        case .revision: "bigint"
         case .bool: "boolean"
         }
     }
@@ -261,6 +324,12 @@ struct Generation {
         for child in node.children(for: .harmonyOS) { try collectImports(child, resolver: resolver, into: &emittedImports) }
         if case let .native(component, location) = node {
             emittedImports.insert(try resolver.target(for: component, platform: .harmonyOS, location: location).symbol)
+            for argument in component.arguments {
+                if argument.selection != nil {
+                    emittedImports.formUnion(["RefractSelectionContent", "RefractSelectionLink", "RefractSelectionRange"])
+                }
+                if argument.type == .selectionContextAction { emittedImports.insert("RefractSelectionContext") }
+            }
         }
         collectModifierImports(node, mapping: mapping, into: &emittedImports)
         if case let .component(component, location) = node {
@@ -294,6 +363,7 @@ struct Generation {
         case let .stack(_, _, values, _), let .layout(_, _, values, _), let .scroll(_, _, values, _),
              let .list(_, values, _), let .text(_, values, _), let .button(_, _, values, _),
              let .image(_, values, _), let .toggle(_, _, values, _, _, _), let .textInput(_, _, values, _),
+             let .secureInput(_, _, _, values, _),
              let .label(_, _, values, _), let .divider(values, _):
             modifiers = values
         default:
@@ -324,13 +394,135 @@ struct Generation {
         case .depth: "Stack"
         }
     }
+
+    // MARK: - Selection, drag and drop
+
+    /// ArkUI selection editing lowers to a `TextInput` whose text is driven by `@State` and whose
+    /// `onTextSelectionChange` callback invokes the declared model action with (start, end, replacement).
+    func emitArkSelectionField(_ node: ViewNode, start: Expression, end: Expression, action: String,
+                               into writer: inout ArkWriter, item: String?, mapping: Mapping) throws {
+        guard case let .textInput(placeholder, value, modifiers, location) = node else {
+            throw Diagnostic(code: "RFNATIVE005",
+                message: "Text selection editing requires a TextField receiver.",
+                suggestion: "Attach `.textSelection(start:end:action:)` directly to the TextField it edits.",
+                location: node.sourceLocation)
+        }
+        guard case let .valueProperty(.state(name)) = value.value else {
+            throw Diagnostic(code: "RFNATIVE005",
+                message: "A selection-aware TextInput must read its value from a local @State String.",
+                suggestion: "Bind the TextField to `@State private var text: String`.", location: value.location)
+        }
+        guard let modelName = currentModelName(forActionNamed: action) else {
+            throw Diagnostic(code: "RFNATIVE005",
+                message: "Selection action `\(action)` must name a method on a declared model.",
+                suggestion: "Declare `func \(action)(start: Int, end: Int, replacement: String)` on a `RefractModel` protocol used by this screen.",
+                location: location)
+        }
+        var arguments = ["text: this.\(name)"]
+        if let placeholder {
+            arguments.insert("placeholder: \(try ArkExpression.emit(placeholder, mapping: mapping))", at: 0)
+        }
+        writer.line("TextInput({ \(arguments.joined(separator: ", ")) })")
+        writer.depth += 1
+        writer.open(".onChange((value: string) =>")
+        writer.line("this.\(name) = value;")
+        writer.close(suffix: ")")
+        let startExpr = try emitLocalExpression(start, item: item, mapping: mapping)
+        let endExpr = try emitLocalExpression(end, item: item, mapping: mapping)
+        writer.open(".onTextSelectionChange((selectionStart: number, selectionEnd: number) =>")
+        writer.line("this.\(modelName).\(action)(selectionStart, selectionEnd, this.\(name));")
+        writer.close(suffix: ")")
+        // Touch the typed expressions so unused references are validated.
+        _ = startExpr; _ = endExpr
+        writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+        writer.depth -= 1
+    }
+
+    /// ArkUI drag and drop lower to `.draggable(true)` plus `onDragStart` for the source and
+    /// `.allowDrop` plus `onDrop` for the target, both wrapped around the original node.
+    func emitArkDragDrop(_ node: ViewNode, operations: [NativeModifier],
+                         into writer: inout ArkWriter, item: String?, lazyOwner: Bool,
+                         mapping: Mapping, resolver: InteropResolver?) throws {
+        var drag: (kind: String, value: Expression)?
+        var drop: (kind: String, action: String)?
+        for op in operations {
+            switch op.operation {
+            case let .dragPayload(kind, value):
+                drag = (kind, value)
+            case let .dropTarget(kind, action):
+                drop = (kind, action)
+            case .textSelection, .retainCallback, .contentType, .testTag, .contentDescription:
+                throw Diagnostic(code: "RFNATIVE005",
+                    message: "This operation cannot be combined with drag/drop on the same receiver.",
+                    suggestion: "Apply drag and drop to a dedicated wrapper Stack.",
+                    location: op.location)
+            }
+        }
+        let modelName: String? = try drop.map { drop in
+            guard let name = currentModelName(forActionNamed: drop.action) else {
+                throw Diagnostic(code: "RFNATIVE005",
+                    message: "Drop action `\(drop.action)` must name a method on a declared model.",
+                    suggestion: "Declare `func \(drop.action)(kind: String, payload: String)` on a `RefractModel` protocol used by this screen.",
+                    location: node.sourceLocation)
+            }
+            return name
+        }
+        writer.open("Stack()")
+        let remaining = operations.filter {
+            switch $0.operation {
+            case .dragPayload, .dropTarget: false
+            default: true
+            }
+        }
+        if remaining.isEmpty {
+            try emit(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+        } else {
+            try emit(.nativeModifier(child: node, operations: remaining, location: node.sourceLocation),
+                     into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+        }
+        writer.close()
+        // Stack modifiers attach after the closing brace.
+        writer.depth += 1
+        if let drag {
+            let value = try emitLocalExpression(drag.value, item: item, mapping: mapping)
+            writer.line(".draggable(true)")
+            writer.open(".onDragStart((event: DragEvent) =>")
+            writer.line("event.setData({ '\(drag.kind)': \(value) } as Record<string, string>);")
+            writer.close(suffix: ")")
+        }
+        if let drop, let modelName {
+            writer.line(".allowDrop([{ type: '\(drop.kind)' } as uniformTypeDescriptor.UniformDataType])")
+            writer.open(".onDrop((event: DragEvent) =>")
+            writer.line("const data = event.getData() as Record<string, string>;")
+            writer.line("const payload = data['\(drop.kind)'];")
+            writer.open("if (payload !== undefined && payload.length > 0)")
+            writer.line("this.\(modelName).\(drop.action)('\(drop.kind)', payload);")
+            writer.close()
+            writer.close(suffix: ")")
+        }
+        writer.depth -= 1
+    }
+
+    /// Looks up a model property whose declared protocol exposes `name` as a synchronous action.
+    private func currentModelName(forActionNamed name: String) -> String? {
+        for screen in module.screens {
+            for state in screen.states {
+                if case let .model(reference, _) = state,
+                   let proto = module.models.first(where: { $0.name == reference.protocolName }),
+                   proto.actions.contains(where: { $0.name == name }) {
+                    return reference.propertyName
+                }
+            }
+        }
+        return nil
+    }
 }
 
 private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location): location
+             let .navigationPath(_, _, location), let .form(_, _, location), let .tabSelection(_, _, location): location
         }
     }
 }

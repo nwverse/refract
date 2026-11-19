@@ -39,6 +39,8 @@ public struct Diagnostic: Codable, Error, Hashable, Sendable {
 
 public enum ValueType: String, Codable, Sendable {
     case string, bool, double, int
+    /// A bounded UInt64 revision stored only by the ChatMessage projection item.
+    case revision
 }
 
 public struct Expression: Codable, Equatable, Sendable {
@@ -47,6 +49,7 @@ public struct Expression: Codable, Equatable, Sendable {
         case verbatimText(String)
         case stringKey(String)
         case localizedText(LocalizedText)
+        case imageResource(String)
         case boolLiteral(Bool)
         case numberLiteral(String)
         case layoutSpacing(LayoutSpacing)
@@ -55,6 +58,12 @@ public struct Expression: Codable, Equatable, Sendable {
         case valueProperty(ValueProperty)
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
+        /// `form.email`: a typed draft value owned by native state.
+        case formField(form: String, field: String)
+        /// `refractPresent(model.submissionError)`: a null check on a declared optional model text.
+        case presence(Expression)
+        /// The checked guard of a form's declared field rules, lowered to native comparisons.
+        case formValid(FormDeclaration)
     }
 
     public let value: Value
@@ -107,6 +116,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case button(label: ViewNode, action: StateAction?, modifiers: [Modifier], location: SourceLocation?)
     case navigationLink(title: Expression, pathName: String, enumName: String, destination: String, location: SourceLocation?)
     case navigationStack(NavigationStackNode, location: SourceLocation?)
+    case tabView(TabViewNode, location: SourceLocation?)
     case native(NativeComponent, location: SourceLocation?)
     case nativeModifier(child: ViewNode, operations: [NativeModifier], location: SourceLocation?)
     case component(ComponentReference, location: SourceLocation?)
@@ -119,12 +129,19 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
     case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    /// A bounded non-scrolling ForEach inside one ChatMessage lazy row.
+    case messageBlocks(NestedListItems, location: SourceLocation?)
     case section(header: Expression?, children: [ViewNode], location: SourceLocation?)
     case listItem(child: ViewNode, location: SourceLocation?)
     case forEach(ListItems, location: SourceLocation?)
     case image(source: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case toggle(title: Expression, value: Expression, modifiers: [Modifier], nativeModifiers: [NativeModifier] = [], labelsHidden: Bool = false, location: SourceLocation?)
     case textInput(placeholder: Expression?, value: Expression, modifiers: [Modifier], location: SourceLocation?)
+    /// Secure text entry (SwiftUI `SecureField`). Always obscured unless `reveal` is a projected Bool
+    /// state/binding selecting plain display. Backends must use native secure-input components and never
+    /// emit secret literals or log the bound value. See docs/subset.md "Sensitive text entry".
+    case secureInput(placeholder: Expression?, value: Expression, reveal: Expression?,
+                     modifiers: [Modifier], location: SourceLocation?)
     case label(title: Expression, image: ImageSource, modifiers: [Modifier], location: SourceLocation?)
     case divider(modifiers: [Modifier], location: SourceLocation?)
     case spacer(location: SourceLocation?)
@@ -145,7 +162,14 @@ public enum StateDeclaration: Codable, Equatable, Sendable {
     case state(name: String, type: ValueType, initialValue: Expression?, location: SourceLocation?)
     case binding(name: String, type: ValueType, location: SourceLocation?)
     case navigationPath(name: String, enumName: String, location: SourceLocation?)
+    case tabSelection(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
+    /// A `refractForm` declaration on local @State or a parent @Binding.
+    case form(ownership: FormOwnership, declaration: FormDeclaration, location: SourceLocation?)
+}
+
+public enum FormOwnership: String, Codable, Sendable {
+    case state, binding
 }
 
 public struct ModelReference: Codable, Equatable, Sendable {
@@ -170,14 +194,16 @@ public struct Screen: Codable, Equatable, Sendable {
     public let name: String
     public let parameters: [ScreenParameter]
     public let states: [StateDeclaration]
+    public let navigation: NavigationOperation?
     public let body: ViewNode
     public let location: SourceLocation?
 
     public init(name: String, parameters: [ScreenParameter] = [], states: [StateDeclaration] = [],
-                body: ViewNode, location: SourceLocation? = nil) {
+                navigation: NavigationOperation? = nil, body: ViewNode, location: SourceLocation? = nil) {
         self.name = name
         self.parameters = parameters
         self.states = states
+        self.navigation = navigation
         self.body = body
         self.location = location
     }
@@ -187,6 +213,7 @@ public struct Screen: Codable, Equatable, Sendable {
         name = try container.decode(String.self, forKey: .name)
         parameters = try container.decodeIfPresent([ScreenParameter].self, forKey: .parameters) ?? []
         states = try container.decode([StateDeclaration].self, forKey: .states)
+        navigation = try container.decodeIfPresent(NavigationOperation.self, forKey: .navigation)
         body = try container.decode(ViewNode.self, forKey: .body)
         location = try container.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
@@ -224,9 +251,25 @@ public struct Module: Codable, Equatable, Sendable {
 public struct TranslationUnit: Codable, Equatable, Sendable {
     public let module: Module
     public let diagnostics: [Diagnostic]
-    public init(module: Module, diagnostics: [Diagnostic] = []) {
+    /// Lowering-only type declarations from the same explicit input set. Unlike
+    /// `module.models` and `module.itemTypes`, these are never emitted by this file.
+    public let resolvedModels: [ModelProtocol]
+    public let resolvedItemTypes: [ItemType]
+    public init(module: Module, diagnostics: [Diagnostic] = [],
+                resolvedModels: [ModelProtocol]? = nil, resolvedItemTypes: [ItemType]? = nil) {
         self.module = module
         self.diagnostics = diagnostics
+        self.resolvedModels = resolvedModels ?? module.models
+        self.resolvedItemTypes = resolvedItemTypes ?? module.itemTypes
+    }
+
+    private enum CodingKeys: String, CodingKey { case module, diagnostics, resolvedModels, resolvedItemTypes }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        module = try values.decode(Module.self, forKey: .module)
+        diagnostics = try values.decode([Diagnostic].self, forKey: .diagnostics)
+        resolvedModels = try values.decodeIfPresent([ModelProtocol].self, forKey: .resolvedModels) ?? module.models
+        resolvedItemTypes = try values.decodeIfPresent([ItemType].self, forKey: .resolvedItemTypes) ?? module.itemTypes
     }
 
     public var hasErrors: Bool { diagnostics.contains { $0.severity == .error } }

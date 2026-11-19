@@ -14,6 +14,7 @@ Text("settings.title")
 Text(LocalizedStringKey("settings.title"))
 Text("profile.greeting\(name)\(count)")
 Text(verbatim: "Debug build")
+Text(verbatim: refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS"))
 
 let accessibilityText = String(localized: "settings.title")
 ```
@@ -23,6 +24,13 @@ let accessibilityText = String(localized: "settings.title")
 - `Text(verbatim:)` is the explicit escape hatch for intentional non-localized text. It remains a literal in both
   generated outputs, with target-language escaping. Other literal-looking text in user-facing positions is diagnosed
   unless it is a valid canonical key; it is never silently copied.
+- Per-platform literal text uses `Text(verbatim: refractValue(ios:android:harmonyOS:))` with a string literal in
+  every branch. The generator selects the matching literal for each native target and the iOS helper's ordinary
+  `String` return value flows through SwiftUI's `Text(verbatim:)` initializer, so all three platforms agree on
+  literal (not localized) semantics. Bare `Text(refractValue(ios:android:harmonyOS:))` in the unlabeled localized
+  position is rejected (`R.string.unsupported_expression`): on iOS the returned `String` would feed SwiftUI's
+  `Text(_: LocalizedStringKey)` initializer and diverge from the verbatim native output. Per-platform localized
+  text is not supported in v0; use a single canonical key that resolves to per-locale resources on every platform.
 - Interpolation is ordinary SwiftUI `LocalizedStringKey` interpolation. The static parts form the lookup key; each
   interpolation becomes an ordered argument. Formatting and plural choice stay in translator-controlled resources,
   not embedded into the key or generated with string concatenation. Each argument must have a statically known

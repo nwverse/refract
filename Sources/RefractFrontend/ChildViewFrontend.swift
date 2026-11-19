@@ -11,6 +11,8 @@ extension Builder {
         }
         var models: [ChildView.Argument] = []
         var item: ChildView.Argument?
+        var messageParent: ChildView.Argument?
+        var messageParentType: ItemType?
         var labels: [String] = []
         for argument in call.arguments {
             guard let label = argument.label?.text, !labels.contains(label) else {
@@ -38,6 +40,19 @@ extension Builder {
                           "Remove the duplicate model argument.", at: argument)
                     return nil
                 }
+                continue
+            }
+            if let reference = argument.expression.as(DeclReferenceExprSyntax.self),
+               let parentType = currentMessageParent?.type, parentType.name == "ChatMessage",
+               reference.baseName.text == currentMessageParent?.name,
+               childItemParameter(declaration, named: label, itemType: "ChatMessage") {
+                guard messageParent == nil, models.isEmpty, item == nil else {
+                    error("RFMSG001", "A message-block child accepts only its parent ChatMessage and current ChatBlock.",
+                          "Use MessageBlock(message: message, block: block)", at: argument)
+                    return nil
+                }
+                messageParent = ChildView.Argument(label: label, expression: reference.baseName.text)
+                messageParentType = parentType
                 continue
             }
             if let reference = argument.expression.as(DeclReferenceExprSyntax.self),
@@ -73,6 +88,23 @@ extension Builder {
             error("RFVIEW006", "A generated View cannot call itself recursively.",
                   "Extract a nonrecursive child View with explicit typed inputs.", at: call)
             return nil
+        }
+        if let messageParentType {
+            let previousItem = currentListItem
+            let previousType = currentListItemType
+            currentListItem = messageParent?.expression
+            currentListItemType = messageParentType
+            defer {
+                currentListItem = previousItem
+                currentListItemType = previousType
+            }
+            guard let messageParent, let item else {
+                error("RFMSG001", "Pass both the ChatMessage parent and current ChatBlock to the block child.",
+                      "Use MessageBlock(message: message, block: block)", at: call)
+                return nil
+            }
+            return .child(ChildView(name: name,
+                                    arguments: [messageParent, item], models: [], item: item), location: location(of: call))
         }
         return .child(ChildView(name: name,
                                 arguments: call.arguments.compactMap { argument in
@@ -120,7 +152,7 @@ extension Builder {
         }
     }
 
-    private func childItemParameter(_ declaration: StructDeclSyntax, named name: String,
+    func childItemParameter(_ declaration: StructDeclSyntax, named name: String,
                                     itemType: String) -> Bool {
         declaration.memberBlock.members.contains { member in
             guard let variable = member.decl.as(VariableDeclSyntax.self),

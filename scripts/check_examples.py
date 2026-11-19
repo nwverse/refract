@@ -23,7 +23,7 @@ def fail(message: str) -> None:
 
 def regenerate_hello() -> None:
     outputs = {
-        "kotlin": ROOT / "examples/android/app/src/main/java/refract/generated",
+        "kotlin": ROOT / "examples/android/app/refract/generated/screens",
         "arkts": ROOT / "examples/harmony/entry/src/main/ets/generated",
     }
     sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift")
@@ -52,7 +52,7 @@ def regenerate_hello() -> None:
 
 def regenerate_identified_list() -> None:
     outputs = {
-        "android": ROOT / "examples/android/app/src/main/java/refract/generated/IdentifiedList.kt",
+        "android": ROOT / "examples/android/app/refract/generated/screens/IdentifiedList.kt",
         "harmony": ROOT / "examples/harmony/entry/src/main/ets/generated/IdentifiedList.ets",
     }
     source = ROOT / "examples/shared/IdentifiedList.swift"
@@ -166,6 +166,8 @@ def check_ios_references() -> None:
         "ModelInterface": "model-interface",
         "AccessibilityDynamicType": "accessibility-dynamic-type",
         "StackLayout": "v0-stack-layout",
+        "ChatMessageProjection": "chat-message-projection",
+        "SelectionLinkContext": "selection-link-context",
     }
     for name, case in compiler_inputs.items():
         path = f"../shared/{name}.swift"
@@ -179,7 +181,7 @@ def check_ios_references() -> None:
         fail("iOS target must not compile multiple canonical files named Input.swift")
     if not (ROOT / "examples/ios/RefractExample/MeasurementDesignTokens.swift").is_file():
         fail("iOS target is missing the measurement fixture's application-owned typography token")
-    print("iOS project compiles every shared source and eight unique, byte-identical compiler inputs")
+    print("iOS project compiles every shared source and ten unique, byte-identical compiler inputs")
 
 
 def main() -> int:

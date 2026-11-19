@@ -5,12 +5,14 @@
 *.xcodeproj/
 # The iOS example's source-controlled project is required for one shared Swift source.
 !examples/ios/RefractExample.xcodeproj/
+!bench/ios/RefractBench.xcodeproj/
 examples/ios/RefractExample.xcodeproj/xcuserdata/
 xcuserdata/
 DerivedData/
 Package.resolved.orig
 # Gradle / Android / Kotlin
 .gradle/
+.kotlin/
 build/
 local.properties
 *.iml
@@ -18,6 +20,8 @@ local.properties
 # Staged fixture Kotlin/resources, written by scripts/check_fixture_compilation.py.
 examples/android/fixtures/src/main/java/
 examples/android/fixtures/src/main/res/
+examples/android/app/src/fixtureTest/java/
+examples/android/app/src/fixtureTest/res/
 # HarmonyOS
 oh_modules/
 .hvigor/

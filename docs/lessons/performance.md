@@ -1,0 +1,38 @@
+# Paired native performance evidence
+
+## Compile-only scenarios and blockers are not measurements
+
+A shared SwiftUI file and independently written native reference can be compiled without creating or selecting a
+simulator. Use explicit `generic/platform=iOS Simulator` or `generic/platform=iOS` `build-for-testing` commands for
+that evidence, and report them as compiler results only. A generic physical-SDK destination does not prove that a
+physical device is attached, authorized, signed or measured.
+
+A benchmark issue whose acceptance permits an explicit toolchain/target blocker should record the exact missing
+prerequisite, preserve the source-prepared reference and stop short of any timing claim. Do not turn source inspection,
+an SDK-independent generation check or a synthetic report test into a performance result. Keep the production gate
+open even when the tracking issue may close through its blocker branch.
+
+## Native metrics and traces have different meanings
+
+`XCTApplicationLaunchMetric` is not a shell stopwatch. `CADisplayLink`'s `targetTimestamp - timestamp` is a display
+interval, not a CPU frame duration. A vendor frame profiler's frame duration is a different metric again. Keep the
+metric definition in the report and never compare absolute numbers across operating systems, targets or toolchains.
+
+A `.xcresult` bundle, Instruments `.trace` recording, vendor trace and UI test timing are separate raw artifacts.
+Preserve them with exact source/toolchain/target metadata, acquisition/export commands and checksums. ZIP a result
+bundle when an ordinary file is needed for public review; do not treat a directory named `.trace` as a trace file.
+Every sample must be directly bound to its variant, scenario and iteration and to the corresponding native trace.
+Do not infer ownership from a similar filename, duplicate a trace to fill missing iterations, or accept a median as a
+p99 sample.
+
+## Equal inputs need equal native behavior
+
+Both variants should use the same model, data, lazy-list identity, controls, accessibility and input script, but the
+reference must not call the generated row or share its view implementation. Compare layout and modifier structure as
+well as text. A convenient extra `frame`, asynchronous callback or dropped native token can make the two screens
+non-equivalent. Compile the canonical source rather than a copied approximation, then verify actual behavior on a
+named target before claiming equivalence.
+
+Use an explicit, exclusively owned, already-booted target. Never use `booted`, create or reboot a shared simulator,
+or infer ownership from an existing device name. A physical target discovered as unavailable is a blocker, not an
+invitation to relabel simulator results as device evidence.

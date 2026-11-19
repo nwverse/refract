@@ -5,11 +5,12 @@ extension ComposeBackend {
     /// An invalid model or item declaration is never replaced by an eager row loop.
     func dynamicListItems(_ items: ListItems, context: inout Context) throws {
         guard case let .valueProperty(.model(model, property)) = items.collection.value,
+              let owner = items.modelType,
+              context.models.contains(where: { $0.name == owner }),
               context.module.screens.contains(where: { screen in
                   screen.states.contains { state in
                       if case let .model(reference, _) = state {
-                          return reference.propertyName == model &&
-                              context.module.models.contains(where: { $0.name == reference.protocolName })
+                          return reference.propertyName == model && reference.protocolName == owner
                       }
                       return false
                   }
@@ -19,7 +20,7 @@ extension ComposeBackend {
                              suggestion: "Use a RefractModel collection of Identifiable items with a stable String or Int id.",
                              location: items.location ?? items.collection.location)
         }
-        guard let reference = context.module.models.first(where: { $0.properties.contains(where: { $0.name == property }) }),
+        guard let reference = context.models.first(where: { $0.name == owner }),
               let modelProperty = reference.properties.first(where: { $0.name == property }),
               let collection = modelProperty.collection,
               collection.itemType == items.itemType,
@@ -36,7 +37,7 @@ extension ComposeBackend {
                              suggestion: "Use Identifiable with a stable stored String or Int id.",
                              location: items.location)
         }
-        guard context.module.itemTypes.contains(where: {
+        guard context.itemTypes.contains(where: {
             $0.name == items.itemType && $0.identity.name == items.key && $0.identity.type == items.keyType
         }) else {
             throw Diagnostic(code: "RFLIST001",
@@ -53,7 +54,7 @@ extension ComposeBackend {
     func emitDynamicListItems(_ items: ListItems, into out: inout KotlinWriter,
                               context: inout Context) throws {
         try dynamicListItems(items, context: &context)
-        let collection = try renderExpression(items.collection, context: &context)
+        let collection = try items.projection?.name ?? renderExpression(items.collection, context: &context)
         let item = items.itemName
         let key = "\(item).\(items.key)"
         out.open("items(")

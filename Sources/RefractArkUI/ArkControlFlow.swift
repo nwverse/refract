@@ -42,7 +42,7 @@ extension Generation {
 
     func emitEnumSwitch(subject: Expression, enumName: String, cases: [SwitchCase],
                         into writer: inout ArkWriter, mapping: Mapping, resolver: InteropResolver?) throws {
-        guard let declaration = module.enums.first(where: { $0.name == enumName }),
+        guard let declaration = enums.first(where: { $0.name == enumName }),
               cases.map(\.name).sorted() == declaration.cases.sorted(), Set(cases.map(\.name)).count == cases.count else {
             throw Diagnostic(code: "arkui.non_exhaustive_switch",
                              message: "A native switch must contain each declared enum case exactly once.",
@@ -115,6 +115,7 @@ extension Generation {
         case .string: "string"
         case .bool: "boolean"
         case .int, .double: "number"
+        case .revision: "bigint"
         }
     }
 

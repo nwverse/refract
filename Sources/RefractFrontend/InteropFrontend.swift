@@ -38,12 +38,15 @@ struct InteropFrontend {
             for binding in property.bindings {
                 guard let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
                       pattern.identifier.text != "body" else { continue }
+                // Accessibility configuration belongs to the ordinary iOS body, not the cross-platform ABI.
+                // Other property wrappers remain diagnostics rather than silently widening that ABI.
+                if Self.isReduceMotionEnvironment(property, binding) { continue }
                 guard property.bindingSpecifier.tokenKind == .keyword(.let),
                       binding.initializer == nil, binding.accessorBlock == nil,
                       let annotation = binding.typeAnnotation,
                       let type = Self.scalarType(annotation.type.trimmedDescription) else {
                     diagnostics.append(error("RFNATIVE001", "Native component `\(node.name.text)` has an unsupported stored property.",
-                          "Use `let` with an explicit String, Bool, Int or Double type", at: binding))
+                          "Use `let` with an explicit supported scalar, Image, LocalizedStringKey, RemoteImageLoader or `() -> Void` type", at: binding))
                     invalidDeclarations.insert(node.name.text)
                     continue
                 }
@@ -94,18 +97,33 @@ struct InteropFrontend {
         return diagnostics
     }
 
-    static func scalarType(_ type: String) -> ValueType? {
+    static func scalarType(_ type: String) -> NativeParameterType? {
         switch type {
         case "String", "string": .string
         case "Bool", "bool": .bool
         case "Int", "int": .int
         case "Double", "double": .double
+        case "Image": .image
+        case "LocalizedStringKey": .stringKey
+        case "RemoteImageLoader": .remoteImageLoader
+        case "() -> Void": .action
+        case "(String) -> Void": .actionString
+        case "RefractSelectionContent": .selectionContent
+        case "(RefractSelectionContext) -> Void": .selectionContextAction
         default: nil
         }
     }
 
+    static func isReduceMotionEnvironment(_ property: VariableDeclSyntax,
+                                          _ binding: PatternBindingSyntax) -> Bool {
+        property.bindingSpecifier.tokenKind == .keyword(.var)
+            && binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "reduceMotion"
+            && binding.accessorBlock == nil
+            && property.attributes.trimmedDescription == "@Environment(\\.accessibilityReduceMotion)"
+    }
+
     static func signature(_ parameters: [NativeParameter]) -> String {
-        parameters.map { "\($0.label): \($0.type.swiftName)" }.joined(separator: ", ")
+        parameters.map { "\($0.label): \($0.type.sourceName)" }.joined(separator: ", ")
     }
 
     func error(_ code: String, _ message: String, _ suggestion: String,
@@ -121,16 +139,5 @@ struct InteropFrontend {
     func location(of node: some SyntaxProtocol) -> RefractIR.SourceLocation {
         let position = converter.location(for: node.positionAfterSkippingLeadingTrivia)
         return RefractIR.SourceLocation(file: file, line: position.line, column: position.column)
-    }
-}
-
-extension ValueType {
-    var swiftName: String {
-        switch self {
-        case .string: "String"
-        case .bool: "Bool"
-        case .int: "Int"
-        case .double: "Double"
-        }
     }
 }

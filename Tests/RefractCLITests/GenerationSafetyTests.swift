@@ -85,6 +85,27 @@ import Testing
     #endif
 }
 
+@Test func cliPreservesScalarModelReadsInMappedComponents() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = try requireCLIExecutable()
+    let fixture = root.appendingPathComponent("Fixtures/mapping/model-scalars")
+    let temporary = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let android = temporary.appendingPathComponent("android")
+    let harmony = temporary.appendingPathComponent("harmony")
+    let result = try runCLI(["generate", "--input", fixture.appendingPathComponent("Input.swift").path,
+        "--mapping", fixture.appendingPathComponent("refract.json").path,
+        "--android-out", android.path, "--harmony-out", harmony.path], executable: executable)
+    #expect(result.status == 0, Comment(rawValue: result.stderr))
+    #expect(try String(contentsOf: android.appendingPathComponent("Input.kt"), encoding: .utf8)
+        .contains("value = model.versionName.value"))
+    #expect(try String(contentsOf: harmony.appendingPathComponent("Input.ets"), encoding: .utf8)
+        .contains("value: this.model.versionName"))
+    #endif
+}
+
 @Test func cliReportsInputAndMappingFailuresWithNonzeroExit() throws {
     #if os(Linux) || os(macOS)
     let executable = try requireCLIExecutable()
@@ -145,16 +166,39 @@ private func launchCLI(_ arguments: [String], executable: URL) throws -> (proces
     let stderr = Pipe()
     process.standardError = stderr
     process.standardOutput = Pipe()
+    // Process lifetime is coordinated by finishCLI, with a bounded watchdog for a stuck child.
     try process.run()
     return (process, stderr)
 }
 
 private func finishCLI(_ launched: (process: Process, stderr: Pipe)) async -> (status: Int32, stderr: String) {
+    // Read stderr concurrently with the synchronous exit wait. On Linux, resuming a continuation
+    // from terminationHandler before draining the pipe can leave both the child and test runner waiting.
     await withCheckedContinuation { continuation in
-        launched.process.terminationHandler = { _ in continuation.resume() }
+        let output = CLIOutput()
+        let stderrReader = Thread {
+            output.stderr = launched.stderr.fileHandleForReading.readDataToEndOfFile()
+        }
+        stderrReader.start()
+        Thread {
+            launched.process.waitUntilExit()
+            while output.stderr == nil { Thread.sleep(forTimeInterval: 0.001) }
+            continuation.resume(returning: (
+                launched.process.terminationStatus,
+                String(decoding: output.stderr ?? Data(), as: UTF8.self)
+            ))
+        }.start()
     }
-    return (launched.process.terminationStatus,
-            String(decoding: launched.stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+}
+
+private final class CLIOutput: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data: Data?
+
+    var stderr: Data? {
+        get { lock.withLock { data } }
+        set { lock.withLock { data = newValue } }
+    }
 }
 
 private func runCLI(_ arguments: [String], executable: URL) throws -> (status: Int32, stderr: String) {
@@ -171,4 +215,3 @@ private func builtCLIExecutable() -> URL {
     return URL(fileURLWithPath: CommandLine.arguments[0])
         .deletingLastPathComponent().appendingPathComponent("refract")
 }
-

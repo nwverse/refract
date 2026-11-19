@@ -6,8 +6,35 @@ extension Builder {
         switch call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text {
         case "Toggle": return toggleControl(call)
         case "TextField": return textFieldControl(call)
+        case "SecureField": return secureFieldControl(call)
         default: return nil
         }
+    }
+
+    /// `.secureReveal($isRevealed)` attaches a projected Bool reveal flag to a `SecureField`.
+    /// v0 requires the projection to refer to a declared Bool @State or @Binding; literals,
+    /// expressions and `.constant(true)` are rejected so reveal ownership stays typed and visible.
+    func secureReveal(_ call: FunctionCallExprSyntax, on node: ViewNode) -> ViewNode? {
+        guard call.arguments.count == 1, call.trailingClosure == nil,
+              call.arguments.first?.label == nil,
+              let projection = call.arguments.first?.expression.as(DeclReferenceExprSyntax.self),
+              projection.baseName.text.hasPrefix("$"),
+              let property = controlBinding(named: String(projection.baseName.text.dropFirst())) else {
+            error("RFSECURE001",
+                  "`.secureReveal` takes exactly one projected Bool @State or @Binding (`$isRevealed`).",
+                  "Declare `@State private var isRevealed: Bool = false` and pass `.secureReveal($isRevealed)`",
+                  at: call)
+            return nil
+        }
+        guard case let .secureInput(placeholder, value, reveal, modifiers, nodeLocation) = node, reveal == nil else {
+            error("RFSECURE001",
+                  "`.secureReveal` applies once, directly to a `SecureField`.",
+                  "Place `.secureReveal($isRevealed)` on the SecureField before layout modifiers", at: call)
+            return nil
+        }
+        let revealExpression = Expression(.valueProperty(property), type: .bool, location: location(of: projection))
+        return .secureInput(placeholder: placeholder, value: value, reveal: revealExpression,
+                            modifiers: modifiers, location: nodeLocation)
     }
 
     func labelsHidden(_ call: FunctionCallExprSyntax, on node: ViewNode) -> ViewNode? {
@@ -132,19 +159,60 @@ extension Builder {
               let titleArgument = call.arguments.first, titleArgument.label == nil,
               let key = stringLiteral(titleArgument.expression), LocalizationKey.isCanonical(key),
               call.arguments.last?.label?.text == "text",
-              let projection = call.arguments.last?.expression.as(DeclReferenceExprSyntax.self),
-              projection.baseName.text.hasPrefix("$"),
-              let property = controlTextBinding(named: String(projection.baseName.text.dropFirst())) else {
+              let projection = call.arguments.last?.expression else {
             error("state.invalid_projection",
-                  "TextField requires a localized title and `text: $property` for a declared String state or binding.",
-                  "Use `TextField(\"settings.name\", text: $name)` with String ownership", at: call)
+                  "TextField requires a localized title and a supported String binding.",
+                  "Use `text: $name`, `text: $form.email`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })",
+                  at: call)
+            return nil
+        }
+        let value: Expression
+        if let reference = projection.as(DeclReferenceExprSyntax.self),
+           reference.baseName.text.hasPrefix("$"),
+           let property = controlTextBinding(named: String(reference.baseName.text.dropFirst())) {
+            value = Expression(.valueProperty(property), location: location(of: projection))
+        } else if let member = projection.as(MemberAccessExprSyntax.self),
+                  member.base?.as(DeclReferenceExprSyntax.self)?.baseName.text.hasPrefix("$") == true,
+                  member.declName.argumentNames == nil,
+                  let base = member.base?.as(DeclReferenceExprSyntax.self),
+                  let declaration = form(named: String(base.baseName.text.dropFirst())),
+                  let field = declaration.field(named: member.declName.baseName.text) {
+            value = Expression(.formField(form: declaration.name, field: field.name), type: .string,
+                               location: location(of: member))
+        } else if let binding = modelTextBinding(projection) {
+            value = binding
+        } else {
+            error("state.invalid_projection",
+                  "TextField requires a local/parent String binding, a declared form field or an explicit model String property and setter.",
+                  "Use `text: $name`, `text: $form.email`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })",
+                  at: projection)
             return nil
         }
         let placeholder = Expression(.localizedText(LocalizedText(key: key)), type: .string,
                                     location: location(of: titleArgument.expression))
         return .textInput(placeholder: placeholder,
-                          value: Expression(.valueProperty(property), location: location(of: projection)),
+                          value: value,
                           modifiers: [], location: location(of: call))
+    }
+
+    private func secureFieldControl(_ call: FunctionCallExprSyntax) -> ViewNode? {
+        guard call.arguments.count == 2, call.trailingClosure == nil,
+              let titleArgument = call.arguments.first, titleArgument.label == nil,
+              let key = stringLiteral(titleArgument.expression), LocalizationKey.isCanonical(key),
+              call.arguments.last?.label?.text == "text",
+              let projection = call.arguments.last?.expression.as(DeclReferenceExprSyntax.self),
+              projection.baseName.text.hasPrefix("$"),
+              let property = controlTextBinding(named: String(projection.baseName.text.dropFirst())) else {
+            error("RFSECURE002",
+                  "SecureField requires a localized title key and `text: $property` for a declared String state or binding.",
+                  "Use `SecureField(\"settings.password\", text: $password)` with String ownership", at: call)
+            return nil
+        }
+        let placeholder = Expression(.localizedText(LocalizedText(key: key)), type: .string,
+                                    location: location(of: titleArgument.expression))
+        return .secureInput(placeholder: placeholder,
+                            value: Expression(.valueProperty(property), location: location(of: projection)),
+                            reveal: nil, modifiers: [], location: location(of: call))
     }
 
     private func controlTextBinding(named name: String) -> ValueProperty? {

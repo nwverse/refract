@@ -47,11 +47,18 @@ extension ComposeBackend {
                              message: "Dynamic list lowering requires the resolved model collection contract.",
                              suggestion: "Declare an Identifiable item with a stable String or Int id through the model interface.",
                              location: location ?? items.location)
+        case .messageBlocks:
+            throw Diagnostic(code: "RFMSG001", message: "Message blocks must be emitted inside their checked parent row.",
+                             suggestion: "Use ForEach(message.blocks) in the ChatMessage row's non-scrolling content.", location: node.sourceLocation)
         case let .textInput(placeholder, value, modifiers, location):
             try emitTextInput(placeholder: placeholder, value: value, modifiers: modifiers, isRoot: isRoot,
                               location: location, into: &out, context: &context)
+        case let .secureInput(placeholder, value, reveal, modifiers, location):
+            try emitSecureInput(placeholder: placeholder, value: value, reveal: reveal,
+                                modifiers: modifiers, isRoot: isRoot, location: location,
+                                into: &out, context: &context)
         case .stack, .text, .button, .toggle, .native, .nativeModifier, .child, .component, .platformView,
-             .conditional, .optionalBinding, .switchExpression, .navigationLink, .navigationStack:
+             .conditional, .optionalBinding, .switchExpression, .navigationLink, .navigationStack, .tabView:
             throw Diagnostic(code: "RF-C001", message: "Internal Compose view dispatch is inconsistent.",
                              suggestion: "Report this generator defect.", location: node.sourceLocation)
         }
@@ -88,6 +95,9 @@ extension ComposeBackend {
                                 into out: inout KotlinWriter, context: inout Context) throws {
         context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
         context.imports.insert("androidx.compose.foundation.lazy.items")
+        if let projection = items.projection {
+            out.line("val \(projection.name) = \(try projectedCollectionExpression(items, context: &context))")
+        }
         out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
         try emitDynamicListItems(items, into: &out, context: &context)
         out.close()
@@ -167,6 +177,10 @@ extension ComposeBackend {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .textInput(_, value, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .secureInput(_, value, _, _, _) = child, case let .valueProperty(.state(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
+        } else if case let .secureInput(_, value, _, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
+            key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .toggle(_, value, _, _, _, _) = child, case let .valueProperty(.state(name)) = value.value {
             key = "\"row:\(staticControlIdentity(name))\""
         } else if case let .toggle(_, value, _, _, _, _) = child, case let .valueProperty(.binding(name)) = value.value {
@@ -226,6 +240,7 @@ extension ComposeBackend {
         case .label: return "Label"
         case .toggle: return "Toggle"
         case .textInput: return "TextInput"
+        case .secureInput: return "SecureInput"
         case .divider: return "Divider"
         case .layout, .stack, .nativeModifier: return "Container"
         case .native: return "Native"

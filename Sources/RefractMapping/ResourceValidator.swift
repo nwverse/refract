@@ -23,13 +23,13 @@ public enum LocalizationResourceValidator {
                 return visit(child) + operations.compactMap { modifier in
                     switch modifier.operation {
                     case let .testTag(value), let .contentDescription(value): value
-                    case .retainCallback, .contentType: nil
+                    case .retainCallback, .contentType, .textSelection, .dragPayload, .dropTarget: nil
                     }
                 }
             case let .native(component, _):
-                return component.arguments.map(\.expression)
+                return component.arguments.compactMap(\.expression)
             case let .component(component, _):
-                return component.arguments.map(\.expression) + component.children.flatMap(visit)
+                return component.arguments.compactMap(\.expression) + component.children.flatMap(visit)
                     + component.modifiers.flatMap(\.arguments)
             case .child:
                 return []
@@ -55,17 +55,22 @@ public enum LocalizationResourceValidator {
                 return visit(child)
             case let .forEach(items, _):
                 return [items.collection] + visit(items.content)
+            case let .messageBlocks(nested, _):
+                return [nested.items.collection] + visit(nested.items.content)
             case let .image(_, modifiers, _):
                 return modifiers.flatMap(\.arguments)
             case let .toggle(title, value, modifiers, nativeModifiers, _, _):
                 return [title, value] + modifiers.flatMap(\.arguments) + nativeModifiers.compactMap {
                     switch $0.operation {
                     case let .testTag(value), let .contentDescription(value): value
-                    case .retainCallback, .contentType: nil
+                    case .retainCallback, .contentType, .textSelection, .dragPayload, .dropTarget: nil
                     }
                 }
             case let .textInput(placeholder, value, modifiers, _):
                 return (placeholder.map { [$0] } ?? []) + [value] + modifiers.flatMap(\.arguments)
+            case let .secureInput(placeholder, value, reveal, modifiers, _):
+                return (placeholder.map { [$0] } ?? []) + [value] + (reveal.map { [$0] } ?? [])
+                    + modifiers.flatMap(\.arguments)
             case let .label(title, _, modifiers, _):
                 return [title] + modifiers.flatMap(\.arguments)
             case let .divider(modifiers, _):
@@ -74,6 +79,9 @@ public enum LocalizationResourceValidator {
                 return [title]
             case let .navigationStack(stack, _):
                 return stack.content.flatMap(visit)
+            case let .tabView(tabs, _):
+                return tabs.destinations.map(\.title) + tabs.menuActions.map(\.title)
+                    + (tabs.menuTitle.map { [$0] } ?? [])
             case .spacer:
                 return []
             }
