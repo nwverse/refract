@@ -115,6 +115,9 @@ struct InteropFrontend {
         case "RefractLinkPolicy": .linkPolicy
         case "RefractLinkHandoff": .linkHandoff
         case "() -> Void": .action
+        case "(String) -> Void": .actionString
+        case "RefractSelectionContent": .selectionContent
+        case "(RefractSelectionContext) -> Void": .selectionContextAction
         default: nil
         }
     }

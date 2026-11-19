@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "settings_email",
+      "value": "Email"
+    },
+    {
+      "name": "settings_password",
+      "value": "Password"
+    },
+    {
+      "name": "settings_confirmation",
+      "value": "Confirm password"
+    },
+    {
+      "name": "settings_submit",
+      "value": "Create account"
+    },
+    {
+      "name": "settings_retry",
+      "value": "Retry"
+    }
+  ]
+}

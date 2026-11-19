@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {},
+      "color": {
+        "DesignColors.action": {
+          "resolver": "AppInteractionColors.resolve",
+          "normal": { "resource": "theme_action_normal" },
+          "disabled": { "resource": "theme_action_disabled" },
+          "pressed": { "resource": "theme_action_pressed" }
+        }
+      }
+    },
+    "resources": { "className": "refract.generated.R", "strings": {} }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {},
+      "color": {
+        "DesignColors.action": {
+          "resolver": "AppInteractionColors.resolve",
+          "normal": { "resource": "theme_action_normal" },
+          "disabled": { "resource": "theme_action_disabled" },
+          "pressed": { "resource": "theme_action_pressed" }
+        }
+      }
+    },
+    "resources": { "namespace": "app", "stringTable": "string", "strings": {} }
+  }
+}

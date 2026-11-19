@@ -243,6 +243,12 @@ The accepted target-type mappings are:
 | `Int` | `Int` | `number` |
 | `Double` | `Double` | `number` |
 | `() -> Void` (one checked model action) | `() -> Unit` | `() => void` |
+| `RefractSelectionContent` (closed literal native host value) | `RefractSelectionContent` | `RefractSelectionContent` |
+| `(String) -> Void` (one checked model link activation) | `(String) -> Unit` | `(string) => void` |
+| `(RefractSelectionContext) -> Void` (one checked model snapshot action) | `(RefractSelectionContext) -> Unit` | `(RefractSelectionContext) => void` |
+
+The last three forms are restricted to the literal selection host in `docs/selection-link-context.md`; they are
+not general Screen closure parameters or arbitrary object payload support.
 
 `Int` values must be integral when emitted for ArkTS. The generator does not silently round, coerce or add a cast.
 

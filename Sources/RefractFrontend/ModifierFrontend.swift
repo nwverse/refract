@@ -69,6 +69,34 @@ extension Builder {
     private func modifierValue(_ expression: ExprSyntax) -> Expression? {
         let location = location(of: expression)
         if let call = expression.as(FunctionCallExprSyntax.self),
+           call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractInteractionColor" {
+            guard call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty,
+                  call.arguments.count == 4,
+                  call.arguments.map(\.label?.text) == [nil, "enabled", "pressed", "focused"],
+                  let tokenExpression = call.arguments.first?.expression.as(MemberAccessExprSyntax.self),
+                  tokenExpression.trimmedDescription.contains(".") else {
+                error("interactionToken", "An interaction color needs one color token and three explicit Boolean values.",
+                      "Use `refractInteractionColor(DesignColors.action, enabled: enabled, pressed: pressed, focused: focused)`.", at: call)
+                return nil
+            }
+            var values: [String: Expression] = [:]
+            for argument in call.arguments.dropFirst() {
+                guard let label = argument.label?.text, let value = scalar(argument.expression),
+                      value.type == .bool else {
+                    error("interactionToken", "Interaction enabled, pressed and focused inputs must be declared Boolean values.",
+                          "Use app-provided Bool state; never substitute a detached InteractionSource or another state.", at: argument)
+                    return nil
+                }
+                values[label] = value.expression
+            }
+            guard let enabled = values["enabled"], let pressed = values["pressed"], let focused = values["focused"] else {
+                return nil
+            }
+            let token = tokenExpression.trimmedDescription
+            return Expression(.interactionColor(InteractionColorValue(token: token, enabled: enabled,
+                pressed: pressed, focused: focused)), location: location)
+        }
+        if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
             return scalar(expression)?.expression
         }

@@ -43,6 +43,10 @@
   importing `RefractMapping` from `RefractIR` creates a circular module dependency.
 - A native view argument needs its label and source type, not only an expression. Unknown reference types must not be
   invented as `String`; wait for typed state/model resolution or issue a diagnostic.
+- A structured native selection value belongs in the existing typed `NativeArgument` channel, not a new general
+  payload ABI. Keep static literal ranges validated in UTF-16, including empty selections and surrogate-pair
+  boundaries, and forward context snapshots to declared scalar model actions. Do not add arbitrary Screen closures,
+  selection callbacks on movement or a URL-opening side effect. See `docs/selection-link-context.md`.
 - Validate a target at its call site. Having both backends validate both targets repeats the same missing/mismatched
   mapping diagnostic. Drivers collect independent target errors before writing either output.
 - Do not infer an ArkTS `number` parameter from the corresponding Kotlin type: Kotlin `Int` and `Double` both map to

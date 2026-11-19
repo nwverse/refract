@@ -156,6 +156,9 @@ public enum InteropMapping {
             case .linkPolicy: "LinkPolicy"
             case .linkHandoff: "LinkHandoff"
             case .action: "() => void"
+            case .actionString: "(string) => void"
+            case .selectionContent: "RefractSelectionContent"
+            case .selectionContextAction: "(context: RefractSelectionContext) => void"
             }
         }
         return switch type {
@@ -168,6 +171,9 @@ public enum InteropMapping {
         case .linkPolicy: "LinkPolicy"
         case .linkHandoff: "LinkHandoff"
         case .action: "() -> Unit"
+        case .actionString: "(String) -> Unit"
+        case .selectionContent: "RefractSelectionContent"
+        case .selectionContextAction: "(RefractSelectionContext) -> Unit"
         }
     }
 
