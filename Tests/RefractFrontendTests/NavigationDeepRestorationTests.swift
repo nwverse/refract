@@ -38,10 +38,8 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
 }
 
 @Test func deepStackDestinationRetainsTypedModalAndNavigationOperations() throws {
-    let mapping = try Mapping.load(data: Data(contentsOf: navigationFixture.deletingLastPathComponent()
-        .appendingPathComponent("modal-native-host/refract.json")),
-        file: "refract.json", resourceBaseURL: navigationFixture.deletingLastPathComponent()
-            .appendingPathComponent("modal-native-host"))
+    let mapping = try Mapping.load(data: Data(contentsOf: navigationFixture.appendingPathComponent("refract.json")),
+                                  file: "refract.json", resourceBaseURL: navigationFixture)
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     enum Route: Hashable {
         case detail
@@ -82,9 +80,7 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
         }
     }
     """), mapping: mapping)
-    #expect(unit.diagnostics.map(\.code) == ["RFNAV003", "RFNAV002"])
-    #expect(unit.diagnostics.first?.message.contains("one declared model input") == true)
-    #expect(unit.diagnostics.last?.message.contains("only declared model inputs and one destination path") == true)
+    #expect(unit.diagnostics.isEmpty)
     let detail = try #require(unit.module.screens.first { $0.name == "DetailScreen" })
     #expect(detail.navigation == NavigationOperation(enumName: "Route"))
     #expect(detail.modals.map(\.kind) == [.alert])
