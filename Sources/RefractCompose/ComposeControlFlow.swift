@@ -81,7 +81,8 @@ extension ComposeBackend {
         }
         defer { if isRoot { out.close() } }
         let renderedSubject = try renderExpression(subject, context: &context)
-        out.open(declaration.payloadTypes.isEmpty ? "when (\(renderedSubject))" : "when (val subject = \(renderedSubject))")
+        let eventSubject = declaration.kind?.hasCorrelation == true ? "\(renderedSubject).state" : renderedSubject
+        out.open(declaration.payloadTypes.isEmpty ? "when (\(eventSubject))" : "when (val subject = \(eventSubject))")
         for branch in cases {
             guard declaration.cases.contains(branch.name) else {
                 throw Diagnostic(code: "RF-C001", message: "Unknown enum case `\(branch.name)`.", location: location)
@@ -99,7 +100,7 @@ extension ComposeBackend {
                 guard branch.binding == nil else {
                     throw Diagnostic(code: "RF-C001", message: "A no-payload case cannot bind a value.", location: location)
                 }
-                out.open("\(enumName).\(branch.name) ->")
+                out.open("\(enumName)\(declaration.kind?.hasCorrelation == true ? ".State" : "").\(branch.name) ->")
                 for child in branch.children { try emit(child, into: &out, context: &context) }
                 out.close()
             }

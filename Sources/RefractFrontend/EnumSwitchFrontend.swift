@@ -83,7 +83,8 @@ extension Builder {
     func view(_ statement: SwitchExprSyntax) -> ViewNode? {
         guard let subject = statement.subject.as(DeclReferenceExprSyntax.self),
               let enumName = enumType(named: subject.baseName.text),
-              let declaration = enums.first(where: { $0.name == enumName }) else {
+              let declaration = enums.first(where: { $0.name == enumName }) ??
+                currentNativeValues.first(where: { $0.kind.stateTypeName == enumName })?.kind.declaration else {
             error("RFCTRL003", "Switch requires a declared enum-typed immutable screen input.",
                   "Use `let value: YourEnum` with a local no-payload enum declaration", at: statement.subject)
             return nil
@@ -139,7 +140,7 @@ extension Builder {
     }
 
     private func enumType(named name: String) -> String? {
-        parameters.first(where: { $0.name == name })?.enumName
+        parameters.first(where: { $0.name == name })?.enumName ?? nativeEnumType(named: name)
     }
 
     private func enumCasePattern(_ pattern: PatternSyntax,

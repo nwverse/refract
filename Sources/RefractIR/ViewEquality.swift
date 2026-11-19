@@ -144,6 +144,8 @@ extension Expression {
                  let (.reference(lhsText), .reference(rhsText)),
                  let (.binding(lhsText), .binding(rhsText)):
                 guard lhsText == rhsText else { return false }
+            case let (.nativeValueProperty(lhsValue), .nativeValueProperty(rhsValue)):
+                guard lhsValue == rhsValue else { return false }
             case let (.imageResource(lhsName), .imageResource(rhsName)):
                 guard lhsName == rhsName else { return false }
             case let (.boolLiteral(lhsValue), .boolLiteral(rhsValue)):

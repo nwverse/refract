@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [], "components": {}, "nativeComponents": {}, "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "refract.generated.R", "catalog": "values/strings.xml", "strings": { "synthetic.notification.id": "synthetic_notification_id", "synthetic.notification.confirm": "synthetic_notification_confirm", "synthetic.notification.present": "synthetic_notification_present", "synthetic.notification.cancel": "synthetic_notification_cancel" } }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [], "components": {}, "nativeComponents": {}, "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "catalog": "resources/base/element/string.json", "strings": { "synthetic.notification.id": "synthetic_notification_id", "synthetic.notification.confirm": "synthetic_notification_confirm", "synthetic.notification.present": "synthetic_notification_present", "synthetic.notification.cancel": "synthetic_notification_cancel" } }
+  }
+}
