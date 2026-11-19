@@ -66,15 +66,13 @@ def copy_artifact(source: Path, raw: Path, index: int) -> dict[str, object]:
     return {"path": f"raw/{destination.name}", "bytes": destination.stat().st_size, "sha256": digest(destination)}
 
 
-def trace_filename(variant: str, scenario: str, iteration: int = 0) -> str:
-    method = {"startup": "Startup", "scroll": "Macrobenchmark[scroll]", "stateUpdate": "StateUpdate"}[scenario]
-    return f"dev.refract.bench.test.SettingsMacrobenchmark_{variant}{method}_iter{iteration:03d}.perfetto-trace"
-
-
 def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
                 traces: list[dict[str, object]]) -> None:
-    """Bind AndroidX profilerOutputs to copied files; fail on missing or ambiguous traces."""
+    """Bind the exact AndroidX relative paths; never construct an expected filename."""
     referenced = set()
+    by_name = {}
+    for trace in traces:
+        by_name.setdefault(trace["source_name"], []).append(trace)
     for source, copied in zip(json_sources, copied_json):
         try:
             payload = json.loads(source.read_text(encoding="utf-8"))
@@ -105,14 +103,18 @@ def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
                     continue
                 trace_index += 1
                 filename = output.get("filename")
-                if not isinstance(filename, str) or not filename:
+                if not isinstance(filename, str) or not filename or "\\" in filename:
                     raise EvidenceError(f"Invalid Perfetto filename for {name}")
-                matches = [trace for trace in traces if Path(trace["source_name"]).name == Path(filename).name]
+                relative = Path(filename)
+                if relative.is_absolute() or ".." in relative.parts or relative.as_posix() != filename:
+                    raise EvidenceError(f"Perfetto path escapes the AndroidX output directory for {name}")
+                matches = by_name.get(relative.as_posix(), [])
                 if len(matches) != 1:
-                    raise EvidenceError(f"Perfetto file is missing or ambiguous for {name}: {Path(filename).name}")
+                    raise EvidenceError(f"Perfetto file is missing or ambiguous for {name}: {relative.as_posix()}")
                 trace = matches[0]
-                if (trace["variant"], trace["scenario"]) != (variant, scenario):
-                    raise EvidenceError(f"Perfetto filename does not match its AndroidX benchmark identity: {name}")
+                if trace["source_name"] in referenced:
+                    raise EvidenceError(f"Perfetto file is claimed by multiple benchmark iterations: {relative.as_posix()}")
+                trace.update({"variant": variant, "scenario": scenario})
                 trace["androidx_benchmark"] = name
                 trace["androidx_json"] = copied["path"]
                 trace["iteration"] = iterations[trace_index]
@@ -137,8 +139,8 @@ def collect(input_directory: Path, output: Path) -> dict[str, object]:
     traces = []
     for index, path in enumerate(trace_sources, len(benchmark_json) + 1):
         item = copy_artifact(path, raw, index)
-        variant, scenario = trace_identity(path.name)
-        item.update({"variant": variant, "scenario": scenario, "source_name": path.name})
+        relative = path.relative_to(input_directory).as_posix()
+        item.update({"source_name": relative})
         traces.append(item)
     bind_traces(json_sources, benchmark_json, traces)
     manifest = {"schema": 1, "benchmark_json": benchmark_json, "traces": traces}
