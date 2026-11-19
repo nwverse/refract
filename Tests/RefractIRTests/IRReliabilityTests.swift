@@ -150,7 +150,7 @@ private struct IRCorpus {
 
     private mutating func expression() -> RefractIR.Expression {
         let value: IRExpression.Value
-        switch Int.random(in: 0..<19, using: &random) {
+        switch Int.random(in: 0..<20, using: &random) {
         case 0: value = .stringLiteral("value\(Int.random(in: 0...100, using: &random))")
         case 1: value = .verbatimText("literal")
         case 2: value = .stringKey("settings.title")
@@ -175,6 +175,8 @@ private struct IRCorpus {
         case 15: value = .imageResource("app_logo")
         case 16: value = .rawAssetResource("privacy_policy")
         case 17: value = .fontAsset(name: "app_body", size: "16")
+        case 18:
+            value = .nativeValueProperty(NativeValueProperty(value: "event", field: .revision))
         default:
             value = .formValid(FormDeclaration(name: "draft", fields: [
                 FormField(name: "email", initialValue: IRExpression(.stringLiteral("")), rules: [.nonEmpty]),
@@ -221,7 +223,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 29 public ViewNode cases and all 19 Expression.Value cases must actually occur.
+        // All 29 public ViewNode cases and all 20 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -241,7 +243,7 @@ struct IRReliabilityTests {
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
         #expect(seenViews.count == 29, "Visited view cases: \(seenViews.sorted())")
-        #expect(seenExpressions.count == 19, "Visited expression cases: \(seenExpressions.sorted())")
+        #expect(seenExpressions.count == 20, "Visited expression cases: \(seenExpressions.sorted())")
     }
 
     private func collectCases(in node: ViewNode, views: inout Set<String>, expressions: inout Set<String>) {
@@ -370,7 +372,7 @@ struct IRReliabilityTests {
         switch action {
         case let .assign(_, value), let .increment(_, value):
             collectExpression(value, into: &expressions)
-        case let .modelMethod(_, _, arguments):
+        case let .modelMethod(_, _, arguments), let .hostMethod(_, _, _, arguments):
             for argument in arguments { collectExpression(argument.value, into: &expressions) }
         case let .submit(submit):
             if let form = submit.declaration {
