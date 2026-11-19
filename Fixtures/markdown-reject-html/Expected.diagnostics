@@ -1,0 +1,1 @@
+Input.swift:11:13: error [RFMD005]: Markdown block `html` is outside version 1. Suggestion: Use `.paragraph` or `.codeBlock`; unsupported structures are never dropped or converted to HTML.

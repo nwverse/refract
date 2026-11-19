@@ -7,3 +7,9 @@
 "settings.notifications" = "Notifications";
 "settings.save" = "Save";
 "settings.native.component" = "Generated screen with a native component";
+
+"conversation.answer" = "Here is a ";
+"conversation.important" = "bounded answer";
+"conversation.note" = " with an example: ";
+"conversation.docs" = " Read the documentation";
+"conversation.code.label" = "Swift code example";
