@@ -166,6 +166,8 @@ def check_ios_references() -> None:
         "ParentBinding": "parent-binding",
         "ModelInterface": "model-interface",
         "AdaptiveSettings": "adaptive-window-size",
+        "AccessibilityDynamicType": "accessibility-dynamic-type",
+        "InteropLinkHandoff": "interop-link-handoff",
         "StackLayout": "v0-stack-layout",
         "InteropTextInputHost": "interop-text-input-host",
         "MarkdownConversation": "markdown-conversation",

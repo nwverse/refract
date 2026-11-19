@@ -39,6 +39,7 @@ cross-file-child-view
 cross-file-enum-switch
 cross-file-two-models
 interop-remote-image
+interop-link-handoff
 navigation-host
 navigation-deep-restoration
 navigation-native-destination

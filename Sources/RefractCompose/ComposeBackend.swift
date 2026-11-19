@@ -120,7 +120,8 @@ public struct ComposeBackend: Sendable {
         var parameters = nativeHostParameters(screen) + nativeValueParameters(screen.nativeValues)
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
-            let type = input.itemType ?? input.enumName ?? kotlinType(input.type)
+            let itemType = input.itemType == "RefractLinkHandoff" ? InteropMapping.targetType(.linkHandoff, platform: .android) : input.itemType
+            let type = itemType ?? input.enumName ?? kotlinType(input.type)
             if input.enumName == "WidthSizeClass" {
                 context.imports.insert("androidx.compose.material3.windowsizeclass.WindowWidthSizeClass")
             }
@@ -431,6 +432,10 @@ public struct ComposeBackend: Sendable {
                                                      packageName: context.packageName) {
                 try renderExpression($0, context: &context)
             }
+        case let .linkDestination(destination):
+            return LinkHandoffEmission.compose(destination)
+        case let .linkPolicy(policy):
+            return LinkHandoffEmission.compose(policy)
         case let .imageResource(name):
             guard let resourceClass = context.androidResourceClass, !name.isEmpty,
                   name.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }) else {

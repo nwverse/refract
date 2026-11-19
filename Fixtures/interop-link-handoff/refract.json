@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [
+      "example.app.LinkAllowlistEntry",
+      "example.app.LinkDestination",
+      "example.app.LinkHandoff",
+      "example.app.LinkPolicy",
+      "example.app.NativeHelpLink"
+    ],
+    "components": {},
+    "nativeComponents": {
+      "NativeHelpLink": {
+        "parameters": [
+          { "label": "destination", "type": "linkDestination", "required": true },
+          { "label": "policy", "type": "linkPolicy", "required": true },
+          { "label": "handoff", "type": "linkHandoff", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeHelpLink",
+        "argumentStyle": "named",
+        "arguments": [
+          { "source": "destination", "target": "destination" },
+          { "source": "policy", "target": "policy" },
+          { "source": "handoff", "target": "handoff" }
+        ],
+        "attributes": {},
+        "modifierParameter": "modifier"
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "strings": {}
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.app", "symbols": ["LinkAllowlistEntry", "LinkDestination", "LinkHandoff", "LinkPolicy", "NativeHelpLink"] }],
+    "components": {},
+    "nativeComponents": {
+      "NativeHelpLink": {
+        "parameters": [
+          { "label": "destination", "type": "linkDestination", "required": true },
+          { "label": "policy", "type": "linkPolicy", "required": true },
+          { "label": "handoff", "type": "linkHandoff", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeHelpLink",
+        "argumentStyle": "object",
+        "arguments": [
+          { "source": "destination", "target": "destination" },
+          { "source": "policy", "target": "policy" },
+          { "source": "handoff", "target": "handoff" }
+        ],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "values/strings.xml",
+      "strings": {}
+    }
+  }
+}

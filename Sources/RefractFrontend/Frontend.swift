@@ -545,6 +545,11 @@ final class Builder: SyntaxVisitor {
             guard let component = nativeComponent(call) else { return nil }
             guard let declaration = interop.declarations.first(where: { $0.name == name }) else { return nil }
             diagnostics.append(contentsOf: interop.validate(component, declaration: declaration, location: nodeLocation))
+            if declaration.parameters.contains(where: {
+                [.linkDestination, .linkPolicy, .linkHandoff].contains($0.type)
+            }) {
+                diagnostics.append(contentsOf: LinkHandoffFrontend(builder: self).validate(component, declaration: declaration))
+            }
             return .native(component, location: nodeLocation)
         }
     }
@@ -593,6 +598,12 @@ final class Builder: SyntaxVisitor {
                 }
             case .remoteImageLoader:
                 parsed = nativeImageLoader(argument.expression, label: label)
+            case .linkDestination:
+                parsed = LinkHandoffFrontend(builder: self).destination(argument.expression)
+            case .linkPolicy:
+                parsed = LinkHandoffFrontend(builder: self).policy(argument.expression)
+            case .linkHandoff:
+                parsed = LinkHandoffFrontend(builder: self).handoff(argument.expression)
             case .selectionContent:
                 parsed = nativeSelectionContent(argument.expression, label: label)
             case .selectionContextAction:
