@@ -1,0 +1,1 @@
+Input.swift:22:17: error [RFSELECTION003]: A link range must be nonempty, in bounds and aligned to Unicode scalar boundaries. Suggestion: Use static UTF-16 offsets; do not split an emoji surrogate pair

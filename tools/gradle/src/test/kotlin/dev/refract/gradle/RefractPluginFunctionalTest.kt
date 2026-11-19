@@ -23,6 +23,10 @@ class RefractPluginFunctionalTest {
         "Build the CLI and pass REFRACT_CLI_PATH before running the Gradle functional tests."
     }
     private val repository = File(requireNotNull(System.getProperty("refract.test.repository"))).canonicalFile
+    private val version = requireNotNull(System.getProperty("refract.test.version")) {
+        "Run refract --version and pass REFRACT_REQUIRED_VERSION to the functional tests."
+    }
+    private val versionLiteral = version.replace("$", "\\$")
 
     @Before
     fun setUp() {
@@ -55,6 +59,7 @@ class RefractPluginFunctionalTest {
             }
             refract {
                 executable.set(layout.projectDirectory.file("${executable.invariantSeparatorsPath}"))
+                requiredVersion.set("$versionLiteral")
                 sources.register("screens") {
                     inputs.from(layout.projectDirectory.file("Screen.swift"))
                     mapping.set(layout.projectDirectory.file("refract.json"))
@@ -82,6 +87,7 @@ class RefractPluginFunctionalTest {
                 mapping.set(layout.projectDirectory.file("refract.json"))
                 resources.from(layout.projectDirectory.file("res/values/strings.xml"))
                 outputDirectory.set(layout.buildDirectory.dir("generated/shared"))
+                harmonyOutputDirectory.set(layout.buildDirectory.dir("generated/shared-harmony"))
             }
             """.trimIndent(),
         )
@@ -207,6 +213,107 @@ class RefractPluginFunctionalTest {
         committed.writeBytes(generated.readBytes())
         harmony.writeBytes(File(project, "build/tmp/generateDebugScreensRefract/cli/harmony/Screen.ets").readBytes())
         assertEquals(TaskOutcome.SUCCESS, run("checkDebugScreensRefract").task(":checkDebugScreensRefract")?.outcome)
+    }
+
+    @Test
+    fun explicitVariantsGenerateBothBackendsCompileAndRejectStaleInternalOutput() {
+        File(project, "build.gradle.kts").writeText(
+            """
+            plugins {
+                id("com.android.application") version "9.5.0"
+                id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
+                id("dev.refract.generator")
+            }
+            refract {
+                executable.set(layout.projectDirectory.file("${executable.invariantSeparatorsPath}"))
+                requiredVersion.set("$versionLiteral")
+                sources.register("screens") {
+                    inputs.from(layout.projectDirectory.file("Screen.swift"))
+                    mapping.set(layout.projectDirectory.file("refract.json"))
+                    resources.from(layout.projectDirectory.file("res/values/strings.xml"))
+                }
+                for (name in listOf("debug", "internal", "release")) {
+                    configurations.register(name) {
+                        androidVariant.set(name)
+                        androidOutputDirectory.set(layout.projectDirectory.dir("generated/" + name))
+                        harmonyOutputDirectory.set(layout.projectDirectory.dir("generated/" + name))
+                    }
+                }
+            }
+            android {
+                namespace = "example.consumer"
+                compileSdk = 37
+                compileSdkMinor = 2
+                defaultConfig { minSdk = 26 }
+                buildFeatures { compose = true }
+                sourceSets.getByName("main").res.directories.add("res")
+                buildTypes { create("internal") { initWith(getByName("debug")) } }
+            }
+            dependencies {
+                implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+                implementation("androidx.compose.ui:ui")
+                implementation("androidx.compose.material3:material3")
+            }
+            """.trimIndent(),
+        )
+
+        for (name in listOf("Debug", "Internal", "Release")) {
+            val result = run("publish${name}Refract", "check${name}Refract")
+            assertEquals(result.output, TaskOutcome.SUCCESS, result.task(":publish${name}ScreensRefract")?.outcome)
+            assertEquals(result.output, TaskOutcome.SUCCESS, result.task(":check${name}ScreensRefract")?.outcome)
+        }
+        val compiled = run("clean", "compileInternalKotlin")
+        assertEquals(compiled.output, TaskOutcome.SUCCESS, compiled.task(":compileInternalKotlin")?.outcome)
+        val productionKotlin = File(project, "generated/debug/screens/android/Screen.kt").readBytes()
+        val productionHarmony = File(project, "generated/debug/screens/harmony/Screen.ets").readBytes()
+        val releaseKotlin = File(project, "generated/release/screens/android/Screen.kt").readBytes()
+        val releaseHarmony = File(project, "generated/release/screens/harmony/Screen.ets").readBytes()
+        run("compileInternalKotlin")
+        assertTrue(productionKotlin.contentEquals(File(project, "generated/debug/screens/android/Screen.kt").readBytes()))
+        assertTrue(productionHarmony.contentEquals(File(project, "generated/debug/screens/harmony/Screen.ets").readBytes()))
+        assertTrue(releaseKotlin.contentEquals(File(project, "generated/release/screens/android/Screen.kt").readBytes()))
+        assertTrue(releaseHarmony.contentEquals(File(project, "generated/release/screens/harmony/Screen.ets").readBytes()))
+        for (extension in listOf("kt", "ets")) {
+            val platform = if (extension == "kt") "android" else "harmony"
+            val debug = File(project, "generated/debug/screens/$platform/Screen.$extension").readBytes()
+            assertTrue(debug.contentEquals(File(project, "generated/internal/screens/$platform/Screen.$extension").readBytes()))
+            assertTrue(debug.contentEquals(File(project, "generated/release/screens/$platform/Screen.$extension").readBytes()))
+        }
+
+        val staleKotlin = File(project, "generated/internal/screens/android/Screen.kt")
+        val staleHarmony = File(project, "generated/internal/screens/harmony/Screen.ets")
+        staleKotlin.appendText("\n// Deliberately stale internal output.\n")
+        staleHarmony.appendText("\n// Deliberately stale internal output.\n")
+        val kotlinBefore = staleKotlin.readBytes()
+        val harmonyBefore = staleHarmony.readBytes()
+        val failure = runAndFail("checkInternalRefract")
+        assertTrue(failure.output, failure.output.contains("Refract committed-output check failed"))
+        assertTrue(kotlinBefore.contentEquals(staleKotlin.readBytes()))
+        assertTrue(harmonyBefore.contentEquals(staleHarmony.readBytes()))
+
+        run("publishInternalRefract")
+        assertEquals(TaskOutcome.SUCCESS, run("checkInternalRefract").task(":checkInternalScreensRefract")?.outcome)
+        assertEquals(TaskOutcome.SUCCESS, run("checkDebugRefract").task(":checkDebugScreensRefract")?.outcome)
+    }
+
+    @Test
+    fun exactCliVersionIsRequiredBeforeGeneration() {
+        File(project, "build.gradle.kts").appendText(
+            "\nrefract.requiredVersion.set(\"refract 0.0.0 (wrong-revision)\")\n",
+        )
+        val failure = runAndFail("generateDebugRefract")
+        assertTrue(failure.output, failure.output.contains("Refract CLI version mismatch"))
+        assertFalse(File(project, "build/generated/refract").exists())
+    }
+
+    @Test
+    fun internalAndroidVariantRequiresAnExplicitConfigurationBinding() {
+        File(project, "build.gradle.kts").appendText(
+            "\nandroid.buildTypes.create(\"internal\")\n",
+        )
+        val failure = runAndFail("generateInternalRefract")
+        assertTrue(failure.output, failure.output.contains("must select exactly one Refract generation configuration"))
+        assertFalse(File(project, "build/generated/refract/internal").exists())
     }
 
     private fun run(vararg arguments: String): BuildResult = runner(*arguments).build()

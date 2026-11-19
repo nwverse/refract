@@ -31,7 +31,17 @@ extension Generation {
         for model in stack.models {
             writer.line("@Param @Require public var \(model.propertyName): \(model.protocolName)")
         }
-        writer.line()
+        let linkedDestinations = stack.destinations.compactMap { destination in
+            module.screens.first(where: { $0.name == destination.viewName })?.navigation
+        }
+        if !linkedDestinations.isEmpty {
+            guard linkedDestinations.allSatisfy({ $0 == NavigationOperation(pathName: stack.pathName, enumName: stack.enumName) }) else {
+                throw Diagnostic(code: "RFNAV003", message: "Linked destinations must use the host's single typed navigation operation.")
+            }
+            try emitNavigationOperation(NavigationOperation(pathName: stack.pathName, enumName: stack.enumName), into: &writer)
+        } else {
+            writer.line()
+        }
         writer.open("build()")
         for (index, destination) in stack.destinations.enumerated() {
             let condition = "this.destination === \(stack.enumName).\(destination.caseName)"
@@ -51,7 +61,11 @@ extension Generation {
                 })?.protocolName else {
                     throw Diagnostic(code: "RFNAV003", message: "A destination model must match its root and target declarations.")
                 }
-                writer.line("\(destination.viewName)({ \(model.label): this.\(model.expression) })")
+                var arguments = ["\(model.label): this.\(model.expression)"]
+                if module.screens.first(where: { $0.name == destination.viewName })?.navigation != nil {
+                    arguments.append("onPathNavigate: this.onPathNavigate")
+                }
+                writer.line("\(destination.viewName)({ \(arguments.joined(separator: ", ")) })")
             } else {
                 guard module.nativeDeclarations.contains(where: { $0.name == destination.viewName && $0.parameters.isEmpty }) else {
                     throw Diagnostic(code: "RFNAV003", message: "A native destination needs a zero-argument typed declaration.")

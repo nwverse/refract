@@ -38,7 +38,11 @@ tasks.test {
     maxParallelForks = 1
     systemProperty("refract.test.repository", layout.settingsDirectory.dir("../..").asFile.absolutePath)
     systemProperty("refract.test.cli", providers.environmentVariable("REFRACT_CLI_PATH").get())
+    systemProperty("refract.test.version", providers.environmentVariable("REFRACT_REQUIRED_VERSION").get())
     testLogging {
         events("failed", "skipped")
+        // Full failure messages retain nested TestKit BuildResult.output; standard streams expose CLI diagnostics.
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
     }
 }

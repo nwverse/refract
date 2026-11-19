@@ -29,6 +29,9 @@ extension Builder {
 
     func typedInputScreen(_ node: StructDeclSyntax,
                           members: MemberBlockItemListSyntax) -> Screen? {
+        if node.name.text == "MessageBlock", itemTypes.contains(where: { $0.name == "ChatBlock" }) {
+            return messageBlockInputScreen(node, members: members)
+        }
         var parameters: [ScreenParameter] = []
         let savedParameters = self.parameters
         defer { self.parameters = savedParameters }

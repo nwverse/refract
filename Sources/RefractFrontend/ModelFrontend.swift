@@ -158,6 +158,16 @@ extension Builder {
                            location: location(of: function))
     }
 
+    func itemCollection(_ expression: ExprSyntax) -> TypedExpression? {
+        guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+              let base = member.base?.as(DeclReferenceExprSyntax.self), let item = currentListItem,
+              base.baseName.text == item, let type = currentListItemType,
+              let property = type.properties.first(where: { $0.name == member.declName.baseName.text }),
+              property.collection != nil else { return nil }
+        return TypedExpression(Expression(.reference(expression.trimmedDescription),
+                                         location: location(of: expression)), nil)
+    }
+
     func modelProperty(_ expression: ExprSyntax) -> Expression? {
         // Preserve the scalar-only API used by actions and modifiers. A typed collection is not a string.
         scalarModelProperty(expression)?.expression
@@ -181,11 +191,23 @@ extension Builder {
             return TypedExpression(Expression(.reference("\(item).\(property.name)"),
                                              type: property.type, location: location(of: expression)), property.type)
         }
+        if let names = currentMessageBlockNames,
+           let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self), base.baseName.text == names.block,
+           currentListItem == names.parent, currentListItemType?.name == "ChatMessage",
+           let block = itemTypes.first(where: { $0.name == "ChatBlock" }),
+           let property = block.properties.first(where: { $0.name == member.declName.baseName.text }) {
+            return TypedExpression(Expression(.reference("\(names.block).\(property.name)"), type: property.type,
+                                             location: location(of: expression)), property.type)
+        }
         guard let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
               let base = member.base?.as(DeclReferenceExprSyntax.self),
               let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
               let contract = models.first(where: { $0.name == reference.protocolName }),
-              let property = contract.properties.first(where: { $0.name == member.declName.baseName.text }) else { return nil }
+              let property = contract.properties.first(where: { $0.name == member.declName.baseName.text }) else {
+            if let collection = itemCollection(expression) { return collection }
+            return nil
+        }
         return TypedExpression(Expression(.valueProperty(.model(model: reference.propertyName,
                                                                property: member.declName.baseName.text)),
                                          location: location(of: expression)),
@@ -209,7 +231,8 @@ extension Builder {
         for (argument, parameter) in zip(call.arguments, action.parameters) {
             let label = argument.label?.text
             guard label == parameter.externalName,
-                  let value = literal(argument.expression, expected: parameter.type) else {
+                  let value = selectionContextArgument(argument.expression, expected: parameter.type)
+                    ?? literal(argument.expression, expected: parameter.type) else {
                 error("model.invalid_action", "Arguments for model action `\(name)` must match its declaration.",
                       "Preserve Swift argument labels and use scalar literals of the declared types", at: argument)
                 return nil

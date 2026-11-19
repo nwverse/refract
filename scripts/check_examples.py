@@ -166,6 +166,9 @@ def check_ios_references() -> None:
         "ModelInterface": "model-interface",
         "AdaptiveSettings": "adaptive-window-size",
         "StackLayout": "v0-stack-layout",
+        "ThemedSettingsControl": "theme-interaction-states",
+        "ChatMessageProjection": "chat-message-projection",
+        "SelectionLinkContext": "selection-link-context",
     }
     for name, case in compiler_inputs.items():
         path = f"../shared/{name}.swift"

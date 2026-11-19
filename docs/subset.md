@@ -239,6 +239,21 @@ row shapes, `.reuse({ reuseId: () => "setting" })`. API 12–17 keep V2 observat
 there is no V1 fallback. Fine-grained `@ObservedV2`/`@Trace` item properties are native optimizations, not a Refract
 cache or runtime. A list cannot be represented by eagerly mapping all rows.
 
+A typed projection extends this source to
+`model.items.filter { item in category == .all || item.category == category }.sorted { lhs, rhs in lhs.rank < rhs.rank || (lhs.rank == rhs.rank && lhs.id < rhs.id) }.refractProjection(name: "catalogItems")`.
+The category is an immutable screen input and the item has a stored property of the same declared no-payload enum,
+including `.all`. The sort field and item id are Int; `<` selects ascending and `>` descending, while the explicit id
+tie-break always remains ascending. Arbitrary predicates, missing or descending ties and other key types are `RFLIST004`
+diagnostics. The iOS support extension returns the filtered/sorted array unchanged.
+
+Compose generates a pure function and remembers it with the actual source list and category; sorting direction is fixed
+at generation. Lazy rows retain the original item id. ArkUI exports the equivalent pure function and requires the named
+projected `BasicDataSource` on the app model. The application computes and publishes that source and its native data
+notifications; Refract does not mirror or synchronize it. `Fixtures/list-typed-projection/` covers descending/tied
+ordering and `Fixtures/list-reject-projection-sort/` the unsupported String key. Native JVM tests cover empty, category
+filtering, `.all` reset, descending/tied order and preservation of original item instances. No iOS/HarmonyOS native
+compilation is implied by those tests.
+
 A paged searchable list uses the same `List(model.items)` contract; it does not introduce a paging collection adapter.
 The model exposes typed String search text, loading/error/empty Booleans and `loadNextPage`/`retry` actions. Search
 editing accepts the explicit `Binding(get: { model.searchText }, set: { model.setSearchText($0) })` form, with matching
@@ -397,6 +412,8 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFLIST001` | Collection lacks a stable, typed identity | Use `Identifiable` with a stored String or Int id |
 | `RFLIST002` | Index, object identity or generated UUID is used as a key | Use the item's stable stored id |
 | `RFLIST003` | Dynamic rows are misplaced, nested, eagerly rendered, or mixed with static rows | Use the sole `ForEach(model.items)` child of `List`, or canonical `List(model.items)` |
+| `RFMSG001` | A bounded message/block snapshot, parent scope, collection or revision is invalid | Use the exact `ChatMessage`/`ChatBlock` declarations in `docs/message-projection.md` |
+| `RFSELECTION001`–`RFSELECTION006` | Dynamic selection content, invalid UTF-16/link ranges or destinations, or an unresolved snapshot callback | Use the bounded literal native selection host and declared model actions in `docs/selection-link-context.md` |
 | `state.invalid_declaration` | Property wrapper or stored input is outside the supported ownership contract | Use @State, @Binding or a plain let model input as documented |
 | `state.missing_initializer` | Local state lacks a supported literal initializer | Initialize state with a Bool, Int, Double or String literal |
 | `state.binding_initializer` | Binding has an initializer or unsupported ownership | Pass an initialized binding from the parent with a supported scalar type |

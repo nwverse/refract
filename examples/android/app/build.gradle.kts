@@ -15,6 +15,7 @@ plugins {
 refract {
     // An environment override keeps machine-specific CLI paths out of the build script.
     executable.set(providers.environmentVariable("REFRACT_CLI_PATH").map { layout.projectDirectory.file(it) })
+    requiredVersion.set(providers.environmentVariable("REFRACT_REQUIRED_VERSION"))
     sources.register("screens") {
         inputs.from(
             rootProject.file("../shared/Hello.swift"),

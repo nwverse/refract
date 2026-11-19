@@ -20,3 +20,4 @@ includeBuild("../../tools/gradle")
 rootProject.name = "RefractExample"
 include(":app")
 include(":fixtures")
+include(":theme-fixture")
