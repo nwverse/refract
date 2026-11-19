@@ -247,11 +247,16 @@ struct Generation {
             let arguments = try InteropEmission.arguments(for: component, target: target) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
             } renderAction: { action in
-                guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
-                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
-                                     location: location)
+                guard case let .modelMethod(model, name, arguments) = action else {
+                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
                 }
-                return "() => { \(try emitLocalAction(action)) }"
+                if arguments.isEmpty { return "() => { \(try emitLocalAction(action)) }" }
+                guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
+                    return try emitArkSelectionAction(action)
+                }
+                return "(destination: string): void => { this.\(model).\(name)(destination); }"
+            } renderSelection: { content in
+                try emitArkSelectionContent(content)
             }
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):
@@ -319,6 +324,12 @@ struct Generation {
         for child in node.children(for: .harmonyOS) { try collectImports(child, resolver: resolver, into: &emittedImports) }
         if case let .native(component, location) = node {
             emittedImports.insert(try resolver.target(for: component, platform: .harmonyOS, location: location).symbol)
+            for argument in component.arguments {
+                if argument.selection != nil {
+                    emittedImports.formUnion(["RefractSelectionContent", "RefractSelectionLink", "RefractSelectionRange"])
+                }
+                if argument.type == .selectionContextAction { emittedImports.insert("RefractSelectionContext") }
+            }
         }
         collectModifierImports(node, mapping: mapping, into: &emittedImports)
         if case let .component(component, location) = node {

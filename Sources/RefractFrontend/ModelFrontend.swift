@@ -231,7 +231,8 @@ extension Builder {
         for (argument, parameter) in zip(call.arguments, action.parameters) {
             let label = argument.label?.text
             guard label == parameter.externalName,
-                  let value = literal(argument.expression, expected: parameter.type) else {
+                  let value = selectionContextArgument(argument.expression, expected: parameter.type)
+                    ?? literal(argument.expression, expected: parameter.type) else {
                 error("model.invalid_action", "Arguments for model action `\(name)` must match its declaration.",
                       "Preserve Swift argument labels and use scalar literals of the declared types", at: argument)
                 return nil
