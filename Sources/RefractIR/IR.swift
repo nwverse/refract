@@ -217,6 +217,10 @@ public struct Screen: Codable, Equatable, Sendable {
         self.location = location
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case name, parameters, states, navigation, body, nativeValues, lifecycle, location
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
