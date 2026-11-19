@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="conversation_answer">Here is a </string>
+    <string name="conversation_important">bounded answer</string>
+    <string name="conversation_note"> with an example: </string>
+    <string name="conversation_docs"> Read the documentation</string>
+    <string name="conversation_code_label">Swift code example</string>
+</resources>

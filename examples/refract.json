@@ -32,7 +32,12 @@
         "settings.preferences": "settings_preferences",
         "settings.notifications": "settings_notifications",
         "settings.save": "settings_save",
-        "settings.native.component": "settings_native_component"
+        "settings.native.component": "settings_native_component",
+        "conversation.answer": "conversation_answer",
+        "conversation.important": "conversation_important",
+        "conversation.note": "conversation_note",
+        "conversation.docs": "conversation_docs",
+        "conversation.code.label": "conversation_code_label"
       }
     }
   },
@@ -70,7 +75,12 @@
         "settings.preferences": "settings_preferences",
         "settings.notifications": "settings_notifications",
         "settings.save": "settings_save",
-        "settings.native.component": "settings_native_component"
+        "settings.native.component": "settings_native_component",
+        "conversation.answer": "conversation_answer",
+        "conversation.important": "conversation_important",
+        "conversation.note": "conversation_note",
+        "conversation.docs": "conversation_docs",
+        "conversation.code.label": "conversation_code_label"
       }
     }
   }

@@ -88,6 +88,23 @@ struct DeepViewEqualityTests {
         #expect(expression != Expression(.interactionColor(changed), type: .string, location: nil))
     }
 
+    @Test func markdownViewsCompareTheirDocumentLinkActionAndModifiers() {
+        let document = MarkdownDocument(version: 1, blocks: [
+            .paragraph(.init(id: "answer", content: [
+                .strong(.link(.init(label: Expression(.stringKey("conversation.docs")),
+                    destination: .init(scheme: "https", host: "example.com", path: "/docs")))),
+            ])),
+        ])
+        let action = MarkdownLinkAction(model: "model", method: "openLink", argumentLabel: "url")
+        let view = ViewNode.markdown(document, linkAction: action, modifiers: [], location: nil)
+        #expect(view == .markdown(document, linkAction: action, modifiers: [], location: nil))
+        #expect(view != .markdown(MarkdownDocument(version: 2, blocks: document.blocks),
+                                  linkAction: action, modifiers: [], location: nil))
+        #expect(view != .markdown(document, linkAction: nil, modifiers: [], location: nil))
+        #expect(view != .markdown(document, linkAction: action,
+                                  modifiers: [Modifier(name: "padding")], location: nil))
+    }
+
     @Test func ordinaryAndDeepExpressionsCompareEveryField() {
         let lhs = deepExpression()
         let rhs = deepExpression()
