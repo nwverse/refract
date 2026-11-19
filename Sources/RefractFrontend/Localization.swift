@@ -12,7 +12,7 @@ extension Builder {
                   let binding = variable.bindings.first,
                   let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier else { return false }
             if let type = binding.typeAnnotation?.type.trimmedDescription,
-               models.contains(where: { $0.name == type }) {
+               models.contains(where: { $0.name == type }) || nativeHosts.contains(where: { $0.name == type }) {
                 return false
             }
             return identifier.text != "body"
@@ -53,7 +53,13 @@ extension Builder {
             guard case let .model(reference, _) = $0 else { return nil }
             return reference
         }
+        currentHosts = states.compactMap {
+            guard case let .nativeHost(reference, _) = $0 else { return nil }
+            return reference
+        }
         currentStates = states
+        guard let native = nativeScreenInputs(node, states: states) else { return nil }
+        currentNativeValues = native.values
         let savedItem = currentListItem
         let savedItemType = currentListItemType
         defer {
@@ -69,7 +75,7 @@ extension Builder {
                 .trimmedDescription ?? ""
             let isItemInput = itemTypes.contains(where: { $0.name == inputType })
             guard let variable = member.decl.as(VariableDeclSyntax.self),
-                  variable.attributes.isEmpty, variable.modifiers.isEmpty,
+                  variable.modifiers.isEmpty,
                   variable.bindings.count == 1, let binding = variable.bindings.first,
                   let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier,
                   identifier.text == "body" || isItemInput || !hasItemInput ||
@@ -79,7 +85,7 @@ extension Builder {
                 return nil
             }
             guard let variable = member.decl.as(VariableDeclSyntax.self),
-                  variable.attributes.isEmpty, variable.modifiers.isEmpty,
+                  variable.modifiers.isEmpty,
                   variable.bindings.count == 1, let binding = variable.bindings.first,
                   let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier else {
                 error("R.string.interpolation", "Only typed immutable inputs and body belong in a View.",
@@ -91,7 +97,8 @@ extension Builder {
                 continue
             }
             if let type = binding.typeAnnotation?.type.trimmedDescription,
-               models.contains(where: { $0.name == type }) {
+               models.contains(where: { $0.name == type }) || nativeHosts.contains(where: { $0.name == type }) ||
+                NativeValueKind.allCases.contains(where: { $0.typeName == type }) {
                 continue
             }
             guard variable.bindingSpecifier.tokenKind == .keyword(.let), binding.initializer == nil,
@@ -164,7 +171,7 @@ extension Builder {
         }
         guard let root = viewStatements(items, body: binding) else { return nil }
         return Screen(name: node.name.text, parameters: parameters, states: states, body: root,
-                      location: location(of: node.name))
+                      nativeValues: native.values, lifecycle: native.lifecycle, location: location(of: node.name))
     }
 }
 
@@ -186,18 +193,20 @@ struct LocalizationFrontend {
     let typedScalar: ((ExprSyntax) -> TypedExpression?)?
     let stateText: (ExprSyntax) -> Expression?
     let enumInputNames: Set<String>
+    let nativeValues: [NativeValueReference]
 
     init(file: String, converter: SourceLocationConverter,
          scalar: @escaping (ExprSyntax) -> TypedExpression?,
          typedScalar: ((ExprSyntax) -> TypedExpression?)? = nil,
          stateText: @escaping (ExprSyntax) -> Expression?,
-         enumInputNames: Set<String> = []) {
+         enumInputNames: Set<String> = [], nativeValues: [NativeValueReference] = []) {
         self.file = file
         self.converter = converter
         self.scalar = scalar
         self.typedScalar = typedScalar
         self.stateText = stateText
         self.enumInputNames = enumInputNames
+        self.nativeValues = nativeValues
     }
     private(set) var diagnostics: [Diagnostic] = []
 
@@ -218,6 +227,9 @@ struct LocalizationFrontend {
             return nil
         }
         if argument.label?.text == "verbatim" {
+            if let native = nativeValue(argument.expression), native.type == .string {
+                return native.expression
+            }
             if let value = stateText(argument.expression) {
                 return value
             }
@@ -250,10 +262,20 @@ struct LocalizationFrontend {
             return nil
         }
         if let literal = expression.as(StringLiteralExprSyntax.self) {
-            if let typedScalar, literal.segments.contains(where: {
-                guard case let .expressionSegment(segment) = $0 else { return false }
-                return segment.expressions.contains { typedScalar($0.expression) != nil }
+            if literal.segments.contains(where: {
+                guard case .expressionSegment = $0 else { return false }
+                return true
             }) {
+                if nativeStringInterpolation(literal) { return localizedLiteral(literal) }
+                if let typedScalar, literal.segments.contains(where: {
+                    guard case let .expressionSegment(segment) = $0 else { return false }
+                    return segment.expressions.contains { typedScalar($0.expression) != nil }
+                }) {
+                    return localizedLiteral(literal)
+                }
+                if let value = stateText(expression), case .interpolatedString = value.value {
+                    return value
+                }
                 return localizedLiteral(literal)
             }
             if let value = stateText(expression), case .interpolatedString = value.value {
@@ -331,6 +353,30 @@ struct LocalizationFrontend {
             location: location(of: call))
     }
 
+    private func nativeValue(_ expression: ExprSyntax) -> TypedExpression? {
+        guard let member = expression.as(MemberAccessExprSyntax.self),
+              let base = member.base?.as(DeclReferenceExprSyntax.self)?.baseName.text,
+              let field = NativeValueField(rawValue: member.declName.baseName.text),
+              let value = nativeValues.first(where: { $0.propertyName == base }),
+              value.selectedField == field || value.selectedField == .id && field == .revision else { return nil }
+        return TypedExpression(Expression(.nativeValueProperty(NativeValueProperty(value: base, field: field)),
+                                        type: field.type, location: location(of: expression)), field.type)
+    }
+
+    private func nativeStringInterpolation(_ literal: StringLiteralExprSyntax) -> Bool {
+        literal.segments.contains { segment in
+            guard case let .expressionSegment(segment) = segment else { return false }
+            return segment.expressions.contains {
+                guard let member = $0.expression.as(MemberAccessExprSyntax.self),
+                      let base = member.base?.as(DeclReferenceExprSyntax.self)?.baseName.text,
+                      let field = NativeValueField(rawValue: member.declName.baseName.text) else { return false }
+                return nativeValues.contains(where: { value in
+                    value.propertyName == base && (value.selectedField == field || value.selectedField == .id && field == .revision)
+                })
+            }
+        }
+    }
+
     private mutating func localizedLiteral(_ literal: StringLiteralExprSyntax) -> Expression? {
         var key = ""
         var arguments: [Expression] = []
@@ -370,6 +416,10 @@ struct LocalizationFrontend {
                     continue
                 }
                 guard let value = scalar(expression) else {
+                    if expression.as(MemberAccessExprSyntax.self) != nil {
+                        error("R.string.interpolation", "Interpolation must resolve to a typed scalar screen or native input field.",
+                              "Use a supported scalar input, not an opaque expression", at: expression)
+                    }
                     return nil
                 }
                 guard let type = value.type, type != .bool else {

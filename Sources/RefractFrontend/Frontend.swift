@@ -34,7 +34,9 @@ public struct Frontend {
                                 nativeDeclarations: builder.interop.declarations,
                                 models: builder.models.filter { $0.location?.file == file.source.path },
                                 itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
-                                enums: builder.enums.filter { $0.location?.file == file.source.path })
+                                enums: builder.enums.filter { $0.location?.file == file.source.path } +
+                                    builder.screens.flatMap(\.nativeValues).map { $0.kind.declaration },
+                                nativeHosts: builder.nativeHosts)
             if sources.count == 1 { builder.validateChildViewGraph(module) }
             builder.bindNavigationDestinations(module)
             pendingMessageBuilders.append(builder)
@@ -51,7 +53,7 @@ public struct Frontend {
                                      nativeDeclarations: builder.interop.declarations,
                                      models: builder.models.filter { $0.location?.file == file.source.path },
                                      itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
-                                     enums: builder.enums.filter { $0.location?.file == file.source.path })
+                                     enums: module.enums, nativeHosts: module.nativeHosts)
             units.append(TranslationUnit(module: boundModule, diagnostics: diagnostics,
                                          resolvedModels: builder.models,
                                          resolvedItemTypes: builder.itemTypes))
@@ -63,7 +65,8 @@ public struct Frontend {
                   !builder.pendingMessageBodies.isEmpty else { return unit }
             let module = Module(sourceFile: builder.file, screens: builder.screens,
                                 nativeDeclarations: unit.module.nativeDeclarations,
-                                models: unit.module.models, itemTypes: unit.module.itemTypes, enums: unit.module.enums)
+                                models: unit.module.models, itemTypes: unit.module.itemTypes,
+                                enums: unit.module.enums, nativeHosts: unit.module.nativeHosts)
             return TranslationUnit(module: module, diagnostics: unit.diagnostics,
                                    resolvedModels: unit.resolvedModels, resolvedItemTypes: unit.resolvedItemTypes)
         }
@@ -95,6 +98,8 @@ final class Builder: SyntaxVisitor {
     var itemTypes: [ItemType] = []
     var enums: [EnumDeclaration] = []
     var currentModels: [ModelReference] = []
+    var currentHosts: [NativeHostReference] = []
+    var currentNativeValues: [NativeValueReference] = []
     var currentListItem: String?
     var currentListItemType: ItemType?
     var currentMessageParent: (name: String, type: ItemType)?
@@ -105,6 +110,7 @@ final class Builder: SyntaxVisitor {
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
+    var nativeHosts: [NativeHostContract] = []
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil) {
         self.file = file
@@ -124,13 +130,17 @@ final class Builder: SyntaxVisitor {
         itemTypes = compilationContext?.allItemTypes ?? []
         collectItemTypes(tree)
         collectModels(tree)
+        collectNativeHosts(tree)
+        collectDeclaredViews(tree)
+        // Native event wrappers and the dedicated text-input host share the declaration table.
         for statement in tree.statements {
-            if let declaration = statement.item.as(StructDeclSyntax.self),
-               declaration.inheritanceClause?.inheritedTypes.contains(where: {
-                   ["View", "RefractTextInputHost"].contains($0.type.trimmedDescription)
-               }) == true {
-                viewDeclarations[declaration.name.text] = declaration
-            }
+            guard let declaration = statement.item.as(StructDeclSyntax.self),
+                  declaration.inheritanceClause?.inheritedTypes.contains(where: { inherited in
+                      let name = inherited.type.trimmedDescription
+                      return name == "RefractTextInputHost" ||
+                          NativeValueKind.allCases.contains(where: { $0.typeName == name })
+                  }) == true else { continue }
+            viewDeclarations[declaration.name.text] = declaration
         }
         if let compilationContext {
             models = compilationContext.models + models
@@ -157,12 +167,21 @@ final class Builder: SyntaxVisitor {
         }
         guard node.inheritanceClause?.inheritedTypes.contains(where: {
             $0.type.trimmedDescription == "View"
-        }) == true else { return .skipChildren }
+        }) == true else {
+            if (node.inheritanceClause?.inheritedTypes.map(\.type.trimmedDescription) ?? []).contains(where: { type in
+                NativeValueKind.allCases.contains(where: { $0.typeName == type })
+            }) {
+                _ = validateViewMembers(node)
+            }
+            return .skipChildren
+        }
         guard validateViewMembers(node) else { return .skipChildren }
 
         let savedParameters = parameters
         let savedStates = currentStates
         let savedModels = currentModels
+        let savedHosts = currentHosts
+        let savedNativeValues = currentNativeValues
         let savedItem = currentListItem
         let savedItemType = currentListItemType
         let savedBindings = currentBindings
@@ -170,6 +189,8 @@ final class Builder: SyntaxVisitor {
         parameters = []
         currentStates = []
         currentModels = []
+        currentHosts = []
+        currentNativeValues = []
         currentListItem = nil
         currentListItemType = nil
         currentBindings = [:]
@@ -178,6 +199,8 @@ final class Builder: SyntaxVisitor {
             parameters = savedParameters
             currentStates = savedStates
             currentModels = savedModels
+            currentHosts = savedHosts
+            currentNativeValues = savedNativeValues
             currentListItem = savedItem
             currentListItemType = savedItemType
             currentBindings = savedBindings
@@ -185,8 +208,8 @@ final class Builder: SyntaxVisitor {
         }
         let members = node.memberBlock.members
         let hasItemInputs = members.contains { member in
-            guard let type = member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
-                .trimmedDescription else { return false }
+            guard let variable = member.decl.as(VariableDeclSyntax.self), variable.attributes.isEmpty,
+                  let type = variable.bindings.first?.typeAnnotation?.type.trimmedDescription else { return false }
             return itemTypes.contains(where: { $0.name == type })
         }
         let isNavigationRoot = members.contains { member in
@@ -195,7 +218,7 @@ final class Builder: SyntaxVisitor {
         }
         if isNavigationRoot {
             // The navigation parser below validates the path and model inputs together.
-        } else if hasItemInputs {
+        } else if hasNativeInputs(node) || hasItemInputs || hasTypedInputs(members) {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
             screens.append(body)
             return .skipChildren
@@ -229,6 +252,12 @@ final class Builder: SyntaxVisitor {
             guard case let .model(reference, _) = $0 else { return nil }
             return reference
         }
+        currentHosts = states.compactMap {
+            guard case let .nativeHost(reference, _) = $0 else { return nil }
+            return reference
+        }
+        guard let native = nativeScreenInputs(node, states: states) else { return .skipChildren }
+        currentNativeValues = native.values
         let forms = states.compactMap { state -> FormDeclaration? in
             guard case let .form(_, declaration, _) = state else { return nil }
             return declaration
@@ -237,16 +266,11 @@ final class Builder: SyntaxVisitor {
         parameters = []
         currentListItem = nil
         currentListItemType = nil
-        defer {
-            currentStates = []
-            currentModels = []
-            currentListItem = nil
-            currentListItemType = nil
-        }
         guard let root = viewStatements(items, body: binding) else { return .skipChildren }
 
         screens.append(Screen(name: node.name.text, parameters: parameters, states: states,
-                              body: root, location: location(of: node.name)))
+                              body: root, nativeValues: native.values, lifecycle: native.lifecycle,
+                              location: location(of: node.name)))
         return .skipChildren
     }
 
@@ -267,7 +291,8 @@ final class Builder: SyntaxVisitor {
             // SwiftSyntax represents `Text("x").padding() { ... }` as a call whose called expression
             // is another call, not as a MemberAccessExprSyntax. Preserve the outer trailing closure
             // when classifying the inner call as a view or a modifier.
-            if let base = call.calledExpression.as(FunctionCallExprSyntax.self) {
+            if let base = call.calledExpression.as(FunctionCallExprSyntax.self),
+               base.calledExpression.as(MemberAccessExprSyntax.self)?.declName.baseName.text != "refractNativeValue" {
                 if base.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Form" {
                     return formContainer(call)
                 }
@@ -277,9 +302,21 @@ final class Builder: SyntaxVisitor {
                 return view(inner)
             }
             if let member = call.calledExpression.as(MemberAccessExprSyntax.self), let base = member.base {
-                guard let node = view(base) else { return nil }
-                return modifier(call, name: member.declName.baseName.text, on: node)
+            if RefractLifecycleHooks(rawValue: member.declName.baseName.text) != nil {
+                guard lifecycleMembers(viewDeclarations[currentViewName ?? ""]!).contains(RefractLifecycleHooks(rawValue: member.declName.baseName.text)!) else {
+                    error("RFHOST003", "A lifecycle hook is supported only once on the generated root view.",
+                          "Use .refractOnAppear and .refractOnDisappear on the root; keep actual scene observation in the native host", at: member)
+                    return nil
+                }
+                return view(stripLifecycleHooks(base))
             }
+            if member.declName.baseName.text == "refractNativeValue" {
+                guard nativeEventBinding(call) != nil else { return nil }
+                return view(base)
+            }
+            guard let node = view(base) else { return nil }
+            return modifier(call, name: member.declName.baseName.text, on: node)
+        }
             if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
                 return extendedView(call)
             }
@@ -296,7 +333,11 @@ final class Builder: SyntaxVisitor {
                name == "Toggle" || name == "TextField" || name == "SecureField" { return nil }
             return view(call)
         }
-        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {            guard let node = view(base) else { return nil }
+        if let member = expression.as(MemberAccessExprSyntax.self), let base = member.base {
+            guard RefractLifecycleHooks(rawValue: member.declName.baseName.text) == nil else {
+                return view(stripLifecycleHooks(base))
+            }
+            guard let node = view(base) else { return nil }
             return modifier(member, on: node)
         }
         error("unsupportedExpression", "The expression `\(expression.trimmedDescription)` is not a supported view.",
@@ -407,7 +448,8 @@ final class Builder: SyntaxVisitor {
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
                                               typedScalar: modelTypedProperty,
                                               stateText: currentStates.isEmpty ? { _ in nil } : stateText,
-                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
+                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }),
+                                              nativeValues: currentNativeValues)
             guard let value = parser.text(call, arguments: call.arguments) else {
                 diagnostics.append(contentsOf: parser.diagnostics)
                 return nil
@@ -441,7 +483,8 @@ final class Builder: SyntaxVisitor {
             var parser = LocalizationFrontend(file: file, converter: converter, scalar: scalar,
                                               typedScalar: modelTypedProperty,
                                               stateText: currentStates.isEmpty ? { _ in nil } : stateText,
-                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }))
+                                              enumInputNames: Set(parameters.compactMap { $0.enumName == nil ? nil : $0.name }),
+                                              nativeValues: currentNativeValues)
             guard let labelText = parser.text(call, arguments: call.arguments,
                                               allowsTrailingClosure: true) else {
                 diagnostics.append(contentsOf: parser.diagnostics)
@@ -648,6 +691,12 @@ final class Builder: SyntaxVisitor {
             return model
         }
         if expression.as(MemberAccessExprSyntax.self) != nil {
+            if let native = nativeValueProperty(expression) { return native }
+            if expression.trimmedDescription.hasPrefix(".") {
+                return TypedExpression(Expression(.reference(expression.trimmedDescription),
+                                                 location: location(of: expression)), nil)
+            }
+            if diagnostics.contains(where: { $0.code == "RFHOST005" }) { return nil }
             return TypedExpression(Expression(.reference(expression.trimmedDescription),
                                              location: location(of: expression)), nil)
         }
@@ -668,6 +717,7 @@ final class Builder: SyntaxVisitor {
                 default: continue
                 }
             }
+            if let native = nativeValueProperty(expression) { return native }
             if let model = modelTypedProperty(expression) { return model }
             // An enum is a finite control-flow subject, not a scalar text or formatting value.
             guard !parameters.contains(where: { $0.name == reference.baseName.text && $0.enumName != nil }) else {
@@ -686,8 +736,13 @@ final class Builder: SyntaxVisitor {
                                              location: location(of: expression)), type)
         }
         if let call = expression.as(FunctionCallExprSyntax.self),
-           call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {
-            return platformValue(call)
+           call.calledExpression.as(MemberAccessExprSyntax.self)?.declName.baseName.text == "refractNativeValue" {
+            error("RFHOST005", "A native event selection belongs on the root, not inside scalar text.",
+                  "Read correlation.id or correlation.revision through the selected typed input", at: expression)
+            return nil
+        }
+        if let call = expression.as(FunctionCallExprSyntax.self),
+           call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractValue" {            return platformValue(call)
         }
         error("RFSEM001", "The expression `\(expression.trimmedDescription)` is not a supported scalar value.",
               "Use a supported literal, typed property, or `refractValue`", at: expression)

@@ -146,6 +146,7 @@ public enum StateAction: Codable, Equatable, Sendable {
     case assign(WritableProperty, Expression)
     case increment(WritableProperty, Expression)
     case modelMethod(model: String, name: String, arguments: [ActionArgument])
+    case hostMethod(host: String, capability: NativeHostCapability, name: String, arguments: [ActionArgument])
     case submit(FormSubmit)
 }
 

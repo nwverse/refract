@@ -21,8 +21,13 @@ public struct ComposeBackend: Sendable {
         if module.models.contains(where: { !$0.properties.isEmpty }) {
             context.imports.insert("androidx.compose.runtime.State")
         }
-        try emitEnumDeclarations(module.enums, into: &bodyWriter)
+        try emitEnumDeclarations(module.enums.filter { $0.kind == nil }, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
+        try emitNativeValueTypes(module.screens.flatMap(\.nativeValues), into: &bodyWriter, context: &context)
+        for kind in Set(module.screens.flatMap(\.nativeValues).map(\.kind)) where kind == .scenePhase {
+            emitComposeScenePhase(&bodyWriter)
+        }
+        try emitNativeHosts(module.nativeHosts, into: &bodyWriter)
         try emitComposeModels(module.models, into: &bodyWriter)
         try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &bodyWriter)
         for screen in module.screens {
@@ -87,6 +92,7 @@ public struct ComposeBackend: Sendable {
         let parameters = parameterList(for: screen, context: &context)
         if parameters.isEmpty {
             out.open("public fun \(screen.name)(modifier: Modifier = Modifier)")
+            try emitNativeLifecycle(screen.lifecycle, into: &out, context: &context)
             try emitStates(screen.states, into: &out, context: &context)
             try emit(screen.body, isRoot: true, into: &out, context: &context)
             out.close()
@@ -100,6 +106,7 @@ public struct ComposeBackend: Sendable {
             out.depth -= 1
             out.line(") {")
             out.depth += 1
+            try emitNativeLifecycle(screen.lifecycle, into: &out, context: &context)
             try emitStates(screen.states, into: &out, context: &context)
             try emit(screen.body, isRoot: true, into: &out, context: &context)
             out.depth -= 1
@@ -110,7 +117,7 @@ public struct ComposeBackend: Sendable {
     // MARK: - Parameters and state
 
     private func parameterList(for screen: Screen, context: inout Context) -> [String] {
-        var parameters: [String] = []
+        var parameters = nativeHostParameters(screen) + nativeValueParameters(screen.nativeValues)
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
             parameters.append("\(input.name): \(input.itemType ?? input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
@@ -143,6 +150,9 @@ public struct ComposeBackend: Sendable {
                 }
             case .state, .form:
                 // Local state is remembered inside the body, not a parameter.
+                continue
+            case .nativeHost:
+                // Closed native capability parameters are added above.
                 continue
             }
         }
@@ -433,6 +443,8 @@ public struct ComposeBackend: Sendable {
             return name
         case let .binding(name):
             return name
+        case let .nativeValueProperty(value):
+            return "\(value.value).\(value.field.rawValue)"
         case let .valueProperty(.state(name)):
             return name
         case let .valueProperty(.binding(name)):
@@ -520,6 +532,8 @@ public struct ComposeBackend: Sendable {
                 return argument.label.map { "\($0) = \(value)" } ?? value
             }.joined(separator: ", ")
             return "\(model).\(name)(\(arguments))"
+        case let .hostMethod(host, capability, name, arguments):
+            return try renderNativeHostAction(host: host, capability: capability, name: name, arguments: arguments)
         case let .submit(submit):
             return try submitAction(submit, context: &context)
         }
