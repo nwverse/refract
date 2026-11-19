@@ -224,7 +224,10 @@ final class Builder: SyntaxVisitor {
         }
         if isNavigationRoot {
             // The navigation parser below validates the path and model inputs together.
-        } else if hasNativeInputs(node) || hasItemInputs || hasTypedInputs(members) {
+        } else if hasNativeInputs(node) || hasItemInputs ||
+            (hasTypedInputs(members) && !members.contains(where: { member in
+                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+            })) {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
             screens.append(body)
             return .skipChildren
