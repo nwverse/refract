@@ -120,7 +120,8 @@ public struct ComposeBackend: Sendable {
         var parameters = nativeHostParameters(screen) + nativeValueParameters(screen.nativeValues)
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
-            parameters.append("\(input.name): \(input.itemType ?? input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
+            let itemType = input.itemType == "RefractLinkHandoff" ? InteropMapping.targetType(.linkHandoff, platform: .android) : input.itemType
+            parameters.append("\(input.name): \(itemType ?? input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
         }
         for state in screen.states {
             switch state {
@@ -435,6 +436,10 @@ public struct ComposeBackend: Sendable {
                                                      packageName: context.packageName) {
                 try renderExpression($0, context: &context)
             }
+        case let .linkDestination(destination):
+            return LinkHandoffEmission.compose(destination)
+        case let .linkPolicy(policy):
+            return LinkHandoffEmission.compose(policy)
         case let .imageResource(name):
             if context.mapping.android.resources.assetCatalog != nil {
                 return try composeResource(name, kind: .image, mapping: context.mapping, location: expression.location)

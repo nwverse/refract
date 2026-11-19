@@ -150,7 +150,7 @@ private struct IRCorpus {
 
     private mutating func expression() -> RefractIR.Expression {
         let value: IRExpression.Value
-        switch Int.random(in: 0..<22, using: &random) {
+        switch Int.random(in: 0..<24, using: &random) {
         case 0: value = .stringLiteral("value\(Int.random(in: 0...100, using: &random))")
         case 1: value = .verbatimText("literal")
         case 2: value = .stringKey("settings.title")
@@ -188,7 +188,13 @@ private struct IRCorpus {
             ]))
         case 19: value = .imageResource("app_logo")
         case 20: value = .rawAssetResource("privacy_policy")
-        default: value = .fontAsset(name: "app_body", size: "16")
+        case 21: value = .fontAsset(name: "app_body", size: "16")
+        case 22:
+            value = .linkDestination(LinkDestination(kind: .external, scheme: "https", host: "example.com", path: "/docs"))
+        default:
+            value = .linkPolicy(LinkPolicy(allowed: [
+                LinkAllowlistEntry(scheme: "https", host: "example.com"),
+            ]))
         }
         return IRExpression(value, type: [nil, .string, .bool, .double, .int].randomElement(using: &random)!, location: location())
     }
@@ -231,7 +237,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 29 public ViewNode cases and all 22 Expression.Value cases must actually occur.
+        // All 29 public ViewNode cases and all 24 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -251,7 +257,7 @@ struct IRReliabilityTests {
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
         #expect(seenViews.count == 29, "Visited view cases: \(seenViews.sorted())")
-        #expect(seenExpressions.count == 22, "Visited expression cases: \(seenExpressions.sorted())")
+        #expect(seenExpressions.count == 24, "Visited expression cases: \(seenExpressions.sorted())")
     }
 
     private func collectCases(in node: ViewNode, views: inout Set<String>, expressions: inout Set<String>) {

@@ -342,6 +342,8 @@ public enum ParameterType: String, Codable, CaseIterable, Sendable {
     case selectionContent, selectionContextAction
     /// The app-owned native loading interface; no implementation is generated.
     case remoteImageLoader
+    /// Typed destinations/policies are values; the app owns the actual handoff protocol.
+    case linkDestination, linkPolicy, linkHandoff
 
     public var isAction: Bool { rawValue.hasPrefix("action") }
 

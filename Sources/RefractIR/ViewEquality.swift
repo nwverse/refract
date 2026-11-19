@@ -151,6 +151,10 @@ extension Expression {
                 guard lhsName == rhsName else { return false }
             case let (.fontAsset(lhsName, lhsSize), .fontAsset(rhsName, rhsSize)):
                 guard lhsName == rhsName, lhsSize == rhsSize else { return false }
+            case let (.linkDestination(lhsDestination), .linkDestination(rhsDestination)):
+                guard lhsDestination == rhsDestination else { return false }
+            case let (.linkPolicy(lhsPolicy), .linkPolicy(rhsPolicy)):
+                guard lhsPolicy == rhsPolicy else { return false }
             case let (.boolLiteral(lhsValue), .boolLiteral(rhsValue)):
                 guard lhsValue == rhsValue else { return false }
             case let (.layoutSpacing(lhsSpacing), .layoutSpacing(rhsSpacing)):

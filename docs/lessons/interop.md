@@ -5,6 +5,12 @@
   Compile uniquely named source-only inputs for the measurement contract, with byte-identity checks against the
   canonical fixtures and their application-owned design tokens. Several `Input.swift` file references collide on
   Xcode's `Input.stringsdata` even when their display names differ; real Xcode builds catch this before type checking.
+- A pending native handoff needs an effect keyed by the actual pending destination. Capturing the whole state from
+  the composition before confirmation misses disposal; even with the right key, `runOnIdle` may precede native
+  deferred disposal. A Native JVM cancellation test must wait for real idle before asserting cancellation. Make
+  cancellation idempotent per request: replacing a destination can explicitly cancel and then dispose the old effect.
+  Use current pending state in disposal/completion and assert no duplicate cancellation or cancellation on success.
+  Keep destination/policy validation on both sides of native confirmation; never begin a dismissed request.
 - Prefer correcting pseudo-SwiftUI over adding a compatibility shim for it. `Button(verbatim:)` is not SwiftUI;
   use the ordinary action/label pair with `Text(verbatim:)` and reject the invalid initializer with a source-located
   diagnostic. The typed interop helpers above are different: they carry declared platform-only semantics while

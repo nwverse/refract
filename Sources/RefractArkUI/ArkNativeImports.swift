@@ -17,6 +17,7 @@ enum ArkNativeImports {
         for screen in module.screens {
             try collect(screen.body)
             for parameter in screen.parameters {
+                if parameter.itemType == "RefractLinkHandoff" { continue }
                 if let name = parameter.itemType ?? parameter.enumName { try reference(name) }
             }
             for state in screen.states {
