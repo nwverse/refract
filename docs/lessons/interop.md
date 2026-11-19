@@ -47,6 +47,11 @@
   payload ABI. Keep static literal ranges validated in UTF-16, including empty selections and surrogate-pair
   boundaries, and forward context snapshots to declared scalar model actions. Do not add arbitrary Screen closures,
   selection callbacks on movement or a URL-opening side effect. See `docs/selection-link-context.md`.
+- Native component properties and callbacks form one source-level ABI, not independent capabilities. Validate a
+  closed host's complete ordered signature before adding its specialized payload/callback types. A literal-selection
+  host must include all four declared fields; partial, renamed or reordered declarations are `RFNATIVE001` errors.
+  Exclude the dedicated text-input host when restricting ordinary `(String) -> Void` parameters: its `onDraftCommit`
+  uses the same source function type but has a separately validated contract.
 - Validate a target at its call site. Having both backends validate both targets repeats the same missing/mismatched
   mapping diagnostic. Drivers collect independent target errors before writing either output.
 - Do not infer an ArkTS `number` parameter from the corresponding Kotlin type: Kotlin `Int` and `Double` both map to
