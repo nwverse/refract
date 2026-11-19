@@ -66,8 +66,10 @@ android {
 
     // The fixture compiler stages the exact remote-image CLI output and its
     // app-owned resources here for Native JVM tests in the real R namespace.
-    sourceSets.getByName("test").kotlin.srcDir("src/fixtureTest/java")
-    sourceSets.getByName("main").res.srcDir("src/fixtureTest/res")
+    sourceSets.getByName("test").kotlin.directories.add("src/fixtureTest/java")
+    // Shared and adaptive catalogs are sibling resource roots, never nested source sets.
+    sourceSets.getByName("main").res.directories.add("src/fixtureTest/res/shared")
+    sourceSets.getByName("main").res.directories.add("src/fixtureTest/res/adaptive-window-size")
 }
 
 configure<KotlinAndroidProjectExtension> {
@@ -83,6 +85,7 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3-window-size-class")
     implementation("androidx.compose.ui:ui")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
@@ -97,6 +100,7 @@ dependencies {
     robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-14663667-2-i7")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("androidx.navigation:navigation-compose:2.9.8")
 }
 
 val stageRobolectricRuntime = tasks.register<Copy>("stageRobolectricRuntime") {

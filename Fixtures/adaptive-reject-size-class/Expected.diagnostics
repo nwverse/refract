@@ -1,0 +1,2 @@
+Input.swift:3:6: error [RFADAPT001]: `WidthSizeClass` must declare exactly `case compact` and `case expanded` without payloads or inheritance. Suggestion: Declare the two native window alternatives, not device or pixel classifications
+Input.swift:12:16: error [RFCTRL003]: Switch requires a declared enum-typed immutable screen input. Suggestion: Use `let value: YourEnum` with a local no-payload enum declaration

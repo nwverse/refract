@@ -48,6 +48,13 @@ composable. Keep the standard AGP `test_config.properties` and binary-resource p
 `Robolectric.buildActivity` controller for the empty host when a test-only manifest overlay is not registered. Resolve
 the exact Android runtime through Gradle rather than a second implicit repository downloader.
 
+When a test fixture uses the application's existing localized settings keys, staging a second XML copy into its
+resource directory causes an Android resource-merger failure. Compare the shared names/values and copy only the
+fixture-specific resources. Keep the generated Kotlin byte-identical except for the documented package-level `R`
+namespace staging. Inspect actual Native JVM screenshots: a correct state assertion does not prove that large text
+fits a two-pane layout. A test Activity also does not prove physical system-back behavior; explicitly label a native
+controller pop as host-side JVM evidence rather than device back evidence.
+
 ## Real SwiftUI compilation and simulator ownership
 
 A SwiftUI source file must import SwiftUI unless another language-supported import supplies it; parsing successfully

@@ -89,6 +89,13 @@ screenshots.** They are not visual-parity or performance measurements and must b
 them and the JUnit HTML reports as `native-jvm-compose-settings`. Tests and their dependencies are confined to the
 application's test source set and add no runtime library to the example APK, generated code or consuming apps.
 Large-text behavior is tracked separately by the accessibility workstream and is not claimed by this check.
+The additional adaptive settings test consumes the exact staged CLI output from `Fixtures/adaptive-window-size`.
+It verifies native window classification, compact/expanded re-layout, 2× text scaling, preserved bindings/model
+content and a native `NavHost` push/pop. The test drives `NavController.popBackStack()` explicitly; it is not a
+physical system-back test. Compact, expanded and expanded-large-text captures use the same Native JVM evidence
+boundary. The inspected large-text two-pane capture can clip at the narrow test width, so it does not establish
+complete large-text visual accessibility. `../../docs/adaptive-layout.md` documents host measurement, the
+host-owned saved draft and all iOS/HarmonyOS verification limits.
 
 ### Accessibility actions, traversal, localization and large text
 

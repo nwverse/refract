@@ -70,6 +70,7 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3-window-size-class")
     // Typed tab/menu symbols map to Material icons through the fixture `symbols` contract.
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui")

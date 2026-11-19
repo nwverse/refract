@@ -173,32 +173,52 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
                 fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-    if fixture in {"interop-remote-image", "accessibility-actions-traversal", "resource-typed-assets"}:
+    if fixture in {"interop-remote-image", "accessibility-actions-traversal", "resource-typed-assets", "adaptive-window-size"}:
         # Native JVM tests need the app's real resource table, not a library's
-        # isolated test APK. Keep every manifest fixture's generated entry point and resources.
-        target_package = APP_TEST_JAVA.joinpath(*package.split("."))
+        # isolated test APK. Stage the exact generated call and its resources.
+        # The batch is cleaned once in main; individual fixtures only append.
+        # Adaptive retains its own resource directory and shared-settings check.
+        if fixture == "adaptive-window-size":
+            target_package = (APP_TEST_JAVA / fixture).joinpath(*package.split("."))
+        else:
+            target_package = APP_TEST_JAVA.joinpath(*package.split("."))
         target_package.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(target, target_package / f"{fixture}.kt")
         generated_test = target_package / f"{fixture}.kt"
         generated_test.write_text(
-            generated_test.read_text(encoding="utf-8").replace("refract.generated.R", "com.example.refract.R"),
+            generated_test.read_text(encoding="utf-8").replace(f"{namespace}.R", "com.example.refract.R"),
             encoding="utf-8",
         )
-        if resources.is_dir():
-            for source in sorted(resources.rglob("*")):
-                if source.is_file():
-                    relative = source.relative_to(resources)
-                    destination = APP_TEST_RES / relative
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(source, destination)
-        if fixture == "resource-typed-assets":
-            native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-NativeComponent.kt"
-            app_native = APP_TEST_JAVA / "example" / "app" / "AppPolicyDocument.kt"
-            app_native.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(native_target, app_native)
-        destination = APP_TEST_RES / "values/strings.xml"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        merge_strings(strings_xml, destination, fixture)
+        if fixture == "adaptive-window-size":
+            app_strings = ROOT / "examples/android/app/src/main/res/values/strings.xml"
+            shared = {child.attrib["name"]: (child.text or "").strip()
+                      for child in ET.parse(app_strings).getroot().findall("string")}
+            required = {child.attrib["name"]: (child.text or "").strip()
+                        for child in ET.parse(strings_xml).getroot().findall("string")}
+            if any(shared.get(name) != value for name, value in required.items() if name != "adaptive_open"):
+                fail(f"{fixture}: app and fixture shared settings strings differ")
+            root = ET.Element("resources")
+            ET.SubElement(root, "string", name="adaptive_open").text = required["adaptive_open"]
+            ET.indent(root, space="  ")
+            destination = APP_TEST_RES / fixture / "values/strings.xml"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            ET.ElementTree(root).write(destination, encoding="utf-8", xml_declaration=True)
+        else:
+            if resources.is_dir():
+                for source in sorted(resources.rglob("*")):
+                    if source.is_file():
+                        relative = source.relative_to(resources)
+                        destination = APP_TEST_RES / "shared" / relative
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(source, destination)
+            if fixture == "resource-typed-assets":
+                native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-NativeComponent.kt"
+                app_native = APP_TEST_JAVA / "example" / "app" / "AppPolicyDocument.kt"
+                app_native.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(native_target, app_native)
+            destination = APP_TEST_RES / "shared/values/strings.xml"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            merge_strings(strings_xml, destination, fixture)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:

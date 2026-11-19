@@ -6,6 +6,25 @@ extension Builder {
         for statement in tree.statements {
             guard let declaration = statement.item.as(EnumDeclSyntax.self) else { continue }
             let inherited = declaration.inheritanceClause?.inheritedTypes.map(\.type.trimmedDescription) ?? []
+            if declaration.name.text == "WidthSizeClass" {
+                guard inherited == [], declaration.genericParameterClause == nil,
+                      declaration.genericWhereClause == nil,
+                      declaration.memberBlock.members.compactMap({ member in
+                          member.decl.as(EnumCaseDeclSyntax.self)?.elements.first?.name.text
+                      }) == ["compact", "expanded"],
+                      declaration.memberBlock.members.allSatisfy({ member in
+                          member.decl.as(EnumCaseDeclSyntax.self)?.elements.count == 1 &&
+                          member.decl.as(EnumCaseDeclSyntax.self)?.elements.first?.parameterClause == nil &&
+                          member.decl.as(EnumCaseDeclSyntax.self)?.elements.first?.rawValue == nil
+                      }) else {
+                    error("RFADAPT001", "`WidthSizeClass` must declare exactly `case compact` and `case expanded` without payloads or inheritance.",
+                          "Declare the two native window alternatives, not device or pixel classifications", at: declaration.name)
+                    continue
+                }
+                enums.append(EnumDeclaration(name: declaration.name.text, cases: ["compact", "expanded"],
+                                             location: location(of: declaration.name)))
+                continue
+            }
             guard inherited == [] || inherited == ["Hashable"], declaration.genericParameterClause == nil,
                   declaration.genericWhereClause == nil else {
                 error("RFCTRL006", "Only finite local enums without inheritance or generics can drive native switch branches.",

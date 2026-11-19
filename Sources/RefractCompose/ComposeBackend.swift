@@ -21,7 +21,7 @@ public struct ComposeBackend: Sendable {
         if module.models.contains(where: { !$0.properties.isEmpty }) {
             context.imports.insert("androidx.compose.runtime.State")
         }
-        try emitEnumDeclarations(module.enums.filter { $0.kind == nil }, into: &bodyWriter)
+        try emitEnumDeclarations(module.enums.filter { $0.kind == nil && !$0.isWidthSizeClass }, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitNativeValueTypes(module.screens.flatMap(\.nativeValues), into: &bodyWriter, context: &context)
         for kind in Set(module.screens.flatMap(\.nativeValues).map(\.kind)) where kind == .scenePhase {
@@ -121,7 +121,11 @@ public struct ComposeBackend: Sendable {
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
             let itemType = input.itemType == "RefractLinkHandoff" ? InteropMapping.targetType(.linkHandoff, platform: .android) : input.itemType
-            parameters.append("\(input.name): \(itemType ?? input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
+            let type = itemType ?? input.enumName ?? kotlinType(input.type)
+            if input.enumName == "WidthSizeClass" {
+                context.imports.insert("androidx.compose.material3.windowsizeclass.WindowWidthSizeClass")
+            }
+            parameters.append("\(input.name): \(type == "WidthSizeClass" ? "WindowWidthSizeClass" : type)\(input.isOptional ? "?" : "")")
         }
         for state in screen.states {
             switch state {
