@@ -38,13 +38,16 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
 }
 
 @Test func deepStackDestinationRetainsTypedModalAndNavigationOperations() throws {
-    var mapping = try Mapping.load(data: Data(contentsOf: navigationFixture.appendingPathComponent("refract.json")),
-                                  file: "refract.json", resourceBaseURL: navigationFixture)
+    let navigationMapping = try Mapping.load(data: Data(contentsOf: navigationFixture.appendingPathComponent("refract.json")),
+                                            file: "refract.json", resourceBaseURL: navigationFixture)
     let modalFixture = navigationFixture.deletingLastPathComponent().appendingPathComponent("modal-native-host")
     let modalMapping = try Mapping.load(data: Data(contentsOf: modalFixture.appendingPathComponent("refract.json")),
                                        file: "refract.json", resourceBaseURL: modalFixture)
-    mapping.android.resources.strings.merge(modalMapping.android.resources.strings) { _, modal in modal }
-    mapping.harmonyOS.resources.strings.merge(modalMapping.harmonyOS.resources.strings) { _, modal in modal }
+    var android = navigationMapping.android
+    android.resources.strings.merge(modalMapping.android.resources.strings) { _, modal in modal }
+    var harmonyOS = navigationMapping.harmonyOS
+    harmonyOS.resources.strings.merge(modalMapping.harmonyOS.resources.strings) { _, modal in modal }
+    let mapping = Mapping(android: android, harmonyOS: harmonyOS, resourceBaseURL: navigationFixture)
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     enum Route: Hashable {
         case detail
