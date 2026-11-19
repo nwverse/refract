@@ -1,6 +1,12 @@
 import RefractIR
 import RefractMapping
 
+func emitNavigationOperation(_ operation: NavigationOperation, into writer: inout ArkWriter) throws {
+    let name = operation.pathName
+    writer.line("@Event on\(name.prefix(1).uppercased())\(name.dropFirst())Navigate: (destination: \(operation.enumName)) => void = (destination: \(operation.enumName)): void => {};")
+    writer.line()
+}
+
 func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWriter) throws {
     if case let .model(reference, _) = declaration {
         writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName);")
@@ -58,6 +64,9 @@ private func stateType(_ type: ValueType) throws -> String {
     case .string: "string"
     case .bool: "boolean"
     case .int, .double: "number"
+    case .revision:
+        throw Diagnostic(code: "RFMSG001", message: "A message revision is item data, not mutable local state.",
+                         suggestion: "Keep the UInt64 revision in the application-owned ChatMessage snapshot")
     }
 }
 

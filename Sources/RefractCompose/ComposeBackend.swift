@@ -24,6 +24,7 @@ public struct ComposeBackend: Sendable {
         try emitEnumDeclarations(module.enums, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitComposeModels(module.models, into: &bodyWriter)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &bodyWriter)
         for screen in module.screens {
             try emit(screen, into: &bodyWriter, context: &context)
             if case let .navigationStack(stack, _) = screen.body {
@@ -145,6 +146,9 @@ public struct ComposeBackend: Sendable {
                 continue
             }
         }
+        if let navigation = screen.navigation {
+            parameters.append("on\(navigation.pathName.uppercasingFirst())Navigate: (\(navigation.enumName)) -> Unit")
+        }
         return parameters
     }
 
@@ -180,6 +184,7 @@ public struct ComposeBackend: Sendable {
         case .string: return Expression(.stringLiteral(""))
         case .bool: return Expression(.boolLiteral(false))
         case .int, .double: return Expression(.numberLiteral("0"))
+        case .revision: return Expression(.numberLiteral("0"))
         }
     }
 
@@ -217,6 +222,8 @@ public struct ComposeBackend: Sendable {
                                              into: &out, context: &context)
         case let .component(component, location):
             try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .messageBlocks(nested, _):
+            try emitMessageBlocks(nested, into: &out, context: &context)
         case let .child(child, _):
             let arguments = child.arguments.map { "\($0.label) = \($0.expression)" }
             out.line("\(child.name)(\(arguments.joined(separator: ", ")))")
@@ -343,11 +350,19 @@ public struct ComposeBackend: Sendable {
         var arguments = try InteropEmission.arguments(for: component, target: target) {
             try renderExpression($0, context: &context)
         } renderAction: { action in
-            guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
-                throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
-                                 location: location)
+            guard case let .modelMethod(_, _, arguments) = action else {
+                throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
             }
-            return "{ \(try renderAction(action, context: &context)) }"
+            if arguments.isEmpty { return "{ \(try renderAction(action, context: &context)) }" }
+            guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
+                return try emitComposeSelectionAction(action)
+            }
+            guard case let .modelMethod(model, name, _) = action else {
+                throw Diagnostic(code: "RFSELECTION006", message: "Link activation requires a declared model method.", location: location)
+            }
+            return "{ destination -> \(model).\(name)(destination) }"
+        } renderSelection: { content in
+            try emitComposeSelectionContent(content)
         }
         if isRoot, let modifier = resolver.nativeComponent(for: component, platform: .android)?.modifierParameter {
             arguments.append("\(modifier) = modifier")
@@ -503,6 +518,7 @@ public struct ComposeBackend: Sendable {
         case .string: return "String"
         case .bool: return "Boolean"
         case .int: return "Int"
+        case .revision: return "Long"
         case .double: return "Double"
         }
     }

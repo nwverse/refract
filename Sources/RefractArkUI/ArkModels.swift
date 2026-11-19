@@ -6,10 +6,23 @@ func emitArkItemTypes(_ items: [ItemType], into writer: inout ArkWriter) throws 
         writer.line("@ObservedV2")
         writer.open("export class \(item.name)")
         for property in item.properties {
-            writer.line("@Trace \(property.name): \(try arkModelType(property.type));")
+            let type = if let collection = property.collection {
+                "\(collection.itemType)[]"
+            } else {
+                try property.enumName ?? arkModelType(property.type)
+            }
+            writer.line("@Trace \(property.name): \(type);")
         }
         writer.line()
-        writer.open("constructor(\(try item.properties.map { "\($0.name): \(try arkModelType($0.type))" }.joined(separator: ", ")))")
+        let parameters = try item.properties.map { property in
+            let type = if let collection = property.collection {
+                "\(collection.itemType)[]"
+            } else {
+                try property.enumName ?? arkModelType(property.type)
+            }
+            return "\(property.name): \(type)"
+        }.joined(separator: ", ")
+        writer.open("constructor(\(parameters))")
         for property in item.properties { writer.line("this.\(property.name) = \(property.name);") }
         writer.close()
         writer.close()
@@ -34,6 +47,10 @@ func emitArkModels(_ models: [ModelProtocol], into writer: inout ArkWriter) thro
             }
             writer.line("\(property.name): \(type);")
         }
+        for property in model.projectedCollections {
+            guard let item = model.properties.compactMap(\.collection).first?.itemType else { continue }
+            writer.line("\(property): BasicDataSource<\(item)>;")
+        }
         for action in model.actions {
             let parameters = try action.parameters.map {
                 "\($0.localName): \(try arkModelType($0.type))"
@@ -49,5 +66,6 @@ func arkModelType(_ type: ValueType) throws -> String {
     case .string: "string"
     case .bool: "boolean"
     case .int, .double: "number"
+    case .revision: "bigint"
     }
 }

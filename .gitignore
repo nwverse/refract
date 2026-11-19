@@ -5,6 +5,7 @@
 *.xcodeproj/
 # The iOS example's source-controlled project is required for one shared Swift source.
 !examples/ios/RefractExample.xcodeproj/
+!bench/ios/RefractBench.xcodeproj/
 examples/ios/RefractExample.xcodeproj/xcuserdata/
 xcuserdata/
 DerivedData/

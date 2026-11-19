@@ -54,7 +54,7 @@ every maintained document must be indexed, every relative Markdown link and imag
 and every literal repository path in inline code must exist. If a promised path is renamed, update its original
 documentation references in the owning change rather than deleting a broken reference.
 
-Both Swift jobs run `swift build`, the complete `swift test`, and `python3 -I scripts/test_swiftpm_consumer.py`. The consumer test uses the real plugin with explicit inputs and plugin-work outputs; it checks no-op scheduling, dependency invalidation, fail-closed output checks and sandbox boundaries. macOS compiles an ordinary SwiftUI host library, not an Xcode iOS app or a device. Linux uses an isolated syntax-only module for build-order testing and makes no SwiftUI claim. Kotlin and ArkTS are staged/committed generation outputs, not languages compiled by SwiftPM. The jobs then run the documented `swift test --filter GoldenTests` regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. CLI
+Both Swift jobs run `swift build`, the complete `swift test`, and `python3 -I scripts/test_swiftpm_consumer.py`. On macOS the test step first derives and validates XCTest and `libXCTestSwiftSupport` locations from `xcrun --show-sdk-platform-path`, exporting the corresponding framework/library search paths. This keeps the SwiftPM testing helper's dynamic loading independent of a machine-specific Xcode installation path; it changes neither the tests nor the app's runtime. The consumer test uses the real plugin with explicit inputs and plugin-work outputs; it checks no-op scheduling, dependency invalidation, fail-closed output checks and sandbox boundaries. macOS compiles an ordinary SwiftUI host library, not an Xcode iOS app or a device. Linux uses an isolated syntax-only module for build-order testing and makes no SwiftUI claim. Kotlin and ArkTS are staged/committed generation outputs, not languages compiled by SwiftPM. The jobs then run the documented `swift test --filter GoldenTests` regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. CLI
 integration tests accept `REFRACT_CLI_PATH`, which the workflow derives from `swift build --show-bin-path`; this
 avoids assuming that SwiftPM test runners and products use the same directory layout on every operating system.
 The jobs request Swift 6.4.2 on Ubuntu 24.04 and macOS 26. The stable setup-swift release has a hard-coded catalog that
@@ -85,8 +85,11 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 3. Install JDK 21 (Temurin) and a pinned Android SDK: platform `android-37.2`, build tools `37.0.0`, and the
    command-line tools zip whose SHA-256 is recorded in the workflow. The pinned toolchain mirrors the documented
    values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
-4. Export the built CLI as `REFRACT_CLI_PATH`, then run `./gradlew --no-daemon :app:checkDebugRefract
-   :app:compileDebugKotlin` from `examples/android/`. The Gradle plugin in `tools/gradle/` registers per-variant
+4. Export the built CLI as `REFRACT_CLI_PATH` and its exact `refract --version` line as
+   `REFRACT_REQUIRED_VERSION`, then run `./gradlew --no-daemon :app:checkDebugRefract
+   :app:compileDebugKotlin` from `examples/android/`. The complete version identity is checked before generation or
+   publication; local development builds identify their source revision as `unknown-source-revision`, while packages
+   carry an exact source revision. The Gradle plugin in `tools/gradle/` registers per-variant
    generation through Android's generated-source API. It compiles the fresh output under `app/build/generated/`,
    while `checkDebugRefract` invokes the CLI's read-only committed-output check. The checked-in Gradle wrapper
    (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle

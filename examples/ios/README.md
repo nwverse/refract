@@ -1,5 +1,9 @@
 # iOS shared-source example
 
+The source prelude includes the zero-effect `Array.refractProjection(name:)` support declaration used by typed
+filter/sort projections. It returns the already-filtered/sorted array unchanged; the same source has no Refract
+runtime dependency. This declaration is source evidence here, not a new iOS compilation claim.
+
 `RefractExampleApp.swift` contains hand-written navigation, native settings and rollback screens. Shared
 `Hello.swift`, `SettingsScreen.swift` and `NativeComponentScreen.swift` compile directly as SwiftUI. The app-local
 `RefractModel` / `RefractNativeView` declarations and `AppSettingsModel` implement the same typed model boundary;
@@ -7,9 +11,10 @@
 is part of this target. The Xcode project references those shared files explicitly; do not replace them with copied
 platform-specific screens.
 
-The target also compiles nine source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
+The target also compiles eleven source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
 `InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift`,
-`ModelInterface.swift`, `AccessibilityDynamicType.swift`, `StackLayout.swift` and `ThemedSettingsControl.swift` in `examples/shared/`. Their unique
+`ModelInterface.swift`, `AccessibilityDynamicType.swift`, `StackLayout.swift`, `ThemedSettingsControl.swift`,
+`ChatMessageProjection.swift` and `SelectionLinkContext.swift` in `examples/shared/`. Their unique
 on-disk basenames avoid Xcode's duplicate `Input.stringsdata` output; `scripts/check_examples.py` requires each to
 stay byte-identical to its named canonical fixture. They exercise `Binding(get:set:)`, typed platform selection,
 native measurement, directional padding, named stack spacing, accessibility labels and ordinary SwiftUI action/label

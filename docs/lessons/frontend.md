@@ -1,5 +1,9 @@
 # SwiftSyntax frontend
 
+- SwiftParser leaves unparenthesized comparison/boolean chains as a flat `SequenceExprSyntax`, not an
+  `InfixOperatorExprSyntax`. A bounded filter/sort grammar must check the exact element count and every operator/member
+  position. Do not broaden it to arbitrary expressions; print the real AST once, then preserve the negative cases.
+
 - Unknown accessor or signature "effects" such as `{ get refractText }` or `func f() refractAsync` are not syntax
   SwiftParser accepts: they produce a recovered tree with `UnexpectedNodesSyntax`, so the source can never be valid
   SwiftUI. Compile-time-only markers belong in custom attributes (`@refractText`, `@refractAsync`), which parse
@@ -53,3 +57,8 @@
   action on the model. Otherwise `get: { model.otherText }` can silently write `searchText`. The closed
   `set<Property>` convention, owner/type/label checks and a mismatched-property negative test keep this source path
   faithful without inventing a writable projection on a get-only protocol.
+- Nested typed scopes need an explicit owner. A message row and its block can have distinct identities even when their
+  Swift closure parameters have the same spelling. Capture the checked parent when entering `ForEach(message.blocks)`,
+  initialize the block declaration's scope before parsing its body, and restore both scopes on exit. Parsing the child
+  call twice in different scopes produces misleading duplicate diagnostics. Do not pass arbitrary sibling item values
+  through the general single-item `ChildView` path.

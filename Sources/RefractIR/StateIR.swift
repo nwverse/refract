@@ -70,12 +70,21 @@ public struct ModelProtocol: Codable, Equatable, Sendable {
     public let properties: [ModelProperty]
     public let actions: [ModelAction]
     public let location: SourceLocation?
+    public var projectedCollections: [String] = []
     public init(name: String, properties: [ModelProperty] = [], actions: [ModelAction] = [],
                 location: SourceLocation? = nil) {
         self.name = name
         self.properties = properties
         self.actions = actions
         self.location = location
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        properties = try values.decode([ModelProperty].self, forKey: .properties)
+        actions = try values.decode([ModelAction].self, forKey: .actions)
+        location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
+        projectedCollections = try values.decodeIfPresent([String].self, forKey: .projectedCollections) ?? []
     }
 }
 
