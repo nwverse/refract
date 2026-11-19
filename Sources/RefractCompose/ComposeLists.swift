@@ -67,9 +67,7 @@ extension ComposeBackend {
             }
         }
         out.line("contentType = { \"\(items.contentType ?? items.itemType)\" },")
-        out.depth -= 1
-        out.line(") { \(item) ->")
-        out.depth += 1
+        out.closeParenAndOpenBody(item)
         let previousItem = context.retainedItem
         context.retainedItem = (items.itemName, items.itemType)
         defer { context.retainedItem = previousItem }

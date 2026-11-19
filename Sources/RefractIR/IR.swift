@@ -138,6 +138,7 @@ public indirect enum ViewNode: Codable, Equatable, Sendable {
     case layout(LayoutContainer, children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
     case scroll(axis: StackAxis, child: ViewNode, modifiers: [Modifier], location: SourceLocation?)
     case list(children: [ViewNode], modifiers: [Modifier], location: SourceLocation?)
+    case horizontalSections(HorizontalSectionCollection, location: SourceLocation?)
     /// A bounded non-scrolling ForEach inside one ChatMessage lazy row.
     case messageBlocks(NestedListItems, location: SourceLocation?)
     case section(header: Expression?, children: [ViewNode], location: SourceLocation?)

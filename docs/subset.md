@@ -99,6 +99,19 @@ same parameters as the Swift view. Full examples are in the linked fixtures.
 and its child items, using the same identity and resource rules. It does not introduce a data-driven runtime tree.
 `Section { ... }` without a title is also accepted. The full settings fixture shows the phase 1 grouping pattern.
 
+### Sectioned lists with horizontal inner scrolling
+
+`List { ForEach(model.sections) { section in Section(section.title) { ScrollView(.horizontal) { LazyHStack { ForEach(section.items) { item in ... } } } } } }`
+is accepted when the section type and the inner item type both conform to `Identifiable` with a stored String or Int id.
+The outer `List` remains the sole vertical lazy owner. Compose emits one `LazyColumn` with keyed `items` for sections;
+each section row contains a `Column` with a header `Text` and a keyed `LazyRow` for the inner items. ArkUI emits one
+`List` with `LazyForEach` over the section data source, `ListItemGroup` with a header, and one `LazyRow(Scroller())` per
+section row. No independent nested vertical scroll container is generated. The generated-screen Native JVM tests verify
+horizontal swipe, section replacement with identity preservation, and composition recreation with app-owned state.
+iOS SwiftUI compiles the same source file directly; ArkTS native compilation is not yet verified.
+Unsupported inner shapes (nested vertical scroll containers, missing identity, multiple section children, etc.) produce
+`RFLIST004` at the offending source location.
+
 ### Alignment mapping
 
 | SwiftUI | Compose | ArkUI |

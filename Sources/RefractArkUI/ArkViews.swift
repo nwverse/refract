@@ -17,9 +17,15 @@ extension Generation {
             writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .list(children, modifiers, _):
-            writer.open("List()")
-            for child in children { try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver) }
-            writer.close()
+            if children.count == 1, case let .horizontalSections(sections, _) = children[0] {
+                try emitHorizontalSections(sections, into: &writer, mapping: mapping, resolver: resolver)
+            } else {
+                writer.open("List()")
+                for child in children {
+                    try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver)
+                }
+                writer.close()
+            }
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .section(header, children, _):
             writer.open("ListItemGroup(\(try header.map { "{ header: Text(\(try ArkExpression.emit($0, mapping: mapping))) }" } ?? ""))")
@@ -27,6 +33,13 @@ extension Generation {
             writer.close()
         case let .listItem(child, _):
             try emitListItem(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
+        case let .horizontalSections(sections, location):
+            guard lazyOwner else {
+                throw Diagnostic(code: "RFLIST004",
+                    message: "Horizontal sections must be a direct List child, not an eager nested container.",
+                    suggestion: "Use the bounded Section + horizontal LazyHStack form inside one outer List", location: location)
+            }
+            try emitHorizontalSections(sections, into: &writer, mapping: mapping, resolver: resolver)
         case let .forEach(items, location):
             guard lazyOwner else {
                 throw Diagnostic(code: "arkui.lazy_list_owner",

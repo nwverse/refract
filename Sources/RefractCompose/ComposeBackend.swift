@@ -267,6 +267,8 @@ public struct ComposeBackend: Sendable {
                                              into: &out, context: &context)
         case let .component(component, location):
             try emitDesignSystem(component, location: location, isRoot: isRoot, into: &out, context: &context)
+        case let .horizontalSections(sections, location):
+            try emitHorizontalSections(sections, isRoot: isRoot, into: &out, context: &context)
         case let .messageBlocks(nested, _):
             try emitMessageBlocks(nested, into: &out, context: &context)
         case let .child(child, _):
@@ -707,6 +709,13 @@ struct KotlinWriter {
     mutating func closeParen(suffix: String = "") {
         depth -= 1
         line(")" + suffix)
+    }
+
+    /// Closes an argument list and opens its trailing closure as one balanced writer operation.
+    mutating func closeParenAndOpenBody(_ parameter: String) {
+        depth -= 1
+        line(") { \(parameter) ->")
+        depth += 1
     }
 
     mutating func append(_ other: String) {

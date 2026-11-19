@@ -129,11 +129,17 @@ extension Builder {
             if isMessageCollection(forEach.arguments.first?.expression) {
                 return dynamicList(forEach)
             }
+            let diagCountBefore = diagnostics.count
+            if let sections = horizontalSections(forEach) {
+                return .list(children: [sections], modifiers: [], location: location(of: call))
+            }
+            if diagnostics.count > diagCountBefore { return nil }
             return forEachList(forEach, owner: call)
         }
         guard let children = children(of: closure) else { return nil }
         return .list(children: children.map { child in
             if case .section = child { return child }
+            if case .horizontalSections = child { return child }
             return .listItem(child: child, location: child.sourceLocation)
         }, modifiers: [], location: location(of: call))
     }

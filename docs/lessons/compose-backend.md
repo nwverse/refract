@@ -62,3 +62,17 @@ Compose examples, and add to it when something surprises you.
 - **Icon-only buttons need an accessibility label.** A generated `IconButton` with only an icon has no text for
   screen readers or for `onNodeWithText` lookups. Put the localized label on the button as `contentDescription`
   (see above), which also gives native tests a stable selector.
+- **Trailing-closure writer operations must be balanced.** `KotlinWriter.open("Name(")` increments depth by one for
+  the parenthesized argument list; `closeParenAndOpenBody("param")` decrements depth (closing the paren) and
+  increments it again (opening the trailing closure body). The caller must then call `close()` exactly once per
+  `open`/`closeParenAndOpenBody` pair. Manually adjusting `out.depth` is fragile and leads to negative-count crashes.
+  If the nesting pattern is new, extract a helper rather than guessing depth offsets.
+- **Sectioned horizontal lists need one vertical lazy owner.** `LazyColumn` owns the vertical axis; each section
+  row is a `Column` with a header and a `LazyRow`. The `LazyRow` is the horizontal scroll container; it does not
+  create a second vertical owner. In ArkUI the outer `List` holds `LazyForEach`; each section row is a
+  `ListItemGroup` wrapping a `ListItem` with a `LazyRow(Scroller())`. The `LazyForEach` keyGenerator is the third
+  argument to `LazyForEach` (after the item builder closure), not inside `ListItemGroup`.
+- **Recognition gates must not emit diagnostics for non-matching shapes.** When adding a new frontend recognizer
+  that hooks into an existing path (e.g. `ForEach` inside `List`), return `nil` silently when the shape does not
+  match. Only emit a diagnostic once the recognizer has committed to handling the construct. Otherwise every
+  ordinary `ForEach(model.items)` will produce a false diagnostic.

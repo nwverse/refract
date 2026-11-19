@@ -50,7 +50,7 @@ private struct IRCorpus {
     private mutating func view(depth: Int) -> ViewNode {
         let leafCount = 12
         // Navigation and message-block cases join the existing selector without pre-empting it.
-        let selection = Int.random(in: 0..<(depth < 3 ? 29 : leafCount + 3), using: &random)
+        let selection = Int.random(in: 0..<(depth < 3 ? 30 : leafCount + 3), using: &random)
         switch selection {
         case 24:
             return .navigationLink(title: expression(), pathName: "path", enumName: "Route",
@@ -129,6 +129,14 @@ private struct IRCorpus {
             return .messageBlocks(NestedListItems(items, parent: "message",
                 message: .init(label: "message", expression: "message"),
                 block: .init(label: "block", expression: "block")), location: location())
+        case 29:
+            return .horizontalSections(HorizontalSectionCollection(
+                collection: expression(), modelType: "Model", sectionName: "section", sectionType: "GallerySection",
+                sectionKey: "id", sectionKeyType: .string, titleProperty: "title",
+                rows: HorizontalItemCollection(property: "items", itemName: "item", itemType: "GalleryItem",
+                    key: "id", keyType: .string,
+                    content: .text(expression(), modifiers: [], location: location()), location: location()),
+                location: location()), location: location())
         case 20: return .label(title: expression(), image: ImageSource(kind: .application, name: "logo", location: location()),
                                modifiers: modifiers(), location: location())
         case 21: return Bool.random(using: &random) ? .divider(modifiers: modifiers(), location: location()) : .spacer(location: location())
@@ -237,7 +245,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 29 public ViewNode cases and all 24 Expression.Value cases must actually occur.
+        // All 30 public ViewNode cases and all 24 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -256,7 +264,7 @@ struct IRReliabilityTests {
             var replay = IRCorpus(seed: seed)
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
-        #expect(seenViews.count == 29, "Visited view cases: \(seenViews.sorted())")
+        #expect(seenViews.count == 30, "Visited view cases: \(seenViews.sorted())")
         #expect(seenExpressions.count == 24, "Visited expression cases: \(seenExpressions.sorted())")
     }
 
@@ -319,6 +327,8 @@ struct IRReliabilityTests {
             collectExpression(items.collection, into: &expressions)
         case let .messageBlocks(nested, _):
             collectExpression(nested.items.collection, into: &expressions)
+        case let .horizontalSections(sections, _):
+            collectExpression(sections.collection, into: &expressions)
         case let .toggle(title, value, modifiers, nativeModifiers, _, _):
             for value in [title, value] { collectExpression(value, into: &expressions) }
             collect(modifiers, into: &expressions)

@@ -286,6 +286,7 @@ public extension ViewNode {
         case let .component(component, _): component.children
         case let .forEach(items, _): [items.content]
         case let .messageBlocks(nested, _): [nested.items.content]
+        case let .horizontalSections(sections, _): [sections.rows.content]
         case let .conditional(branches, _): branches.flatMap(\.children)
         case let .optionalBinding(_, _, children, otherwise, _): children + otherwise
         case let .switchExpression(_, _, cases, _): cases.flatMap(\.children)
@@ -303,6 +304,7 @@ public extension ViewNode {
              let .child(_, location), let .platformView(_, location), let .conditional(_, location),
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
              let .section(_, _, location), let .listItem(_, location), let .forEach(_, location),
+             let .horizontalSections(_, location),
              let .image(_, _, location), let .toggle(_, _, _, _, _, location), let .textInput(_, _, _, location),
              let .secureInput(_, _, _, _, location),
              let .label(_, _, _, location), let .divider(_, location), let .spacer(location),
