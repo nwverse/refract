@@ -32,9 +32,10 @@ extension Generation {
     }
 
     func emitArkLifecycleAndModals(_ screen: Screen, into writer: inout ArkWriter) throws {
-        if screen.lifecycle != nil || screen.modals.contains(where: { $0.kind == .alert }) {
+        let hasAlert = screen.modals.contains(where: { $0.kind == .alert })
+        if screen.lifecycle != nil || hasAlert {
             writer.line()
-            writer.open("aboutToAppear(): void")
+            writer.open(hasAlert ? "aboutToAppear(): void" : "aboutToAppear()")
             if let lifecycle = screen.lifecycle {
                 writer.line(try emitLocalAction(lifecycle.foreground))
             }
@@ -43,7 +44,7 @@ extension Generation {
             writer.line()
         }
         if let lifecycle = screen.lifecycle {
-            writer.open("aboutToDisappear(): void")
+            writer.open(hasAlert ? "aboutToDisappear(): void" : "aboutToDisappear()")
             writer.line(try emitLocalAction(lifecycle.background))
             writer.close()
             writer.line()

@@ -15,8 +15,8 @@ private let modalRepository = URL(fileURLWithPath: #filePath)
     let lifecycle = NativeLifecycle(
         foreground: .hostMethod(host: "lifecycle", capability: .lifecycle, name: "foreground", arguments: []),
         background: .hostMethod(host: "lifecycle", capability: .lifecycle, name: "background", arguments: []))
-    let screen = Screen(name: "Screen", modals: [modal], navigation: NavigationOperation(enumName: "Route"),
-                        states: [.state(name: "visible", type: .bool, initialValue: Expression(.boolLiteral(false)), location: nil)],
+    let screen = Screen(name: "Screen", states: [.state(name: "visible", type: .bool, initialValue: Expression(.boolLiteral(false)), location: nil)],
+                        modals: [modal], navigation: NavigationOperation(enumName: "Route"),
                         body: .text(Expression(.verbatimText("Root")), modifiers: [], location: nil),
                         nativeValues: [NativeValueReference(propertyName: "phase", kind: .scenePhase, selectedField: .state)],
                         lifecycle: lifecycle)
