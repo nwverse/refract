@@ -80,5 +80,29 @@ class FixtureOutputIsolationTest(unittest.TestCase):
             self.assertFalse((module.ROOT / "generated").exists())
 
 
+class FixtureAppResourceNamespaceTest(unittest.TestCase):
+    def test_app_staging_rewrites_the_library_r_import_after_package_normalization(self):
+        script = Path(__file__).resolve().parents[1] / "check_fixture_compilation.py"
+        spec = importlib.util.spec_from_file_location("check_fixture_compilation_for_app_r", script)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        expected = module.FIXTURES_ROOT / "accessibility-actions-traversal/Expected.kt"
+        with tempfile.TemporaryDirectory(prefix="refract-app-r-namespace-test-") as temporary:
+            root = Path(temporary)
+            module.STAGING_JAVA = root / "library/java"
+            module.STAGING_RES = root / "library/res"
+            module.STAGING_VALUES = module.STAGING_RES / "values"
+            module.APP_TEST_JAVA = root / "app/java"
+            module.APP_TEST_RES = root / "app/res"
+            module.stage_generated(expected, "accessibility-actions-traversal", "accessibility-actions-traversal")
+            staged = (module.APP_TEST_JAVA / "refract/generated/accessibility/accessibility-actions-traversal.kt").read_text()
+            self.assertIn("import com.example.refract.R\n", staged)
+            self.assertNotIn("import refract.generated.R\n", staged)
+            self.assertIn("package refract.generated.accessibility\n", staged)
+            self.assertTrue((module.APP_TEST_RES / "shared/values/strings.xml").is_file())
+            self.assertTrue((module.APP_TEST_RES / "shared/values-es/strings.xml").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

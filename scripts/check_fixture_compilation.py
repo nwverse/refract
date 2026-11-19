@@ -186,7 +186,7 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
         shutil.copyfile(target, target_package / f"{fixture}.kt")
         generated_test = target_package / f"{fixture}.kt"
         generated_test.write_text(
-            generated_test.read_text(encoding="utf-8").replace(f"{package}.R", "com.example.refract.R"),
+            generated_test.read_text(encoding="utf-8").replace(f"{namespace}.R", "com.example.refract.R"),
             encoding="utf-8",
         )
         if fixture == "adaptive-window-size":
