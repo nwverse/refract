@@ -104,6 +104,12 @@
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
   select the node that defines `SemanticsActions.Dismiss`, not an arbitrary `onRoot()`.
+- A bounded native swipe row is not a persistent reveal runtime. Compose `SwipeToDismissBox` may settle a partial
+  swipe back immediately; the pending native confirmation owns the request. Keep swipe and menu/custom-action requests
+  idempotent while pending, close confirmation before confirm/cancel and use native reset/snap for settling. A model
+  action with a real String parameter cannot reuse the generic zero-argument or link-placeholder emitter: preserve a
+  dedicated checked forwarding representation and generate the identifier argument on both backends. Keep any iOS-only
+  private confirmation state on the specific component's whitelist, never as a cross-platform parameter.
 - Selection editing and drag/drop payloads on a `TextField`/view go through the closed `NativeModifier.Operation`
   set, not through a generic native component. The Compose drag-and-drop API lives in
   `androidx.compose.foundation.draganddrop` for the `Modifier` extensions but in

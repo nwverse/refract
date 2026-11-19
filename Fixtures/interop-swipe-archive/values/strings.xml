@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="swipe_archive">Archive</string>
+    <string name="swipe_confirm_title">Archive this item?</string>
+    <string name="swipe_confirm_message">The app will archive the selected item after confirmation.</string>
+    <string name="swipe_confirm">Archive item</string>
+    <string name="swipe_cancel">Cancel</string>
+</resources>

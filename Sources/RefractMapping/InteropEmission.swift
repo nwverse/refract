@@ -7,7 +7,8 @@ public enum InteropEmission {
                           location: SourceLocation? = nil,
                           render: (Expression) throws -> String,
                           renderAction: (StateAction) throws -> String,
-                          renderSelection: (SelectionContent) throws -> String) throws -> [String] {
+                          renderSelection: (SelectionContent) throws -> String,
+                          renderSwipeStringAction: (NativeArgument.SwipeStringAction) throws -> String) throws -> [String] {
         var diagnostics: [Diagnostic] = []
         var values: [String: String] = [:]
         for argument in component.arguments {
@@ -18,6 +19,8 @@ public enum InteropEmission {
                     values[argument.label] = try render(expression)
                 } else if let selection = argument.selection {
                     values[argument.label] = try renderSelection(selection)
+                } else if let action = argument.swipeAction {
+                    values[argument.label] = try renderSwipeStringAction(action)
                 } else if let action = argument.action {
                     values[argument.label] = try renderAction(action)
                 } else {

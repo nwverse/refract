@@ -587,6 +587,13 @@ final class Builder: SyntaxVisitor {
             return valid ? NativeComponent(name: name, arguments: arguments) : nil
         }
         let before = diagnostics.count
+        if name == "NativeSwipeArchiveRow" {
+            guard currentListItem != nil, currentListItemType?.identity.type == .string else {
+                error("RFSWIPE001", "A bounded swipe archive row must be the direct row of an identified String-id List.",
+                      "Use NativeSwipeArchiveRow directly inside List(model.items) or List { ForEach(model.items) }", at: call)
+                return nil
+            }
+        }
         let arguments = call.arguments.compactMap { argument -> NativeArgument? in
             guard let label = argument.label?.text else {
                 error("RFNATIVE002", "Native component arguments require explicit labels and supported values.",
@@ -598,6 +605,12 @@ final class Builder: SyntaxVisitor {
                 error("RFNATIVE002", "Native component argument `\(label)` is not declared by `\(name)`.",
                       "Use the memberwise SwiftUI initializer signature", at: argument)
                 return nil
+            }
+            if name == "NativeSwipeArchiveRow", label == "identifier",
+               let typed = scalar(argument.expression),
+               typed.expression.value == .reference("\(currentListItem ?? "").\(currentListItemType?.identity.name ?? "id")") {
+                return NativeArgument(label: label, expression: typed.expression, type: .string,
+                                      location: location(of: argument))
             }
             let parsed: NativeArgument?
             switch parameter.type {
@@ -626,11 +639,19 @@ final class Builder: SyntaxVisitor {
             case .selectionContextAction:
                 parsed = nativeSelectionContextAction(argument.expression, label: label)
             case .actionString:
-                parsed = nativeStringAction(argument.expression, label: label)
+                if name == "NativeSwipeArchiveRow" {
+                    parsed = swipeArchiveAction(argument.expression, label: label)
+                } else {
+                    parsed = nativeStringAction(argument.expression, label: label)
+                }
             case .action:
-                parsed = nativeAction(argument.expression, label: label)
+                if name == "NativeSwipeArchiveRow" {
+                    parsed = swipeArchiveCancel(argument.expression, label: label)
+                } else {
+                    parsed = nativeAction(argument.expression, label: label)
+                }
             case .string, .bool, .int, .double:
-                parsed = scalar(argument.expression).map {
+                parsed = (modelTypedProperty(argument.expression) ?? scalar(argument.expression)).map {
                     NativeArgument(label: label, expression: $0.expression,
                                    type: $0.type.flatMap { NativeParameterType(rawValue: $0.rawValue) },
                                    location: location(of: argument))
@@ -701,6 +722,46 @@ final class Builder: SyntaxVisitor {
         diagnostics.append(contentsOf: parser.diagnostics)
         guard let localized else { return nil }
         return TypedExpression(localized, .string)
+    }
+
+    private func swipeArchiveAction(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let closure = expression.as(ClosureExprSyntax.self),
+              let parameter = closure.signature?.parameterClause?.as(ClosureShorthandParameterListSyntax.self),
+              parameter.count == 1, parameter.first?.name.text == "identifier",
+              closure.signature?.capture == nil, closure.signature?.returnClause == nil,
+              closure.signature?.effectSpecifiers == nil, closure.statements.count == 1,
+              let body = closure.statements.first?.item.as(ExprSyntax.self),
+              let call = body.as(FunctionCallExprSyntax.self),
+              let member = call.calledExpression.as(MemberAccessExprSyntax.self),
+              let base = member.base?.as(DeclReferenceExprSyntax.self),
+              let reference = currentModels.first(where: { $0.propertyName == base.baseName.text }),
+              let contract = models.first(where: { $0.name == reference.protocolName }),
+              let action = contract.actions.first(where: { $0.name == member.declName.baseName.text }),
+              action.parameters.count == 1, action.parameters.first?.type == .string,
+              action.parameters.first?.externalName == nil, call.arguments.count == 1,
+              call.arguments.first?.label == nil,
+              call.arguments.first?.expression.as(DeclReferenceExprSyntax.self)?.baseName.text == "identifier",
+              currentListItem != nil, currentListItemType != nil else {
+            error("RFSWIPE002", "Swipe request/confirmation must forward the current row's String id unchanged.",
+                  "Use `{ identifier in model.requestArchive(identifier) }` and `{ identifier in model.archive(identifier) }`", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label,
+            action: .modelMethod(model: reference.propertyName, name: action.name, arguments: []),
+            swipeAction: NativeArgument.SwipeStringAction(model: reference.propertyName, name: action.name,
+                externalLabel: action.parameters.first?.externalName, parameterName: "identifier"),
+            type: .actionString, location: location(of: expression))
+    }
+
+    private func swipeArchiveCancel(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let parsed = nativeAction(expression, label: label) else {
+            diagnostics.append(Diagnostic(code: "RFSWIPE002",
+                message: "Swipe cancellation must use one declared no-argument model cancellation action.",
+                suggestion: "Use `onCancel: { model.cancelArchive() }`; no arbitrary gesture closure is accepted.",
+                location: location(of: expression)))
+            return nil
+        }
+        return parsed
     }
 
     private func nativeAction(_ expression: ExprSyntax, label: String) -> NativeArgument? {

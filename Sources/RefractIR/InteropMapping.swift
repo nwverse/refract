@@ -68,9 +68,23 @@ public enum InteropMapping {
         ("draft", .string), ("focusRequest", .int), ("onDraftCommit", .string), ("onCommit", .string),
     ]
 
+    private static let swipeArchiveParameters: [(String, NativeParameterType)] = [
+        ("identifier", .string), ("title", .string), ("onRequest", .actionString),
+        ("onConfirm", .actionString), ("onCancel", .action),
+    ]
+
     private static func validateHost(_ declaration: NativeDeclaration, platform: String,
                                      location: SourceLocation?) -> [Diagnostic] {
         let expected = declaration.kind == .textInputHost ? textInputHostParameters : []
+        if declaration.name == "NativeSwipeArchiveRow" {
+            guard declaration.parameters.map({ ($0.label, $0.type) }).elementsEqual(swipeArchiveParameters, by: ==) else {
+                return [Diagnostic(code: "RFSWIPE001",
+                    message: "NativeSwipeArchiveRow has an invalid bounded swipe archive ABI.",
+                    suggestion: "Declare identifier/title Strings, onRequest/onConfirm String actions and one no-argument onCancel.",
+                    location: location ?? declaration.location)]
+            }
+            return []
+        }
         let valid = declaration.kind == .textInputHost
             ? declaration.name == "NativeTextInputHost"
                 && declaration.parameters.map { ($0.label, $0.type) }.elementsEqual(expected, by: ==)

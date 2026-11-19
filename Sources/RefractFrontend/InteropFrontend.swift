@@ -49,6 +49,8 @@ struct InteropFrontend {
                 if Self.isReduceMotionEnvironment(property, binding) { continue }
                 if linkParameterNames == ["destination", "policy", "handoff"],
                    Self.isPrivateLinkConfirmationState(property, binding) { continue }
+                if node.name.text == "NativeSwipeArchiveRow",
+                   Self.isPrivateSwipeConfirmationState(property, binding) { continue }
                 guard property.bindingSpecifier.tokenKind == .keyword(.let),
                       binding.initializer == nil, binding.accessorBlock == nil,
                       let annotation = binding.typeAnnotation,
@@ -165,6 +167,18 @@ struct InteropFrontend {
             && property.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) })
             && binding.typeAnnotation?.type.trimmedDescription == "Bool"
             && binding.initializer?.value.as(BooleanLiteralExprSyntax.self)?.literal.tokenKind == .keyword(.false)
+            && property.attributes.count == 1
+            && property.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State"
+    }
+
+    private static func isPrivateSwipeConfirmationState(_ property: VariableDeclSyntax,
+                                                        _ binding: PatternBindingSyntax) -> Bool {
+        property.bindingSpecifier.tokenKind == .keyword(.var)
+            && binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "isConfirming"
+            && binding.typeAnnotation?.type.trimmedDescription == "Bool"
+            && binding.initializer?.value.as(BooleanLiteralExprSyntax.self)?.literal.tokenKind == .keyword(.false)
+            && binding.accessorBlock == nil
+            && property.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) })
             && property.attributes.count == 1
             && property.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State"
     }
