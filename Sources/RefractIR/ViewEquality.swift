@@ -12,6 +12,10 @@ extension ViewNode {
                       append(lhsChildren, rhsChildren, to: &pending) else { return false }
             case let (.text(lhsText, lhsModifiers, _), .text(rhsText, rhsModifiers, _)):
                 guard lhsText == rhsText, lhsModifiers == rhsModifiers else { return false }
+            case let (.markdown(lhsDocument, lhsAction, lhsModifiers, _),
+                      .markdown(rhsDocument, rhsAction, rhsModifiers, _)):
+                guard lhsDocument == rhsDocument, lhsAction == rhsAction,
+                      lhsModifiers == rhsModifiers else { return false }
             case let (.button(lhsLabel, lhsAction, lhsModifiers, _),
                       .button(rhsLabel, rhsAction, rhsModifiers, _)):
                 guard lhsAction == rhsAction, lhsModifiers == rhsModifiers else { return false }

@@ -11,9 +11,10 @@ runtime dependency. This declaration is source evidence here, not a new iOS comp
 is part of this target. The Xcode project references those shared files explicitly; do not replace them with copied
 platform-specific screens.
 
-The target also compiles twelve source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
+The target also compiles thirteen source-only typed-contract inputs: `InteropNativeMeasurement.swift`,
 `InteropPlatformValue.swift`, `InteropPlatformView.swift`, `StateCounter.swift`, `ParentBinding.swift`,
 `ModelInterface.swift`, `AccessibilityDynamicType.swift`, `InteropLinkHandoff.swift`, `StackLayout.swift`,
+`MarkdownConversation.swift`,
 `ThemedSettingsControl.swift`, `ChatMessageProjection.swift` and `SelectionLinkContext.swift` in `examples/shared/`. Their unique
 on-disk basenames avoid Xcode's duplicate `Input.stringsdata` output; `scripts/check_examples.py` requires each to
 stay byte-identical to its named canonical fixture. They exercise `Binding(get:set:)`, typed platform selection,
@@ -24,9 +25,13 @@ unchanged, and directional padding forwards to standard SwiftUI `EdgeInsets`. `D
 normal/disabled/pressed/focused color mapping used by the themed settings component; its resolver does not discard
 state inputs. `MeasurementDesignTokens.swift` owns the iOS typography tokens. `RefractLinkSource.swift` supplies the
 typed link destination, exact allowlist and handoff protocol used by the new source-only confirmation component; it
-does not call `openURL` or dispatch intents. None of these declarations performs runtime platform dispatch or links
-a Refract library. The link source contract was added without an Xcode pass on Linux and remains unverified on macOS;
-`docs/link-handoff.md` defines its scope.
+does not call `openURL` or dispatch intents. `RefractMarkdownSource.swift` owns the bounded typed Markdown AST and
+direct `AttributedString` construction; it does not parse Markdown at run time or import Refract. The conversation
+snippet is byte-identical to `Fixtures/markdown-conversation/Input.swift`. **The added Markdown and link-handoff
+sources have not been compiled on macOS**; the checks here prove project wiring and source consistency only. Their
+native link, confirmation and accessibility behavior require a real Apple-toolchain test, as documented in
+`docs/markdown.md` and `docs/link-handoff.md`. None of these declarations performs runtime platform dispatch or
+links a Refract library.
 
 ## Build on macOS
 
