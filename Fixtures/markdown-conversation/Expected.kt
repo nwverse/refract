@@ -31,13 +31,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import refract.generated.R
 
-public interface ConversationModel {
+public interface MarkdownConversationModel {
     public fun openLink(url: String)
 }
 
 @Composable
 public fun ConversationSnippet(
-    model: ConversationModel,
+    model: MarkdownConversationModel,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.verticalScroll(rememberScrollState())) {

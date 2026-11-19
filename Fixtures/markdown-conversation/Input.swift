@@ -1,11 +1,11 @@
 import SwiftUI
 
-protocol ConversationModel: RefractModel {
+protocol MarkdownConversationModel: RefractModel {
     func openLink(_ url: String)
 }
 
 struct ConversationSnippet: View {
-    let model: ConversationModel
+    let model: MarkdownConversationModel
 
     var body: some View {
         ScrollView {

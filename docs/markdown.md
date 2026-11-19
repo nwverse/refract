@@ -8,12 +8,12 @@ No generated target parses Markdown, HTML or target-language strings at run time
 ## Source and ownership
 
 ```swift
-protocol ConversationModel: RefractModel {
+protocol MarkdownConversationModel: RefractModel {
     func openLink(_ url: String)
 }
 
 struct ConversationSnippet: View {
-    let model: ConversationModel
+    let model: MarkdownConversationModel
     var body: some View {
         refractMarkdown(version: 1, blocks: [
             .paragraph(id: "answer.summary", content: [

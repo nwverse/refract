@@ -13,7 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import refract.generated.ConversationModel
+import refract.generated.MarkdownConversationModel
 import refract.generated.ConversationSnippet
 
 /** Native JVM Compose semantics through the exact staged CLI output, not an emulator or device. */
@@ -38,7 +38,7 @@ class GeneratedConversationMarkdownTest {
         assertEquals(listOf("https://example.com/docs"), model.openedLinks)
     }
 
-    private class RecordingConversationModel : ConversationModel {
+    private class RecordingConversationModel : MarkdownConversationModel {
         val openedLinks = mutableListOf<String>()
         override fun openLink(url: String) {
             openedLinks += url
