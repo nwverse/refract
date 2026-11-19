@@ -61,10 +61,10 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
             VStack {
                 NavigationLink("navigation.open.editor", value: Route.editor)
             }
-            .alert("modal.title", isPresented: $visible) {
-                Button("modal.confirm") { model.confirm() }
-                Button("modal.cancel", role: .cancel) {}
-            } message: { Text("modal.message") }
+            .alert("modal.delete.title", isPresented: $visible) {
+                Button("modal.delete.confirm") { model.confirm() }
+                Button("modal.delete.cancel", role: .cancel) {}
+            } message: { Text("modal.delete.message") }
         }
     }
     struct EditorScreen: View {
