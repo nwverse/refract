@@ -31,17 +31,26 @@ extension Generation {
         }
     }
 
-    func emitArkLifecycle(_ lifecycle: NativeLifecycle?, into writer: inout ArkWriter) throws {
-        guard let lifecycle else { return }
-        writer.line()
-        writer.open("aboutToAppear()")
-        writer.line(try emitLocalAction(lifecycle.foreground))
-        writer.close()
-        writer.line()
-        writer.open("aboutToDisappear()")
-        writer.line(try emitLocalAction(lifecycle.background))
-        writer.close()
-        writer.line()
+    func emitArkLifecycleAndModals(_ screen: Screen, into writer: inout ArkWriter) throws {
+        let hasAlert = screen.modals.contains(where: { $0.kind == .alert })
+        if screen.lifecycle != nil || hasAlert {
+            writer.line()
+            writer.open(hasAlert ? "aboutToAppear(): void" : "aboutToAppear()")
+            if let lifecycle = screen.lifecycle {
+                writer.line(try emitLocalAction(lifecycle.foreground))
+            }
+            emitInitialModalPresentation(screen, into: &writer)
+            writer.close()
+            writer.line()
+        }
+        if let lifecycle = screen.lifecycle {
+            writer.open(hasAlert ? "aboutToDisappear(): void" : "aboutToDisappear()")
+            writer.line(try emitLocalAction(lifecycle.background))
+            writer.close()
+            writer.line()
+        }
+        emitModalObservers(screen, into: &writer)
+        if screen.modals.contains(where: { $0.kind == .alert }) { writer.line() }
     }
 }
 

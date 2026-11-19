@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "modal_profile_open", "value": "Open profile" },
+    { "name": "modal_sheet_description", "value": "Profile details" }
+  ]
+}

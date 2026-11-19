@@ -147,6 +147,8 @@ A modifier combination that cannot preserve the source semantics is diagnosed.
 | `.accessibilityAction(named: Text("accessibility.action")) { model.sync() }` | `customActions = listOf(CustomAccessibilityAction(...))` | `.accessibilityCustomActions([...])`, API 26+ | One typed synchronous model action or scalar local-state action; an ordinary Button remains an accessible alternative. |
 | `.accessibilityIdentifier("sync_now")` on an actionable direct child | `testTag` plus a sibling `traversalIndex` when ordered | `id` where the traversal contract requires it | The ordinary iOS identifier is retained on iOS; names are unique within a declared traversal. |
 | `.accessibilityTraversal([.accessibility("sync_now"), .accessibility("details", after: "sync_now")])` on a direct stack | Parent/merging actionable-child `isTraversalGroup` and zero-based `traversalIndex` | Predecessor `.accessibilityNextFocusId("details")`, API 18+ | Only in the declared Android/HarmonyOS `refractView` branches. The iOS branch uses ordinary `.accessibilitySortPriority`; no cross-platform numeric-priority equivalence is claimed. See `docs/accessibility.md`. |
+| `.sheet(isPresented: $visible) { content }` | Native `ModalBottomSheet` while `visible` is true; dismissal writes the same state/binding false | Root `.bindSheet` with typed `@Builder` and native `onWillDismiss` | A native modal host, not Boolean layout or an overlay registry. One content root; no item sheets or detents in this slice. See `docs/navigation.md`. |
+| `.alert("key", isPresented: $visible) { confirm; cancel } message: { Text("message.key") }` | Native `AlertDialog`, two native buttons, typed confirmation/cancel and `LaunchedEffect` host notification | Typed `on<State>Present` event from `aboutToAppear`/`@Monitor`; application UIContext calls native `showAlertDialog` | Static localized text, one model-action confirmation and one cancel-role button. Native back, focus and accessibility stay with the host. See `docs/navigation.md`. |
 
 ### Accessibility actions and traversal
 
@@ -427,6 +429,9 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNAV001` | NavigationStack, NavigationLink or destination registration is outside the bounded host contract | Use the explicit forms in docs/navigation.md |
 | `RFNAV002` | Navigation path/identity has invalid ownership or payload values | Use an empty `[Route]` @State and no-payload Hashable enum |
 | `RFNAV003` | Destination coverage, identity or typed model/native view is invalid | Register every case with a same-file typed model destination or declared native component |
+| `RFMODAL001` | Item sheet, invalid Boolean ownership or malformed sheet content | Use a declared Boolean @State/@Binding and one bounded sheet content root |
+| `RFMODAL002` | Confirmation alert text, action or message shape is unsupported | Use localized static text, one model-action confirmation and one cancel-role button |
+| `RFMODAL003` | Nested/repeated modals, shared presentation state, non-container host or generated event name collision | Keep one sheet and one alert with distinct owners on a supported root container and a unique typed event name |
 | `RFADAPT001` | WidthSizeClass declaration, host input or bounded alternatives are malformed | Declare compact/expanded and switch the native-host widthSizeClass input |
 | `RFADAPT003` | Adaptive width input shares the native navigation path owner | Keep NavigationStack in the host and adaptive settings in a sibling root |
 | `RFNAV401` | TabView, tab item, tag or tab modifier is outside the bounded tab contract | Use `TabView(selection:)` with `.tabItem { Label(...) }` and `.tag(.case)` per docs/navigation.md |

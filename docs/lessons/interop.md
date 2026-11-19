@@ -103,6 +103,7 @@
 - Hidden Toggle labels remove the visible title and its layout wrapper, not the title's typed getter/action checks,
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
+  select the node that defines `SemanticsActions.Dismiss`, not an arbitrary `onRoot()`.
 - Selection editing and drag/drop payloads on a `TextField`/view go through the closed `NativeModifier.Operation`
   set, not through a generic native component. The Compose drag-and-drop API lives in
   `androidx.compose.foundation.draganddrop` for the `Modifier` extensions but in

@@ -43,6 +43,8 @@ interop-link-handoff
 navigation-host
 navigation-deep-restoration
 navigation-native-destination
+modal-native-host
+modal-sheet-state
 navigation-tabs-menu
 accessibility-dynamic-type
 accessibility-actions-traversal

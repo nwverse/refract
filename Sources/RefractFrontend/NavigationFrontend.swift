@@ -48,7 +48,7 @@ extension Builder {
         }
         screens = module.screens.map { screen in
             guard containsNavigationLink(screen.body) else {
-                return Screen(name: screen.name, parameters: screen.parameters, states: screen.states,
+                return Screen(name: screen.name, parameters: screen.parameters, states: screen.states, modals: screen.modals,
                               navigation: bindings[screen.name], body: screen.body,
                               nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
             }
@@ -72,7 +72,7 @@ extension Builder {
                     suggestion: "Use `NavigationLink(\"navigation.open\", value: Route.case)` and register that destination in the same source file.",
                     location: screen.location))
             }
-            return Screen(name: screen.name, parameters: screen.parameters, states: screen.states,
+            return Screen(name: screen.name, parameters: screen.parameters, states: screen.states, modals: screen.modals,
                           navigation: bindings[screen.name], body: screen.body,
                           nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
         }

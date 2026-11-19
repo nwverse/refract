@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="modal_profile_open">Open profile</string>
+    <string name="modal_sheet_description">Profile details</string>
+</resources>

@@ -346,6 +346,26 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "modal-native-host",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "modal-reject-alert",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "modal-reject-item",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "modal-reject-owner",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "modal-sheet-state",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "model-interface",
       "implementationStatus": "ready"
     },

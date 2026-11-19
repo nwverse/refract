@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="modal_profile_open">Open profile</string>
+    <string name="modal_delete_open">Delete profile</string>
+    <string name="modal_sheet_description">Profile details</string>
+    <string name="modal_delete_title">Delete this profile?</string>
+    <string name="modal_delete_confirm">Delete</string>
+    <string name="modal_delete_cancel">Cancel</string>
+    <string name="modal_delete_message">This action cannot be undone.</string>
+</resources>

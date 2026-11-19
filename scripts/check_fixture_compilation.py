@@ -38,6 +38,7 @@ FIXTURES_ROOT = ROOT / "Fixtures"
 STAGING_JAVA = ROOT / "examples/android/fixtures/src/main/java"
 STAGING_RES = ROOT / "examples/android/fixtures/src/main/res"
 STAGING_VALUES = STAGING_RES / "values"
+STAGING_TEST = ROOT / "examples/android/fixtures/src/test/java/example/native"
 APP_TEST_JAVA = ROOT / "examples/android/app/src/fixtureTest/java"
 APP_TEST_RES = ROOT / "examples/android/app/src/fixtureTest/res"
 
@@ -130,6 +131,32 @@ def regenerate_and_stage_multiple(fixture: str, fixture_dir: Path, inputs: list[
     merge_strings(strings_xml, STAGING_VALUES / "strings.xml", fixture)
 
 
+def stage_native_test(native_test: Path, fixture: str) -> None:
+    package_lines = [line for line in native_test.read_text(encoding="utf-8").splitlines()
+                     if line.startswith("package ")]
+    if len(package_lines) != 1:
+        fail(f"{fixture}: {native_test.name} needs one package declaration")
+    relative_package = package_lines[0].removeprefix("package ").strip()
+    if not relative_package or any(not segment.isidentifier() for segment in relative_package.split(".")):
+        fail(f"{fixture}: {native_test.name} has an invalid test package")
+    target = STAGING_TEST / relative_package.replace(".", "/") / native_test.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(native_test.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def fixture_test_targets(fixtures: list[str]) -> set[Path]:
+    targets: set[Path] = set()
+    for fixture in fixtures:
+        for native_test in sorted((FIXTURES_ROOT / fixture).glob("*Test.kt")):
+            packages = [line.removeprefix("package ").strip()
+                        for line in native_test.read_text(encoding="utf-8").splitlines()
+                        if line.startswith("package ")]
+            if len(packages) == 1 and packages[0] and all(
+                    segment.isidentifier() for segment in packages[0].split(".")):
+                targets.add(Path(packages[0].replace(".", "/")) / native_test.name)
+    return targets
+
+
 def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
     fixture_dir = expected_kt.parent
     mapping_json = fixture_dir / "refract.json"
@@ -157,6 +184,10 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
             native_target = STAGING_JAVA / "example" / "native" / f"{fixture}-{name}"
             native_target.parent.mkdir(parents=True, exist_ok=True)
             native_target.write_text(native_source.read_text(encoding="utf-8"), encoding="utf-8")
+    # Native JVM tests are first-class fixture evidence: compile and execute the
+    # exact checked-in test against the CLI-generated source, never a replacement.
+    for native_test in sorted(fixture_dir.glob("*Test.kt")):
+        stage_native_test(native_test, fixture)
     STAGING_VALUES.mkdir(parents=True, exist_ok=True)
     # Each fixture brings its own values/strings.xml. Concatenate the entries
     # into a single staged strings.xml so that resources with the same name do
@@ -266,6 +297,14 @@ def main() -> int:
         for path in (STAGING_JAVA, STAGING_RES, APP_TEST_JAVA, APP_TEST_RES):
             if path.exists():
                 shutil.rmtree(path)
+        if STAGING_TEST.exists():
+            owned_tests = fixture_test_targets(fixtures)
+            for path in sorted(STAGING_TEST.rglob("*Test.kt"), reverse=True):
+                if path.is_file() and path.relative_to(STAGING_TEST) in owned_tests:
+                    path.unlink()
+            for path in sorted((path for path in STAGING_TEST.rglob("*") if path.is_dir()), reverse=True):
+                if not any(path.iterdir()):
+                    path.rmdir()
         for fixture in fixtures:
             regenerate_and_stage(fixture)
         print(f"Staged {len(fixtures)} fixture(s) under examples/android/fixtures/src/main/")

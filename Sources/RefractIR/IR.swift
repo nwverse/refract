@@ -204,6 +204,7 @@ public struct Screen: Codable, Equatable, Sendable {
     public let name: String
     public let parameters: [ScreenParameter]
     public let states: [StateDeclaration]
+    public let modals: [ModalPresentation]
     public let navigation: NavigationOperation?
     public let body: ViewNode
     public let nativeValues: [NativeValueReference]
@@ -211,12 +212,13 @@ public struct Screen: Codable, Equatable, Sendable {
     public let location: SourceLocation?
 
     public init(name: String, parameters: [ScreenParameter] = [], states: [StateDeclaration] = [],
-                navigation: NavigationOperation? = nil, body: ViewNode,
+                modals: [ModalPresentation] = [], navigation: NavigationOperation? = nil, body: ViewNode,
                 nativeValues: [NativeValueReference] = [], lifecycle: NativeLifecycle? = nil,
                 location: SourceLocation? = nil) {
         self.name = name
         self.parameters = parameters
         self.states = states
+        self.modals = modals
         self.navigation = navigation
         self.body = body
         self.nativeValues = nativeValues
@@ -225,7 +227,7 @@ public struct Screen: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, parameters, states, navigation, body, nativeValues, lifecycle, location
+        case name, parameters, states, modals, navigation, body, nativeValues, lifecycle, location
     }
 
     public init(from decoder: Decoder) throws {
@@ -233,6 +235,7 @@ public struct Screen: Codable, Equatable, Sendable {
         name = try container.decode(String.self, forKey: .name)
         parameters = try container.decodeIfPresent([ScreenParameter].self, forKey: .parameters) ?? []
         states = try container.decode([StateDeclaration].self, forKey: .states)
+        modals = try container.decodeIfPresent([ModalPresentation].self, forKey: .modals) ?? []
         navigation = try container.decodeIfPresent(NavigationOperation.self, forKey: .navigation)
         body = try container.decode(ViewNode.self, forKey: .body)
         nativeValues = try container.decodeIfPresent([NativeValueReference].self, forKey: .nativeValues) ?? []

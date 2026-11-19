@@ -13,7 +13,9 @@ import Testing
         .state(name: "enabled", type: .bool, initialValue: Expression(.boolLiteral(true)), location: nil),
         .binding(name: "title", type: .string, location: nil),
         .model(ModelReference(propertyName: "model", protocolName: "SettingsModel"), location: nil),
-    ], body: .native(NativeComponent(name: "Map", arguments: [
+    ], modals: [ModalPresentation(kind: .sheet, stateName: "enabled", isBinding: false)],
+       navigation: NavigationOperation(enumName: "Route"),
+       body: .native(NativeComponent(name: "Map", arguments: [
         NativeArgument(label: "title", expression: Expression(.stringKey("map.title")), type: .string),
     ]), location: nil))
     let module = Module(sourceFile: "Input.swift", screens: [screen])

@@ -25,6 +25,18 @@ The current fixture and harness patterns use the merged `docs/state-and-models.m
 with `let model` and a `RefractModel` protocol; Compose `State<T>` at the typed model boundary; ArkUI V2 on API 12+.
 There is no Refract base class, observer registry, proxy, interpreter, view-tree renderer or generated initialization.
 
+## Native modal state
+
+Sheets and alerts use the platform's own modal host. Compose conditionally calls Material 3 `ModalBottomSheet` or
+`AlertDialog` while its typed Boolean is true and scopes alert-host notification to a `LaunchedEffect` in that same
+branch; no controller registry, overlay layout, polling or start-up work is introduced. ArkUI uses the root's native
+`.bindSheet` builder and observes only the alert's Boolean with `@Monitor`/`aboutToAppear` to notify the application's
+native UIContext host. Do not call imperative dialog APIs from `build()` or mirror modal state in a generated cache.
+Dismissal writes the original binding, so a second overlay model is never needed. `Fixtures/modal-sheet-state` and
+`Fixtures/modal-native-host` show these patterns and retain ordinary root modifiers. Their golden/native-JVM checks
+are structural and behavioral evidence, not frame-time or memory measurements; no modal performance claim is made
+without a same-device generated-vs-native benchmark.
+
 ## Jetpack Compose
 
 ### C1: pass stable scalar inputs and keep the row's identity

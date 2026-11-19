@@ -11,8 +11,11 @@
   `stringResource` also accepts arguments. No resource-manager wrapper is needed.
 - **Test empty formats.** `(1...maximum)` crashes when no placeholders exist (`maximum == 0`). Return `[]` explicitly
   and test argument-free strings, not only formatted ones.
-- **Linux XML APIs live in FoundationXML.** Import that module conditionally. Do not import `RefractMapping` from
-  its own source file; Swift warns about a module self-import.
+- **Linux XML APIs live in FoundationXML.** Apple SDKs instead export `XMLDocument` and `XMLElement` from
+  `Foundation`, with no standalone `FoundationXML` module. Keep `import Foundation` and guard the extra import with
+  `#if canImport(FoundationXML)` in tests as well as production sources; an unconditional import breaks the required
+  macOS dependency scan before tests run. Do not import `RefractMapping` from its own source file; Swift warns about a
+  module self-import.
 - **Keep frontend dependencies one-way.** Key syntax belongs in IR; `RefractFrontend` cannot call a helper in
   `RefractMapping` just because both modules need it. Mapping and backend code may depend on IR, not the reverse.
 - **Do not compare repackaged SwiftSyntax members by identity.** Filtering a member list creates new syntax values;

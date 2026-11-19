@@ -24,6 +24,7 @@ struct Generation {
     let enums: [EnumDeclaration]
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
+    var currentModals: [ModalPresentation] = []
 
     init(module: Module, mapping: Mapping, nativeSource: NativeSource,
          models: [ModelProtocol], itemTypes: [ItemType], enums: [EnumDeclaration]) {
@@ -51,6 +52,11 @@ struct Generation {
         let usedTokenOwners = try usedTokenImports(in: module.screens.map(\.body))
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
+            for modal in screen.modals {
+                for content in modal.content {
+                    try collectImports(content, resolver: resolver, into: &emittedImports)
+                }
+            }
             for parameter in screen.parameters where ["RemoteImageLoader", "RefractLinkHandoff"].contains(parameter.itemType) {
                 emittedImports.insert(parameter.itemType == "RefractLinkHandoff"
                     ? InteropMapping.targetType(.linkHandoff, platform: .harmonyOS) : parameter.itemType!)
@@ -109,6 +115,11 @@ struct Generation {
                 try emitLocalState(state, into: &writer)
             }
             emitArkNativeValues(screen.nativeValues, into: &writer)
+            for modal in screen.modals where modal.kind == .alert {
+                let event = "on\(modal.stateName.prefix(1).uppercased())\(modal.stateName.dropFirst())Present"
+                writer.line("@Event \(event): () => void = (): void => {};")
+                if screen.states.isEmpty && screen.parameters.isEmpty { writer.line() }
+            }
             if let navigation = screen.navigation {
                 try emitNavigationOperation(navigation, into: &writer)
             }
@@ -116,9 +127,11 @@ struct Generation {
                 try emitTabHelpers(tabs, into: &writer)
             }
             // Local-state emission already supplies the separator before lifecycle/build().
-            if screen.states.isEmpty, screen.navigation == nil, !screen.parameters.isEmpty { writer.line() }
-            try emitArkLifecycle(screen.lifecycle, into: &writer)
+            if screen.states.isEmpty && screen.navigation == nil && !screen.parameters.isEmpty { writer.line() }
+            try emitModalBuilders(screen, into: &writer)
+            try emitArkLifecycleAndModals(screen, into: &writer)
             writer.open("build()")
+            currentModals = screen.modals
             let previousItemParameters = screenItemTypes
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
                 input.itemType.map { (input.name, $0) }
@@ -138,8 +151,12 @@ struct Generation {
             defer { screenItemTypes = previousItemParameters }
             try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver,
                      itemTypeName: listItemTypes.values.first)
+            for modal in screen.modals {
+                try emitModalAttachment(modal, for: screen, into: &writer)
+            }
             writer.close()
             writer.close()
+            currentModals = []
         }
         return writer.text
     }
