@@ -33,7 +33,7 @@ extension ComposeBackend {
             "androidx.compose.ui.text.font.FontWeight", "androidx.compose.ui.text.style.TextDecoration",
             "androidx.compose.ui.text.withLink", "androidx.compose.ui.text.withStyle", "androidx.compose.ui.unit.dp",
         ] { context.imports.insert(item) }
-        let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         out.open("Column(modifier = \(chain), verticalArrangement = Arrangement.spacedBy(8.dp))")
         for block in document.blocks {
             switch block {

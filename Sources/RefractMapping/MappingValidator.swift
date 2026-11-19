@@ -34,7 +34,7 @@ final class MappingValidator {
     }
 
     private func platform(_ value: JSON, _ platform: Platform) {
-        fields(value, allowed: ["output", "imports", "components", "nativeComponents", "modifiers", "tokens", "resources", "symbols"])
+        fields(value, allowed: ["output", "imports", "components", "nativeComponents", "modifiers", "tokens", "resources", "symbols", "minimumAPI"])
         output(field("output", in: value, required: true), platform)
         imports(field("imports", in: value, required: true), platform)
         components(field("components", in: value, required: true), "components")
@@ -43,6 +43,10 @@ final class MappingValidator {
         tokens(field("tokens", in: value, required: true))
         symbols(field("symbols", in: value), platform)
         resources(field("resources", in: value, required: true), platform)
+        if let minimum = field("minimumAPI", in: value), integer(minimum) == nil || (integer(minimum) ?? 0) < 12 {
+            error("mappingMinimumAPI", "minimumAPI must be an integer SDK/API level of at least 12.",
+                  "Declare the minimum level supported by the consuming native application.", at: minimum.location)
+        }
     }
 
     private func output(_ value: JSON?, _ platform: Platform) {

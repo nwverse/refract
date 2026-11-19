@@ -177,6 +177,11 @@ extension Expression {
                 pending.append((lhsAlternatives.ios, rhsAlternatives.ios))
                 pending.append((lhsAlternatives.android, rhsAlternatives.android))
                 pending.append((lhsAlternatives.harmonyOS, rhsAlternatives.harmonyOS))
+            case let (.accessibilityAction(lhsAction), .accessibilityAction(rhsAction)):
+                guard lhsAction.action == rhsAction.action else { return false }
+                pending.append((lhsAction.label, rhsAction.label))
+            case let (.accessibilityTraversal(lhsTraversal), .accessibilityTraversal(rhsTraversal)):
+                guard lhsTraversal == rhsTraversal else { return false }
             case let (.interactionColor(lhsColor), .interactionColor(rhsColor)):
                 guard lhsColor.token == rhsColor.token else { return false }
                 pending.append((lhsColor.enabled, rhsColor.enabled))

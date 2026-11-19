@@ -45,6 +45,7 @@ navigation-deep-restoration
 navigation-native-destination
 navigation-tabs-menu
 accessibility-dynamic-type
+accessibility-actions-traversal
 state-counter
 parent-binding
 model-interface

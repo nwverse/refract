@@ -39,6 +39,13 @@ Android `imports` are fully qualified symbols, emitted in their listed order. Ha
 initializers. Duplicates are errors. The mapping author includes the imports needed by mapped calls and modifier
 chains. The platform compiler checks that referenced symbols and their native types exist.
 
+A platform may add `minimumAPI`, an integer at least 12. It declares the consuming application's minimum native
+SDK/API level. The field is optional for compatibility with existing mappings and is not a claim about the toolchain
+installed on the generation host. Gated native accessibility operations require a sufficient declared HarmonyOS
+level: 18 for `accessibilityNextFocusId`, 23 for `accessibilityStateDescription`, and 26 for
+`accessibilityCustomActions`. If the declaration is absent or too low, generation reports `RFACCESS005` rather than
+silently discarding the operation. See `docs/accessibility.md` for the source contract and evidence limits.
+
 ## Components and parameters
 
 Every entry under `components` has this common part in each platform object:
