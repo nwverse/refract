@@ -50,7 +50,7 @@ private struct IRCorpus {
     private mutating func view(depth: Int) -> ViewNode {
         let leafCount = 12
         // Navigation and message-block cases join the existing selector without pre-empting it.
-        let selection = Int.random(in: 0..<(depth < 3 ? 28 : leafCount + 2), using: &random)
+        let selection = Int.random(in: 0..<(depth < 3 ? 29 : leafCount + 3), using: &random)
         switch selection {
         case 24:
             return .navigationLink(title: expression(), pathName: "path", enumName: "Route",
@@ -64,6 +64,17 @@ private struct IRCorpus {
             return .tabView(TabViewNode(selectionName: "tab", enumName: "Tab", destinations: [
                 TabDestination(caseName: "home", viewName: "Home", title: expression(), symbol: "house"),
             ]), location: location())
+        case 28:
+            let inline = MarkdownDocument.Inline.strong(.link(MarkdownDocument.Link(
+                label: expression(),
+                destination: .init(scheme: "https", host: "example.com", path: "/docs"))))
+            return .markdown(MarkdownDocument(version: 1, blocks: [
+                .paragraph(.init(id: "answer.summary", content: [inline, .text(expression())], location: location())),
+                .codeBlock(.init(id: "answer.example", language: .swift,
+                    accessibilityLabel: LocalizedText(key: "conversation.code.label", arguments: [expression()]),
+                    code: "let answer = 42", location: location())),
+            ]), linkAction: MarkdownLinkAction(model: "model", method: "openLink", argumentLabel: "url"),
+               modifiers: modifiers(), location: location())
         default:
             break
         }
@@ -215,7 +226,7 @@ private struct IRCorpus {
 @Suite("Fixed-seed typed IR differential")
 struct IRReliabilityTests {
     @Test func codingPreservesEveryPublicIRCase() throws {
-        // All 28 public ViewNode cases and all 18 Expression.Value cases must actually occur.
+        // All 29 public ViewNode cases and all 18 Expression.Value cases must actually occur.
         // A triple-branch platform node multiplies its subtree on each platform. The strictest
         // three-level nesting produces 397 nodes, so every generated input has a checked bound.
         var seenViews = Set<String>()
@@ -234,7 +245,7 @@ struct IRReliabilityTests {
             var replay = IRCorpus(seed: seed)
             #expect(replay.module() == module, "The test generator itself is not reproducible at seed \(seed)")
         }
-        #expect(seenViews.count == 28, "Visited view cases: \(seenViews.sorted())")
+        #expect(seenViews.count == 29, "Visited view cases: \(seenViews.sorted())")
         #expect(seenExpressions.count == 18, "Visited expression cases: \(seenExpressions.sorted())")
     }
 
@@ -244,6 +255,18 @@ struct IRReliabilityTests {
         case let .text(value, modifiers, _):
             collectExpression(value, into: &expressions)
             collect(modifiers, into: &expressions)
+        case let .markdown(document, _, modifiers, _):
+            collect(modifiers, into: &expressions)
+            for block in document.blocks {
+                switch block {
+                case let .paragraph(paragraph):
+                    for inline in paragraph.content { collectMarkdown(inline, into: &expressions) }
+                case let .codeBlock(code):
+                    for argument in code.accessibilityLabel.arguments {
+                        collectExpression(argument, into: &expressions)
+                    }
+                }
+            }
         case let .button(_, action, modifiers, _):
             collect(action, into: &expressions)
             collect(modifiers, into: &expressions)
@@ -325,6 +348,15 @@ struct IRReliabilityTests {
             for field in form.fields { collectExpression(field.initialValue, into: &expressions) }
         default:
             break
+        }
+    }
+
+    private func collectMarkdown(_ inline: MarkdownDocument.Inline, into expressions: inout Set<String>) {
+        switch inline {
+        case let .text(value): collectExpression(value, into: &expressions)
+        case let .strong(content), let .emphasis(content): collectMarkdown(content, into: &expressions)
+        case let .link(link): collectExpression(link.label, into: &expressions)
+        case .inlineCode: break
         }
     }
 

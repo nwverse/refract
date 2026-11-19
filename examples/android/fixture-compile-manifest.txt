@@ -44,6 +44,7 @@ accessibility-actions-traversal
 state-counter
 parent-binding
 model-interface
+markdown-conversation
 v0-stack-layout
 selection-dragdrop
 selection-link-context

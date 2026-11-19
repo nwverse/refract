@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "strings.xml",
+      "strings": {
+        "conversation.answer": "conversation_answer",
+        "conversation.important": "conversation_important",
+        "conversation.note": "conversation_note",
+        "conversation.docs": "conversation_docs",
+        "conversation.code.label": "conversation_code_label"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "string.json",
+      "strings": {
+        "conversation.answer": "conversation_answer",
+        "conversation.important": "conversation_important",
+        "conversation.note": "conversation_note",
+        "conversation.docs": "conversation_docs",
+        "conversation.code.label": "conversation_code_label"
+      }
+    }
+  }
+}

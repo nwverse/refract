@@ -17,6 +17,25 @@ public enum LocalizationResourceValidator {
             switch node {
             case let .text(expression, modifiers, _):
                 return [expression] + modifiers.flatMap(\.arguments)
+            case let .markdown(document, _, modifiers, _):
+                return document.blocks.flatMap { block -> [Expression] in
+                    switch block {
+                    case let .paragraph(paragraph):
+                        func inlineExpressions(_ values: [MarkdownDocument.Inline]) -> [Expression] {
+                            values.flatMap { value -> [Expression] in
+                                switch value {
+                                case let .text(expression): return [expression]
+                                case let .strong(value), let .emphasis(value): return inlineExpressions([value])
+                                case let .link(link): return [link.label]
+                                case .inlineCode: return []
+                                }
+                            }
+                        }
+                        return inlineExpressions(paragraph.content)
+                    case let .codeBlock(code):
+                        return [Expression(.localizedText(code.accessibilityLabel), location: code.location)]
+                    }
+                } + modifiers.flatMap(\.arguments)
             case let .stack(_, children, modifiers, _):
                 return children.flatMap(visit) + modifiers.flatMap(\.arguments)
             case let .button(label, _, modifiers, _):

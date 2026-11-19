@@ -286,6 +286,22 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "markdown-conversation",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "markdown-reject-html",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "markdown-reject-link",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "markdown-reject-runtime",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "model-interface",
       "implementationStatus": "ready"
     },
