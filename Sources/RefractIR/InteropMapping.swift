@@ -74,7 +74,9 @@ public enum InteropMapping {
         let valid = declaration.kind == .textInputHost
             ? declaration.name == "NativeTextInputHost"
                 && declaration.parameters.map { ($0.label, $0.type) }.elementsEqual(expected, by: ==)
-            : declaration.parameters.allSatisfy { !$0.type.isAction }
+            : declaration.parameters.allSatisfy { parameter in
+                parameter.type != .actionString || parameter.label == "onLink"
+            }
         return valid ? [] : [Diagnostic(code: "RFINPUT003",
             message: "Native component `\(declaration.name)` does not have a valid \(platform) text-input host ABI.",
             suggestion: declaration.kind == .textInputHost

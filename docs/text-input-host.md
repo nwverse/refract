@@ -50,9 +50,9 @@ requests focus and the soft keyboard; it does not force focus loss or reset the 
 committed native editor value for application submission. `onCommit` performs the app's explicit return-key action.
 The parent also owns ongoing committed-draft updates through the ordinary binding callback. Arbitrary closures,
 local-only draft storage, missing native focus state, other action shapes, additional host ABI fields and use of the
-marker with a different component name are diagnostics. Generic `RefractNativeView` declarations retain the upstream
-no-argument model-action boundary but do not accept this host's String callback; the host does not silently give every
-native component a String-consuming closure ABI.
+marker with a different component name are diagnostics. The host's committed-draft callback has its exact dedicated
+ABI; it is not the separate `docs/selection-link-context.md` typed destination callback, even though both use a
+String payload. The host validator does not silently give arbitrary native components its draft-editing semantics.
 
 `docs/interop.md` owns the generic typed mapping representation. `action` and `actionString` are signatures, not
 arbitrary executable mapping strings. The source declaration's stored properties retain their bounded payload types;

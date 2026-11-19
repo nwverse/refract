@@ -1,6 +1,7 @@
 import Testing
 import RefractIR
 @testable import RefractFrontend
+import RefractMapping
 
 @Test func textInputHostBuildsBoundedBindingAndModelCallbacks() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: hostSource))
@@ -55,18 +56,27 @@ func textInputHostRejectsIncompleteSignature(_ properties: String) {
     #expect(unit.diagnostics.isEmpty)
 }
 
-@Test func ordinaryNativeViewRejectsHostStringCallback() {
-    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
-    struct ArbitraryEditor: RefractNativeView {
-        let onDraftCommit: (String) -> Void
-        var body: some View { Text(verbatim: "iOS") }
+@Test func ordinaryNativeViewRejectsHostDraftCallbackMapping() throws {
+    let declaration = NativeDeclaration(name: "ArbitraryEditor", parameters: [
+        NativeParameter(label: "onDraftCommit", type: .actionString),
+    ])
+    let target = NativeTarget(symbol: "ArbitraryEditor", module: "example.input", kind: .composable,
+                              argumentStyle: .named,
+                              parameters: [.init(label: "onDraftCommit", type: .actionString)],
+                              arguments: [.init(source: "onDraftCommit", target: "onDraftCommit")])
+    #expect(throws: InteropMappingError.self) {
+        try InteropMapping.validate(declaration: declaration, target: target, platform: .android)
     }
-    struct Screen: View {
-        var body: some View { ArbitraryEditor(onDraftCommit: { _ in }) }
-    }
-    """))
-    #expect(unit.hasErrors)
-    #expect(unit.diagnostics.contains { $0.code == "RFNATIVE001" })
+
+    // Selection owns a separate typed destination action; it does not inherit host draft semantics.
+    let selection = NativeDeclaration(name: "NativeSelectionMessage", parameters: [
+        NativeParameter(label: "onLink", type: .actionString),
+    ])
+    let selectionTarget = NativeTarget(symbol: "NativeSelectionMessage", module: "example.selection", kind: .composable,
+                                       argumentStyle: .named,
+                                       parameters: [.init(label: "onLink", type: .actionString)],
+                                       arguments: [.init(source: "onLink", target: "onLink")])
+    _ = try InteropMapping.validate(declaration: selection, target: selectionTarget, platform: .android)
 }
 
 private let hostSource = """
