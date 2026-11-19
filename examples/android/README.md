@@ -120,6 +120,32 @@ cd examples/android
 ./gradlew :fixtures:compileDebugKotlin
 ```
 
+### Theme interaction and dynamic-type Native JVM tests
+
+`theme-interaction-states` supplies one generated settings component, an app-owned state resolver and light/night
+resources. `ThemedSettingsAction` observes one actual `MutableInteractionSource` and passes its Boolean pressed and
+focused values into the generated component. The independent `theme-fixture` module compiles the exact golden Kotlin
+with those application resources, and CI includes it in the Android compile gate:
+
+```sh
+./gradlew :theme-fixture:compileDebugKotlin
+```
+
+The fixture test source set compiles that same generated component again with Robolectric and runs
+`ThemeInteractionTest`. It verifies actual press/focus/disabled precedence, light-versus-night rendered pixels and
+default-versus-2x-fontScale text bounds. Run the canonical staging step first, then:
+
+```sh
+python3 scripts/check_fixture_compilation.py
+cd examples/android
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.theme.ThemeInteractionTest
+```
+
+The captures and measured bounds are written to `fixtures/build/reports/native-jvm-compose/` and uploaded as
+`native-jvm-compose-theme` by CI. **These are Native JVM Compose results, not emulator/device screenshots, physical
+screen-reader checks or performance measurements.** The resolver is application code, not a Refract runtime or an
+automatic interaction-state discovery mechanism. iOS and ArkUI compilation/rendering are separate tool checks.
+
 ### Native animation lifecycle tests
 
 The app-owned `NativeSaveConfirmation` demonstrates a typed visibility/identity boundary. Its implementation uses

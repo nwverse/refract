@@ -166,6 +166,7 @@ def check_ios_references() -> None:
         "ModelInterface": "model-interface",
         "AccessibilityDynamicType": "accessibility-dynamic-type",
         "StackLayout": "v0-stack-layout",
+        "ThemedSettingsControl": "theme-interaction-states",
         "ChatMessageProjection": "chat-message-projection",
         "SelectionLinkContext": "selection-link-context",
     }
@@ -181,7 +182,7 @@ def check_ios_references() -> None:
         fail("iOS target must not compile multiple canonical files named Input.swift")
     if not (ROOT / "examples/ios/RefractExample/MeasurementDesignTokens.swift").is_file():
         fail("iOS target is missing the measurement fixture's application-owned typography token")
-    print("iOS project compiles every shared source and ten unique, byte-identical compiler inputs")
+    print("iOS project references every shared source and eleven unique, byte-identical compiler inputs")
 
 
 def main() -> int:

@@ -58,6 +58,7 @@ public struct Expression: Codable, Equatable, Sendable {
         case valueProperty(ValueProperty)
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
+        case interactionColor(InteractionColorValue)
         /// `form.email`: a typed draft value owned by native state.
         case formField(form: String, field: String)
         /// `refractPresent(model.submissionError)`: a null check on a declared optional model text.

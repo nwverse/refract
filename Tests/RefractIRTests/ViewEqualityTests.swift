@@ -66,6 +66,28 @@ struct DeepViewEqualityTests {
         #expect(!differentLocation)
     }
 
+    @Test func interactionColorsCompareTheirTokenAndEveryStateExpression() {
+        let color = InteractionColorValue(
+            token: "DesignColors.action",
+            enabled: Expression(.valueProperty(.binding("enabled")), type: .bool),
+            pressed: Expression(.boolLiteral(false), type: .bool),
+            focused: Expression(.boolLiteral(true), type: .bool)
+        )
+        let expression = Expression(.interactionColor(color), type: .string, location: nil)
+        #expect(expression == Expression(.interactionColor(color), type: .string, location: nil))
+
+        var changed: InteractionColorValue
+        changed = InteractionColorValue(token: "DesignColors.other", enabled: color.enabled,
+                                        pressed: color.pressed, focused: color.focused)
+        #expect(expression != Expression(.interactionColor(changed), type: .string, location: nil))
+        changed = InteractionColorValue(token: color.token, enabled: color.enabled,
+                                        pressed: Expression(.boolLiteral(true), type: .bool), focused: color.focused)
+        #expect(expression != Expression(.interactionColor(changed), type: .string, location: nil))
+        changed = InteractionColorValue(token: color.token, enabled: color.enabled,
+                                        pressed: color.pressed, focused: Expression(.boolLiteral(false), type: .bool))
+        #expect(expression != Expression(.interactionColor(changed), type: .string, location: nil))
+    }
+
     @Test func ordinaryAndDeepExpressionsCompareEveryField() {
         let lhs = deepExpression()
         let rhs = deepExpression()

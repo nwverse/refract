@@ -39,6 +39,54 @@ public extension HStack {
     }
 }
 
+/// Application-owned semantic color roles. The values are system colors, so the existing light/dark theme wins.
+public struct DesignColorToken {
+    public let normal: Color
+    public let disabled: Color
+    public let pressed: Color
+    public let focused: Color
+
+    public init(normal: Color, disabled: Color, pressed: Color, focused: Color) {
+        self.normal = normal
+        self.disabled = disabled
+        self.pressed = pressed
+        self.focused = focused
+    }
+
+    public func resolve(enabled: Bool, pressed: Bool, focused: Bool) -> Color {
+        if !enabled { return disabled }
+        if pressed { return self.pressed }
+        if focused { return self.focused }
+        return normal
+    }
+}
+
+public enum DesignColors {
+    public static let action = DesignColorToken(
+        normal: .accentColor, disabled: .secondary, pressed: .indigo, focused: .orange
+    )
+    public static let content = Color.primary
+}
+
+public enum DesignTypography {
+    public static let body = Font.body
+}
+
+public enum DesignSpacing {
+    public static let medium = CGFloat(12)
+}
+
+public enum DesignRadius {
+    public static let medium = CGFloat(8)
+}
+
+/// This is an ordinary application-owned SwiftUI state mapping on iOS, not a discarded-state shim.
+@inlinable
+@inline(__always)
+public func refractInteractionColor(_ token: DesignColorToken, enabled: Bool, pressed: Bool, focused: Bool) -> Color {
+    token.resolve(enabled: enabled, pressed: pressed, focused: focused)
+}
+
 /// Source-level measurement declarations. The generator selects and lowers these
 /// operations for their native targets; they have no effect on the iOS branch.
 public enum RefractNativeModifier {

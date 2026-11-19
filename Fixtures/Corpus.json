@@ -406,6 +406,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "theme-interaction-states",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "theme-reject-missing-state",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "v0-binding-state",
       "implementationStatus": "ready"
     },

@@ -167,6 +167,11 @@ extension Expression {
                 pending.append((lhsAlternatives.ios, rhsAlternatives.ios))
                 pending.append((lhsAlternatives.android, rhsAlternatives.android))
                 pending.append((lhsAlternatives.harmonyOS, rhsAlternatives.harmonyOS))
+            case let (.interactionColor(lhsColor), .interactionColor(rhsColor)):
+                guard lhsColor.token == rhsColor.token else { return false }
+                pending.append((lhsColor.enabled, rhsColor.enabled))
+                pending.append((lhsColor.pressed, rhsColor.pressed))
+                pending.append((lhsColor.focused, rhsColor.focused))
             case let (.formField(lhsForm, lhsField), .formField(rhsForm, rhsField)):
                 guard lhsForm == rhsForm, lhsField == rhsField else { return false }
             case let (.presence(lhsSubject), .presence(rhsSubject)):
