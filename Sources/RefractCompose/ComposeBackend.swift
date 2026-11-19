@@ -206,6 +206,9 @@ public struct ComposeBackend: Sendable {
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
             try emitToggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers, isRoot: isRoot,
                            labelsHidden: labelsHidden, location: location, into: &out, context: &context)
+        case let .markdown(document, linkAction, modifiers, location):
+            try emitMarkdown(document, linkAction: linkAction, modifiers: modifiers, isRoot: isRoot, location: location,
+                             into: &out, context: &context)
         case let .text(expression, modifiers, location):
             try emitText(expression, modifiers: modifiers, isRoot: isRoot, parentAxis: parentAxis, location: location,
                          into: &out, context: &context)

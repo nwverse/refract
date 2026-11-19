@@ -183,6 +183,13 @@ JVM behavior check, not a physical reduced-motion system-settings test, device/e
 Gradle cache key includes this module's build script so changes to its dependency pins invalidate CI caches. The
 fixture module resolves the same pinned Android-all runtime as the app tests and runs Robolectric offline.
 
+### Bounded typed Markdown tests
+
+The fixture module also compiles the bounded typed Markdown conversation and runs
+`GeneratedConversationMarkdownTest` on Native JVM Compose. It checks the generated paragraph, native link annotation
+and typed model callback, and code-block accessibility label. This is source compilation and JVM semantics evidence,
+not a device/emulator, browser-opening, screen-reader or performance result. See `../../docs/markdown.md` for the
+source AST, limits and unverified iOS/HarmonyOS toolchains.
 ### Synthetic document preview lifecycle tests
 
 `interop-document-preview` exercises typed document metadata, exhaustive loading/missing/unsupported/cancelled/closed

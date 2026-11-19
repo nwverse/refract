@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "conversation_answer", "value": "Here is a " },
+    { "name": "conversation_important", "value": "bounded answer" },
+    { "name": "conversation_note", "value": " with an example: " },
+    { "name": "conversation_docs", "value": " Read the documentation" },
+    { "name": "conversation_code_label", "value": "Swift code example" }
+  ]
+}

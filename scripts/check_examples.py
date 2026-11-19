@@ -96,6 +96,7 @@ def check_resources() -> None:
         fail("Android and HarmonyOS string registries differ")
     if set(android) != {
         "example.hello", "example.go",
+        "conversation.answer", "conversation.important", "conversation.note", "conversation.docs", "conversation.code.label",
         "settings.profile", "settings.display.name", "settings.preferences",
         "settings.notifications", "settings.save", "settings.native.component",
     }:
@@ -166,6 +167,7 @@ def check_ios_references() -> None:
         "ModelInterface": "model-interface",
         "AdaptiveSettings": "adaptive-window-size",
         "StackLayout": "v0-stack-layout",
+        "MarkdownConversation": "markdown-conversation",
         "ThemedSettingsControl": "theme-interaction-states",
         "ChatMessageProjection": "chat-message-projection",
         "SelectionLinkContext": "selection-link-context",
@@ -182,6 +184,8 @@ def check_ios_references() -> None:
         fail("iOS target must not compile multiple canonical files named Input.swift")
     if not (ROOT / "examples/ios/RefractExample/MeasurementDesignTokens.swift").is_file():
         fail("iOS target is missing the measurement fixture's application-owned typography token")
+    if not (ROOT / "examples/ios/RefractExample/RefractMarkdownSource.swift").is_file():
+        fail("iOS target is missing the typed Markdown source declarations")
     print("iOS project references every shared source and each unique, byte-identical compiler input")
 
 
