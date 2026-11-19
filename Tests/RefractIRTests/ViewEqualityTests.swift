@@ -88,6 +88,32 @@ struct DeepViewEqualityTests {
         #expect(expression != Expression(.interactionColor(changed), type: .string, location: nil))
     }
 
+    @Test func accessibilityExpressionsCompareAllTypedPayloads() {
+        let label = Expression(.localizedText(LocalizedText(key: "accessibility.sync.action")))
+        let action = AccessibilityCustomAction(label: label,
+            action: .modelMethod(model: "model", name: "sync", arguments: []))
+        let expression = Expression(.accessibilityAction(action), location: nil)
+        #expect(expression == Expression(.accessibilityAction(action), location: nil))
+
+        var changed = AccessibilityCustomAction(
+            label: Expression(.localizedText(LocalizedText(key: "accessibility.other.action"))),
+            action: action.action)
+        #expect(expression != Expression(.accessibilityAction(changed), location: nil))
+        changed = AccessibilityCustomAction(label: label,
+            action: .modelMethod(model: "model", name: "other", arguments: []))
+        #expect(expression != Expression(.accessibilityAction(changed), location: nil))
+
+        let traversal = AccessibilityTraversal(steps: [
+            .init(name: "first"), .init(name: "second", after: "first"),
+        ])
+        let ordered = Expression(.accessibilityTraversal(traversal), location: nil)
+        #expect(ordered == Expression(.accessibilityTraversal(traversal), location: nil))
+        let reversed = AccessibilityTraversal(steps: [
+            .init(name: "second", after: "first"), .init(name: "first"),
+        ])
+        #expect(ordered != Expression(.accessibilityTraversal(reversed), location: nil))
+    }
+
     @Test func ordinaryAndDeepExpressionsCompareEveryField() {
         let lhs = deepExpression()
         let rhs = deepExpression()
