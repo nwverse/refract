@@ -61,6 +61,51 @@ class SyntheticMediaCapabilityTest {
     }
 
     @Test
+    fun sameRevisionIdentifierReplacementRejectsTheOldApprovalThroughGeneratedScreen() = runMediaTest {
+        val controller = SyntheticMediaController()
+        setContent { GeneratedMediaHost(controller) }
+        controller.select(SyntheticMediaKind.camera, SyntheticPhase.approvalRequired)
+        onNodeWithText("Request synthetic camera approval").performClick()
+        val revision = controller.request.revision
+        runOnIdle {
+            controller.replaceForApprovalCorrelation(
+                SyntheticMediaKind.camera,
+                "synthetic-camera-replacement",
+            )
+        }
+        onNodeWithText("Camera approval required").assertExists()
+        assertEquals(revision, controller.request.revision)
+        controller.deliverSyntheticApproval()
+        onNodeWithText("Camera approval required").assertExists()
+        onNodeWithTag("media_camera_ready").assertDoesNotExist()
+        assertEquals(SyntheticPhase.approvalRequired, controller.request.phase)
+        assertEquals(listOf("approve:synthetic-camera-1:2"), controller.actions)
+    }
+
+    @Test
+    fun sameRevisionKindReplacementRejectsTheOldApprovalThroughGeneratedScreen() = runMediaTest {
+        val controller = SyntheticMediaController()
+        setContent { GeneratedMediaHost(controller) }
+        controller.select(SyntheticMediaKind.camera, SyntheticPhase.approvalRequired)
+        onNodeWithText("Request synthetic camera approval").performClick()
+        val revision = controller.request.revision
+        runOnIdle {
+            controller.replaceForApprovalCorrelation(
+                SyntheticMediaKind.share,
+                "synthetic-share-replacement",
+            )
+        }
+        onNodeWithText("Share approval required").assertExists()
+        assertEquals(revision, controller.request.revision)
+        controller.deliverSyntheticApproval()
+        onNodeWithText("Share approval required").assertExists()
+        onNodeWithTag("media_share_ready").assertDoesNotExist()
+        onNodeWithTag("media_camera_ready").assertDoesNotExist()
+        assertEquals(SyntheticPhase.approvalRequired, controller.request.phase)
+        assertEquals(listOf("approve:synthetic-camera-1:2"), controller.actions)
+    }
+
+    @Test
     fun shareReadyIsOnlyAppSelectedAndCancelsThroughTypedAction() = runMediaTest {
         val appeared = mutableListOf<String>()
         val disposed = mutableListOf<String>()
