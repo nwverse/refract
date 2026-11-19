@@ -110,6 +110,7 @@ final class Builder: SyntaxVisitor {
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
+    var accessibilityPlatform: TargetPlatform?
     var nativeHosts: [NativeHostContract] = []
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil) {
@@ -375,7 +376,12 @@ final class Builder: SyntaxVisitor {
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "secureReveal" { return secureReveal(call, on: node) }
-        if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
+        if name == "accessibilitySortPriority" { return accessibilitySortPriority(call, on: node) }
+        if ["accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction",
+            "accessibilityTraversal", "accessibilityIdentifier"].contains(name) {
+            if name == "accessibilityIdentifier" { return accessibilityIdentifier(call, on: node) }
+            return accessibilityModifier(call, name: name, on: node)
+        }
         if name == "disabled" { return disabledModifier(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
@@ -413,12 +419,12 @@ final class Builder: SyntaxVisitor {
         return modifier(name, arguments: [], on: node, at: member)
     }
 
-    func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
+    func modifier(_ name: String, arguments: [Expression], argumentLabels: [String?] = [], on node: ViewNode,
                           at syntax: some SyntaxProtocol) -> ViewNode? {
         if case let .component(component, _) = node {
-            return designSystem?.modifiers([Modifier(name: name, arguments: arguments, location: location(of: syntax))], on: component)
+            return designSystem?.modifiers([Modifier(name: name, arguments: arguments, argumentLabels: argumentLabels, location: location(of: syntax))], on: component)
         }
-        let modifier = Modifier(name: name, arguments: arguments, location: location(of: syntax))
+        let modifier = Modifier(name: name, arguments: arguments, argumentLabels: argumentLabels, location: location(of: syntax))
         if let updated = node.appendingModifier(modifier) { return updated }
         error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
         return nil
@@ -679,6 +685,9 @@ final class Builder: SyntaxVisitor {
         }
         var branches: [[ViewNode]] = []
         for argument in call.arguments {
+            guard let platform = TargetPlatform(rawValue: argument.label?.text ?? "") else { return nil }
+            accessibilityPlatform = platform
+            defer { accessibilityPlatform = nil }
             guard let closure = argument.expression.as(ClosureExprSyntax.self),
                   let children = children(of: closure) else {
                 error("RFSEM001", "A platform view branch must contain only supported view expressions.",

@@ -275,11 +275,15 @@ public struct ComposeBackend: Sendable {
             context.imports.insert("androidx.compose.foundation.layout.Box")
             call = "Box"
         }
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
         out.open("\(call)(modifier = \(modifierChain))")
+        let traversal = try prepareComposeAccessibilityTraversal(modifiers, children: children)
+        let savedTraversal = context.accessibilityTraversal
+        context.accessibilityTraversal = traversal
         for child in children {
             try emit(child, parentAxis: axis, into: &out, context: &context)
         }
+        context.accessibilityTraversal = savedTraversal
         out.close()
     }
 
@@ -296,7 +300,7 @@ public struct ComposeBackend: Sendable {
             // fallback is only Kotlin's nullability requirement, not generated error copy.
             text = "\(model).\(property).value ?: \"\""
         }
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, parentAxis: parentAxis, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, parentAxis: parentAxis, into: &out, context: &context)
         let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
         let styled = modifiers.contains { $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle" }
@@ -338,7 +342,7 @@ public struct ComposeBackend: Sendable {
                             location: SourceLocation?, into out: inout KotlinWriter,
                             context: inout Context) throws {
         context.imports.insert("androidx.compose.material3.Button")
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         let onClick: String
         if modifiers.contains(where: { $0.name == "retainCallback" }) {
             onClick = "onClick"
@@ -470,6 +474,10 @@ public struct ComposeBackend: Sendable {
             return result + "\""
         case let .platformValue(alternatives):
             return try renderExpression(alternatives.android, context: &context)
+        case .accessibilityAction, .accessibilityTraversal:
+            throw Diagnostic(code: "RFACCESS004", message: "An accessibility operation cannot be rendered as a scalar value.",
+                             suggestion: "Keep the typed accessibility operation in its dedicated modifier lowering.",
+                             location: expression.location)
         case let .interactionColor(value):
             return try MappedExpression.interactionColor(value, mapping: context.mapping, platform: .android,
                 renderState: { try renderExpression($0, context: &context) },
@@ -569,6 +577,8 @@ public struct ComposeBackend: Sendable {
         let enums: [EnumDeclaration]
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
+        var accessibilityTraversal: AccessibilityTraversal?
+        var accessibilityTextValues: [String: Int] = [:]
 
         func form(named name: String) -> FormDeclaration? {
             for screen in module.screens {
@@ -619,7 +629,14 @@ struct KotlinWriter {
         if value.isEmpty {
             text += "\n"
         } else {
-            text += String(repeating: "    ", count: depth) + value + "\n"
+            if value.contains("\u{1}") {
+                let continuation = value.split(separator: "\n", omittingEmptySubsequences: false).map {
+                    $0.hasPrefix("\u{1}") ? String($0.dropFirst()) : String($0)
+                }.joined(separator: "\n")
+                text += String(repeating: "    ", count: depth) + continuation.replacingOccurrences(of: "\n", with: "\n" + String(repeating: "    ", count: depth)) + "\n"
+            } else {
+                text += String(repeating: "    ", count: depth) + value + "\n"
+            }
         }
     }
 

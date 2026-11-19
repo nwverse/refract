@@ -17,9 +17,10 @@ extension Generation {
         case .depth: "Stack"
         }
         let children = try stackChildren(children, parentAxis: layout.axis)
+        let traversal = try ArkModifiers.validateAccessibilityTraversal(modifiers, children: children, mapping: mapping)
         writer.open("\(container)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
         for child in children {
-            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
+            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver, traversal: traversal)
         }
         writer.close()
         if layout.axis != .depth, let alignment = layout.alignment {

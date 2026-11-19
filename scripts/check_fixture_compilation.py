@@ -173,13 +173,15 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
                 fail(f"{fixture}: unsafe or duplicate staged resource {relative}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-    if fixture in ("interop-remote-image", "adaptive-window-size"):
+    if fixture in {"interop-remote-image", "accessibility-actions-traversal", "adaptive-window-size"}:
         # Native JVM tests need the app's real resource table, not a library's
         # isolated test APK. Stage the exact generated call and its resources.
-        for base in (APP_TEST_JAVA / fixture, APP_TEST_RES / fixture):
-            if base.exists():
-                shutil.rmtree(base)
-        target_package = (APP_TEST_JAVA / fixture).joinpath(*package.split("."))
+        # The batch is cleaned once in main; individual fixtures only append.
+        # Adaptive retains its own resource directory and shared-settings check.
+        if fixture == "adaptive-window-size":
+            target_package = (APP_TEST_JAVA / fixture).joinpath(*package.split("."))
+        else:
+            target_package = APP_TEST_JAVA.joinpath(*package.split("."))
         target_package.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(target, target_package / f"{fixture}.kt")
         generated_test = target_package / f"{fixture}.kt"
@@ -187,14 +189,6 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
             generated_test.read_text(encoding="utf-8").replace(f"{package}.R", "com.example.refract.R"),
             encoding="utf-8",
         )
-        for source in sorted(resources.rglob("*")):
-            if source.is_file():
-                relative = source.relative_to(resources)
-                destination = APP_TEST_RES / fixture / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(source, destination)
-        destination = APP_TEST_RES / fixture / "values/strings.xml"
-        destination.parent.mkdir(parents=True, exist_ok=True)
         if fixture == "adaptive-window-size":
             app_strings = ROOT / "examples/android/app/src/main/res/values/strings.xml"
             shared = {child.attrib["name"]: (child.text or "").strip()
@@ -206,9 +200,20 @@ def stage_generated(expected_kt: Path, fixture: str, output_name: str) -> None:
             root = ET.Element("resources")
             ET.SubElement(root, "string", name="adaptive_open").text = required["adaptive_open"]
             ET.indent(root, space="  ")
+            destination = APP_TEST_RES / fixture / "values/strings.xml"
+            destination.parent.mkdir(parents=True, exist_ok=True)
             ET.ElementTree(root).write(destination, encoding="utf-8", xml_declaration=True)
         else:
-            shutil.copyfile(strings_xml, destination)
+            if resources.is_dir():
+                for source in sorted(resources.rglob("*")):
+                    if source.is_file():
+                        relative = source.relative_to(resources)
+                        destination = APP_TEST_RES / relative
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(source, destination)
+            destination = APP_TEST_RES / "values/strings.xml"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            merge_strings(strings_xml, destination, fixture)
 
 
 def merge_strings(source: Path, target: Path, fixture: str) -> None:
