@@ -1,4 +1,5 @@
 import Foundation
+import FoundationXML
 import RefractArkUI
 import RefractCompose
 import RefractFrontend
