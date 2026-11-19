@@ -53,7 +53,7 @@ public struct Frontend {
                                      nativeDeclarations: builder.interop.declarations,
                                      models: builder.models.filter { $0.location?.file == file.source.path },
                                      itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
-                                     enums: builder.enums.filter { $0.location?.file == file.source.path })
+                                     enums: module.enums, nativeHosts: module.nativeHosts)
             units.append(TranslationUnit(module: boundModule, diagnostics: diagnostics,
                                          resolvedModels: builder.models,
                                          resolvedItemTypes: builder.itemTypes))
@@ -65,7 +65,8 @@ public struct Frontend {
                   !builder.pendingMessageBodies.isEmpty else { return unit }
             let module = Module(sourceFile: builder.file, screens: builder.screens,
                                 nativeDeclarations: unit.module.nativeDeclarations,
-                                models: unit.module.models, itemTypes: unit.module.itemTypes, enums: unit.module.enums)
+                                models: unit.module.models, itemTypes: unit.module.itemTypes,
+                                enums: unit.module.enums, nativeHosts: unit.module.nativeHosts)
             return TranslationUnit(module: module, diagnostics: unit.diagnostics,
                                    resolvedModels: unit.resolvedModels, resolvedItemTypes: unit.resolvedItemTypes)
         }
