@@ -20,6 +20,10 @@ extension Builder {
                     case let .model(reference, _): reference.propertyName == eventName
                     case let .binding(name, _, _), let .navigationPath(name, _, _), let .tabSelection(name, _, _): name == eventName
                     case let .state(name, _, _, _): name == eventName
+                    case let .form(_, declaration, _):
+                        declaration.name == eventName || declaration.fields.contains(where: {
+                            declaration.name + $0.name.prefix(1).uppercased() + $0.name.dropFirst() == eventName
+                        })
                     }
                 }) {
                     diagnostics.append(Diagnostic(code: "RFMODAL003",

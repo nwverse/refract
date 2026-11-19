@@ -42,6 +42,16 @@ extension ComposeBackend {
         for model in stack.models {
             out.line("\(model.propertyName): \(model.protocolName),")
         }
+        let linkedDestinations = stack.destinations.compactMap { destination in
+            context.module.screens.first(where: { $0.name == destination.viewName })?.navigation
+        }
+        if !linkedDestinations.isEmpty {
+            guard linkedDestinations.allSatisfy({ $0 == NavigationOperation(pathName: stack.pathName, enumName: stack.enumName) }) else {
+                throw Diagnostic(code: "RFNAV003", message: "Linked destinations must use the host's single typed navigation operation.",
+                                 suggestion: "Bind every linked destination to the same finite enum and host callback")
+            }
+            out.line("on\(stack.pathName.uppercasingFirst())Navigate: (\(stack.enumName)) -> Unit,")
+        }
         out.line("modifier: Modifier = Modifier,")
         out.depth -= 1
         out.line(") {")
@@ -71,7 +81,12 @@ extension ComposeBackend {
                 throw Diagnostic(code: "RFNAV003", message: "A destination model must match its root and target declarations.")
             }
             out.open("\(stack.enumName).\(destination.caseName) ->")
-            out.line("\(destination.viewName)(\(model.label) = \(model.expression), modifier = modifier)")
+            var arguments = ["\(model.label) = \(model.expression)"]
+            if context.module.screens.first(where: { $0.name == destination.viewName })?.navigation != nil {
+                arguments.append("onPathNavigate = onPathNavigate")
+            }
+            arguments.append("modifier = modifier")
+            out.line("\(destination.viewName)(\(arguments.joined(separator: ", ")))")
             out.close()
         }
         out.close()

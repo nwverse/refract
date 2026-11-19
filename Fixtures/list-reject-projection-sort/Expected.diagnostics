@@ -1,0 +1,2 @@
+Input.swift:26:18: error [RFLIST004]: Use `lhs.rank < rhs.rank || (lhs.rank == rhs.rank && lhs.id < rhs.id)` with an Int rank. Suggestion: Use a finite enum category, `.all` reset, Int sort field, and explicit Int id tie-break
+Input.swift:24:9: error [RFLIST001]: A dynamic List needs a declared identifiable model collection and one item view. Suggestion: Use a RefractModel collection of Identifiable items with a stable String or Int id

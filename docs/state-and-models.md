@@ -26,7 +26,11 @@ class, a global store or a subscription adapter.
 - **First-slice types are `String`, `Bool`, `Int`, `Double` and arrays of supported primitive values.** Optional
   values, nested objects, reference mutation, collection mutation through bindings, computed model properties and
   asynchronous streams are rejected until their semantics and observation are specified. The app keeps that logic
-  behind a supported model interface.
+  behind a supported model interface. The single bounded exception is `@refractText` on a get-only String property
+  (`docs/forms.md`): its native type is `State<String?>` / `string | null | undefined`, read only through a
+  `refractPresent` null check or Kotlin's required non-null argument. `@refractAsync` actions return
+  `Boolean`/`boolean` so a form submission can report whether the native attempt was accepted; the app still owns
+  the task and its pending state.
 
 The official ArkUI contracts are recorded in the OpenHarmony documentation for
 [`@Local`](https://github.com/openharmony/docs/blob/master/zh-cn/application-dev/ui/state-management/arkts-new-local.md),
