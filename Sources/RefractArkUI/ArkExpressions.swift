@@ -39,6 +39,12 @@ enum ArkExpression {
                 return try referenceName(name, location: expression.location)
             }
             return "this.\(try referenceName(name, location: expression.location))"
+        case let .nativeValueProperty(value):
+            guard value.field != .state else {
+                throw Diagnostic(code: "RFHOST005", message: "A native event state must be handled by its exhaustive switch.",
+                                 suggestion: "Select event.id or event.revision for scalar interpolation.", location: expression.location)
+            }
+            return "this.\(value.value).\(value.field.rawValue)"
         case .binding:
             throw Diagnostic(code: "arkui.unsupported_binding_projection",
                              message: "A projected binding needs a supported control or child component argument.",
