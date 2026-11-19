@@ -3,31 +3,19 @@ import RefractMapping
 
 enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty,
-                     isText: Bool = false) throws -> String {
-        let measurement = modifiers.filter { ["nativeTestTag", "accessibilityLabel", "retainCallback"].contains($0.name) }
-        let layout = modifiers.filter { !["nativeTestTag", "accessibilityLabel", "retainCallback", "disabled"].contains($0.name) }
+                     isText: Bool = false, traversal: AccessibilityTraversal? = nil) throws -> String {
+        let measurement = modifiers.filter { Self.accessibilityNames.contains($0.name) }
+        let layout = modifiers.filter {
+            !Self.accessibilityNames.contains($0.name) && $0.name != "disabled"
+        }
         if !measurement.isEmpty {
-            let native = try measurement.map { modifier in
-                switch modifier.name {
-                case "nativeTestTag":
-                    return ".id(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
-                case "accessibilityLabel":
-                    return ".accessibilityText(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))"
-                default:
-                    if modifier.name == "retainCallback" {
-                        throw Diagnostic(code: "RFNATIVE004",
-                            message: "HarmonyOS callback retention requires a typed callback-identity representation.",
-                            suggestion: "Use a direct typed callback; do not discard the retention operation or add a runtime cache.",
-                            location: modifier.location)
-                    }
-                    throw Diagnostic(code: "RFNATIVE004",
-                        message: "Modifier `\(modifier.name)` is not supported on an ArkUI toggle.",
-                        suggestion: "Keep native measurement operations on the selected toggle control.",
-                        location: modifier.location)
-                }
-            }.joined()
-            guard !layout.isEmpty else { return native }
+            let native = try Self.emitAccessibility(measurement, item: item, mapping: mapping, traversal: traversal)
+            if native.isEmpty { return try emit(layout, item: item, mapping: mapping, isText: isText) }
+            guard !layout.isEmpty else {
+                return native.hasPrefix("\n") ? String(native.dropFirst()) : native
+            }
             let remainder = try emit(layout, item: item, mapping: mapping, isText: isText)
+            if native.hasPrefix("\n") { return native + remainder }
             if remainder.hasPrefix("\n") { return native + remainder }
             return native + "\n" + remainder
         }

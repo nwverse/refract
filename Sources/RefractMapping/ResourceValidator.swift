@@ -2,15 +2,17 @@ import RefractIR
 
 /// Atomic resource resolution for CLI and golden generation, before any native output is emitted.
 public enum LocalizationResourceValidator {
-    public static func validate(module: Module, mapping: Mapping) throws {
-        for expression in localizedExpressions(in: module) {
+    public static func validate(module: Module, mapping: Mapping, platform: Platform? = nil) throws {
+        for expression in localizedExpressions(in: module, platform: platform) {
             guard case let .localizedText(text) = expression.value else { continue }
             _ = try mapping.stringCatalog(text, platform: .android, location: expression.location)
-            _ = try mapping.stringCatalog(text, platform: .harmonyOS, location: expression.location)
+            if platform != .android {
+                _ = try mapping.stringCatalog(text, platform: .harmonyOS, location: expression.location)
+            }
         }
     }
 
-    private static func localizedExpressions(in module: Module) -> [Expression] {
+    private static func localizedExpressions(in module: Module, platform: Platform? = nil) -> [Expression] {
         func visit(_ node: ViewNode) -> [Expression] {
             switch node {
             case let .text(expression, modifiers, _):
@@ -53,7 +55,8 @@ public enum LocalizationResourceValidator {
             case .child:
                 return []
             case let .platformView(alternatives, _):
-                return (alternatives.android + alternatives.harmonyOS).flatMap(visit)
+                guard let platform else { return (alternatives.android + alternatives.harmonyOS).flatMap(visit) }
+                return (platform == .android ? alternatives.android : alternatives.harmonyOS).flatMap(visit)
             case let .optionalBinding(subject, _, children, otherwise, _):
                 return [subject] + children.flatMap(visit) + otherwise.flatMap(visit)
             case let .switchExpression(subject, _, cases, _):
@@ -108,6 +111,9 @@ public enum LocalizationResourceValidator {
         func expressions(in value: Expression) -> [Expression] {
             if case let .localizedText(text) = value.value {
                 return [value] + text.arguments.flatMap(expressions)
+            }
+            if case let .accessibilityAction(action) = value.value {
+                return expressions(in: action.label)
             }
             if case let .platformValue(alternatives) = value.value {
                 return [alternatives.android, alternatives.harmonyOS].flatMap(expressions)

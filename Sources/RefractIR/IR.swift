@@ -61,6 +61,8 @@ public struct Expression: Codable, Equatable, Sendable {
         case valueProperty(ValueProperty)
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
+        case accessibilityAction(AccessibilityCustomAction)
+        case accessibilityTraversal(AccessibilityTraversal)
         case interactionColor(InteractionColorValue)
         /// `form.email`: a typed draft value owned by native state.
         case formField(form: String, field: String)

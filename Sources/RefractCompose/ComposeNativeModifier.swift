@@ -62,7 +62,7 @@ struct ComposeNativeModifier {
         context.imports.insert("androidx.compose.ui.res.stringResource")
         context.imports.insert("androidx.compose.ui.text.TextRange")
         context.imports.insert("androidx.compose.ui.text.input.TextFieldValue")
-        let modifierChain = try ComposeBackend().modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let modifierChain = try ComposeBackend().modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         out.open("TextField(")
         out.line("value = TextFieldValue(text = \(name), selection = TextRange(\(startExpr), \(endExpr))),")
         out.line("onValueChange = { updated ->")

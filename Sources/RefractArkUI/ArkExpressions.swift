@@ -65,6 +65,10 @@ enum ArkExpression {
                              location: expression.location)
         case let .platformValue(alternatives):
             return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
+        case .accessibilityAction, .accessibilityTraversal:
+            throw Diagnostic(code: "RFACCESS004", message: "An accessibility operation cannot be rendered as an ArkTS value.",
+                             suggestion: "Keep the typed accessibility operation in its dedicated modifier lowering.",
+                             location: expression.location)
         case let .interactionColor(value):
             return try MappedExpression.interactionColor(value, mapping: mapping, platform: .harmonyOS,
                 renderState: { try emitLocalExpression($0, item: item, mapping: mapping) },

@@ -25,6 +25,16 @@ struct Generation {
     var screenItemTypes: [String: String] = [:]
     var listItemTypes: [String: String] = [:]
 
+    init(module: Module, mapping: Mapping, nativeSource: NativeSource,
+         models: [ModelProtocol], itemTypes: [ItemType], enums: [EnumDeclaration]) {
+        self.module = module
+        self.mapping = mapping
+        self.nativeSource = nativeSource
+        self.models = models
+        self.itemTypes = itemTypes
+        self.enums = enums
+    }
+
     mutating func generate() throws -> String {
         guard mapping.schemaVersion == 1 else {
             throw Diagnostic(code: "arkui.unsupported_mapping_version",
@@ -127,14 +137,15 @@ struct Generation {
     func emit(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
               lazyOwner: Bool = false, mapping: Mapping = .empty,
               resolver: InteropResolver? = nil, parentAxis: ViewNode.StackAxis? = nil,
-              itemTypeName: String? = nil) throws {
+              itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil) throws {
         switch node {
         case let .stack(axis, children, modifiers, _):
             let children = try stackChildren(children, parentAxis: axis)
+            let traversal = try ArkModifiers.validateAccessibilityTraversal(modifiers, children: children, mapping: mapping)
             writer.open("\(containerName(axis))()")
             for child in children {
                 try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
-                         parentAxis: axis, itemTypeName: itemTypeName)
+                         parentAxis: axis, itemTypeName: itemTypeName, traversal: traversal)
             }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .markdown(document, linkAction, modifiers, _):
@@ -162,7 +173,7 @@ struct Generation {
                 }
                 writer.line(".enabled(!(\(try emitLocalExpression(argument, item: item, mapping: mapping))))")
             }
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, traversal: traversal), unlessEmpty: true)
         case let .conditional(branches, location):
             guard !branches.isEmpty, branches[0].condition != nil,
                   branches.dropFirst().allSatisfy({ $0.condition != nil }) || branches.last?.condition == nil else {
@@ -301,7 +312,7 @@ struct Generation {
             try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
                                      labelsHidden: labelsHidden, location: location),
                              into: &writer, item: item, mapping: mapping, resolver: resolver,
-                             itemParameters: screenItemTypes, itemTypeName: itemTypeName)
+                             itemParameters: screenItemTypes, itemTypeName: itemTypeName, traversal: traversal)
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
                 try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
