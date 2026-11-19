@@ -263,22 +263,28 @@ struct Generation {
                                  suggestion: "Declare its ArkUI symbol and typed parameters in refract.json.",
                                  location: location)
             }
-            let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
-            let arguments = try InteropEmission.arguments(for: component, target: target) {
-                try ArkExpression.emit($0, item: item, mapping: mapping)
-            } renderAction: { action in
-                guard case let .modelMethod(model, name, arguments) = action else {
-                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
+            if module.nativeDeclarations.contains(where: { $0.name == component.name && $0.kind == .textInputHost }) {
+                let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
+                try ArkTextInputHost.emit(component, target: target, module: module, mapping: mapping,
+                                          location: location, into: &writer)
+            } else {
+                let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
+                let arguments = try InteropEmission.arguments(for: component, target: target) {
+                    try ArkExpression.emit($0, item: item, mapping: mapping)
+                } renderAction: { action in
+                    guard case let .modelMethod(model, name, arguments) = action else {
+                        throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
+                    }
+                    if arguments.isEmpty { return "() => { \(try emitLocalAction(action)) }" }
+                    guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
+                        return try emitArkSelectionAction(action)
+                    }
+                    return "(destination: string): void => { this.\(model).\(name)(destination); }"
+                } renderSelection: { content in
+                    try emitArkSelectionContent(content)
                 }
-                if arguments.isEmpty { return "() => { \(try emitLocalAction(action)) }" }
-                guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
-                    return try emitArkSelectionAction(action)
-                }
-                return "(destination: string): void => { this.\(model).\(name)(destination); }"
-            } renderSelection: { content in
-                try emitArkSelectionContent(content)
+                writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
             }
-            writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):
             try ArkDesignSystem().emit(component, location: location, mapping: mapping, writer: &writer)
         case let .child(child, _):

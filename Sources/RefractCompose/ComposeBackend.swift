@@ -363,6 +363,15 @@ public struct ComposeBackend: Sendable {
     func emitNative(_ component: NativeComponent, location: SourceLocation?, isRoot: Bool,
                             into out: inout KotlinWriter, context: inout Context) throws {
         let resolver = InteropResolver(module: context.module, mapping: context.mapping)
+        if context.module.nativeDeclarations.contains(where: { $0.name == component.name && $0.kind == .textInputHost }) {
+            let declaration = try ComposeTextInputHost.declaration(context.module, location: location)
+            let target = try resolver.target(for: component, platform: .android, location: location)
+            try ComposeTextInputHost.emit(component, declaration: declaration, target: target,
+                location: location, isRoot: isRoot,
+                modifierParameter: resolver.nativeComponent(for: component, platform: .android)?.modifierParameter,
+                into: &out, context: &context, backend: self)
+            return
+        }
         let target = try resolver.target(for: component, platform: .android, location: location)
         var arguments = try InteropEmission.arguments(for: component, target: target) {
             try renderExpression($0, context: &context)
