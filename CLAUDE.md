@@ -76,6 +76,7 @@ This is a public open-source repository, and its history is public too.
 | `Fixtures/` | Golden conformance corpus: Swift input, expected Kotlin and ArkTS, expected diagnostics |
 | `examples/` | Apps mixing generated and hand-written code |
 | `bench/` | Performance comparisons, generated vs hand-written |
+| `site/` | Static component gallery built from `Fixtures/` and `docs/subset.md` (`node site/serve.mjs`) |
 | `docs/` | Design docs (index below) |
 | `scripts/` | Hooks, privacy scan, repository checks |
 
