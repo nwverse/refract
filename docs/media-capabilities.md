@@ -42,8 +42,9 @@ app-defined policy states, not an assertion that every platform has a sharing pe
 An approval request means only "ask the app to handle approval." It cannot synchronously report that permission was
 granted or that playback, capture or sharing succeeded. Cancellation invalidates the app-owned pending request. A late
 approval must be matched to the still-pending kind, identifier and revision and discarded after cancellation or
-replacement; it must not select `ready`. The synthetic controller compares all three correlation fields and requires both pending and
-current phases to remain `approvalRequired`; a superseded identifier, kind or revision cannot accept an old approval.
+replacement; it must not select `ready`. The synthetic controller compares all three correlation fields and requires
+both pending and current phases to remain `approvalRequired`; a superseded identifier, kind or revision cannot accept
+an old approval.
 Leaving a ready native component lets its app-owned implementation release its resources through normal native
 disposal; the fixture observes that callback only and does not claim to release real hardware or media resources.
 The generator does not invent a second timer, cancellation queue or lifecycle owner.
