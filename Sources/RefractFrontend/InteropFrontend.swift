@@ -17,6 +17,9 @@ struct InteropFrontend {
 
     mutating func declaration(_ node: StructDeclSyntax) -> Bool {
         let inherited = node.inheritanceClause?.inheritedTypes.map(\.type.trimmedDescription) ?? []
+        if inherited.contains("RefractTextInputHost") {
+            return textInputHostDeclaration(node, inherited: inherited)
+        }
         guard inherited.contains("RefractNativeView") else { return false }
         guard inherited == ["RefractNativeView"] else {
             diagnostics.append(error("RFNATIVE001", "Native component `\(node.name.text)` must inherit only `RefractNativeView`.",                  "Keep the marker view's other behavior inside its ordinary SwiftUI body", at: node.name))
@@ -60,6 +63,26 @@ struct InteropFrontend {
         return true
     }
 
+    mutating func textInputHostDeclaration(_ node: StructDeclSyntax, inherited: [String]) -> Bool {
+        let name = node.name.text
+        let host = TextInputHostFrontend(file: file, converter: converter)
+        let result = host.validate(node, inherited: inherited)
+        diagnostics.append(contentsOf: result.diagnostics)
+        guard result.isValid else {
+            invalidDeclarations.insert(name)
+            if result.diagnostics.isEmpty {
+                diagnostics.append(error("RFINPUT001",
+                    "The text-input host must declare its complete signature and private native focus state.",
+                    "Use draft, focusRequest, typed callbacks, @FocusState and an ordinary SwiftUI body", at: node.name))
+            }
+            return true
+        }
+        declarations.append(NativeDeclaration(name: name, parameters: result.parameters,
+                                              kind: .textInputHost, location: location(of: node.name)))
+        locations[name] = location(of: node.name)
+        return true
+    }
+
     func validate(_ component: NativeComponent, declaration: NativeDeclaration?,
                   location: RefractIR.SourceLocation?) -> [Diagnostic] {
         guard let declaration else {
@@ -81,13 +104,17 @@ struct InteropFrontend {
                     "Use declaration-order labels `\(Self.signature(declaration.parameters))`", at: argument.location))
                 continue
             }
-            guard let actualType = argument.type else {
+            let actualType = argument.type
+            guard let actualType else {
                 diagnostics.append(diagnostic("RFSEM001",
                     "Native component `\(component.name)` cannot infer the type of `\(argument.label)`.",
                     "Use a literal or a typed state/model property supported by the state frontend", at: argument.location))
                 continue
             }
-            guard actualType == parameter.type else {
+            let expectedCallback = declaration.kind == .textInputHost
+                ? ["onDraftCommit": NativeParameterType.actionString, "onCommit": .action][parameter.label] : nil
+            let expectedParameterType = expectedCallback ?? parameter.type
+            guard actualType == expectedParameterType else {
                 diagnostics.append(diagnostic("RFNATIVE002",
                     "Native component `\(component.name)` expects `\(parameter.label): \(parameter.type.rawValue)` but receives \(actualType.rawValue).",
                     "Pass a value of the declared Swift type", at: argument.location))

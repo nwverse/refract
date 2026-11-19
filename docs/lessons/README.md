@@ -18,6 +18,7 @@ add to it when you hit something new: what happened, why, and what to do instead
 | Generated-code semantic and native compile review | `docs/lessons/generated-code-review.md` |
 | Native navigation graph binding and restoration tests | `docs/lessons/navigation.md` |
 | Android benchmarking | `docs/lessons/android.md` |
+| Native text input, focus and IME ownership | `docs/lessons/input-host.md` |
 | Local CLI packaging | `docs/lessons/packaging.md` |
 | SwiftPM consumer integration | `docs/lessons/swiftpm.md` |
 | Paired native performance evidence | `docs/lessons/performance.md` |
