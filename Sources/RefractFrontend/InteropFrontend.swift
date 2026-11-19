@@ -33,6 +33,9 @@ struct InteropFrontend {
         }
         var parameters: [NativeParameter] = []
         for member in node.memberBlock.members {
+            let linkParameterNames = Set(parameters.compactMap { parameter in
+                [.linkDestination, .linkPolicy, .linkHandoff].contains(parameter.type) ? parameter.label : nil
+            })
             guard let property = member.decl.as(VariableDeclSyntax.self) else {
                 diagnostics.append(error("RFNATIVE001", "Native component `\(node.name.text)` contains an unsupported declaration.",
                       "Use typed immutable stored properties and a computed SwiftUI `body`", at: member))
@@ -44,12 +47,14 @@ struct InteropFrontend {
                 // Accessibility configuration belongs to the ordinary iOS body, not the cross-platform ABI.
                 // Other property wrappers remain diagnostics rather than silently widening that ABI.
                 if Self.isReduceMotionEnvironment(property, binding) { continue }
+                if linkParameterNames == ["destination", "policy", "handoff"],
+                   Self.isPrivateLinkConfirmationState(property, binding) { continue }
                 guard property.bindingSpecifier.tokenKind == .keyword(.let),
                       binding.initializer == nil, binding.accessorBlock == nil,
                       let annotation = binding.typeAnnotation,
                       let type = Self.scalarType(annotation.type.trimmedDescription) else {
                     diagnostics.append(error("RFNATIVE001", "Native component `\(node.name.text)` has an unsupported stored property.",
-                          "Use `let` with an explicit supported scalar, Image, LocalizedStringKey, RemoteImageLoader or `() -> Void` type", at: binding))
+"Use `let` with an explicit supported scalar, Image, LocalizedStringKey, RawAsset, RemoteImageLoader or `() -> Void` type", at: binding))
                     invalidDeclarations.insert(node.name.text)
                     continue
                 }
@@ -133,6 +138,10 @@ struct InteropFrontend {
         case "Image": .image
         case "LocalizedStringKey": .stringKey
         case "RemoteImageLoader": .remoteImageLoader
+        case "RawAsset": .rawAsset
+        case "RefractLinkDestination": .linkDestination
+        case "RefractLinkPolicy": .linkPolicy
+        case "RefractLinkHandoff": .linkHandoff
         case "() -> Void": .action
         case "(String) -> Void": .actionString
         case "RefractSelectionContent": .selectionContent
@@ -147,6 +156,17 @@ struct InteropFrontend {
             && binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "reduceMotion"
             && binding.accessorBlock == nil
             && property.attributes.trimmedDescription == "@Environment(\\.accessibilityReduceMotion)"
+    }
+
+    static func isPrivateLinkConfirmationState(_ property: VariableDeclSyntax,
+                                                _ binding: PatternBindingSyntax) -> Bool {
+        property.bindingSpecifier.tokenKind == .keyword(.var)
+            && binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == "isConfirming"
+            && property.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) })
+            && binding.typeAnnotation?.type.trimmedDescription == "Bool"
+            && binding.initializer?.value.as(BooleanLiteralExprSyntax.self)?.literal.tokenKind == .keyword(.false)
+            && property.attributes.count == 1
+            && property.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State"
     }
 
     static func signature(_ parameters: [NativeParameter]) -> String {

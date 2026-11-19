@@ -5,7 +5,7 @@ extension Generation {
     func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
                       lazyOwner: Bool = false, mapping: Mapping = .empty,
                       resolver: InteropResolver? = nil, itemParameters: [String: String] = [:],
-                      itemTypeName: String? = nil) throws {
+                      itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
             try emitLayout(layout, children: children, modifiers: modifiers,
@@ -48,7 +48,15 @@ extension Generation {
             let key = "\(items.itemName).\(items.key)"
             writer.close(suffix: ", (\(items.itemName): \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
         case let .image(source, modifiers, _):
-            writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
+            guard let description = source.contentDescription else {
+                writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
+                return
+            }
+            writer.line("Image(\(try image(source, mapping: mapping)))")
+            writer.depth += 1
+            writer.line(".accessibilityText(\(try ArkExpression.emit(description, item: item, mapping: mapping)))")
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.depth -= 1
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, _):
             var rowModifiers: [Modifier] = []
             var switchModifiers = try nativeModifiers.map { operation -> Modifier in
@@ -73,7 +81,7 @@ extension Generation {
             }
             for modifier in modifiers {
                 switch modifier.name {
-                case "accessibilityLabel", "nativeTestTag":
+                case "accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction", "accessibilityIdentifier", "nativeTestTag":
                     switchModifiers.append(modifier)
                 default:
                     rowModifiers.append(modifier)
@@ -109,7 +117,7 @@ extension Generation {
                                  suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)
             }
             writer.close(suffix: ")")
-            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping, traversal: traversal), unlessEmpty: true)
             writer.depth -= 1
             if !labelsHidden {
                 writer.close()

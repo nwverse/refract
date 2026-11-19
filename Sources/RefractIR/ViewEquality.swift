@@ -146,8 +146,15 @@ extension Expression {
                 guard lhsText == rhsText else { return false }
             case let (.nativeValueProperty(lhsValue), .nativeValueProperty(rhsValue)):
                 guard lhsValue == rhsValue else { return false }
-            case let (.imageResource(lhsName), .imageResource(rhsName)):
+            case let (.imageResource(lhsName), .imageResource(rhsName)),
+                 let (.rawAssetResource(lhsName), .rawAssetResource(rhsName)):
                 guard lhsName == rhsName else { return false }
+            case let (.fontAsset(lhsName, lhsSize), .fontAsset(rhsName, rhsSize)):
+                guard lhsName == rhsName, lhsSize == rhsSize else { return false }
+            case let (.linkDestination(lhsDestination), .linkDestination(rhsDestination)):
+                guard lhsDestination == rhsDestination else { return false }
+            case let (.linkPolicy(lhsPolicy), .linkPolicy(rhsPolicy)):
+                guard lhsPolicy == rhsPolicy else { return false }
             case let (.boolLiteral(lhsValue), .boolLiteral(rhsValue)):
                 guard lhsValue == rhsValue else { return false }
             case let (.layoutSpacing(lhsSpacing), .layoutSpacing(rhsSpacing)):
@@ -173,6 +180,11 @@ extension Expression {
                 pending.append((lhsAlternatives.ios, rhsAlternatives.ios))
                 pending.append((lhsAlternatives.android, rhsAlternatives.android))
                 pending.append((lhsAlternatives.harmonyOS, rhsAlternatives.harmonyOS))
+            case let (.accessibilityAction(lhsAction), .accessibilityAction(rhsAction)):
+                guard lhsAction.action == rhsAction.action else { return false }
+                pending.append((lhsAction.label, rhsAction.label))
+            case let (.accessibilityTraversal(lhsTraversal), .accessibilityTraversal(rhsTraversal)):
+                guard lhsTraversal == rhsTraversal else { return false }
             case let (.interactionColor(lhsColor), .interactionColor(rhsColor)):
                 guard lhsColor.token == rhsColor.token else { return false }
                 pending.append((lhsColor.enabled, rhsColor.enabled))

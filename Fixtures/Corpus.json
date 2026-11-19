@@ -2,7 +2,31 @@
   "schemaVersion": 1,
   "cases": [
     {
+      "path": "accessibility-actions-traversal",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "accessibility-dynamic-type",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-reject-branches",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-reject-input",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-reject-navigation",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-reject-size-class",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "adaptive-window-size",
       "implementationStatus": "ready"
     },
     {
@@ -135,6 +159,14 @@
     },
     {
       "path": "interop-document-preview-reject",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-link-handoff",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-link-handoff-reject",
       "implementationStatus": "ready"
     },
     {
@@ -435,6 +467,14 @@
     },
     {
       "path": "rejected-view-declaration",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "resource-reject-missing-assets",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "resource-typed-assets",
       "implementationStatus": "ready"
     },
     {

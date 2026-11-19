@@ -46,7 +46,7 @@
       "pattern": "^[a-z][a-z0-9_]*$"
     },
     "valueType": {
-      "enum": ["string", "bool", "int", "double", "length", "color", "font", "image", "stringKey", "remoteImageLoader", "action", "actionString", "actionBool", "actionInt", "actionDouble", "selectionContent", "selectionContextAction"]
+      "enum": ["string", "bool", "int", "double", "length", "color", "font", "image", "stringKey", "rawAsset", "remoteImageLoader", "linkDestination", "linkPolicy", "linkHandoff", "action", "actionString", "actionBool", "actionInt", "actionDouble", "selectionContent", "selectionContextAction"]
     },
     "parameter": {
       "type": "object",
@@ -232,6 +232,7 @@
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+\\.R$"
         },
         "catalog": { "$ref": "#/$defs/catalogPath" },
+        "assetCatalog": { "const": "res" },
         "strings": { "$ref": "#/$defs/strings" }
       }
     },
@@ -243,6 +244,7 @@
         "namespace": { "$ref": "#/$defs/identifier" },
         "stringTable": { "$ref": "#/$defs/identifier" },
         "catalog": { "$ref": "#/$defs/catalogPath" },
+        "assetCatalog": { "const": "resources" },
         "strings": { "$ref": "#/$defs/strings" }
       }
     },
@@ -300,6 +302,7 @@
         "modifiers": { "$ref": "#/$defs/modifiers" },
         "tokens": { "$ref": "#/$defs/tokens" },
         "symbols": { "$ref": "#/$defs/symbols" },
+        "minimumAPI": { "type": "integer", "minimum": 12 },
         "resources": { "$ref": "#/$defs/androidResources" }
       }
     },
@@ -324,6 +327,7 @@
         "modifiers": { "$ref": "#/$defs/modifiers" },
         "tokens": { "$ref": "#/$defs/tokens" },
         "symbols": { "$ref": "#/$defs/symbols" },
+        "minimumAPI": { "type": "integer", "minimum": 12 },
         "resources": { "$ref": "#/$defs/harmonyResources" }
       }
     }

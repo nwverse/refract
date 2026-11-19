@@ -21,7 +21,7 @@ public struct ComposeBackend: Sendable {
         if module.models.contains(where: { !$0.properties.isEmpty }) {
             context.imports.insert("androidx.compose.runtime.State")
         }
-        try emitEnumDeclarations(module.enums.filter { $0.kind == nil }, into: &bodyWriter)
+        try emitEnumDeclarations(module.enums.filter { $0.kind == nil && !$0.isWidthSizeClass }, into: &bodyWriter)
         try emitComposeItemTypes(module.itemTypes, into: &bodyWriter, context: &context)
         try emitNativeValueTypes(module.screens.flatMap(\.nativeValues), into: &bodyWriter, context: &context)
         for kind in Set(module.screens.flatMap(\.nativeValues).map(\.kind)) where kind == .scenePhase {
@@ -147,7 +147,12 @@ public struct ComposeBackend: Sendable {
         var parameters = nativeHostParameters(screen) + nativeValueParameters(screen.nativeValues)
         for input in screen.parameters {
             context.imports.insert("androidx.compose.ui.Modifier")
-            parameters.append("\(input.name): \(input.itemType ?? input.enumName ?? kotlinType(input.type))\(input.isOptional ? "?" : "")")
+            let itemType = input.itemType == "RefractLinkHandoff" ? InteropMapping.targetType(.linkHandoff, platform: .android) : input.itemType
+            let type = itemType ?? input.enumName ?? kotlinType(input.type)
+            if input.enumName == "WidthSizeClass" {
+                context.imports.insert("androidx.compose.material3.windowsizeclass.WindowWidthSizeClass")
+            }
+            parameters.append("\(input.name): \(type == "WidthSizeClass" ? "WindowWidthSizeClass" : type)\(input.isOptional ? "?" : "")")
         }
         for state in screen.states {
             switch state {
@@ -298,11 +303,15 @@ public struct ComposeBackend: Sendable {
             context.imports.insert("androidx.compose.foundation.layout.Box")
             call = "Box"
         }
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, parentAxis: parentAxis, into: &out, context: &context)
         out.open("\(call)(modifier = \(modifierChain))")
+        let traversal = try prepareComposeAccessibilityTraversal(modifiers, children: children)
+        let savedTraversal = context.accessibilityTraversal
+        context.accessibilityTraversal = traversal
         for child in children {
             try emit(child, parentAxis: axis, into: &out, context: &context)
         }
+        context.accessibilityTraversal = savedTraversal
         out.close()
     }
 
@@ -319,10 +328,13 @@ public struct ComposeBackend: Sendable {
             // fallback is only Kotlin's nullability requirement, not generated error copy.
             text = "\(model).\(property).value ?: \"\""
         }
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, parentAxis: parentAxis, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, isText: true, parentAxis: parentAxis, into: &out, context: &context)
         let textModifiers = try textSpecificModifiers(modifiers, context: &context)
         var arguments = ["text = \(text)"]
-        let styled = modifiers.contains { $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle" }
+        let styled = modifiers.contains {
+            if case .fontAsset = $0.arguments.first?.value { return true }
+            return $0.argumentLabels.contains(where: { $0 != nil }) || $0.name == "foregroundStyle"
+        }
         if modifierChain != "Modifier" {
             if modifiers.contains(where: { $0.arguments.contains(where: {
                 if case .interactionColor = $0.value { return true }
@@ -337,7 +349,12 @@ public struct ComposeBackend: Sendable {
         }
         if styled {
             for modifier in modifiers where ["font", "foregroundStyle", "foregroundColor"].contains(modifier.name) {
-                let value = try composeToken(try ModifierArguments(modifier: modifier).one(),
+                let argument = try ModifierArguments(modifier: modifier).one()
+                if case .fontAsset = argument.value {
+                    arguments.append(contentsOf: try textSpecificModifiers([modifier], context: &context))
+                    continue
+                }
+                let value = try composeToken(argument,
                     category: modifier.name == "font" ? .font : .color, context: &context)
                 arguments.append("\(modifier.name == "font" ? "style" : "color") = \(value)")
             }
@@ -361,7 +378,7 @@ public struct ComposeBackend: Sendable {
                             location: SourceLocation?, into out: inout KotlinWriter,
                             context: inout Context) throws {
         context.imports.insert("androidx.compose.material3.Button")
-        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let modifierChain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         let onClick: String
         if modifiers.contains(where: { $0.name == "retainCallback" }) {
             onClick = "onClick"
@@ -450,7 +467,14 @@ public struct ComposeBackend: Sendable {
                                                      packageName: context.packageName) {
                 try renderExpression($0, context: &context)
             }
+        case let .linkDestination(destination):
+            return LinkHandoffEmission.compose(destination)
+        case let .linkPolicy(policy):
+            return LinkHandoffEmission.compose(policy)
         case let .imageResource(name):
+            if context.mapping.android.resources.assetCatalog != nil {
+                return try composeResource(name, kind: .image, mapping: context.mapping, location: expression.location)
+            }
             guard let resourceClass = context.androidResourceClass, !name.isEmpty,
                   name.allSatisfy({ $0.isASCII && ($0.isLowercase || $0.isNumber || $0 == "_") }) else {
                 throw Diagnostic(code: "RFMAP003",
@@ -460,6 +484,10 @@ public struct ComposeBackend: Sendable {
             }
             context.imports.insert(resourceClass)
             return "R.drawable.\(name)"
+        case let .rawAssetResource(name):
+            return try composeResource(name, kind: .raw, mapping: context.mapping, location: expression.location)
+        case let .fontAsset(name, _):
+            return try composeFontFamily(name, mapping: context.mapping, location: expression.location, context: &context)
         case let .boolLiteral(value):
             return value ? "true" : "false"
         case let .numberLiteral(text):
@@ -493,6 +521,10 @@ public struct ComposeBackend: Sendable {
             return result + "\""
         case let .platformValue(alternatives):
             return try renderExpression(alternatives.android, context: &context)
+        case .accessibilityAction, .accessibilityTraversal:
+            throw Diagnostic(code: "RFACCESS004", message: "An accessibility operation cannot be rendered as a scalar value.",
+                             suggestion: "Keep the typed accessibility operation in its dedicated modifier lowering.",
+                             location: expression.location)
         case let .interactionColor(value):
             return try MappedExpression.interactionColor(value, mapping: context.mapping, platform: .android,
                 renderState: { try renderExpression($0, context: &context) },
@@ -593,6 +625,8 @@ public struct ComposeBackend: Sendable {
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
         var currentModals: [ModalPresentation] = []
+        var accessibilityTraversal: AccessibilityTraversal?
+        var accessibilityTextValues: [String: Int] = [:]
 
         func form(named name: String) -> FormDeclaration? {
             for screen in module.screens {
@@ -643,7 +677,14 @@ struct KotlinWriter {
         if value.isEmpty {
             text += "\n"
         } else {
-            text += String(repeating: "    ", count: depth) + value + "\n"
+            if value.contains("\u{1}") {
+                let continuation = value.split(separator: "\n", omittingEmptySubsequences: false).map {
+                    $0.hasPrefix("\u{1}") ? String($0.dropFirst()) : String($0)
+                }.joined(separator: "\n")
+                text += String(repeating: "    ", count: depth) + continuation.replacingOccurrences(of: "\n", with: "\n" + String(repeating: "    ", count: depth)) + "\n"
+            } else {
+                text += String(repeating: "    ", count: depth) + value + "\n"
+            }
         }
     }
 

@@ -82,6 +82,7 @@ same parameters as the Swift view. Full examples are in the linked fixtures.
 | `Text(verbatim: refractValue(ios: "iOS", android: "Android", harmonyOS: "HarmonyOS"))` | `Text(text = "Android")` | `Text("HarmonyOS")` | Per-platform literal text. The iOS branch feeds SwiftUI's `Text(verbatim:)` initializer, so all three platforms agree on verbatim semantics. The bare localized form `Text(refractValue(...))` is rejected (`R.string.unsupported_expression`): on iOS it would reinterpret the string as a localization key, diverging from the verbatim native output. |
 | `Text(model.title)` | `Text(text = model.title.value)` | `Text(this.model.title)` | Read observable state at the leaf. No eager screen-level snapshot or derived full-view copy. |
 | `Image(systemName: "gear")` | `Icon(imageVector = Icons.Default.Settings, contentDescription = null)` | `Image($r('app.media.settings'))` | A typed per-platform symbol mapping is required. `Image("asset_name")` maps to an application-declared drawable/media resource. Decorative images have a null/empty accessibility description unless an explicit localized label is declared. |
+| `Image("app_logo", label: Text("assets.logo.description"))` | `Image(painter = painterResource(AppR.drawable.app_logo), contentDescription = stringResource(...))` | `Image($r('app.media.app_logo')).accessibilityText($r('app.string.assets_logo_description'))` | A typed app-packaged asset and localized accessibility label. An explicit asset catalog checks base existence and paired dark/density variants at build time; see `docs/asset-catalogs.md`. |
 | `Button("settings.save") { model.save() }` | `Button(onClick = { model.save() }) { Text(text = stringResource(R.string.settings_save)) }` | `Button($r('app.string.settings_save')) { ... }.onClick(() => { this.model.save() })` | The body is exactly one zero-argument action from the model/state section. ArkUI uses a `Button` with a text resource; a custom single-view label uses `Button() { label }`. |
 | `Button { model.save() } label: { Text(verbatim: "Save") }` | `Button(onClick = { model.save() }) { Text(text = "Save") }` | `Button() { Text("Save") }.onClick(() => { this.model.save() })` | Standard SwiftUI action/label syntax for intentional nonlocalized text. `Button(verbatim:)` is not a SwiftUI initializer and is a source-located `unsupportedButton` error; do not add an iOS shim that hides the invalid spelling. |
 | `Button { model.save() } label: { Label(...) }` | `Button(onClick = { model.save() }) { Label(...) }` | `Button() { Label(...) }.onClick(() => { this.model.save() })` | Supported label forms are `Text`, `Image` and `Label`. An action cannot capture arbitrary values or run general Swift code. |
@@ -137,11 +138,32 @@ A modifier combination that cannot preserve the source semantics is diagnosed.
 | `.background(.surface)` | `Modifier.background(AppTheme.colors.surface)` | `.backgroundColor(AppTheme.colors.surface)` | A semantic color token resolved by the mapping; never an RGB fallback. |
 | `.foregroundStyle(.secondary)` | `Modifier` does not change the text call; use `color = AppTheme.colors.secondary` at `Text` | `.fontColor(AppTheme.colors.secondary)` | Text color is passed directly to the leaf instead of adding a draw/layout wrapper. |
 | `.font(.title)` | `style = AppTheme.typography.title` at `Text` | `.font(AppTheme.typography.title)` | A declared typography token. Compose text parameters are direct; no new typography object in composition. |
+| `.font(.custom("app_body", size: 16, relativeTo: .body))` on `Text` | `fontFamily = FontFamily(Font(AppR.font.app_body)), fontSize = 16.sp` | `.fontFamily('app_body').fontSize(16)` | A declared application font with native sp/fp scaling. Font packaging/registration is app-owned; no file read or registry is generated. See `docs/asset-catalogs.md`. |
 | `.cornerRadius(.small)` | `Modifier.clip(RoundedCornerShape(4.dp))` | `.borderRadius(4)` | Clipping follows the documented native semantics. Shape instances are not cached in a Refract runtime. |
 | `.disabled(model.isLocked)` | `enabled = !model.isLocked.value` at the control | `.enabled(!this.model.isLocked)` | This is a view/control property, not a blanket hit-test filter that changes child behavior. |
-| `.accessibilityLabel("settings.icon.hint")` | `Modifier.semantics { contentDescription = ... }` with resource text resolved appropriately | `.accessibilityText($r('app.string.settings_icon_hint'))` | Accessibility labels are localized resources and must not be silently dropped. |
+| `.accessibilityLabel(Text("accessibility.icon.label"))` | `Modifier.semantics { contentDescription = ... }` with resource text read in composition | `.accessibilityText($r('app.string.accessibility_icon_label'))` | Localized accessibility text, never an unlocalized literal. The existing statically typed model-String label overload is preserved. |
+| `.accessibilityHint(Text("accessibility.hint"))` | Supplementary `contentDescription` joined after the label | `.accessibilityDescription(...)` | Platform-specific supplementary descriptions, not editable `hintText` or ArkUI's vehicle-oriented `accessibilityTextHint`; see `docs/accessibility.md`. |
+| `.accessibilityValue(Text("accessibility.state\(model.value)"))` | `stateDescription` | `.accessibilityStateDescription(...)`, API 23+ | Localized current state, retaining the native control and ordinary activation. |
+| `.accessibilityAction(named: Text("accessibility.action")) { model.sync() }` | `customActions = listOf(CustomAccessibilityAction(...))` | `.accessibilityCustomActions([...])`, API 26+ | One typed synchronous model action or scalar local-state action; an ordinary Button remains an accessible alternative. |
+| `.accessibilityIdentifier("sync_now")` on an actionable direct child | `testTag` plus a sibling `traversalIndex` when ordered | `id` where the traversal contract requires it | The ordinary iOS identifier is retained on iOS; names are unique within a declared traversal. |
+| `.accessibilityTraversal([.accessibility("sync_now"), .accessibility("details", after: "sync_now")])` on a direct stack | Parent/merging actionable-child `isTraversalGroup` and zero-based `traversalIndex` | Predecessor `.accessibilityNextFocusId("details")`, API 18+ | Only in the declared Android/HarmonyOS `refractView` branches. The iOS branch uses ordinary `.accessibilitySortPriority`; no cross-platform numeric-priority equivalence is claimed. See `docs/accessibility.md`. |
 | `.sheet(isPresented: $visible) { content }` | Native `ModalBottomSheet` while `visible` is true; dismissal writes the same state/binding false | Root `.bindSheet` with typed `@Builder` and native `onWillDismiss` | A native modal host, not Boolean layout or an overlay registry. One content root; no item sheets or detents in this slice. See `docs/navigation.md`. |
 | `.alert("key", isPresented: $visible) { confirm; cancel } message: { Text("message.key") }` | Native `AlertDialog`, two native buttons, typed confirmation/cancel and `LaunchedEffect` host notification | Typed `on<State>Present` event from `aboutToAppear`/`@Monitor`; application UIContext calls native `showAlertDialog` | Static localized text, one model-action confirmation and one cancel-role button. Native back, focus and accessibility stay with the host. See `docs/navigation.md`. |
+
+### Accessibility actions and traversal
+
+All source-provided accessibility text is a localized `Text` resource or an existing typed model-backed String label.
+Verbatim text, unknown resource keys, untyped callbacks and non-native hint substitutions are errors. Custom actions
+reuse the normal synchronous Button action contract and do not introduce a runtime action registry. Compose reads
+localized semantics strings in composition through `rememberUpdatedState`, never by calling `stringResource` from a
+non-composable semantics/action lambda.
+
+Traversal is deliberately bounded: only direct actionable/image children of a stack can be named, every named child
+must appear once, and `after` must name an earlier entry. Decorative text and non-merging containers cannot be used
+as fake traversal anchors. This sequence affects accessibility metadata, not drawing order. Prefer natural source
+order when it already matches reading order. `harmonyOS.minimumAPI` must meet each native API requirement (18 for
+traversal links, 23 for state descriptions, 26 for custom actions); otherwise `RFACCESS005` fails generation instead
+of dropping semantics. Full source/platform contracts and Native JVM evidence limits are in `docs/accessibility.md`.
 
 ### Dynamic type and native control semantics
 
@@ -155,8 +177,9 @@ replaces a native control with a static visual approximation.
   tokens map to `MaterialTheme.typography.*` (or any application `TextStyle` whose `fontSize` is in `sp`) and
   ArkUI tokens map to application-owned `Font`/`Resource` values in `fp`. The mapping rejects a typography
   token that does not resolve to a typed reference, so there is no silent fallback to a fixed-size literal.
-  The generator does not emit `.fontSize(<fixed>)`, `fontSize(<fixed>)` or any size override on its own;
-  size only changes when the source explicitly requests it through the supported `fontSize` modifier path.
+  The generator does not emit a size override on its own;
+  size only changes when the source explicitly requests it through the supported `fontSize` modifier path or the
+  bounded, body-relative custom font catalog form in `docs/asset-catalogs.md`.
 - **Native control semantics.** A `Toggle`, `TextField` or `Button` lowers to the platform's real control
   (`Switch`/`TextField`/`Button` on Compose, `Toggle`/`TextInput`/`Button` on ArkUI). The control retains
   its checked/value state and onChange/onClick callback; the visible label, when present, is a sibling
@@ -303,6 +326,10 @@ equality/ordering of typed scalar values. Optional unwrapping,
 implicit casts and arbitrary predicates are rejected. `if` content is a view branch, never a statement that
 mutates state during composition.
 
+### Bounded window-width alternatives
+
+`docs/adaptive-layout.md` defines the typed `WidthSizeClass` compact/expanded input. The shared enum/switch Builder and IR preserve one model and screen-local state across native host resizes; a draft that must survive navigation is host-owned through an ordinary binding. Compose receives its native `WindowWidthSizeClass`, while HarmonyOS receives the finite enum. Device detection, font-scale branching and second navigation ownership are diagnostics, not approximate native fallbacks.
+
 ## 5. State and model boundary
 
 The source remains ordinary SwiftUI. `RefractModel` is an empty marker protocol declared by the consuming iOS
@@ -405,6 +432,8 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFMODAL001` | Item sheet, invalid Boolean ownership or malformed sheet content | Use a declared Boolean @State/@Binding and one bounded sheet content root |
 | `RFMODAL002` | Confirmation alert text, action or message shape is unsupported | Use localized static text, one model-action confirmation and one cancel-role button |
 | `RFMODAL003` | Nested/repeated modals, shared presentation state, non-container host or generated event name collision | Keep one sheet and one alert with distinct owners on a supported root container and a unique typed event name |
+| `RFADAPT001` | WidthSizeClass declaration, host input or bounded alternatives are malformed | Declare compact/expanded and switch the native-host widthSizeClass input |
+| `RFADAPT003` | Adaptive width input shares the native navigation path owner | Keep NavigationStack in the host and adaptive settings in a sibling root |
 | `RFNAV401` | TabView, tab item, tag or tab modifier is outside the bounded tab contract | Use `TabView(selection:)` with `.tabItem { Label(...) }` and `.tag(.case)` per docs/navigation.md |
 | `RFNAV402` | Tab selection has invalid ownership, scalar/payload or non-Hashable identity | Use `@State private var tab: Tab = .case` over a no-payload Hashable enum |
 | `RFNAV403` | Tab destination is non-exhaustive, out of order, duplicated or carries stored inputs | Cover every case once, in order, with a zero-argument generated View |
@@ -413,6 +442,10 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFVIEW001` | View has no v0 mapping; unknown views currently use `RFNATIVE001` until a built-in mapping exists | Use a supported view or declare a typed native component |
 | `unsupportedModifier` | Modifier has no v0 mapping | Use a supported modifier or a typed native component |
 | `RFVIEW003` | Modifier argument or axis is unsupported | Use a documented token, scalar dimension or alignment |
+| `RFACCESS001` | Accessibility label/hint/value is not localized typed Text | Use a canonical Text resource or a declared model String label |
+| `RFACCESS002` | Custom accessibility action name or callback is unsupported | Use localized Text and one typed synchronous action |
+| `RFACCESS003` | Traversal identifiers, completeness or predecessor order is invalid | Name unique direct actionable children and use an acyclic source-order sequence |
+| `RFACCESS005` | HarmonyOS minimumAPI is missing or too low for a gated native semantic | Declare the consumer's supported API level or remove the operation; no silent fallback |
 | `RFVIEW004` | Container children or label shape is invalid | Use the documented child and label forms |
 | `RFVIEW005` | Per-platform variation is hidden in free-form `#if` | Use the declared, type-checked platform-value construct |
 | `RFLIST001` | Collection lacks a stable, typed identity | Use `Identifiable` with a stored String or Int id |
@@ -450,6 +483,8 @@ semantic contract and generated diff; there is no blind regeneration workflow.
 | `RFNATIVE001` | Native component declaration is missing | Declare the application view and both typed platform implementations |
 | `RFMAP003` | Native component parameters disagree with the Swift declaration or platform binding | Match every parameter label and supported type in declaration order |
 | `RFNATIVE003` | Platform-value declaration is malformed or incomplete | Declare one typed value for every required platform |
+| `RFLINK001` | Link destination, policy, handoff declaration or constructor is outside the closed literal contract | Use `RefractLinkDestination.https/deepLink`, a literal exact allowlist and an injected `RefractLinkHandoff` |
+| `RFLINK002` | Link scheme/host/path is unsafe or outside the exact scheme/host allowlist | Use the bounded values and policy in `docs/link-handoff.md`; do not dispatch an arbitrary URL |
 | `RFSECURE001` | `.secureReveal` argument is not a projected Bool state/binding, or the modifier is misapplied | Pass `.secureReveal($isRevealed)` once, directly on a `SecureField`, with a declared Bool @State or @Binding |
 | `RFSECURE002` | `SecureField` title or `text:` argument is outside the typed contract | Use `SecureField("settings.password", text: $password)` with a canonical resource key and String state/binding |
 

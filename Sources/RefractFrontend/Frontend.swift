@@ -113,6 +113,7 @@ final class Builder: SyntaxVisitor {
     var currentModals: [ModalPresentation] = []
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
+    var accessibilityPlatform: TargetPlatform?
     var nativeHosts: [NativeHostContract] = []
 
     init(file: String, tree: SourceFileSyntax, mapping: Mapping?, compilationContext: CompilationContext? = nil) {
@@ -222,9 +223,19 @@ final class Builder: SyntaxVisitor {
             member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
                 .as(ArrayTypeSyntax.self) != nil
         }
+        if members.contains(where: { member in
+            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+        }), isNavigationRoot {
+            error("RFADAPT003", "An adaptive layout cannot own the native navigation path or resize a pushed destination.",
+                  "Keep NavigationStack in the host and place the adaptive settings content in a sibling root", at: node.name)
+            return .skipChildren
+        }
         if isNavigationRoot {
             // The navigation parser below validates the path and model inputs together.
-        } else if hasNativeInputs(node) || hasItemInputs || hasTypedInputs(members) {
+        } else if hasNativeInputs(node) || hasItemInputs ||
+            (hasTypedInputs(members) && !members.contains(where: { member in
+                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+            })) {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
             screens.append(body)
             return .skipChildren
@@ -232,9 +243,17 @@ final class Builder: SyntaxVisitor {
         if hasDeclaredModelInputs(node) && !hasTypedInputs(members) {
             guard localStateDeclarations(node) != nil else { return .skipChildren }
         } else if hasTypedInputs(members) {
-            guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
-            screens.append(body)
-            return .skipChildren
+            let isWidthClassSettings = members.contains { member in
+                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+            }
+            if isWidthClassSettings {
+                guard localStateDeclarations(node) != nil else { return .skipChildren }
+                parameters = []
+            } else {
+                guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
+                screens.append(body)
+                return .skipChildren
+            }
         }
         guard let body = node.memberBlock.members.first(where: {
             $0.decl.as(VariableDeclSyntax.self)?.bindings.first?.pattern
@@ -253,6 +272,13 @@ final class Builder: SyntaxVisitor {
             return .visitChildren
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
+        if members.contains(where: { member in
+            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+        }) {
+            guard let screen = statefulWidthClassScreen(node, members: members) else { return .skipChildren }
+            screens.append(screen)
+            return .skipChildren
+        }
         currentStates = states
         currentModels = states.compactMap {
             guard case let .model(reference, _) = $0 else { return nil }
@@ -365,7 +391,12 @@ final class Builder: SyntaxVisitor {
         if name == "refractNativeModifier" { return nativeModifier(call, on: node) }
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "secureReveal" { return secureReveal(call, on: node) }
-        if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
+        if name == "accessibilitySortPriority" { return accessibilitySortPriority(call, on: node) }
+        if ["accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction",
+            "accessibilityTraversal", "accessibilityIdentifier"].contains(name) {
+            if name == "accessibilityIdentifier" { return accessibilityIdentifier(call, on: node) }
+            return accessibilityModifier(call, name: name, on: node)
+        }
         if name == "disabled" { return disabledModifier(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
@@ -403,12 +434,12 @@ final class Builder: SyntaxVisitor {
         return modifier(name, arguments: [], on: node, at: member)
     }
 
-    func modifier(_ name: String, arguments: [Expression], on node: ViewNode,
+    func modifier(_ name: String, arguments: [Expression], argumentLabels: [String?] = [], on node: ViewNode,
                           at syntax: some SyntaxProtocol) -> ViewNode? {
         if case let .component(component, _) = node {
-            return designSystem?.modifiers([Modifier(name: name, arguments: arguments, location: location(of: syntax))], on: component)
+            return designSystem?.modifiers([Modifier(name: name, arguments: arguments, argumentLabels: argumentLabels, location: location(of: syntax))], on: component)
         }
-        let modifier = Modifier(name: name, arguments: arguments, location: location(of: syntax))
+        let modifier = Modifier(name: name, arguments: arguments, argumentLabels: argumentLabels, location: location(of: syntax))
         if let updated = node.appendingModifier(modifier) { return updated }
         error("unsupportedModifierTarget", "This modifier target is not supported yet.", at: syntax)
         return nil
@@ -529,6 +560,11 @@ final class Builder: SyntaxVisitor {
             guard let component = nativeComponent(call) else { return nil }
             guard let declaration = interop.declarations.first(where: { $0.name == name }) else { return nil }
             diagnostics.append(contentsOf: interop.validate(component, declaration: declaration, location: nodeLocation))
+            if declaration.parameters.contains(where: {
+                [.linkDestination, .linkPolicy, .linkHandoff].contains($0.type)
+            }) {
+                diagnostics.append(contentsOf: LinkHandoffFrontend(builder: self).validate(component, declaration: declaration))
+            }
             return .native(component, location: nodeLocation)
         }
     }
@@ -570,6 +606,8 @@ final class Builder: SyntaxVisitor {
                     NativeArgument(label: label, expression: $0.expression, type: .image,
                                    location: location(of: argument))
                 }
+            case .rawAsset:
+                parsed = nativeRawAsset(argument.expression, label: label)
             case .stringKey:
                 parsed = nativeLocalizedText(argument.expression).map {
                     NativeArgument(label: label, expression: $0.expression, type: .stringKey,
@@ -577,6 +615,12 @@ final class Builder: SyntaxVisitor {
                 }
             case .remoteImageLoader:
                 parsed = nativeImageLoader(argument.expression, label: label)
+            case .linkDestination:
+                parsed = LinkHandoffFrontend(builder: self).destination(argument.expression)
+            case .linkPolicy:
+                parsed = LinkHandoffFrontend(builder: self).policy(argument.expression)
+            case .linkHandoff:
+                parsed = LinkHandoffFrontend(builder: self).handoff(argument.expression)
             case .selectionContent:
                 parsed = nativeSelectionContent(argument.expression, label: label)
             case .selectionContextAction:
@@ -630,6 +674,21 @@ final class Builder: SyntaxVisitor {
                                          location: location(of: expression)), .string)
     }
 
+    private func nativeRawAsset(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let call = expression.as(FunctionCallExprSyntax.self),
+              call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "RawAsset",
+              call.arguments.count == 1, call.arguments.first?.label == nil,
+              call.trailingClosure == nil, let name = stringLiteral(call.arguments.first!.expression),
+              AssetCatalog.isResourceName(name) else {
+            error("RFNATIVE002", "RawAsset requires one static lowercase application resource name.",
+                  "Use RawAsset(\"resource_name\") with a declared base raw catalog entry", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, expression: Expression(.rawAssetResource(name),
+                              location: location(of: expression)), type: .rawAsset,
+                              location: location(of: expression))
+    }
+
     private func nativeLocalizedText(_ expression: ExprSyntax) -> TypedExpression? {
         guard stringLiteral(expression) != nil else {
             error("RFNATIVE002", "A native LocalizedStringKey argument requires a literal localization key.",
@@ -669,6 +728,9 @@ final class Builder: SyntaxVisitor {
         }
         var branches: [[ViewNode]] = []
         for argument in call.arguments {
+            guard let platform = TargetPlatform(rawValue: argument.label?.text ?? "") else { return nil }
+            accessibilityPlatform = platform
+            defer { accessibilityPlatform = nil }
             guard let closure = argument.expression.as(ClosureExprSyntax.self),
                   let children = children(of: closure) else {
                 error("RFSEM001", "A platform view branch must contain only supported view expressions.",

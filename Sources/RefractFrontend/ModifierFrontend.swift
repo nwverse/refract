@@ -1,4 +1,5 @@
 import RefractIR
+import RefractMapping
 import SwiftSyntax
 
 extension Builder {
@@ -68,6 +69,26 @@ extension Builder {
 
     private func modifierValue(_ expression: ExprSyntax) -> Expression? {
         let location = location(of: expression)
+        if let call = expression.as(FunctionCallExprSyntax.self),
+           let member = call.calledExpression.as(MemberAccessExprSyntax.self),
+           member.declName.baseName.text == "custom",
+           (member.base == nil || member.base?.as(DeclReferenceExprSyntax.self)?.baseName.text == "Font") {
+            let labels = call.arguments.map(\.label?.text)
+            let arguments = Array(call.arguments)
+            guard labels == [nil, "size", "relativeTo"],
+                  let name = stringLiteral(arguments[0].expression),
+                  AssetCatalog.isResourceName(name),
+                  let size = arguments[1].expression.as(IntegerLiteralExprSyntax.self),
+                  let points = Int(size.literal.text), (1...256).contains(points),
+                  let textStyle = arguments[2].expression.as(MemberAccessExprSyntax.self),
+                  textStyle.base == nil, textStyle.declName.baseName.text == "body",
+                  call.trailingClosure == nil else {
+                error("RFVIEW003", "Custom fonts require a declared name, bounded point size and body-relative scaling.",
+                      "Use Font.custom(\"font_name\", size: 16, relativeTo: .body)", at: expression)
+                return nil
+            }
+            return Expression(.fontAsset(name: name, size: String(points)), location: location)
+        }
         if let call = expression.as(FunctionCallExprSyntax.self),
            call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractInteractionColor" {
             guard call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty,

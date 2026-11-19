@@ -188,10 +188,13 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
     public var tokens: TokenSet
     public var resources: Resources
     public var symbols: [String: SymbolMapping]
+    /// The lowest native SDK level the application compiles for; required by gated accessibility APIs.
+    public var minimumAPI: Int?
 
     public init(output: Output = .unspecified, imports: [NativeImport] = [], components: [String: Component] = [:],
                 nativeComponents: [String: Component] = [:], modifiers: [String: ModifierSignature] = [:],
-                tokens: TokenSet = .empty, resources: Resources = .empty, symbols: [String: SymbolMapping] = [:]) {
+                tokens: TokenSet = .empty, resources: Resources = .empty, symbols: [String: SymbolMapping] = [:],
+                minimumAPI: Int? = nil) {
         self.output = output
         self.imports = imports
         self.components = components
@@ -200,11 +203,12 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
         self.tokens = tokens
         self.resources = resources
         self.symbols = symbols
+        self.minimumAPI = minimumAPI
     }
 
     public static let empty = PlatformMapping()
 
-    enum CodingKeys: String, CodingKey { case output, imports, components, nativeComponents, modifiers, tokens, resources, symbols }
+    enum CodingKeys: String, CodingKey { case output, imports, components, nativeComponents, modifiers, tokens, resources, symbols, minimumAPI }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -216,6 +220,7 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
         tokens = try values.decode(TokenSet.self, forKey: .tokens)
         resources = try values.decode(Resources.self, forKey: .resources)
         symbols = try values.decodeIfPresent([String: SymbolMapping].self, forKey: .symbols) ?? [:]
+        minimumAPI = try values.decodeIfPresent(Int.self, forKey: .minimumAPI)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -228,6 +233,7 @@ public struct PlatformMapping: Codable, Equatable, Sendable {
         try values.encode(tokens, forKey: .tokens)
         try values.encode(resources, forKey: .resources)
         if !symbols.isEmpty { try values.encode(symbols, forKey: .symbols) }
+        try values.encodeIfPresent(minimumAPI, forKey: .minimumAPI)
     }
 }
 
@@ -330,12 +336,14 @@ public struct Parameter: Codable, Equatable, Sendable {
 }
 
 public enum ParameterType: String, Codable, CaseIterable, Sendable {
-    case string, bool, int, double, length, color, font, image, stringKey
+    case string, bool, int, double, length, color, font, image, stringKey, rawAsset
     case action, actionString, actionBool, actionInt, actionDouble
     /// Closed literal text/range values for an app-owned native selection host.
     case selectionContent, selectionContextAction
     /// The app-owned native loading interface; no implementation is generated.
     case remoteImageLoader
+    /// Typed destinations/policies are values; the app owns the actual handoff protocol.
+    case linkDestination, linkPolicy, linkHandoff
 
     public var isAction: Bool { rawValue.hasPrefix("action") }
 
@@ -427,17 +435,23 @@ public struct Resources: Codable, Equatable, Sendable {
     public var namespace: String?
     public var stringTable: String?
     public var catalog: String?
+    /// An explicit Android `res` or HarmonyOS `resources` root; never a glob or asset search path.
+    public var assetCatalog: String?
     public var strings: [String: String]
 
     public init(className: String? = nil, namespace: String? = nil, stringTable: String? = nil,
-                catalog: String? = nil, strings: [String: String] = [:]) {
+                catalog: String? = nil, assetCatalog: String? = nil, strings: [String: String] = [:]) {
         self.className = className
         self.namespace = namespace
         self.stringTable = stringTable
         self.catalog = catalog
+        self.assetCatalog = assetCatalog
         self.strings = strings
     }
     public static let empty = Resources()
+    private enum CodingKeys: String, CodingKey {
+        case className, namespace, stringTable, catalog, assetCatalog, strings
+    }
     public var isConfigured: Bool { className != nil || stringTable != nil }
 }
 

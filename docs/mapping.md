@@ -39,6 +39,13 @@ Android `imports` are fully qualified symbols, emitted in their listed order. Ha
 initializers. Duplicates are errors. The mapping author includes the imports needed by mapped calls and modifier
 chains. The platform compiler checks that referenced symbols and their native types exist.
 
+A platform may add `minimumAPI`, an integer at least 12. It declares the consuming application's minimum native
+SDK/API level. The field is optional for compatibility with existing mappings and is not a claim about the toolchain
+installed on the generation host. Gated native accessibility operations require a sufficient declared HarmonyOS
+level: 18 for `accessibilityNextFocusId`, 23 for `accessibilityStateDescription`, and 26 for
+`accessibilityCustomActions`. If the declaration is absent or too low, generation reports `RFACCESS005` rather than
+silently discarding the operation. See `docs/accessibility.md` for the source contract and evidence limits.
+
 ## Components and parameters
 
 Every entry under `components` has this common part in each platform object:
@@ -198,7 +205,9 @@ name; names are lower-case ASCII identifiers with underscores; in v1 it must equ
 platforms. Keys use lowercase ASCII letter-led alphanumeric dot-separated segments. The key sets and
 normalized names must agree. Resource APIs are emitted directly (`stringResource` plus `R.string`, or `$r` with the declared table),
 so a missing key is a compile-time diagnostic rather than a runtime lookup failure. `docs/localization.md` defines
-catalog parsing and typed formatting.
+catalog parsing and typed formatting. `docs/asset-catalogs.md` defines the opt-in image/font/raw catalog roots,
+qualified binary resources, accessibility and app-owned raw/font boundaries. Those resource names are never
+runtime lookup keys or arbitrary filesystem paths.
 
 ## System symbols
 

@@ -12,13 +12,30 @@ enum ArkExpression {
             return try LocalizedTextEmitter.arkUI(expression, mapping: mapping) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
             }
+        case let .linkDestination(destination):
+            return LinkHandoffEmission.arkUI(destination)
+        case let .linkPolicy(policy):
+            return LinkHandoffEmission.arkUI(policy)
         case let .imageResource(name):
             guard ArkText.isResourceName(name) else {
                 throw Diagnostic(code: "RFMAP003", message: "Native image resource `\(name)` is not a valid resource identifier.",
                                  suggestion: "Use the same lowercase app-owned resource name on both platforms.",
                                  location: expression.location)
             }
+            if mapping.harmonyOS.resources.assetCatalog != nil {
+                _ = try AssetCatalog.resolveBoth(name, kind: .image, mapping: mapping, location: expression.location)
+            }
             return "$r('app.media.\(name)')"
+        case let .rawAssetResource(name):
+            let variants = try AssetCatalog.resolve(name, kind: .raw, mapping: mapping, platform: .harmonyOS,
+                                                    location: expression.location)
+            let suffix = try AssetCatalog.rawExtension(name, variants: variants)
+            return "$rawfile('\(name).\(suffix)')"
+        case .fontAsset:
+            throw Diagnostic(code: "arkui.invalid_font_expression",
+                             message: "A custom font is valid only as the `.font` modifier on Text.",
+                             suggestion: "Use `.font(Font.custom(\"font_name\", size: 16, relativeTo: .body))` on Text",
+                             location: expression.location)
         case let .stringKey(key):
             let resource = try mapping.stringResource(key, platform: .harmonyOS, location: expression.location)
             return "$r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)')"
@@ -52,6 +69,10 @@ enum ArkExpression {
                              location: expression.location)
         case let .platformValue(alternatives):
             return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
+        case .accessibilityAction, .accessibilityTraversal:
+            throw Diagnostic(code: "RFACCESS004", message: "An accessibility operation cannot be rendered as an ArkTS value.",
+                             suggestion: "Keep the typed accessibility operation in its dedicated modifier lowering.",
+                             location: expression.location)
         case let .interactionColor(value):
             return try MappedExpression.interactionColor(value, mapping: mapping, platform: .harmonyOS,
                 renderState: { try emitLocalExpression($0, item: item, mapping: mapping) },

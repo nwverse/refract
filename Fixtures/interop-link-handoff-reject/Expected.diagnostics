@@ -1,0 +1,1 @@
+Input.swift:19:26: error [RFLINK002]: Link handoff `NativeHelpLink` has a destination outside its exact scheme/host allowlist. Suggestion: Add the exact pair to `RefractLinkPolicy` or remove the destination; never bypass the allowlist.

@@ -1,4 +1,5 @@
 import RefractIR
+import RefractMapping
 
 extension ComposeBackend {
     func emitTyped(_ node: ViewNode, isRoot: Bool, parentAxis: ViewNode.StackAxis?,
@@ -25,6 +26,16 @@ extension ComposeBackend {
             throw Diagnostic(code: "RF-C001", message: "A list item can only be lowered inside its parent LazyColumn.",
                              suggestion: "Use ListItem as a direct List child.", location: location)
         case let .image(source, modifiers, location):
+            if context.mapping.android.resources.assetCatalog != nil, let description = source.contentDescription {
+                context.imports.insert("androidx.compose.foundation.Image")
+                context.imports.insert("androidx.compose.ui.res.painterResource")
+                let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
+                let resource = try composeResource(source.name, kind: .image, mapping: context.mapping,
+                                                   location: source.location)
+                let label = try renderExpression(description, context: &context)
+                out.line("Image(painter = painterResource(\(resource)), contentDescription = \(label), modifier = \(chain))")
+                return
+            }
             try emitImage(source, modifiers: modifiers, isRoot: isRoot, location: location,
                           into: &out, context: &context)
         case let .label(title, source, modifiers, location):
@@ -34,7 +45,7 @@ extension ComposeBackend {
             let horizontal = parentAxis != .horizontal
             context.imports.insert(horizontal ? "androidx.compose.material3.HorizontalDivider"
                                                : "androidx.compose.material3.VerticalDivider")
-            let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+            let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
             out.line("\(horizontal ? "HorizontalDivider" : "VerticalDivider")(modifier = \(chain))")
         case .spacer:
             // weight is a RowScope/ColumnScope extension. No foundation.layout.weight import exists publicly.
@@ -77,7 +88,7 @@ extension ComposeBackend {
                              suggestion: "Use one lazy list, or put fixed-size non-scrolling content inside the ScrollView.",
                              location: listLocation ?? location)
         }
-        let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         if axis == .vertical {
             context.imports.insert("androidx.compose.foundation.rememberScrollState")
             context.imports.insert("androidx.compose.foundation.verticalScroll")
@@ -98,7 +109,7 @@ extension ComposeBackend {
         if let projection = items.projection {
             out.line("val \(projection.name) = \(try projectedCollectionExpression(items, context: &context))")
         }
-        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
+        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)))")
         try emitDynamicListItems(items, into: &out, context: &context)
         out.close()
     }
@@ -114,7 +125,7 @@ extension ComposeBackend {
                              suggestion: "Use a model-backed list with a stable item identity.", location: location)
         }
         context.imports.insert("androidx.compose.foundation.lazy.LazyColumn")
-        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, context: &context)))")
+        out.open("LazyColumn(modifier = \(try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)))")
         var keys = Set<String>()
         var keyIndex = 0
         for child in children {
@@ -291,10 +302,14 @@ extension ComposeBackend {
                              suggestion: "Use a lowercase ASCII drawable identifier with digits and underscores.",
                              location: location ?? source.location)
         }
+        if context.mapping.android.resources.assetCatalog != nil {
+            _ = try AssetCatalog.resolveBoth(source.name, kind: .image, mapping: context.mapping,
+                                             location: location ?? source.location)
+        }
         context.imports.insert("androidx.compose.foundation.Image")
         context.imports.insert("androidx.compose.ui.res.painterResource")
         context.imports.insert(resourceClass)
-        let chain = try modifierChain(modifiers, isRoot: isRoot, context: &context)
+        let chain = try modifierChain(modifiers, isRoot: isRoot, into: &out, context: &context)
         out.line("Image(painter = painterResource(R.drawable.\(source.name)), contentDescription = null, modifier = \(chain))")
     }
 

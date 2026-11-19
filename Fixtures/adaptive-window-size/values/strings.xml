@@ -1,0 +1,6 @@
+<resources>
+    <string name="adaptive_open">Open details</string>
+    <string name="settings_display_name">Display name</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_save">Save</string>
+</resources>

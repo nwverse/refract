@@ -142,6 +142,8 @@ build-time diagnostic, never a silently dropped call (goal 3).
   immutable subject, and each matching case exposes its typed payload only in that branch. Mixed, multiple, reference,
   ambiguous or non-exhaustive patterns are diagnostics; no runtime cast or registry is used.
 
+The bounded `WidthSizeClass` input maps to the platform `WindowWidthSizeClass` parameter. The native host calculates it; the component only emits `Compact` versus expanded alternatives. Its model and state ownership are outside those branches; a host-owned binding preserves drafts across native navigation. See `docs/adaptive-layout.md` for the source contract, measurement ownership and Native JVM rendering limits.
+
 ### Lists
 
 `List(items) { item in RowView(item: item) }` and `List { ForEach(items) { item in RowView(item: item) } }` both

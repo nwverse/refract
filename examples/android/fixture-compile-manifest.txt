@@ -39,6 +39,7 @@ cross-file-child-view
 cross-file-enum-switch
 cross-file-two-models
 interop-remote-image
+interop-link-handoff
 navigation-host
 navigation-deep-restoration
 navigation-native-destination
@@ -46,6 +47,7 @@ modal-native-host
 modal-sheet-state
 navigation-tabs-menu
 accessibility-dynamic-type
+accessibility-actions-traversal
 state-counter
 parent-binding
 model-interface
@@ -54,8 +56,10 @@ v0-stack-layout
 selection-dragdrop
 selection-link-context
 mapping/model-scalars
+adaptive-window-size
 v0-text-input
 v0-secure-input
 form-validation
 chat-message-projection
 chat-message-cross-file
+resource-typed-assets

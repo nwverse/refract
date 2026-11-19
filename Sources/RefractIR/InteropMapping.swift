@@ -173,13 +173,21 @@ public enum InteropMapping {
         return diagnostics
     }
 
+    public static func targetType(_ type: NativeParameterType, platform: TargetPlatform) -> String {
+        targetType(type, platform: platform == .android ? "Android" : "HarmonyOS")
+    }
+
     private static func targetType(_ type: NativeParameterType, platform: String) -> String {
         if platform == "HarmonyOS" {
             return switch type {
             case .string, .stringKey: "string"
             case .bool: "boolean"
             case .int, .double, .image: "number"
+            case .rawAsset: "Resource"
             case .remoteImageLoader: "RemoteImageLoader"
+            case .linkDestination: "LinkDestination"
+            case .linkPolicy: "LinkPolicy"
+            case .linkHandoff: "LinkHandoff"
             case .action: "() => void"
             case .actionString: "(string) => void"
             case .selectionContent: "RefractSelectionContent"
@@ -189,9 +197,12 @@ public enum InteropMapping {
         return switch type {
         case .string, .stringKey: "String"
         case .bool: "Boolean"
-        case .int, .image: "Int"
+        case .int, .image, .rawAsset: "Int"
         case .double: "Double"
         case .remoteImageLoader: "RemoteImageLoader"
+        case .linkDestination: "LinkDestination"
+        case .linkPolicy: "LinkPolicy"
+        case .linkHandoff: "LinkHandoff"
         case .action: "() -> Unit"
         case .actionString: "(String) -> Unit"
         case .selectionContent: "RefractSelectionContent"
