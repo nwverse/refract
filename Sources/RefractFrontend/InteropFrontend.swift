@@ -62,6 +62,17 @@ struct InteropFrontend {
                                                   location: location(of: binding)))
             }
         }
+        // These payload/callback types share one closed literal-selection ABI. Accepting a
+        // subset or a renamed callback on an arbitrary native view would widen that ABI.
+        if parameters.contains(where: {
+            [.selectionContent, .actionString, .selectionContextAction].contains($0.type)
+        }), !Self.isLiteralSelectionHost(parameters) {
+            invalidDeclarations.insert(node.name.text)
+            diagnostics.append(error("RFNATIVE001",
+                "Native component `\(node.name.text)` does not have the complete literal-selection host signature.",
+                "Use content, onLink, onUseAsContext and onEditWithAI with the literal-selection types in docs/selection-link-context.md",
+                at: node.name))
+        }
         declarations.append(NativeDeclaration(name: node.name.text, parameters: parameters,
                                               location: location(of: node.name)))
         locations[node.name.text] = location(of: node.name)
@@ -127,6 +138,17 @@ struct InteropFrontend {
             }
         }
         return diagnostics
+    }
+
+    private static let literalSelectionParameters: [(String, NativeParameterType)] = [
+        ("content", .selectionContent),
+        ("onLink", .actionString),
+        ("onUseAsContext", .selectionContextAction),
+        ("onEditWithAI", .selectionContextAction),
+    ]
+
+    private static func isLiteralSelectionHost(_ parameters: [NativeParameter]) -> Bool {
+        parameters.map { ($0.label, $0.type) }.elementsEqual(literalSelectionParameters, by: ==)
     }
 
     static func scalarType(_ type: String) -> NativeParameterType? {
