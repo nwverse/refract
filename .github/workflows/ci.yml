@@ -213,11 +213,11 @@ jobs:
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
         run: ./gradlew --no-daemon :theme-fixture:testDebugUnitTest
-      - name: Publish semantic theme Native JVM captures and test reports
+      - name: Publish semantic theme interaction Native JVM captures and test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: native-jvm-compose-theme
+          name: native-jvm-compose-theme-interaction
           path: |
             examples/android/theme-fixture/build/reports/native-jvm-theme/
             examples/android/theme-fixture/build/reports/tests/

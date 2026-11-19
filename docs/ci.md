@@ -138,8 +138,9 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
     taking precedence over a held native press. `:fixtures` separately selects `values`/`values-night` with real
     Android configuration contexts and drives enlarged text with Compose's corresponding native density/font-scale
     setting. Assertions compare rendered resource colors and text bounds, not only resolver outputs, `sp` or golden
-    text. The `native-jvm-compose-theme` artifact includes the independent interaction-state captures as well as the
-    dark/light and default/large-font captures and JUnit reports. These are Native JVM Compose results, not physical
+    text. The `native-jvm-compose-theme-interaction` artifact contains the independent interaction-state captures
+    and JUnit reports, while `native-jvm-compose-theme` retains the dark/light and default/large-font evidence.
+    These are Native JVM Compose results, not physical
     configuration changes, screen-reader traversal, device or performance evidence.
 12. Reject any untracked files left in the checkout after compilation and tests.
 
