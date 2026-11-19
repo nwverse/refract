@@ -29,6 +29,7 @@ interop-native-lifecycle
 interop-native-notification
 interop-native-background-work
 interop-native-animation
+interop-text-input-host
 interop-native-state-transition
 interop-document-preview
 benchmark-settings

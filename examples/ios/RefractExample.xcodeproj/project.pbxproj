@@ -44,6 +44,7 @@
 				AA0000000000000000000034 /* SelectionLinkContext.swift */,
 				AA0000000000000000000036 /* ThemedSettingsControl.swift */,
 				AA0000000000000000000038 /* MarkdownConversation.swift */,
+				AA000000000000000000003A /* InteropTextInputHost.swift */,
 				AA0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -166,6 +167,12 @@
 			path = ../shared/MarkdownConversation.swift;
 			sourceTree = "<group>";
 		};
+		AA000000000000000000003A /* InteropTextInputHost.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/InteropTextInputHost.swift;
+			sourceTree = "<group>";
+		};
 		AA0000000000000000000008 /* RefractExample.app */ = {
 			isa = PBXFileReference;
 			explicitFileType = wrapper.application;
@@ -192,6 +199,7 @@
 				AA0000000000000000000035 /* SelectionLinkContext.swift in Sources */,
 				AA0000000000000000000037 /* ThemedSettingsControl.swift in Sources */,
 				AA0000000000000000000039 /* MarkdownConversation.swift in Sources */,
+				AA000000000000000000003B /* InteropTextInputHost.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -266,6 +274,10 @@
 		AA0000000000000000000039 /* MarkdownConversation.swift in Sources */ = {
 			isa = PBXBuildFile;
 			fileRef = AA0000000000000000000038 /* MarkdownConversation.swift */;
+		};
+		AA000000000000000000003B /* InteropTextInputHost.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA000000000000000000003A /* InteropTextInputHost.swift */;
 		};
 		AA000000000000000000000D /* Debug */ = {
 			isa = XCBuildConfiguration;
