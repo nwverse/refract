@@ -103,7 +103,8 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    `Expected.kt`, and stage the Kotlin plus the fixture's `values/strings.xml` under
    `examples/android/fixtures/src/main/`. The staged files are `.gitignored`; they are produced on every CI run
    and never committed.
-7. Run `./gradlew --no-daemon :fixtures:compileDebugKotlin` from `examples/android/`. The `:fixtures` module
+7. Run `./gradlew --no-daemon :fixtures:compileDebugKotlin :theme-fixture:compileDebugKotlin` from
+   `examples/android/`. The `:fixtures` module
    (`examples/android/fixtures/`) is an Android library whose `namespace = "refract.generated"` matches the
    package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
    exactly as the fixtures reference. Adding a fixture to the compile set is a manifest-only change; there is no
@@ -128,8 +129,20 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
     and the observed dark-mode semantics tree. This is rendering and interaction evidence only: **it is not an
     emulator, a device screenshot, a cross-platform visual-parity result or a performance measurement.** The captures
     must be inspected rather than inferred from a green test. Tests and their dependencies are confined to the app's
-    test source set and add no runtime dependency to generated code or consumers.
-11. Reject any untracked files left in the checkout after compilation and tests.
+    test source set and add no runtime dependency to generated code or consumers. The `native-jvm-compose-theme`
+    artifact also contains the fixture's dark/light and enlarged-font captures and test reports.
+11. Run `./gradlew --no-daemon :theme-fixture:testDebugUnitTest`. The independent theme module invokes the actual
+    generated `ThemedSettingsControl` through the app-owned `ThemedSettingsAction`. One mutable interaction source
+    supplies the native clickable and its pressed/focused observations. Tests drive real touch/focus changes and
+    assert the generated component's normal, pressed, focused and disabled rendered colors, including disabled
+    taking precedence over a held native press. `:fixtures` separately selects `values`/`values-night` with real
+    Android configuration contexts and drives enlarged text with Compose's corresponding native density/font-scale
+    setting. Assertions compare rendered resource colors and text bounds, not only resolver outputs, `sp` or golden
+    text. The `native-jvm-compose-theme-interaction` artifact contains the independent interaction-state captures
+    and JUnit reports, while `native-jvm-compose-theme` retains the dark/light and default/large-font evidence.
+    These are Native JVM Compose results, not physical
+    configuration changes, screen-reader traversal, device or performance evidence.
+12. Reject any untracked files left in the checkout after compilation and tests.
 
 The `:app:compileDebugKotlin` and `:fixtures:compileDebugKotlin` gates are compile-only. They produce no APK, no
 emulator or device run, and no performance measurement; `docs/GOALS.md` goal 2 is not exercised by those jobs and no
@@ -137,8 +150,9 @@ such claim may be inferred from them. The separate JVM tests do not close that g
 CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not hidden by this
 job. To run the same checks locally, follow `examples/android/README.md`: build the CLI, run
 `scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, set `REFRACT_CLI_PATH`, then
-`./gradlew :app:checkDebugRefract :app:compileDebugKotlin :fixtures:compileDebugKotlin :fixtures:testDebugUnitTest
-:app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21 on `PATH`. Run the `tools/gradle/` functional tests as
+`./gradlew :app:checkDebugRefract :app:compileDebugKotlin :fixtures:compileDebugKotlin :theme-fixture:compileDebugKotlin
+:fixtures:testDebugUnitTest :theme-fixture:testDebugUnitTest :app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21
+on `PATH`. Run the `tools/gradle/` functional tests as
 documented in the example README to cover incremental generation and missing-tool behavior.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or
