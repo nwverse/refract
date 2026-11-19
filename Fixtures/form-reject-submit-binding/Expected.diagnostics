@@ -1,0 +1,1 @@
+Input.swift:17:29: error [RFFORM004]: Model action `save` is not an asynchronous attempt and cannot submit a form. Suggestion: Declare `@refractAsync func save(...)` so the native model owns the attempt and its pending state

@@ -116,6 +116,7 @@ extension Generation {
         case .string: "string"
         case .bool: "boolean"
         case .int, .double: "number"
+        case .revision: "bigint"
         }
     }
 

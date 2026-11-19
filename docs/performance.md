@@ -226,5 +226,25 @@ Memory, startup, recomposition and APK size are reported separately; averages ne
 Label every result **DEVICE** or **EMULATOR**, and include the model, OS/SDK, ABI, build type, dependency/toolchain
 versions, compilation mode, runs and source revision. A headless software-emulator result is never a device result.
 Raw AndroidX JSON and traces are retained alongside `report.json`/`report.md`. A compile-only run or an empty result
-set is not a passing benchmark. See `bench/android/README.md` and `bench/harmony/README.md` for commands and the
-HarmonyOS toolchain gap.
+set is not a passing benchmark. See `bench/android/README.md` for the existing Android harness and `bench/README.md`
+for the iOS/HarmonyOS paired reference contract and evidence limits.
+
+### iOS and HarmonyOS paired references
+
+`bench/ios/` compiles the canonical benchmark Swift source directly as SwiftUI next to an independently written native
+reference; `bench/harmony/` contains actual CLI-generated ArkTS and a separate `@ComponentV2` reference. They use the
+same bounded 200-row model, stable lazy-list identity, accessibility and immutable local updates. Neither reference
+calls the generated row or adds a runtime. The shared fail-closed schema and analysis commands are in
+`bench/common/paired_report.py` and `bench/README.md`.
+
+The protocol requires at least 30 iterations of cold start, scroll and eight-toggle local update, paired raw native
+samples, one distinct native profiler trace per variant/scenario/iteration, explicit target labels and SHA-256-bound
+provenance. iOS uses Xcode launch metrics and explicitly named `CADisplayLink` target intervals; those intervals are
+not CPU frame time. HarmonyOS must use its own native launch/frame profiler metrics. A source-prepared scenario, a
+compiler pass or a synthetic report test is not a timing result. Neither platform has an executed paired measurement
+in this change: iOS has compile-only evidence, while HarmonyOS retains its authorized-SDK/target blocker.
+
+The common reporter retains the existing greater-than-5% **AND** greater-than-0.1 ms screening threshold at p50/p99,
+using nearest rank. With 30 iterations, p99 is the maximum, not an average or a neighboring percentile. A failing tail
+is not hidden by a favorable median or erased by a rerun. Simulator/emulator results never close the physical-device
+gate, and no absolute timing is transferred across platforms.

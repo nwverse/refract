@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="theme_action_normal">#FF526D82</color>
+    <color name="theme_action_pressed">#FF34495E</color>
+    <color name="theme_action_focused">#FF8E6C3D</color>
+    <color name="theme_action_disabled">#FFB8BEC5</color>
+    <color name="theme_content">#FF17212B</color>
+</resources>

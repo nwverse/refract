@@ -56,6 +56,11 @@ extension Builder {
             }) {
                 continue
             }
+            if let form = formState(declaration) {
+                states.append(form)
+                continue
+            }
+            if diagnostics.contains(where: { $0.code.hasPrefix("RFFORM") }) { return nil }
             if let annotation = declaration.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self) {
                 guard declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.attributes.count == 1,
                       declaration.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State",
@@ -147,6 +152,33 @@ extension Builder {
         return states
     }
 
+    /// `@State private var form = refractForm { ... }` or `@Binding var form: RefractForm`.
+    /// Both ownerships lower the draft to per-field native values; only the write path differs.
+    private func formState(_ declaration: VariableDeclSyntax) -> StateDeclaration? {
+        guard declaration.bindingSpecifier.tokenKind == .keyword(.var),
+              declaration.attributes.count == 1,
+              let attribute = declaration.attributes.first?.as(AttributeSyntax.self),
+              ["State", "Binding"].contains(attribute.attributeName.trimmedDescription),
+              declaration.bindings.count == 1, let binding = declaration.bindings.first,
+              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else { return nil }
+        let ownership = attribute.attributeName.trimmedDescription
+        let isFormCall = binding.initializer?.value.as(FunctionCallExprSyntax.self)?
+            .calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "refractForm"
+        let isFormType = binding.typeAnnotation?.type.trimmedDescription == "RefractForm"
+        guard isFormCall || isFormType else { return nil }
+        guard ownership != "Binding" || isFormType, ownership != "State" || isFormCall,
+              declaration.modifiers.contains(where: { $0.name.tokenKind == .keyword(.private) }) == (ownership == "State"),
+              attribute.arguments == nil else {
+            error("state.invalid_declaration", "A form uses `@State private var form = refractForm { ... }` or `@Binding var form: RefractForm`.",
+                  "Keep the draft in local state or pass the parent-owned form declaration", at: declaration)
+            return nil
+        }
+        let initializer = binding.initializer?.value ?? ExprSyntax(DeclReferenceExprSyntax(baseName: .identifier("refractForm")))
+        guard let declaration = formDeclaration(named: name, initializer: initializer, at: declaration) else { return nil }
+        return .form(ownership: ownership == "State" ? .state : .binding, declaration: declaration,
+                     location: declaration.location)
+    }
+
     func stateText(_ expression: ExprSyntax) -> Expression? {
         if let property = modelProperty(expression) { return property }
         if expression.as(MemberAccessExprSyntax.self) != nil {
@@ -195,6 +227,11 @@ extension Builder {
            let action = nativeHostAction(expression) {
             return action
         }
+        if closure.statements.count == 1, let expression = closure.statements.first?.item.as(ExprSyntax.self),
+           let action = formSubmit(expression) {
+            return action
+        }
+        if diagnostics.contains(where: { $0.code == "RFFORM004" }) { return nil }
         if closure.statements.count == 1, let expression = closure.statements.first?.item.as(ExprSyntax.self),
            let action = modelAction(expression) {
             return action
@@ -278,6 +315,10 @@ extension Builder {
         case .int:
             guard let value = expression.as(IntegerLiteralExprSyntax.self) else { return nil }
             return Expression(.numberLiteral(value.literal.text), location: at)
+        case .revision:
+            error("RFMSG001", "A revision literal belongs only in the application's validated message projection.",
+                  "Store the UInt64 revision in the ChatMessage item, not a generic scalar action", at: expression)
+            return nil
         case .double:
             if let value = expression.as(FloatLiteralExprSyntax.self) {
                 return Expression(.numberLiteral(value.literal.text), location: at)

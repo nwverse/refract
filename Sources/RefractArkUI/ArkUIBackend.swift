@@ -38,6 +38,7 @@ struct Generation {
         let resolver = InteropResolver(module: module, mapping: mapping)
         var importLines: [String] = []
         var emittedImports: Set<String> = []
+        let usedTokenOwners = try usedTokenImports(in: module.screens.map(\.body))
         for screen in module.screens {
             try collectImports(screen.body, resolver: resolver, into: &emittedImports)
             for parameter in screen.parameters where parameter.itemType == "RemoteImageLoader" {
@@ -47,9 +48,11 @@ struct Generation {
                 try collectImports(stack, resolver: resolver, into: &emittedImports)
             }
         }
-        for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module })
-            where declaration.symbols.contains(where: emittedImports.contains) {
-            importLines.append("import { \(declaration.symbols.filter(emittedImports.contains).joined(separator: ", ")) } from '\(declaration.module)';")
+        for declaration in resolver.imports(for: .harmonyOS).sorted(by: { $0.module < $1.module }) {
+            let selected = declaration.symbols.filter { emittedImports.contains($0) || usedTokenOwners.contains($0) }
+            if !selected.isEmpty {
+                importLines.append("import { \(selected.joined(separator: ", ")) } from '\(declaration.module)';")
+            }
         }
         for native in usedNativeComponents(in: module.screens.map(\.body)) {
             let target = try resolver.target(for: native.component, platform: .harmonyOS, location: native.location)
@@ -65,6 +68,7 @@ struct Generation {
         emitArkNativeValueTypes(module.screens.flatMap(\.nativeValues), into: &writer)
         try emitArkNativeHosts(module.nativeHosts, into: &writer)
         try emitArkModels(module.models, into: &writer)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
             if case let .navigationStack(stack, _) = screen.body {
                 try emitNavigationDestinations(stack, into: &writer)
@@ -85,11 +89,14 @@ struct Generation {
                 try emitLocalState(state, into: &writer)
             }
             emitArkNativeValues(screen.nativeValues, into: &writer)
+            if let navigation = screen.navigation {
+                try emitNavigationOperation(navigation, into: &writer)
+            }
             if case let .tabView(tabs, _) = screen.body {
                 try emitTabHelpers(tabs, into: &writer)
             }
             // Local-state emission already supplies the separator before lifecycle/build().
-            if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
+            if screen.states.isEmpty, screen.navigation == nil, !screen.parameters.isEmpty { writer.line() }
             try emitArkLifecycle(screen.lifecycle, into: &writer)
             writer.open("build()")
             let previousItemParameters = screenItemTypes
@@ -145,6 +152,13 @@ struct Generation {
                 writer.open(".onClick(() =>")
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
+            }
+            for modifier in modifiers where modifier.name == "disabled" {
+                guard let argument = modifier.arguments.first else {
+                    throw Diagnostic(code: "RFFORM007", message: "`.disabled` needs one Boolean model property.",
+                                     suggestion: "Use `.disabled(model.submitting)`.", location: modifier.location)
+                }
+                writer.line(".enabled(!(\(try emitLocalExpression(argument, item: item, mapping: mapping))))")
             }
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .conditional(branches, location):
@@ -240,11 +254,16 @@ struct Generation {
             let arguments = try InteropEmission.arguments(for: component, target: target) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
             } renderAction: { action in
-                guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
-                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
-                                     location: location)
+                guard case let .modelMethod(model, name, arguments) = action else {
+                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
                 }
-                return "() => { \(try emitLocalAction(action)) }"
+                if arguments.isEmpty { return "() => { \(try emitLocalAction(action)) }" }
+                guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
+                    return try emitArkSelectionAction(action)
+                }
+                return "(destination: string): void => { this.\(model).\(name)(destination); }"
+            } renderSelection: { content in
+                try emitArkSelectionContent(content)
             }
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):
@@ -266,6 +285,10 @@ struct Generation {
                 }
                 writer.line(".reuse({ reuseId: () => '\(contentType)' })")
             }
+        case let .messageBlocks(nested, location):
+            try emitMessageBlocks(nested, into: &writer, parent: item, location: location,
+                                  mapping: mapping, resolver: resolver)
+
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
             try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
                                      labelsHidden: labelsHidden, location: location),
@@ -284,6 +307,7 @@ struct Generation {
         switch type {
         case .string: "string"
         case .int, .double: "number"
+        case .revision: "bigint"
         case .bool: "boolean"
         }
     }
@@ -303,10 +327,58 @@ struct Generation {
         return result
     }
 
+    private func usedTokenImports(in bodies: [ViewNode]) throws -> Set<String> {
+        var result: Set<String> = []
+        func collect(_ expression: Expression) throws {
+            switch expression.value {
+            case let .reference(name):
+                for category in TokenCategory.allCases {
+                    if let token = mapping.harmonyOS.tokens[category][name], let owner = token.importSymbol {
+                        result.insert(owner)
+                    }
+                }
+            case let .platformValue(alternatives):
+                try collect(alternatives.android)
+                try collect(alternatives.harmonyOS)
+            case let .interactionColor(value):
+                let token = try mapping.token(value.token, category: .color,
+                    platform: .harmonyOS, location: expression.location)
+                result.insert(try token.interactionImports(mapping: mapping, platform: .harmonyOS).resolver)
+            default: break
+            }
+        }
+        func collect(_ node: ViewNode) throws {
+            if case let .component(component, _) = node {
+                for modifier in component.modifiers {
+                    for argument in modifier.arguments { try collect(argument) }
+                }
+            }
+            switch node {
+            case let .stack(_, _, modifiers, _), let .layout(_, _, modifiers, _), let .scroll(_, _, modifiers, _),
+                 let .list(_, modifiers, _), let .text(_, modifiers, _), let .button(_, _, modifiers, _),
+                 let .image(_, modifiers, _), let .toggle(_, _, modifiers, _, _, _), let .textInput(_, _, modifiers, _),
+                 let .label(_, _, modifiers, _), let .divider(modifiers, _):
+                for modifier in modifiers {
+                    for argument in modifier.arguments { try collect(argument) }
+                }
+            default: break
+            }
+            for child in node.children(for: .harmonyOS) { try collect(child) }
+        }
+        for body in bodies { try collect(body) }
+        return result
+    }
+
     private func collectImports(_ node: ViewNode, resolver: InteropResolver, into emittedImports: inout Set<String>) throws {
         for child in node.children(for: .harmonyOS) { try collectImports(child, resolver: resolver, into: &emittedImports) }
         if case let .native(component, location) = node {
             emittedImports.insert(try resolver.target(for: component, platform: .harmonyOS, location: location).symbol)
+            for argument in component.arguments {
+                if argument.selection != nil {
+                    emittedImports.formUnion(["RefractSelectionContent", "RefractSelectionLink", "RefractSelectionRange"])
+                }
+                if argument.type == .selectionContextAction { emittedImports.insert("RefractSelectionContext") }
+            }
         }
         collectModifierImports(node, mapping: mapping, into: &emittedImports)
         if case let .component(component, location) = node {
@@ -316,8 +388,8 @@ struct Generation {
                 for argument in modifier.arguments {
                     if case let .reference(reference) = argument.value {
                         for category in TokenCategory.allCases {
-                            if let target = mapping.harmonyOS.tokens[category][reference] {
-                                emittedImports.insert(target.split(separator: ".").first.map(String.init) ?? target)
+                            if let target = mapping.harmonyOS.tokens[category][reference], let owner = target.importSymbol {
+                                emittedImports.insert(owner)
                             }
                         }
                     }
@@ -351,8 +423,8 @@ struct Generation {
                 for expression in [argument] + platformBranches(argument) {
                     guard case let .reference(name) = expression.value, name.contains(".") else { continue }
                     for category in TokenCategory.allCases {
-                        guard let target = mapping.harmonyOS.tokens[category][name] else { continue }
-                        emittedImports.insert(target.split(separator: ".").first.map(String.init) ?? target)
+                        guard let target = mapping.harmonyOS.tokens[category][name], let owner = target.importSymbol else { continue }
+                        emittedImports.insert(owner)
                     }
                 }
             }
@@ -499,7 +571,8 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .nativeHost(_, location), let .navigationPath(_, _, location), let .tabSelection(_, _, location): location
+             let .nativeHost(_, location), let .navigationPath(_, _, location),
+             let .form(_, _, location), let .tabSelection(_, _, location): location
         }
     }
 }

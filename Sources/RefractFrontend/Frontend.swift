@@ -16,6 +16,7 @@ public struct Frontend {
         let resolver = CompilationInputResolver(sources: sources)
         let duplicateDiagnostics = resolver.duplicateDiagnostics()
         var units: [TranslationUnit] = []
+        var pendingMessageBuilders: [Builder] = []
         for file in resolver.files {
             guard file.parserDiagnostics.isEmpty else {
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
@@ -28,6 +29,7 @@ public struct Frontend {
             builder.rejectDuplicateGeneratedDeclarations(file.tree)
             let hasDuplicateGeneratedDeclaration = builder.hasDuplicateGeneratedDeclaration
             builder.walk(file.tree)
+            builder.validateCollectionProjections()
             let module = Module(sourceFile: file.source.path, screens: builder.screens,
                                 nativeDeclarations: builder.interop.declarations,
                                 models: builder.models.filter { $0.location?.file == file.source.path },
@@ -36,17 +38,36 @@ public struct Frontend {
                                     builder.screens.flatMap(\.nativeValues).map { $0.kind.declaration },
                                 nativeHosts: builder.nativeHosts)
             if sources.count == 1 { builder.validateChildViewGraph(module) }
+            builder.bindNavigationDestinations(module)
+            pendingMessageBuilders.append(builder)
             builder.validateNavigationDeclarations(module)
             builder.validateRowContentTypes(module)
+            builder.validateMessageProjection(module)
             let diagnostics = duplicateDiagnostics[file.source.path, default: []] + builder.diagnostics
             if hasDuplicateGeneratedDeclaration || duplicateDiagnostics[file.source.path]?.isEmpty == false {
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
                                              diagnostics: diagnostics))
                 continue
             }
-            units.append(TranslationUnit(module: module, diagnostics: diagnostics,
+            let boundModule = Module(sourceFile: file.source.path, screens: builder.screens,
+                                     nativeDeclarations: builder.interop.declarations,
+                                     models: builder.models.filter { $0.location?.file == file.source.path },
+                                     itemTypes: builder.itemTypes.filter { $0.location?.file == file.source.path },
+                                     enums: builder.enums.filter { $0.location?.file == file.source.path })
+            units.append(TranslationUnit(module: boundModule, diagnostics: diagnostics,
                                          resolvedModels: builder.models,
                                          resolvedItemTypes: builder.itemTypes))
+        }
+        let allScreens = units.flatMap(\.module.screens)
+        for builder in pendingMessageBuilders { builder.linkMessageProjection(siblingScreens: allScreens) }
+        units = units.map { unit in
+            guard let builder = pendingMessageBuilders.first(where: { $0.file == unit.module.sourceFile }),
+                  !builder.pendingMessageBodies.isEmpty else { return unit }
+            let module = Module(sourceFile: builder.file, screens: builder.screens,
+                                nativeDeclarations: unit.module.nativeDeclarations,
+                                models: unit.module.models, itemTypes: unit.module.itemTypes, enums: unit.module.enums)
+            return TranslationUnit(module: module, diagnostics: unit.diagnostics,
+                                   resolvedModels: unit.resolvedModels, resolvedItemTypes: unit.resolvedItemTypes)
         }
         if sources.count > 1, let cycle = CompilationInputResolver.declarationCycleDiagnostic(units: units) {
             units = units.map { unit in
@@ -80,6 +101,11 @@ final class Builder: SyntaxVisitor {
     var currentNativeValues: [NativeValueReference] = []
     var currentListItem: String?
     var currentListItemType: ItemType?
+    var currentMessageParent: (name: String, type: ItemType)?
+    var currentMessageBlockNames: (parent: String, block: String)?
+    var pendingMessageSources: [(outer: Expression, content: ViewNode, screen: String, modelType: String)] = []
+    var pendingMessageBodies: [(screen: String, body: ViewNode)] = []
+    var pendingMessageOwners: [String: Screen] = [:]
     var currentBindings: [String: ValueType] = [:]
     var viewDeclarations: [String: StructDeclSyntax] = [:]
     var pendingNavigationDestinations: [NavigationDestination] = []
@@ -104,19 +130,9 @@ final class Builder: SyntaxVisitor {
         collectItemTypes(tree)
         collectModels(tree)
         collectNativeHosts(tree)
-        for statement in tree.statements {
-            if let declaration = statement.item.as(StructDeclSyntax.self),
-               declaration.inheritanceClause?.inheritedTypes.contains(where: {
-                   $0.type.trimmedDescription == "View"
-               }) == true || (declaration.inheritanceClause?.inheritedTypes.map(\.type.trimmedDescription) ?? []).contains(where: { type in
-                   NativeValueKind.allCases.contains(where: { $0.typeName == type })
-               }) {
-                viewDeclarations[declaration.name.text] = declaration
-            }
-        }
+        collectDeclaredViews(tree)
         if let compilationContext {
             models = compilationContext.models + models
-            itemTypes = compilationContext.itemTypes + itemTypes
             enums = compilationContext.enums + enums
             var modelKeys: Set<String> = []
             models = models.filter { modelKeys.insert(Self.declarationKey(name: $0.name, location: $0.location)).inserted }
@@ -231,6 +247,11 @@ final class Builder: SyntaxVisitor {
         }
         guard let native = nativeScreenInputs(node, states: states) else { return .skipChildren }
         currentNativeValues = native.values
+        let forms = states.compactMap { state -> FormDeclaration? in
+            guard case let .form(_, declaration, _) = state else { return nil }
+            return declaration
+        }
+        guard validateForms(forms) else { return .skipChildren }
         parameters = []
         currentListItem = nil
         currentListItemType = nil
@@ -250,6 +271,7 @@ final class Builder: SyntaxVisitor {
 
     func view(_ expression: ExprSyntax) -> ViewNode? {
         if let call = expression.as(FunctionCallExprSyntax.self), forEachCall(expression) != nil {
+            if currentListItemType?.name == "ChatMessage" { return messageBlocks(call) }
             error("RFLIST003", "ForEach must be the sole dynamic child directly owned by List, not nested or eagerly rendered.",
                   "Use List { ForEach(model.items) { item in ... } } with a stable stored id", at: call)
             return nil
@@ -260,6 +282,9 @@ final class Builder: SyntaxVisitor {
             // when classifying the inner call as a view or a modifier.
             if let base = call.calledExpression.as(FunctionCallExprSyntax.self),
                base.calledExpression.as(MemberAccessExprSyntax.self)?.declName.baseName.text != "refractNativeValue" {
+                if base.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "Form" {
+                    return formContainer(call)
+                }
                 var inner = base
                 inner.trailingClosure = call.trailingClosure
                 inner.additionalTrailingClosures = call.additionalTrailingClosures
@@ -284,14 +309,10 @@ final class Builder: SyntaxVisitor {
             if extendedViewHandles(name: call.calledExpression.trimmedDescription) {
                 return extendedView(call)
             }
+            if call.calledExpression.trimmedDescription == "Form" { return formContainer(call) }
             if call.calledExpression.trimmedDescription == "NavigationStack" { return navigationStack(call) }
             if call.calledExpression.trimmedDescription == "TabView" { return tabView(call) }
             if call.calledExpression.trimmedDescription == "NavigationLink" {
-                guard currentStates.contains(where: { if case .navigationPath = $0 { true } else { false } }) else {
-                    error("RFNAV001", "NavigationLink must belong to a NavigationStack with a typed destination path.",
-                          "Use `NavigationStack(path: $path)` and a no-payload Hashable destination enum", at: call)
-                    return nil
-                }
                 return navigationLink(call)
             }
             if let control = stateControl(call) { return control }
@@ -319,6 +340,7 @@ final class Builder: SyntaxVisitor {
         if name == "labelsHidden" { return labelsHidden(call, on: node) }
         if name == "secureReveal" { return secureReveal(call, on: node) }
         if name == "accessibilityLabel" { return accessibilityLabel(call, on: node) }
+        if name == "disabled" { return disabledModifier(call, on: node) }
         let before = diagnostics.count
         if let builtin = builtinModifier(call, name: name) {
             if diagnostics.count > before { return nil }
@@ -390,14 +412,19 @@ final class Builder: SyntaxVisitor {
                           children: children, modifiers: [], location: nodeLocation)
         case "Text":
             let beforeText = diagnostics.count
-            if let argument = call.arguments.first, argument.label == nil,
-               let value = modelTypedProperty(argument.expression) {
-                guard value.type == .string else {
-                    error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
-                          "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
-                    return nil
+            if let argument = call.arguments.first, argument.label == nil {
+                if let field = formFieldReference(argument.expression) {
+                    guard field.type == .string else { return nil }
+                    return .text(field.expression, modifiers: [], location: nodeLocation)
                 }
-                return .text(value.expression, modifiers: [], location: nodeLocation)
+                if let value = modelTypedProperty(argument.expression) {
+                    guard value.type == .string else {
+                        error("RFSEM001", "Text requires a String expression, not the declared scalar type of this property.",
+                              "Use a String item or model property, or a supported localized interpolation", at: argument.expression)
+                        return nil
+                    }
+                    return .text(value.expression, modifiers: [], location: nodeLocation)
+                }
             }
             if let argument = call.arguments.first, argument.label == nil,
                let reference = argument.expression.as(DeclReferenceExprSyntax.self),
@@ -507,6 +534,12 @@ final class Builder: SyntaxVisitor {
                 }
             case .remoteImageLoader:
                 parsed = nativeImageLoader(argument.expression, label: label)
+            case .selectionContent:
+                parsed = nativeSelectionContent(argument.expression, label: label)
+            case .selectionContextAction:
+                parsed = nativeSelectionContextAction(argument.expression, label: label)
+            case .actionString:
+                parsed = nativeStringAction(argument.expression, label: label)
             case .action:
                 parsed = nativeAction(argument.expression, label: label)
             case .string, .bool, .int, .double:
@@ -606,6 +639,7 @@ final class Builder: SyntaxVisitor {
     }
 
     func scalar(_ expression: ExprSyntax) -> TypedExpression? {
+        if let field = formFieldReference(expression) { return field }
         if let string = stringLiteral(expression) {
             return TypedExpression(Expression(.stringLiteral(string), type: .string,
                                              location: location(of: expression)), .string)

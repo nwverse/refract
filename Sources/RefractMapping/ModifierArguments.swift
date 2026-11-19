@@ -66,7 +66,8 @@ public struct ModifierValue {
         case .numberLiteral:
             return (try number(), true)
         case let .reference(name) where name.contains("."):
-            return (try mapping.token(name, category: category, platform: platform, location: location), false)
+            return (try mapping.token(name, category: category, platform: platform, location: location)
+                .compose(location: location), false)
         case let .platformValue(alternatives):
             let branch = platform == .android ? alternatives.android : alternatives.harmonyOS
             return try ModifierValue(expression: branch, mapping: mapping, location: location)
