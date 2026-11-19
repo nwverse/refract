@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": {
+      "directory": "generated",
+      "packageName": "dev.refract.bench"
+    },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {
+        "DesignTypography.screenTitle": "androidx.compose.material3.MaterialTheme.typography.headlineSmall",
+        "DesignTypography.rowTitle": "androidx.compose.material3.MaterialTheme.typography.bodyLarge",
+        "DesignTypography.rowSubtitle": "androidx.compose.material3.MaterialTheme.typography.bodySmall"
+      },
+      "color": {}
+    },
+    "resources": {
+      "className": "dev.refract.bench.R",
+      "catalog": "../android/screen/src/main/res/values/strings.xml",
+      "strings": {
+        "settings.item": "settings_item"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": {
+      "directory": "generated"
+    },
+    "imports": [
+      {
+        "module": "../native/AppTypography",
+        "symbols": [
+          "AppTypography"
+        ]
+      }
+    ],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": {},
+      "radius": {},
+      "font": {
+        "DesignTypography.screenTitle": "AppTypography.screenTitle",
+        "DesignTypography.rowTitle": "AppTypography.rowTitle",
+        "DesignTypography.rowSubtitle": "AppTypography.rowSubtitle"
+      },
+      "color": {}
+    },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "../android/resources/base/element/string.json",
+      "strings": {
+        "settings.item": "settings_item"
+      }
+    }
+  }
+}

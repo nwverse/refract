@@ -50,6 +50,7 @@ export ANDROID_HOME=/path/to/android-sdk
 export JAVA_HOME=/path/to/jdk21
 swift build --package-path ../..
 export REFRACT_CLI_PATH="$PWD/../../.build/debug/refract"
+export REFRACT_REQUIRED_VERSION="$($REFRACT_CLI_PATH --version)"
 ./gradlew -p examples/android :app:assembleDebug
 ./gradlew -p examples/android :app:checkDebugRefract
 
@@ -135,6 +136,32 @@ cd examples/android
 ./gradlew :fixtures:compileDebugKotlin
 ```
 
+### Theme interaction and dynamic-type Native JVM tests
+
+`theme-interaction-states` supplies one generated settings component, an app-owned state resolver and light/night
+resources. `ThemedSettingsAction` observes one actual `MutableInteractionSource` and passes its Boolean pressed and
+focused values into the generated component. The independent `theme-fixture` module compiles the exact golden Kotlin
+with those application resources, and CI includes it in the Android compile gate:
+
+```sh
+./gradlew :theme-fixture:compileDebugKotlin
+```
+
+The fixture test source set compiles that same generated component again with Robolectric and runs
+`ThemeInteractionTest`. It verifies actual press/focus/disabled precedence, light-versus-night rendered pixels and
+default-versus-2x-fontScale text bounds. Run the canonical staging step first, then:
+
+```sh
+python3 scripts/check_fixture_compilation.py
+cd examples/android
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.theme.ThemeInteractionTest
+```
+
+The captures and measured bounds are written to `fixtures/build/reports/native-jvm-compose/` and uploaded as
+`native-jvm-compose-theme` by CI. **These are Native JVM Compose results, not emulator/device screenshots, physical
+screen-reader checks or performance measurements.** The resolver is application code, not a Refract runtime or an
+automatic interaction-state discovery mechanism. iOS and ArkUI compilation/rendering are separate tool checks.
+
 ### Native animation lifecycle tests
 
 The app-owned `NativeSaveConfirmation` demonstrates a typed visibility/identity boundary. Its implementation uses
@@ -194,12 +221,27 @@ This is native model JVM evidence only. It performs no network request, renders 
 device, ArkTS compiler, runtime observation or performance evidence. A HarmonyOS implementation must provide the
 corresponding app-owned data-source notifications and lifecycle cancellation described in `docs/state-and-models.md`.
 
+### Typed projection tests
+
+`list-typed-projection` compiles the actual generated Compose pure projection. Its Native JVM test covers empty input,
+finite category filtering, `.all` reset, descending Int rank, ascending Int id ties and original item instance identity:
+
+```sh
+./gradlew :fixtures:testDebugUnitTest --tests com.example.refract.projection.CatalogProjectionTest
+```
+
+The generated list retains original item ids. The reviewed ArkUI output exports the pure function and consumes the
+app-owned projected `BasicDataSource`; it has no runtime mirror or synchronization adapter. ArkTS, iOS and device
+compilation are not claimed by this host-JVM test.
+
 ## Opt-in Gradle generation
 
 The repository's `tools/gradle/` build supplies the `dev.refract.generator` plugin. `app/build.gradle.kts` opts in
 and declares the four shared Swift inputs as the `screens` group, using the shared mapping and both resource
-catalogs. `REFRACT_CLI_PATH` supplies a version-matched CLI
-without a machine-global path. An application may instead set `refract.executable`; the plugin never runs an implicit
+catalogs. `REFRACT_CLI_PATH` supplies a version-matched CLI and `REFRACT_REQUIRED_VERSION` pins its exact
+`refract --version` output before generation or publication. The existing debug/release source-group roots remain the
+reviewed production outputs. To bind debug, internal and release to separate output roots, publish
+them explicitly and check both native backends, see `../../docs/generation-configurations.md`. An application may instead set `refract.executable`; the plugin never runs an implicit
 Swift build. There is no Refract runtime dependency or application start-up hook.
 
 `:app:generateDebugRefract` generates the group below the variant's build-owned `generated/refract/` directory.

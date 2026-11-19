@@ -135,6 +135,19 @@ extension ComposeBackend {
             onChange = "{ value -> \(name) = value }"
         case let .valueProperty(.binding(name)):
             onChange = "on\(name.uppercasingFirst())Change"
+        case let .formField(form, field):
+            guard let declaration = context.form(named: form), declaration.field(named: field) != nil else {
+                throw Diagnostic(code: "RFFORM002", message: "Unknown form field `\(form).\(field)`.",
+                                 suggestion: "Declare the field in refractForm.", location: value.location)
+            }
+            let name = "\(form)\(field.uppercasingFirst())"
+            let isBinding = context.module.screens.contains { screen in
+                screen.states.contains {
+                    if case let .form(.binding, declared, _) = $0 { return declared.name == form }
+                    return false
+                }
+            }
+            onChange = isBinding ? "on\(name.uppercasingFirst())Change" : "{ value -> \(name) = value }"
         case let .valueProperty(.modelScalarBinding(binding)):
             onChange = "{ value -> \(binding.model).\(binding.action)(value) }"
         default:

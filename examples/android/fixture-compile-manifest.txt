@@ -21,6 +21,7 @@ control-switch-modifier
 list-foreach
 list-foreach-explicit-id
 list-paged-search
+list-typed-projection
 v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
@@ -35,6 +36,7 @@ cross-file-enum-switch
 cross-file-two-models
 interop-remote-image
 navigation-host
+navigation-deep-restoration
 navigation-native-destination
 navigation-tabs-menu
 accessibility-dynamic-type
@@ -44,6 +46,10 @@ parent-binding
 model-interface
 v0-stack-layout
 selection-dragdrop
+selection-link-context
 mapping/model-scalars
 v0-text-input
 v0-secure-input
+form-validation
+chat-message-projection
+chat-message-cross-file

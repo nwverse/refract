@@ -46,7 +46,7 @@
       "pattern": "^[a-z][a-z0-9_]*$"
     },
     "valueType": {
-      "enum": ["string", "bool", "int", "double", "length", "color", "font", "image", "stringKey", "remoteImageLoader", "action", "actionString", "actionBool", "actionInt", "actionDouble"]
+      "enum": ["string", "bool", "int", "double", "length", "color", "font", "image", "stringKey", "remoteImageLoader", "action", "actionString", "actionBool", "actionInt", "actionDouble", "selectionContent", "selectionContextAction"]
     },
     "parameter": {
       "type": "object",
@@ -150,10 +150,44 @@
       },
       "maxProperties": 256
     },
-    "tokenValues": {
+    "interactionValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/qualifiedReference" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resource"],
+          "properties": { "resource": { "$ref": "#/$defs/resourceName" } }
+        }
+      ]
+    },
+    "interactionToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolver", "normal", "disabled", "pressed", "focused"],
+      "properties": {
+        "resolver": { "$ref": "#/$defs/qualifiedReference" },
+        "normal": { "$ref": "#/$defs/interactionValue" },
+        "disabled": { "$ref": "#/$defs/interactionValue" },
+        "pressed": { "$ref": "#/$defs/interactionValue" },
+        "focused": { "$ref": "#/$defs/interactionValue" }
+      }
+    },
+    "staticTokenValues": {
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/tokenKey" },
       "additionalProperties": { "$ref": "#/$defs/qualifiedReference" },
+      "maxProperties": 1024
+    },
+    "tokenValues": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/tokenKey" },
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/$defs/qualifiedReference" },
+          { "$ref": "#/$defs/interactionToken" }
+        ]
+      },
       "maxProperties": 1024
     },
     "tokens": {
@@ -161,9 +195,9 @@
       "additionalProperties": false,
       "required": ["spacing", "radius", "font", "color"],
       "properties": {
-        "spacing": { "$ref": "#/$defs/tokenValues" },
-        "radius": { "$ref": "#/$defs/tokenValues" },
-        "font": { "$ref": "#/$defs/tokenValues" },
+        "spacing": { "$ref": "#/$defs/staticTokenValues" },
+        "radius": { "$ref": "#/$defs/staticTokenValues" },
+        "font": { "$ref": "#/$defs/staticTokenValues" },
         "color": { "$ref": "#/$defs/tokenValues" }
       }
     },

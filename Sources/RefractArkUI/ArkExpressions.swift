@@ -50,13 +50,17 @@ enum ArkExpression {
             throw Diagnostic(code: "RFACCESS004", message: "An accessibility operation cannot be rendered as an ArkTS value.",
                              suggestion: "Keep the typed accessibility operation in its dedicated modifier lowering.",
                              location: expression.location)
+        case let .interactionColor(value):
+            return try MappedExpression.interactionColor(value, mapping: mapping, platform: .harmonyOS,
+                renderState: { try emitLocalExpression($0, item: item, mapping: mapping) },
+                location: expression.location)
         case let .valueProperty(.model(model, property)):
             return "this.\(try referenceName(model, location: expression.location)).\(try referenceName(property, location: expression.location))"
         case let .valueProperty(.modelScalarBinding(binding)):
             return "this.\(try referenceName(binding.model, location: expression.location)).\(try referenceName(binding.property, location: expression.location))"
         case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
             return "this.\(try referenceName(name, location: expression.location))"
-        case .valueProperty, .interpolatedString:
+        case .valueProperty, .interpolatedString, .formField, .presence, .formValid:
             throw Diagnostic(code: "arkui.unsupported_state_expression",
                              message: "This state expression requires the local-state lowering.",
                              suggestion: "Use a supported state read or interpolation.",

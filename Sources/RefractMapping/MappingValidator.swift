@@ -272,7 +272,29 @@ final class MappingValidator {
                           "Use one token category for this key.", at: reference.location)
                 }
                 keys[key] = category.rawValue
-                pattern(reference, Self.referencePattern, "a qualified native token reference", code: "mappingToken")
+                if reference.object != nil {
+                    guard category == .color else {
+                        error("mappingToken", "Only a color token can declare interaction states.",
+                              "Use a native symbol for spacing, radius and font tokens.", at: reference.location)
+                        continue
+                    }
+                    fields(reference, allowed: ["resolver", "normal", "disabled", "pressed", "focused"])
+                    pattern(field("resolver", in: reference, required: true), Self.referencePattern,
+                            "an application-owned interaction resolver", code: "mappingToken")
+                    for state in ["normal", "disabled", "pressed", "focused"] {
+                        guard let value = field(state, in: reference, required: true) else { continue }
+                        if value.object != nil {
+                            fields(value, allowed: ["resource"])
+                            pattern(field("resource", in: value, required: true), "^[a-z][a-z0-9_]*$",
+                                    "a native color resource name", code: "mappingToken")
+                        } else {
+                            pattern(value, Self.referencePattern, "a native symbol or structured color resource",
+                                    code: "mappingToken")
+                        }
+                    }
+                } else {
+                    pattern(reference, Self.referencePattern, "a qualified native token reference", code: "mappingToken")
+                }
             }
         }
     }

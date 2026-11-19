@@ -5,7 +5,9 @@ enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty,
                      isText: Bool = false, traversal: AccessibilityTraversal? = nil) throws -> String {
         let measurement = modifiers.filter { Self.accessibilityNames.contains($0.name) }
-        let layout = modifiers.filter { !Self.accessibilityNames.contains($0.name) }
+        let layout = modifiers.filter {
+            !Self.accessibilityNames.contains($0.name) && $0.name != "disabled"
+        }
         if !measurement.isEmpty {
             let native = try Self.emitAccessibility(measurement, item: item, mapping: mapping, traversal: traversal)
             if native.isEmpty { return try emit(layout, item: item, mapping: mapping, isText: isText) }
@@ -59,7 +61,7 @@ enum ArkModifiers {
                 switch expression.value {
                 case let .reference(name):
                     return TokenCategory.allCases.contains { mapping.harmonyOS.tokens[$0][name] != nil }
-                case .platformValue:
+                case .platformValue, .interactionColor:
                     return true
                 default:
                     return false
