@@ -17,15 +17,11 @@ extension Generation {
             writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .list(children, modifiers, _):
-            if children.count == 1, case let .horizontalSections(sections, _) = children[0] {
-                try emitHorizontalSections(sections, into: &writer, mapping: mapping, resolver: resolver)
-            } else {
-                writer.open("List()")
-                for child in children {
-                    try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver)
-                }
-                writer.close()
+            writer.open("List()")
+            for child in children {
+                try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver)
             }
+            writer.close()
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .section(header, children, _):
             writer.open("ListItemGroup(\(try header.map { "{ header: Text(\(try ArkExpression.emit($0, mapping: mapping))) }" } ?? ""))")

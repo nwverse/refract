@@ -162,6 +162,18 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "horizontal-sections-reject-row",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "horizontal-sections-reject-stack",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "horizontal-sections-reject-static",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-document-preview",
       "implementationStatus": "ready"
     },
