@@ -298,7 +298,7 @@ public extension ViewNode {
 
     var sourceLocation: SourceLocation? {
         switch self {
-        case let .stack(_, _, _, location), let .text(_, _, location), let .button(_, _, _, location),
+        case let .stack(_, _, _, location), let .text(_, _, location), let .markdown(_, _, _, location), let .button(_, _, _, location),
              let .native(_, location), let .nativeModifier(_, _, location), let .component(_, location),
              let .child(_, location), let .platformView(_, location), let .conditional(_, location),
              let .layout(_, _, _, location), let .scroll(_, _, _, location), let .list(_, _, location),
