@@ -54,7 +54,7 @@ every maintained document must be indexed, every relative Markdown link and imag
 and every literal repository path in inline code must exist. If a promised path is renamed, update its original
 documentation references in the owning change rather than deleting a broken reference.
 
-Both Swift jobs run `swift build`, the complete `swift test`, and `python3 -I scripts/test_swiftpm_consumer.py`. The consumer test uses the real plugin with explicit inputs and plugin-work outputs; it checks no-op scheduling, dependency invalidation, fail-closed output checks and sandbox boundaries. macOS compiles an ordinary SwiftUI host library, not an Xcode iOS app or a device. Linux uses an isolated syntax-only module for build-order testing and makes no SwiftUI claim. Kotlin and ArkTS are staged/committed generation outputs, not languages compiled by SwiftPM. The jobs then run the documented `swift test --filter GoldenTests` regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. CLI
+Both Swift jobs run `swift build`, the complete `swift test`, and `python3 -I scripts/test_swiftpm_consumer.py`. On macOS the test step first derives and validates XCTest and `libXCTestSwiftSupport` locations from `xcrun --show-sdk-platform-path`, exporting the corresponding framework/library search paths. This keeps the SwiftPM testing helper's dynamic loading independent of a machine-specific Xcode installation path; it changes neither the tests nor the app's runtime. The consumer test uses the real plugin with explicit inputs and plugin-work outputs; it checks no-op scheduling, dependency invalidation, fail-closed output checks and sandbox boundaries. macOS compiles an ordinary SwiftUI host library, not an Xcode iOS app or a device. Linux uses an isolated syntax-only module for build-order testing and makes no SwiftUI claim. Kotlin and ArkTS are staged/committed generation outputs, not languages compiled by SwiftPM. The jobs then run the documented `swift test --filter GoldenTests` regenerate-and-diff check. They then require no fixture diff and no unexpected generated or dependency files. CLI
 integration tests accept `REFRACT_CLI_PATH`, which the workflow derives from `swift build --show-bin-path`; this
 avoids assuming that SwiftPM test runners and products use the same directory layout on every operating system.
 The jobs request Swift 6.4.2 on Ubuntu 24.04 and macOS 26. The stable setup-swift release has a hard-coded catalog that
@@ -85,8 +85,11 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 3. Install JDK 21 (Temurin) and a pinned Android SDK: platform `android-37.2`, build tools `37.0.0`, and the
    command-line tools zip whose SHA-256 is recorded in the workflow. The pinned toolchain mirrors the documented
    values in `examples/android/README.md` and `examples/android/app/build.gradle.kts`.
-4. Export the built CLI as `REFRACT_CLI_PATH`, then run `./gradlew --no-daemon :app:checkDebugRefract
-   :app:compileDebugKotlin` from `examples/android/`. The Gradle plugin in `tools/gradle/` registers per-variant
+4. Export the built CLI as `REFRACT_CLI_PATH` and its exact `refract --version` line as
+   `REFRACT_REQUIRED_VERSION`, then run `./gradlew --no-daemon :app:checkDebugRefract
+   :app:compileDebugKotlin` from `examples/android/`. The complete version identity is checked before generation or
+   publication; local development builds identify their source revision as `unknown-source-revision`, while packages
+   carry an exact source revision. The Gradle plugin in `tools/gradle/` registers per-variant
    generation through Android's generated-source API. It compiles the fresh output under `app/build/generated/`,
    while `checkDebugRefract` invokes the CLI's read-only committed-output check. The checked-in Gradle wrapper
    (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle
@@ -100,7 +103,8 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    `Expected.kt`, and stage the Kotlin plus the fixture's `values/strings.xml` under
    `examples/android/fixtures/src/main/`. The staged files are `.gitignored`; they are produced on every CI run
    and never committed.
-7. Run `./gradlew --no-daemon :fixtures:compileDebugKotlin` from `examples/android/`. The `:fixtures` module
+7. Run `./gradlew --no-daemon :fixtures:compileDebugKotlin :theme-fixture:compileDebugKotlin` from
+   `examples/android/`. The `:fixtures` module
    (`examples/android/fixtures/`) is an Android library whose `namespace = "refract.generated"` matches the
    package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
    exactly as the fixtures reference. Adding a fixture to the compile set is a manifest-only change; there is no
@@ -125,8 +129,20 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
     and the observed dark-mode semantics tree. This is rendering and interaction evidence only: **it is not an
     emulator, a device screenshot, a cross-platform visual-parity result or a performance measurement.** The captures
     must be inspected rather than inferred from a green test. Tests and their dependencies are confined to the app's
-    test source set and add no runtime dependency to generated code or consumers.
-11. Reject any untracked files left in the checkout after compilation and tests.
+    test source set and add no runtime dependency to generated code or consumers. The `native-jvm-compose-theme`
+    artifact also contains the fixture's dark/light and enlarged-font captures and test reports.
+11. Run `./gradlew --no-daemon :theme-fixture:testDebugUnitTest`. The independent theme module invokes the actual
+    generated `ThemedSettingsControl` through the app-owned `ThemedSettingsAction`. One mutable interaction source
+    supplies the native clickable and its pressed/focused observations. Tests drive real touch/focus changes and
+    assert the generated component's normal, pressed, focused and disabled rendered colors, including disabled
+    taking precedence over a held native press. `:fixtures` separately selects `values`/`values-night` with real
+    Android configuration contexts and drives enlarged text with Compose's corresponding native density/font-scale
+    setting. Assertions compare rendered resource colors and text bounds, not only resolver outputs, `sp` or golden
+    text. The `native-jvm-compose-theme-interaction` artifact contains the independent interaction-state captures
+    and JUnit reports, while `native-jvm-compose-theme` retains the dark/light and default/large-font evidence.
+    These are Native JVM Compose results, not physical
+    configuration changes, screen-reader traversal, device or performance evidence.
+12. Reject any untracked files left in the checkout after compilation and tests.
 
 The `:app:compileDebugKotlin` and `:fixtures:compileDebugKotlin` gates are compile-only. They produce no APK, no
 emulator or device run, and no performance measurement; `docs/GOALS.md` goal 2 is not exercised by those jobs and no
@@ -134,8 +150,9 @@ such claim may be inferred from them. The separate JVM tests do not close that g
 CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not hidden by this
 job. To run the same checks locally, follow `examples/android/README.md`: build the CLI, run
 `scripts/check_examples.py` and `scripts/check_fixture_compilation.py`, set `REFRACT_CLI_PATH`, then
-`./gradlew :app:checkDebugRefract :app:compileDebugKotlin :fixtures:compileDebugKotlin :fixtures:testDebugUnitTest
-:app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21 on `PATH`. Run the `tools/gradle/` functional tests as
+`./gradlew :app:checkDebugRefract :app:compileDebugKotlin :fixtures:compileDebugKotlin :theme-fixture:compileDebugKotlin
+:fixtures:testDebugUnitTest :theme-fixture:testDebugUnitTest :app:testDebugUnitTest` with `ANDROID_HOME` and a JDK 21
+on `PATH`. Run the `tools/gradle/` functional tests as
 documented in the example README to cover incremental generation and missing-tool behavior.
 
 The job is required: a pull request that breaks generated Kotlin compilation, leaves stale committed output, or

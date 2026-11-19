@@ -50,8 +50,12 @@ android {
             "src/native/java",
             "../app/src/main/java/com/example/refract/animation",
             "../app/src/main/java/com/example/refract/input",
+            "../../../Fixtures/theme-interaction-states/Expected.kt",
+            "../../../Fixtures/theme-interaction-states/NativeTheme.kt",
+            "../../../Fixtures/theme-interaction-states/NativeThemeHost.kt",
         ),
     )
+    sourceSets.getByName("main").res.srcDir("../../../Fixtures/theme-interaction-states")
 }
 
 configure<KotlinAndroidProjectExtension> {
@@ -75,6 +79,7 @@ dependencies {
     robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-14663667-2-i7")
     testImplementation("androidx.test.ext:junit:1.3.0")
     testImplementation("androidx.activity:activity-compose:1.9.3")
+    testImplementation("androidx.core:core:1.17.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
 }
 
@@ -92,4 +97,8 @@ tasks.withType<Test>().configureEach {
     // Resolve the public runtime through Gradle, then run without a second downloader.
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", stageRobolectricRuntime.get().destinationDir.absolutePath)
+    systemProperty(
+        "refract.render.output",
+        layout.buildDirectory.dir("reports/native-jvm-compose").get().asFile.absolutePath,
+    )
 }

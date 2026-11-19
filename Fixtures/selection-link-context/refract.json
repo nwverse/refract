@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": ["example.selection.RefractSelectionContent", "example.selection.RefractSelectionContext", "example.selection.RefractSelectionLink", "example.selection.RefractSelectionRange"],
+    "components": {},
+    "nativeComponents": {
+      "NativeSelectionMessage": {
+        "kind": "composable",
+        "module": "example.selection",
+        "target": "NativeSelectionMessage",
+        "content": "none",
+        "modifiers": [],
+        "argumentStyle": "named",
+        "attributes": {},
+        "parameters": [
+          { "label": "content", "type": "selectionContent", "required": true },
+          { "label": "onLink", "type": "actionString", "required": true },
+          { "label": "onUseAsContext", "type": "selectionContextAction", "required": true },
+          { "label": "onEditWithAI", "type": "selectionContextAction", "required": true }
+        ],
+        "arguments": [
+          { "source": "content", "target": "content" },
+          { "source": "onLink", "target": "onLink" },
+          { "source": "onUseAsContext", "target": "onUseAsContext" },
+          { "source": "onEditWithAI", "target": "onEditWithAI" }
+        ]
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "refract.generated.R", "catalog": "values/strings.xml", "strings": {} }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.selection", "symbols": ["RefractSelectionContent", "RefractSelectionContext", "RefractSelectionLink", "RefractSelectionRange"] }],
+    "components": {},
+    "nativeComponents": {
+      "NativeSelectionMessage": {
+        "kind": "component",
+        "module": "example.selection",
+        "target": "NativeSelectionMessage",
+        "content": "none",
+        "modifiers": [],
+        "argumentStyle": "object",
+        "attributes": {},
+        "parameters": [
+          { "label": "content", "type": "selectionContent", "required": true },
+          { "label": "onLink", "type": "actionString", "required": true },
+          { "label": "onUseAsContext", "type": "selectionContextAction", "required": true },
+          { "label": "onEditWithAI", "type": "selectionContextAction", "required": true }
+        ],
+        "arguments": [
+          { "source": "content", "target": "content" },
+          { "source": "onLink", "target": "onLink" },
+          { "source": "onUseAsContext", "target": "onUseAsContext" },
+          { "source": "onEditWithAI", "target": "onEditWithAI" }
+        ]
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "catalog": "resources/base/element/string.json", "strings": {} }
+  }
+}

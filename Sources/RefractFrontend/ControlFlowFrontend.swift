@@ -77,10 +77,26 @@ extension Builder {
     }
 
     private func typedBoolean(_ expression: ExprSyntax) -> Expression? {
+        if let presence = presenceCondition(expression) { return presence }
+        if diagnostics.contains(where: { $0.code == "RFFORM006" }) { return nil }
         if let value = expression.as(BooleanLiteralExprSyntax.self) {
             return Expression(.boolLiteral(value.literal.tokenKind == .keyword(.true)), location: location(of: value))
         }
-        if let property = modelProperty(expression) {
+        if let property = modelTypedProperty(expression), property.type == .bool {
+            return property.expression
+        }
+        if let member = expression.as(MemberAccessExprSyntax.self), member.declName.argumentNames == nil,
+           let base = member.base?.as(DeclReferenceExprSyntax.self), let item = currentListItem,
+           base.baseName.text == item,
+           let property = currentListItemType?.properties.first(where: { $0.name == member.declName.baseName.text }) {
+            guard property.type == .bool else {
+                error("RFCTRL001", "A view conditional requires a Boolean item property.",
+                      "Declare the selected stored item property as Bool", at: expression)
+                return nil
+            }
+            return Expression(.reference("\(item).\(property.name)"), type: .bool, location: location(of: expression))
+        }
+        if let property = modelProperty(expression), modelPropertyType(expression) == nil {
             guard modelPropertyType(expression) == .bool else {
                 error("RFCTRL001", "A view conditional requires a Boolean model property.",
                       "Declare the selected property as Bool in the model protocol", at: expression)

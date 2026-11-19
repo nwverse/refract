@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_email">Email</string>
+    <string name="settings_password">Password</string>
+    <string name="settings_confirmation">Confirm password</string>
+    <string name="settings_submit">Create account</string>
+    <string name="settings_retry">Retry</string>
+</resources>
+

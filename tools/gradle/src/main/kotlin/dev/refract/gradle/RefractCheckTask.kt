@@ -1,6 +1,5 @@
 package dev.refract.gradle
 
-import java.io.ByteArrayOutputStream
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.tasks.IgnoreEmptyDirectories
@@ -22,7 +21,7 @@ abstract class RefractCheckTask : RefractTask() {
 
     @TaskAction
     fun check() {
-        val tool = executable.singleFile
+        val tool = validatedTool()
         val arguments = mutableListOf("check")
         for (input in swiftInputs.files.sortedBy { it.absolutePath }) {
             arguments += listOf("--input", input.absolutePath)
@@ -32,20 +31,11 @@ abstract class RefractCheckTask : RefractTask() {
             "--android-out", committedOutputDirectory.get().asFile.absolutePath,
             "--harmony-out", harmonyCommittedOutputDirectory.get().asFile.absolutePath,
         )
-        val output = ByteArrayOutputStream()
-        val result = execOperations.exec {
-            setExecutable(tool.absolutePath)
-            setArgs(arguments)
-            setWorkingDir(project.projectDir)
-            setStandardOutput(output)
-            setErrorOutput(output)
-            setIgnoreExitValue(true)
-        }
-        if (result.exitValue != 0) {
+        val output = runTool(tool, arguments)
+        if (output.exitCode != 0) {
             throw GradleException(
-                "Refract committed-output check failed with exit code ${result.exitValue}. " +
-                    "Regenerate with the same CLI version, review the generated diff and commit it.\n" +
-                    output.toString(Charsets.UTF_8),
+                "Refract committed-output check failed with exit code ${output.exitCode}. " +
+                    "Publish with the same CLI version, review the generated diff and commit it.\n${output.text}",
             )
         }
     }

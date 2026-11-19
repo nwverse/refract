@@ -29,7 +29,7 @@ extension Builder {
         guard currentStates.allSatisfy({ state in
             switch state {
             case .model, .tabSelection: true
-            case .state, .binding, .navigationPath: false
+            case .state, .binding, .navigationPath, .form: false
             }
         }), currentStates.filter({ if case .tabSelection = $0 { true } else { false } }).count == 1 else {
             error("RFNAV402", "A tab root accepts only declared model inputs and one tab selection.",

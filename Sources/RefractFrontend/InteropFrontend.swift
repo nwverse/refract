@@ -134,6 +134,9 @@ struct InteropFrontend {
         case "LocalizedStringKey": .stringKey
         case "RemoteImageLoader": .remoteImageLoader
         case "() -> Void": .action
+        case "(String) -> Void": .actionString
+        case "RefractSelectionContent": .selectionContent
+        case "(RefractSelectionContext) -> Void": .selectionContextAction
         default: nil
         }
     }

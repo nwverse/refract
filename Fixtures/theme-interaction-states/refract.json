@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [
+      "example.design.AppColors",
+      "example.design.AppInteractionColors",
+      "example.design.AppRadius",
+      "example.design.AppSpacing",
+      "example.design.AppTypography"
+    ],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "AppSpacing.medium" },
+      "radius": { "DesignRadius.medium": "AppRadius.medium" },
+      "font": { "DesignTypography.body": "AppTypography.body" },
+      "color": {
+        "DesignColors.content": "AppColors.content",
+        "DesignColors.action": {
+          "resolver": "AppInteractionColors.resolve",
+          "normal": { "resource": "theme_action_normal" },
+          "disabled": { "resource": "theme_action_disabled" },
+          "pressed": { "resource": "theme_action_pressed" },
+          "focused": { "resource": "theme_action_focused" }
+        }
+      }
+    },
+    "resources": { "className": "refract.generated.R", "strings": {} }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [
+      { "module": "example.design", "symbols": ["AppColors", "AppInteractionColors", "AppRadius", "AppSpacing", "AppTypography"] }
+    ],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": {
+      "spacing": { "DesignSpacing.medium": "AppSpacing.medium" },
+      "radius": { "DesignRadius.medium": "AppRadius.medium" },
+      "font": { "DesignTypography.body": "AppTypography.body" },
+      "color": {
+        "DesignColors.content": "AppColors.content",
+        "DesignColors.action": {
+          "resolver": "AppInteractionColors.resolve",
+          "normal": { "resource": "theme_action_normal" },
+          "disabled": { "resource": "theme_action_disabled" },
+          "pressed": { "resource": "theme_action_pressed" },
+          "focused": { "resource": "theme_action_focused" }
+        }
+      }
+    },
+    "resources": { "namespace": "app", "stringTable": "string", "strings": {} }
+  }
+}

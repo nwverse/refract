@@ -40,7 +40,10 @@
 				AA0000000000000000000024 /* ModelInterface.swift */,
 				AA0000000000000000000028 /* AccessibilityDynamicType.swift */,
 				AA0000000000000000000029 /* StackLayout.swift */,
-				AA0000000000000000000032 /* InteropTextInputHost.swift */,
+				AA0000000000000000000032 /* ChatMessageProjection.swift */,
+				AA0000000000000000000034 /* SelectionLinkContext.swift */,
+				AA0000000000000000000036 /* ThemedSettingsControl.swift */,
+				AA0000000000000000000038 /* InteropTextInputHost.swift */,
 				AA0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -139,7 +142,25 @@
 			path = ../shared/StackLayout.swift;
 			sourceTree = "<group>";
 		};
-		AA0000000000000000000032 /* InteropTextInputHost.swift */ = {
+		AA0000000000000000000032 /* ChatMessageProjection.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/ChatMessageProjection.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000034 /* SelectionLinkContext.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/SelectionLinkContext.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000036 /* ThemedSettingsControl.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = ../shared/ThemedSettingsControl.swift;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000038 /* InteropTextInputHost.swift */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.swift;
 			path = ../shared/InteropTextInputHost.swift;
@@ -167,9 +188,16 @@
 				AA0000000000000000000027 /* ModelInterface.swift in Sources */,
 				AA0000000000000000000030 /* AccessibilityDynamicType.swift in Sources */,
 				AA0000000000000000000031 /* StackLayout.swift in Sources */,
-				AA0000000000000000000033 /* InteropTextInputHost.swift in Sources */,
+				AA0000000000000000000033 /* ChatMessageProjection.swift in Sources */,
+				AA0000000000000000000035 /* SelectionLinkContext.swift in Sources */,
+				AA0000000000000000000037 /* ThemedSettingsControl.swift in Sources */,
+				AA0000000000000000000039 /* InteropTextInputHost.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000035 /* SelectionLinkContext.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000034 /* SelectionLinkContext.swift */;
 		};
 		AA000000000000000000000B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -227,9 +255,17 @@
 			isa = PBXBuildFile;
 			fileRef = AA0000000000000000000029 /* StackLayout.swift */;
 		};
-		AA0000000000000000000033 /* InteropTextInputHost.swift in Sources */ = {
+		AA0000000000000000000033 /* ChatMessageProjection.swift in Sources */ = {
 			isa = PBXBuildFile;
-			fileRef = AA0000000000000000000032 /* InteropTextInputHost.swift */;
+			fileRef = AA0000000000000000000032 /* ChatMessageProjection.swift */;
+		};
+		AA0000000000000000000037 /* ThemedSettingsControl.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000036 /* ThemedSettingsControl.swift */;
+		};
+		AA0000000000000000000039 /* InteropTextInputHost.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = AA0000000000000000000038 /* InteropTextInputHost.swift */;
 		};
 		AA000000000000000000000D /* Debug */ = {
 			isa = XCBuildConfiguration;
