@@ -50,6 +50,8 @@ public struct Expression: Codable, Equatable, Sendable {
         case stringKey(String)
         case localizedText(LocalizedText)
         case imageResource(String)
+        case rawAssetResource(String)
+        case fontAsset(name: String, size: String)
         case linkDestination(LinkDestination)
         case linkPolicy(LinkPolicy)
         case boolLiteral(Bool)

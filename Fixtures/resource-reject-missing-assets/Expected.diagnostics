@@ -1,0 +1,1 @@
+Input.swift:3:9: error [R.asset.missing_base]: Asset `app_logo` has no base image resource on HarmonyOS. Suggestion: Add `app_logo` to base/media, then provide the same qualifiers on both platforms

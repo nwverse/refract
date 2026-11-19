@@ -450,6 +450,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "resource-reject-missing-assets",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "resource-typed-assets",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "selection-dragdrop",
       "implementationStatus": "ready"
     },

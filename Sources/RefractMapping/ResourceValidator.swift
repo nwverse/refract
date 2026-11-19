@@ -79,8 +79,8 @@ public enum LocalizationResourceValidator {
                 return [items.collection] + visit(items.content)
             case let .messageBlocks(nested, _):
                 return [nested.items.collection] + visit(nested.items.content)
-            case let .image(_, modifiers, _):
-                return modifiers.flatMap(\.arguments)
+            case let .image(source, modifiers, _):
+                return (source.contentDescription.map { [$0] } ?? []) + modifiers.flatMap(\.arguments)
             case let .toggle(title, value, modifiers, nativeModifiers, _, _):
                 return [title, value] + modifiers.flatMap(\.arguments) + nativeModifiers.compactMap {
                     switch $0.operation {

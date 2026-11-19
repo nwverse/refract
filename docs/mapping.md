@@ -205,7 +205,9 @@ name; names are lower-case ASCII identifiers with underscores; in v1 it must equ
 platforms. Keys use lowercase ASCII letter-led alphanumeric dot-separated segments. The key sets and
 normalized names must agree. Resource APIs are emitted directly (`stringResource` plus `R.string`, or `$r` with the declared table),
 so a missing key is a compile-time diagnostic rather than a runtime lookup failure. `docs/localization.md` defines
-catalog parsing and typed formatting.
+catalog parsing and typed formatting. `docs/asset-catalogs.md` defines the opt-in image/font/raw catalog roots,
+qualified binary resources, accessibility and app-owned raw/font boundaries. Those resource names are never
+runtime lookup keys or arbitrary filesystem paths.
 
 ## System symbols
 

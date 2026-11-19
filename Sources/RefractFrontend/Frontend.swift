@@ -591,6 +591,8 @@ final class Builder: SyntaxVisitor {
                     NativeArgument(label: label, expression: $0.expression, type: .image,
                                    location: location(of: argument))
                 }
+            case .rawAsset:
+                parsed = nativeRawAsset(argument.expression, label: label)
             case .stringKey:
                 parsed = nativeLocalizedText(argument.expression).map {
                     NativeArgument(label: label, expression: $0.expression, type: .stringKey,
@@ -655,6 +657,21 @@ final class Builder: SyntaxVisitor {
         }
         return TypedExpression(Expression(.imageResource(name), type: .string,
                                          location: location(of: expression)), .string)
+    }
+
+    private func nativeRawAsset(_ expression: ExprSyntax, label: String) -> NativeArgument? {
+        guard let call = expression.as(FunctionCallExprSyntax.self),
+              call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "RawAsset",
+              call.arguments.count == 1, call.arguments.first?.label == nil,
+              call.trailingClosure == nil, let name = stringLiteral(call.arguments.first!.expression),
+              AssetCatalog.isResourceName(name) else {
+            error("RFNATIVE002", "RawAsset requires one static lowercase application resource name.",
+                  "Use RawAsset(\"resource_name\") with a declared base raw catalog entry", at: expression)
+            return nil
+        }
+        return NativeArgument(label: label, expression: Expression(.rawAssetResource(name),
+                              location: location(of: expression)), type: .rawAsset,
+                              location: location(of: expression))
     }
 
     private func nativeLocalizedText(_ expression: ExprSyntax) -> TypedExpression? {

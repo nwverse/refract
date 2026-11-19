@@ -1,6 +1,6 @@
 /// A native-only extension of the scalar value boundary; it never enters models or local state.
 public enum NativeParameterType: String, Codable, Sendable {
-    case string, bool, double, int, image, stringKey, remoteImageLoader, action, actionString
+    case string, bool, double, int, image, stringKey, remoteImageLoader, action, actionString, rawAsset
     case selectionContent, selectionContextAction, linkDestination, linkPolicy, linkHandoff
 
     public var scalar: ValueType? {
@@ -9,7 +9,7 @@ public enum NativeParameterType: String, Codable, Sendable {
         case .bool: .bool
         case .double: .double
         case .int: .int
-        case .image, .stringKey, .remoteImageLoader, .action, .actionString,
+        case .image, .stringKey, .remoteImageLoader, .action, .actionString, .rawAsset,
              .selectionContent, .selectionContextAction, .linkDestination, .linkPolicy, .linkHandoff: nil
         }
     }
@@ -28,6 +28,7 @@ public enum NativeParameterType: String, Codable, Sendable {
         case .linkHandoff: "RefractLinkHandoff"
         case .action: "() -> Void"
         case .actionString: "(String) -> Void"
+        case .rawAsset: "RawAsset"
         case .selectionContent: "RefractSelectionContent"
         case .selectionContextAction: "(RefractSelectionContext) -> Void"
         }

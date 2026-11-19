@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": ["example.app.AppPolicyDocument"],
+    "components": {},
+    "nativeComponents": {
+      "AppPolicyDocument": {
+        "parameters": [{ "label": "document", "type": "rawAsset", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "AppPolicyDocument",
+        "argumentStyle": "named",
+        "arguments": [{ "source": "document", "target": "document" }],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.R",
+      "catalog": "values/strings.xml",
+      "assetCatalog": "res",
+      "strings": {
+        "assets.logo.description": "assets_logo_description",
+        "assets.title": "assets_title"
+      }
+    }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.app", "symbols": ["AppPolicyDocument"] }],
+    "components": {},
+    "nativeComponents": {
+      "AppPolicyDocument": {
+        "parameters": [{ "label": "document", "type": "rawAsset", "required": true }],
+        "content": "none",
+        "modifiers": [],
+        "target": "AppPolicyDocument",
+        "argumentStyle": "object",
+        "arguments": [{ "source": "document", "target": "document" }],
+        "attributes": {}
+      }
+    },
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "assetCatalog": "resources",
+      "strings": {
+        "assets.logo.description": "assets_logo_description",
+        "assets.title": "assets_title"
+      }
+    }
+  }
+}
