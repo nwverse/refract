@@ -16,8 +16,9 @@ extension Builder {
                 generated = inherits(declaration, anyOf: ["View", "RefractNativeView", "Identifiable"])
             } else if let declaration = statement.item.as(ProtocolDeclSyntax.self) {
                 name = declaration.name
-                generated = declaration.inheritanceClause?.inheritedTypes.contains(where: {
-                    $0.type.trimmedDescription == "RefractModel"
+                generated = declaration.inheritanceClause?.inheritedTypes.contains(where: { inherited in
+                    inherited.type.trimmedDescription == "RefractModel" ||
+                        NativeHostCapability.allCases.contains(where: { $0.marker == inherited.type.trimmedDescription })
                 }) == true
             } else if let declaration = statement.item.as(EnumDeclSyntax.self) {
                 name = declaration.name

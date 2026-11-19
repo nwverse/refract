@@ -8,6 +8,10 @@ func emitNavigationOperation(_ operation: NavigationOperation, into writer: inou
 }
 
 func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWriter) throws {
+    if case let .nativeHost(reference, _) = declaration {
+        writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName);")
+        return
+    }
     if case let .model(reference, _) = declaration {
         writer.line("@Require @Param \(reference.propertyName): \(reference.protocolName);")
         return
@@ -73,6 +77,8 @@ private func stateType(_ type: ValueType) throws -> String {
 func emitLocalExpression(_ expression: Expression, item: String? = nil,
                          mapping: Mapping = .empty, itemParameters: Set<String> = []) throws -> String {
     switch expression.value {
+    case let .nativeValueProperty(value):
+        return "this.\(value.value).\(value.field.rawValue)"
     case let .valueProperty(.state(name)), let .valueProperty(.binding(name)):
         guard ArkText.isIdentifier(name) else {
             throw Diagnostic(code: "arkui.invalid_reference", message: "`\(name)` is not a valid state identifier.",
@@ -125,6 +131,8 @@ func emitLocalAction(_ action: StateAction) throws -> String {
     case let .modelMethod(model, name, arguments):
         let arguments = try arguments.map { try emitLocalExpression($0.value) }.joined(separator: ", ")
         return "this.\(model).\(name)(\(arguments));"
+    case let .hostMethod(host, capability, name, arguments):
+        return try emitArkNativeHostAction(host: host, capability: capability, name: name, arguments: arguments)
     case let .submit(submit):
         let arguments = try submit.arguments.map {
             try emitLocalExpression(Expression(.formField(form: submit.form, field: $0.field)))

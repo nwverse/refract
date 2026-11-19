@@ -69,8 +69,10 @@ struct Generation {
         }
         for line in try ArkNativeImports.emit(module: module, nativeSource: nativeSource) { writer.line(line) }
         for line in importLines { writer.line(line) }
-        try emitEnums(module.enums, into: &writer)
+        try emitEnums(module.enums.filter { $0.kind == nil }, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
+        emitArkNativeValueTypes(module.screens.flatMap(\.nativeValues), into: &writer)
+        try emitArkNativeHosts(module.nativeHosts, into: &writer)
         try emitArkModels(module.models, into: &writer)
         try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
@@ -92,6 +94,7 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
+            emitArkNativeValues(screen.nativeValues, into: &writer)
             for modal in screen.modals where modal.kind == .alert {
                 let event = "on\(modal.stateName.prefix(1).uppercased())\(modal.stateName.dropFirst())Present"
                 writer.line("@Event \(event): () => void = (): void => {};")
@@ -103,18 +106,10 @@ struct Generation {
             if case let .tabView(tabs, _) = screen.body {
                 try emitTabHelpers(tabs, into: &writer)
             }
-            // Local-state emission already supplies the separator before build().
+            // Local-state emission already supplies the separator before lifecycle/build().
             if screen.states.isEmpty && screen.navigation == nil && !screen.parameters.isEmpty { writer.line() }
             try emitModalBuilders(screen, into: &writer)
-            if screen.modals.contains(where: { $0.kind == .alert }) {
-                writer.line()
-                writer.open("aboutToAppear(): void")
-                emitInitialModalPresentation(screen, into: &writer)
-                writer.close()
-                writer.line()
-                emitModalObservers(screen, into: &writer)
-                writer.line()
-            }
+            try emitArkLifecycleAndModals(screen, into: &writer)
             writer.open("build()")
             currentModals = screen.modals
             let previousItemParameters = screenItemTypes
@@ -595,7 +590,8 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location), let .form(_, _, location), let .tabSelection(_, _, location): location
+             let .nativeHost(_, location), let .navigationPath(_, _, location),
+             let .form(_, _, location), let .tabSelection(_, _, location): location
         }
     }
 }

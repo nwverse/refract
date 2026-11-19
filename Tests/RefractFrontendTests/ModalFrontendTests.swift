@@ -9,14 +9,32 @@ import Testing
 private let modalRepository = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-@Test func screenRoundTripRetainsModalAndNavigationOperations() throws {
+@Test func screenRoundTripRetainsModalNavigationAndNativeLifecycle() throws {
     let modal = ModalPresentation(kind: .sheet, stateName: "visible", isBinding: false,
                                   content: [.text(Expression(.verbatimText("Sheet")), modifiers: [], location: nil)])
+    let lifecycle = NativeLifecycle(
+        foreground: .hostMethod(host: "lifecycle", capability: .lifecycle, name: "foreground", arguments: []),
+        background: .hostMethod(host: "lifecycle", capability: .lifecycle, name: "background", arguments: []))
     let screen = Screen(name: "Screen", modals: [modal], navigation: NavigationOperation(enumName: "Route"),
-                        body: .text(Expression(.verbatimText("Root")), modifiers: [], location: nil))
+                        states: [.state(name: "visible", type: .bool, initialValue: Expression(.boolLiteral(false)), location: nil)],
+                        body: .text(Expression(.verbatimText("Root")), modifiers: [], location: nil),
+                        nativeValues: [NativeValueReference(propertyName: "phase", kind: .scenePhase, selectedField: .state)],
+                        lifecycle: lifecycle)
     let module = Module(sourceFile: "Input.swift", screens: [screen])
     let decoded = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(module))
     #expect(decoded == module)
+
+    let alert = ModalPresentation(kind: .alert, stateName: "visible", isBinding: false,
+                                  title: Expression(.verbatimText("Title")), message: Expression(.verbatimText("Message")),
+                                  confirmTitle: Expression(.verbatimText("Confirm")), cancelTitle: Expression(.verbatimText("Cancel")),
+                                  confirmAction: .hostMethod(host: "lifecycle", capability: .lifecycle, name: "foreground", arguments: []))
+    let generated = try ArkUIBackend().generate(module: Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "Combined", states: screen.states, modals: [alert], body: screen.body, lifecycle: lifecycle),
+    ]))
+    #expect(generated.components(separatedBy: "aboutToAppear(): void").count == 2)
+    #expect(generated.components(separatedBy: "aboutToDisappear(): void").count == 2)
+    #expect(generated.contains("this.lifecycle.foreground();"))
+    #expect(generated.contains("this.onVisiblePresent();"))
 }
 
 @Test func nativeModalHostsOwnPresentationAndTypedDismissal() throws {

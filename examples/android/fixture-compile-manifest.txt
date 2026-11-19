@@ -25,6 +25,9 @@ list-typed-projection
 v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
+interop-native-lifecycle
+interop-native-notification
+interop-native-background-work
 interop-native-animation
 interop-native-state-transition
 interop-document-preview

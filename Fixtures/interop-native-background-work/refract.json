@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [], "components": {}, "nativeComponents": {}, "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "refract.generated.R", "catalog": "values/strings.xml", "strings": { "synthetic.work.id": "synthetic_work_id", "synthetic.work.confirm": "synthetic_work_confirm", "synthetic.work.schedule": "synthetic_work_schedule", "synthetic.work.cancel": "synthetic_work_cancel" } }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [], "components": {}, "nativeComponents": {}, "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "catalog": "resources/base/element/string.json", "strings": { "synthetic.work.id": "synthetic_work_id", "synthetic.work.confirm": "synthetic_work_confirm", "synthetic.work.schedule": "synthetic_work_schedule", "synthetic.work.cancel": "synthetic_work_cancel" } }
+  }
+}

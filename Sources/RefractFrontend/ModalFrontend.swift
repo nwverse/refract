@@ -18,6 +18,7 @@ extension Builder {
                 if screen.parameters.contains(where: { $0.name == eventName }) || screen.states.contains(where: {
                     switch $0 {
                     case let .model(reference, _): reference.propertyName == eventName
+                    case let .nativeHost(reference, _): reference.propertyName == eventName
                     case let .binding(name, _, _), let .navigationPath(name, _, _), let .tabSelection(name, _, _): name == eventName
                     case let .state(name, _, _, _): name == eventName
                     case let .form(_, declaration, _):

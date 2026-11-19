@@ -55,6 +55,7 @@ public struct Expression: Codable, Equatable, Sendable {
         case layoutSpacing(LayoutSpacing)
         case reference(String)
         case binding(String)
+        case nativeValueProperty(NativeValueProperty)
         case valueProperty(ValueProperty)
         case interpolatedString([StringInterpolationSegment])
         case platformValue(PlatformAlternatives<Expression>)
@@ -166,6 +167,7 @@ public enum StateDeclaration: Codable, Equatable, Sendable {
     case navigationPath(name: String, enumName: String, location: SourceLocation?)
     case tabSelection(name: String, enumName: String, location: SourceLocation?)
     case model(ModelReference, location: SourceLocation?)
+    case nativeHost(NativeHostReference, location: SourceLocation?)
     /// A `refractForm` declaration on local @State or a parent @Binding.
     case form(ownership: FormOwnership, declaration: FormDeclaration, location: SourceLocation?)
 }
@@ -199,18 +201,27 @@ public struct Screen: Codable, Equatable, Sendable {
     public let modals: [ModalPresentation]
     public let navigation: NavigationOperation?
     public let body: ViewNode
+    public let nativeValues: [NativeValueReference]
+    public let lifecycle: NativeLifecycle?
     public let location: SourceLocation?
 
     public init(name: String, parameters: [ScreenParameter] = [], states: [StateDeclaration] = [],
-                modals: [ModalPresentation] = [], navigation: NavigationOperation? = nil,
-                body: ViewNode, location: SourceLocation? = nil) {
+                modals: [ModalPresentation] = [], navigation: NavigationOperation? = nil, body: ViewNode,
+                nativeValues: [NativeValueReference] = [], lifecycle: NativeLifecycle? = nil,
+                location: SourceLocation? = nil) {
         self.name = name
         self.parameters = parameters
         self.states = states
         self.modals = modals
         self.navigation = navigation
         self.body = body
+        self.nativeValues = nativeValues
+        self.lifecycle = lifecycle
         self.location = location
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, parameters, states, modals, navigation, body, nativeValues, lifecycle, location
     }
 
     public init(from decoder: Decoder) throws {
@@ -221,6 +232,8 @@ public struct Screen: Codable, Equatable, Sendable {
         modals = try container.decodeIfPresent([ModalPresentation].self, forKey: .modals) ?? []
         navigation = try container.decodeIfPresent(NavigationOperation.self, forKey: .navigation)
         body = try container.decode(ViewNode.self, forKey: .body)
+        nativeValues = try container.decodeIfPresent([NativeValueReference].self, forKey: .nativeValues) ?? []
+        lifecycle = try container.decodeIfPresent(NativeLifecycle.self, forKey: .lifecycle)
         location = try container.decodeIfPresent(SourceLocation.self, forKey: .location)
     }
 }
@@ -232,17 +245,20 @@ public struct Module: Codable, Equatable, Sendable {
     public let models: [ModelProtocol]
     public let itemTypes: [ItemType]
     public let enums: [EnumDeclaration]
+    public let nativeHosts: [NativeHostContract]
     public init(sourceFile: String, screens: [Screen], nativeDeclarations: [NativeDeclaration] = [],
-                models: [ModelProtocol] = [], itemTypes: [ItemType] = [], enums: [EnumDeclaration] = []) {
+                models: [ModelProtocol] = [], itemTypes: [ItemType] = [], enums: [EnumDeclaration] = [],
+                nativeHosts: [NativeHostContract] = []) {
         self.sourceFile = sourceFile
         self.screens = screens
         self.nativeDeclarations = nativeDeclarations
         self.models = models
         self.itemTypes = itemTypes
         self.enums = enums
+        self.nativeHosts = nativeHosts
     }
 
-    private enum CodingKeys: String, CodingKey { case sourceFile, screens, nativeDeclarations, models, itemTypes, enums }
+    private enum CodingKeys: String, CodingKey { case sourceFile, screens, nativeDeclarations, models, itemTypes, enums, nativeHosts }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         sourceFile = try values.decode(String.self, forKey: .sourceFile)
@@ -251,6 +267,7 @@ public struct Module: Codable, Equatable, Sendable {
         models = try values.decodeIfPresent([ModelProtocol].self, forKey: .models) ?? []
         itemTypes = try values.decodeIfPresent([ItemType].self, forKey: .itemTypes) ?? []
         enums = try values.decodeIfPresent([EnumDeclaration].self, forKey: .enums) ?? []
+        nativeHosts = try values.decodeIfPresent([NativeHostContract].self, forKey: .nativeHosts) ?? []
     }
 }
 

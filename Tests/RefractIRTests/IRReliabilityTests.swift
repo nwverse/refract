@@ -367,7 +367,7 @@ struct IRReliabilityTests {
         switch action {
         case let .assign(_, value), let .increment(_, value):
             collectExpression(value, into: &expressions)
-        case let .modelMethod(_, _, arguments):
+        case let .modelMethod(_, _, arguments), let .hostMethod(_, _, _, arguments):
             for argument in arguments { collectExpression(argument.value, into: &expressions) }
         case let .submit(submit):
             if let form = submit.declaration {
