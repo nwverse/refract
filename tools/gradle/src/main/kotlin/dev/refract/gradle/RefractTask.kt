@@ -12,7 +12,6 @@ import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.IgnoreEmptyDirectories
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputFiles
-import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -42,14 +41,14 @@ abstract class RefractTask : DefaultTask() {
     protected abstract val execOperations: ExecOperations
 
     protected fun generateInto(staging: File) {
-        val tool = executable.singleFile
-        if (!tool.isFile || !Files.isExecutable(tool.toPath())) {
-            throw GradleException(
-                "Refract CLI is not an executable file: ${tool.path}. " +
-                    "Set refract.executable or REFRACT_CLI_PATH to a version-matched executable " +
-                    "built from the intended Refract revision.",
-            )
-        }
+        val android = File(staging, "android")
+        val harmony = File(staging, "harmony")
+        generateFiles(android, harmony)
+    }
+
+    /** Both staging and explicit publication use the CLI's own dual-backend writer. */
+    protected fun generateFiles(android: File, harmony: File) {
+        val tool = validatedTool()
         val swiftFiles = swiftInputs.files.sortedBy { it.absolutePath }
         if (swiftFiles.isEmpty()) {
             throw GradleException("Refract has no Swift inputs. Declare at least one file in the refract.sources input group.")
@@ -65,8 +64,6 @@ abstract class RefractTask : DefaultTask() {
             }
         }
 
-        val android = File(staging, "android")
-        val harmony = File(staging, "harmony")
         android.mkdirs()
         harmony.mkdirs()
         val arguments = mutableListOf("generate")
@@ -80,6 +77,30 @@ abstract class RefractTask : DefaultTask() {
             "--harmony-out", harmony.absolutePath,
         )
 
+        val output = runTool(tool, arguments)
+        if (output.exitCode != 0) {
+            throw GradleException(
+                "Refract generation failed with exit code ${output.exitCode}; " +
+                    "existing generated and committed outputs were not changed.\n${output.text}",
+            )
+        }
+        verifyGeneratedDirectory(android, expectedFilenames(".kt"), "staged Android")
+        verifyGeneratedDirectory(harmony, expectedFilenames(".ets"), "staged HarmonyOS")
+    }
+
+    protected fun validatedTool(): File {
+        val tool = executable.singleFile
+        if (!tool.isFile || !Files.isExecutable(tool.toPath())) {
+            throw GradleException(
+                "Refract CLI is not an executable file: ${tool.path}. " +
+                    "Set refract.executable or REFRACT_CLI_PATH to a version-matched executable " +
+                    "built from the intended Refract revision.",
+            )
+        }
+        return tool
+    }
+
+    protected fun runTool(tool: File, arguments: List<String>): ToolResult {
         val output = ByteArrayOutputStream()
         val result = execOperations.exec {
             setExecutable(tool.absolutePath)
@@ -89,13 +110,7 @@ abstract class RefractTask : DefaultTask() {
             setErrorOutput(output)
             setIgnoreExitValue(true)
         }
-        if (result.exitValue != 0) {
-            throw GradleException(
-                "Refract generation failed with exit code ${result.exitValue}; " +
-                    "existing generated and committed outputs were not changed.\n${output.toString(Charsets.UTF_8)}",
-            )
-        }
-        verifyGeneratedDirectory(android, expectedFilenames(".kt"), "staged Android")
+        return ToolResult(result.exitValue, output.toString(Charsets.UTF_8))
     }
 
     protected fun expectedFilenames(extension: String): Set<String> =
@@ -116,4 +131,6 @@ abstract class RefractTask : DefaultTask() {
             )
         }
     }
+
+    protected data class ToolResult(val exitCode: Int, val text: String)
 }

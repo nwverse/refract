@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Native generated versus reference benchmark"
+    },
+    {
+      "name": "entry_desc",
+      "value": "Refract benchmark"
+    },
+    {
+      "name": "entry_label",
+      "value": "Refract benchmark"
+    },
+    {
+      "name": "settings_item",
+      "value": "Setting %d"
+    }
+  ]
+}

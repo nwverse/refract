@@ -66,6 +66,7 @@ struct Generation {
         try emitEnums(module.enums, into: &writer)
         try emitArkItemTypes(module.itemTypes, into: &writer)
         try emitArkModels(module.models, into: &writer)
+        try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
             if case let .navigationStack(stack, _) = screen.body {
                 try emitNavigationDestinations(stack, into: &writer)
@@ -85,11 +86,14 @@ struct Generation {
             for state in screen.states {
                 try emitLocalState(state, into: &writer)
             }
+            if let navigation = screen.navigation {
+                try emitNavigationOperation(navigation, into: &writer)
+            }
             if case let .tabView(tabs, _) = screen.body {
                 try emitTabHelpers(tabs, into: &writer)
             }
             // Local-state emission already supplies the separator before build().
-            if screen.states.isEmpty, !screen.parameters.isEmpty { writer.line() }
+            if screen.states.isEmpty, screen.navigation == nil, !screen.parameters.isEmpty { writer.line() }
             writer.open("build()")
             let previousItemParameters = screenItemTypes
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
@@ -144,6 +148,13 @@ struct Generation {
                 writer.open(".onClick(() =>")
                 writer.line(try emitLocalAction(action))
                 writer.close(suffix: ")")
+            }
+            for modifier in modifiers where modifier.name == "disabled" {
+                guard let argument = modifier.arguments.first else {
+                    throw Diagnostic(code: "RFFORM007", message: "`.disabled` needs one Boolean model property.",
+                                     suggestion: "Use `.disabled(model.submitting)`.", location: modifier.location)
+                }
+                writer.line(".enabled(!(\(try emitLocalExpression(argument, item: item, mapping: mapping))))")
             }
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .conditional(branches, location):
@@ -239,11 +250,16 @@ struct Generation {
             let arguments = try InteropEmission.arguments(for: component, target: target) {
                 try ArkExpression.emit($0, item: item, mapping: mapping)
             } renderAction: { action in
-                guard case let .modelMethod(_, _, arguments) = action, arguments.isEmpty else {
-                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions accept only a no-argument model method.",
-                                     location: location)
+                guard case let .modelMethod(model, name, arguments) = action else {
+                    throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
                 }
-                return "() => { \(try emitLocalAction(action)) }"
+                if arguments.isEmpty { return "() => { \(try emitLocalAction(action)) }" }
+                guard arguments.map(\.value.value) == [.stringLiteral("__refract_destination")] else {
+                    return try emitArkSelectionAction(action)
+                }
+                return "(destination: string): void => { this.\(model).\(name)(destination); }"
+            } renderSelection: { content in
+                try emitArkSelectionContent(content)
             }
             writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
         case let .component(component, location):
@@ -265,6 +281,10 @@ struct Generation {
                 }
                 writer.line(".reuse({ reuseId: () => '\(contentType)' })")
             }
+        case let .messageBlocks(nested, location):
+            try emitMessageBlocks(nested, into: &writer, parent: item, location: location,
+                                  mapping: mapping, resolver: resolver)
+
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, location):
             try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
                                      labelsHidden: labelsHidden, location: location),
@@ -283,6 +303,7 @@ struct Generation {
         switch type {
         case .string: "string"
         case .int, .double: "number"
+        case .revision: "bigint"
         case .bool: "boolean"
         }
     }
@@ -348,6 +369,12 @@ struct Generation {
         for child in node.children(for: .harmonyOS) { try collectImports(child, resolver: resolver, into: &emittedImports) }
         if case let .native(component, location) = node {
             emittedImports.insert(try resolver.target(for: component, platform: .harmonyOS, location: location).symbol)
+            for argument in component.arguments {
+                if argument.selection != nil {
+                    emittedImports.formUnion(["RefractSelectionContent", "RefractSelectionLink", "RefractSelectionRange"])
+                }
+                if argument.type == .selectionContextAction { emittedImports.insert("RefractSelectionContext") }
+            }
         }
         collectModifierImports(node, mapping: mapping, into: &emittedImports)
         if case let .component(component, location) = node {
@@ -540,7 +567,7 @@ private extension StateDeclaration {
     var location: RefractIR.SourceLocation? {
         switch self {
         case let .state(_, _, _, location), let .binding(_, _, location), let .model(_, location),
-             let .navigationPath(_, _, location), let .tabSelection(_, _, location): location
+             let .navigationPath(_, _, location), let .form(_, _, location), let .tabSelection(_, _, location): location
         }
     }
 }

@@ -1,6 +1,7 @@
 /// A native-only extension of the scalar value boundary; it never enters models or local state.
 public enum NativeParameterType: String, Codable, Sendable {
-    case string, bool, double, int, image, stringKey, remoteImageLoader, action
+    case string, bool, double, int, image, stringKey, remoteImageLoader, action, actionString
+    case selectionContent, selectionContextAction
 
     public var scalar: ValueType? {
         switch self {
@@ -8,7 +9,8 @@ public enum NativeParameterType: String, Codable, Sendable {
         case .bool: .bool
         case .double: .double
         case .int: .int
-        case .image, .stringKey, .remoteImageLoader, .action: nil
+        case .image, .stringKey, .remoteImageLoader, .action, .actionString,
+             .selectionContent, .selectionContextAction: nil
         }
     }
 
@@ -22,6 +24,9 @@ public enum NativeParameterType: String, Codable, Sendable {
         case .stringKey: "LocalizedStringKey"
         case .remoteImageLoader: "RemoteImageLoader"
         case .action: "() -> Void"
+        case .actionString: "(String) -> Void"
+        case .selectionContent: "RefractSelectionContent"
+        case .selectionContextAction: "(RefractSelectionContext) -> Void"
         }
     }
 }
@@ -58,14 +63,17 @@ public struct NativeArgument: Codable, Equatable, Sendable {
     public let action: StateAction?
     public let type: NativeParameterType?
     public let location: SourceLocation?
+    /// Closed literal selection content, never an arbitrary serialized payload.
+    public let selection: SelectionContent?
 
-    private enum CodingKeys: String, CodingKey { case label, expression, action, type, location }
+    private enum CodingKeys: String, CodingKey { case label, expression, action, type, location, selection }
 
     public init(label: String, expression: Expression? = nil, action: StateAction? = nil,
-                type: NativeParameterType?, location: SourceLocation? = nil) {
+                selection: SelectionContent? = nil, type: NativeParameterType?, location: SourceLocation? = nil) {
         self.label = label
         self.expression = expression
         self.action = action
+        self.selection = selection
         self.type = type
         self.location = location
     }
@@ -75,6 +83,7 @@ public struct NativeArgument: Codable, Equatable, Sendable {
         label = try values.decode(String.self, forKey: .label)
         expression = try values.decodeIfPresent(Expression.self, forKey: .expression)
         action = try values.decodeIfPresent(StateAction.self, forKey: .action)
+        selection = try values.decodeIfPresent(SelectionContent.self, forKey: .selection)
         type = try values.decodeIfPresent(NativeParameterType.self, forKey: .type)
         location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }

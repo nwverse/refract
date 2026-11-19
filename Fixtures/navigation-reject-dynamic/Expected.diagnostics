@@ -1,1 +1,1 @@
-Input.swift:13:17: error [RFNAV001]: NavigationLink accepts one localized title and a static `.case` value. Suggestion: Use `NavigationLink("navigation.open", value: .detail)`; dynamic strings and closure destinations are unsupported
+Input.swift:13:17: error [RFNAV001]: NavigationLink accepts one localized title and a static `.case` value. Suggestion: Use `NavigationLink("navigation.open", value: .detail)` at the root or `value: Route.detail` in a registered destination; dynamic strings and closure destinations are unsupported
