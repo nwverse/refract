@@ -85,6 +85,7 @@ extension Builder {
             case let .state(other, _, _, _), let .binding(other, _, _): collides = other == name
             case let .navigationPath(other, _, _): collides = other == name
             case let .model(reference, _): collides = reference.propertyName == name
+            case let .nativeHost(reference, _): collides = reference.propertyName == name
             case let .form(_, other, _): collides = other.name == name
             case .tabSelection: collides = false
             }
