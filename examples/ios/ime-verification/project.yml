@@ -1,0 +1,47 @@
+name: RefractIMEVerification
+options:
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    CODE_SIGNING_ALLOWED: NO
+    COMPILER_INDEX_STORE_ENABLE: NO
+targets:
+  RefractIMEVerification:
+    type: application
+    platform: iOS
+    sources:
+      - path: Host
+      - path: ../shared/InteropTextInputHost.swift
+      - path: ../RefractExample/MinimalSourcePrelude.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.refract.imeverification
+        SWIFT_EMIT_LOC_STRINGS: NO
+        TARGETED_DEVICE_FAMILY: "1"
+  RefractIMEVerificationUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: RefractIMEVerification
+    settings:
+      base:
+        SWIFT_EMIT_LOC_STRINGS: NO
+schemes:
+  RefractIMEVerification:
+    build:
+      targets:
+        RefractIMEVerification: all
+        RefractIMEVerificationUITests: [test]
+    test:
+      targets:
+        - RefractIMEVerificationUITests
