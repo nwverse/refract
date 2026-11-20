@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [], "components": {},
+    "nativeComponents": {
+      "NativeSwipeArchiveRow": {
+        "kind": "composable", "module": "com.example.refract.gesture", "target": "NativeSwipeArchiveRow",
+        "content": "none", "modifiers": [], "argumentStyle": "named", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "title", "type": "string", "required": true },
+          { "label": "onRequest", "type": "actionString", "required": true },
+          { "label": "onConfirm", "type": "actionString", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "title", "target": "title" },
+          { "source": "onRequest", "target": "onRequest" },
+          { "source": "onConfirm", "target": "onConfirm" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      }
+    }, "modifiers": {}, "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "refract.generated.R", "catalog": "values/strings.xml", "strings": {
+      "swipe.archive": "swipe_archive", "swipe.confirm.title": "swipe_confirm_title",
+      "swipe.confirm.message": "swipe_confirm_message", "swipe.confirm": "swipe_confirm", "swipe.cancel": "swipe_cancel"
+    } }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.gestures", "symbols": ["NativeSwipeArchiveRow"] }],
+    "components": {},
+    "nativeComponents": {
+      "NativeSwipeArchiveRow": {
+        "kind": "component", "module": "example.gestures", "target": "NativeSwipeArchiveRow",
+        "content": "none", "modifiers": [], "argumentStyle": "object", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "title", "type": "string", "required": true },
+          { "label": "onRequest", "type": "actionString", "required": true },
+          { "label": "onConfirm", "type": "actionString", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "title", "target": "title" },
+          { "source": "onRequest", "target": "onRequest" },
+          { "source": "onConfirm", "target": "onConfirm" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      }
+    }, "modifiers": {}, "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "catalog": "resources/base/element/string.json", "strings": {
+      "swipe.archive": "swipe_archive", "swipe.confirm.title": "swipe_confirm_title",
+      "swipe.confirm.message": "swipe_confirm_message", "swipe.confirm": "swipe_confirm", "swipe.cancel": "swipe_cancel"
+    } }
+  }
+}

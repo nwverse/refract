@@ -47,6 +47,11 @@
   payload ABI. Keep static literal ranges validated in UTF-16, including empty selections and surrogate-pair
   boundaries, and forward context snapshots to declared scalar model actions. Do not add arbitrary Screen closures,
   selection callbacks on movement or a URL-opening side effect. See `docs/selection-link-context.md`.
+- Native component properties and callbacks form one source-level ABI, not independent capabilities. Validate a
+  closed host's complete ordered signature before adding its specialized payload/callback types. A literal-selection
+  host must include all four declared fields; partial, renamed or reordered declarations are `RFNATIVE001` errors.
+  Exclude the dedicated text-input host when restricting ordinary `(String) -> Void` parameters: its `onDraftCommit`
+  uses the same source function type but has a separately validated contract.
 - Validate a target at its call site. Having both backends validate both targets repeats the same missing/mismatched
   mapping diagnostic. Drivers collect independent target errors before writing either output.
 - Do not infer an ArkTS `number` parameter from the corresponding Kotlin type: Kotlin `Int` and `Double` both map to
@@ -104,6 +109,18 @@
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
   select the node that defines `SemanticsActions.Dismiss`, not an arbitrary `onRoot()`.
+- A bounded native swipe row is not a persistent reveal runtime. Compose `SwipeToDismissBox` may settle a partial
+  swipe back immediately; the pending native confirmation owns the request. Keep swipe and menu/custom-action requests
+  idempotent while pending, close confirmation before confirm/cancel and use native reset/snap for settling. A model
+  action with a real String parameter cannot reuse the generic zero-argument or link-placeholder emitter: preserve a
+  dedicated checked forwarding representation and generate the identifier argument on both backends. Keep any iOS-only
+  private confirmation state on the specific component's whitelist, never as a cross-platform parameter.
+- A media capability ABI is not a media implementation. Keep permission/approval/cancellation as explicit app-owned
+  states and checked model actions; absence branches must not place a native player, camera or share component.
+  Compact native-component mappings accept scalar parameters only: a checked no-argument action requires the schema-1
+  `type: action` declaration and its exact target arguments. Resource keys accept only lowercase ASCII letters/digits
+  in dot-separated segments, with underscores produced by normalization. Let the real CLI reject invalid mapping forms
+  before reviewing or staging generated output; never widen the schema to hide a fixture mistake.
 - Selection editing and drag/drop payloads on a `TextField`/view go through the closed `NativeModifier.Operation`
   set, not through a generic native component. The Compose drag-and-drop API lives in
   `androidx.compose.foundation.draganddrop` for the `Modifier` extensions but in
