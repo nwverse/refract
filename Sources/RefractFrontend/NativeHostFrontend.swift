@@ -199,7 +199,7 @@ extension Builder {
 
     private func hostMemberSyntax(_ name: String) -> TokenSyntax {
         guard let node = currentViewName.flatMap({ viewDeclarations[$0] }) else { return hostMemberSyntax(name) }
-        return node.memberBlock.members.compactMap { member in
+        return node.memberBlock.members.compactMap { member -> TokenSyntax? in
             guard let variable = member.decl.as(VariableDeclSyntax.self),
                   variable.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == name else { return nil }
             return variable.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier

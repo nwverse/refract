@@ -32,7 +32,7 @@ public struct InteropResolver: Sendable {
     private func target(for declaration: NativeDeclaration, platform: Platform,
                         location: SourceLocation?) throws -> NativeTarget {
         let component = mapping.platform(platform).nativeComponents[declaration.name]
-        let target = component.map { target($0, platform: platform, module: $0.module ?? "") }
+        let target = component.map { self.target($0, platform: platform, module: $0.module ?? "") }
         return try InteropMapping.validate(declaration: declaration, target: target,
             platform: platform == .android ? .android : .harmonyOS,
             location: location ?? declaration.location)
