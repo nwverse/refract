@@ -43,6 +43,11 @@ class SyntheticMediaController : PlaybackCapabilityModel, CameraCapabilityModel,
         screenRevision = request.revision
     }
 
+    /** Replacement deliberately keeps the revision to test full approval correlation. */
+    fun replaceForApprovalCorrelation(kind: SyntheticMediaKind, identifier: String) {
+        request = request.copy(kind = kind, identifier = identifier, phase = SyntheticPhase.approvalRequired)
+    }
+
     fun beginSyntheticApproval(kind: SyntheticMediaKind) {
         require(request.kind == kind && request.phase == SyntheticPhase.approvalRequired)
         pending = request
@@ -51,7 +56,12 @@ class SyntheticMediaController : PlaybackCapabilityModel, CameraCapabilityModel,
     /** Only this synthetic test controller supplies the result, never a platform permission API. */
     fun deliverSyntheticApproval() {
         val current = pending ?: return
-        if (request.phase != SyntheticPhase.approvalRequired || request.revision != current.revision) return
+        if (current.phase != SyntheticPhase.approvalRequired ||
+            request.phase != SyntheticPhase.approvalRequired ||
+            current.kind != request.kind ||
+            current.identifier != request.identifier ||
+            current.revision != request.revision
+        ) return
         pending = null
         request = request.copy(phase = SyntheticPhase.ready)
     }

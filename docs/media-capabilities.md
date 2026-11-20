@@ -41,8 +41,10 @@ app-defined policy states, not an assertion that every platform has a sharing pe
 
 An approval request means only "ask the app to handle approval." It cannot synchronously report that permission was
 granted or that playback, capture or sharing succeeded. Cancellation invalidates the app-owned pending request. A late
-approval must be matched to the still-pending identifier/revision and discarded after cancellation or replacement;
-it must not select `ready`. The synthetic controller also refuses to deliver an approval against a superseded revision.
+approval must be matched to the still-pending kind, identifier and revision and discarded after cancellation or
+replacement; it must not select `ready`. The synthetic controller compares all three correlation fields and requires
+both pending and current phases to remain `approvalRequired`; a superseded identifier, kind or revision cannot accept
+an old approval.
 Leaving a ready native component lets its app-owned implementation release its resources through normal native
 disposal; the fixture observes that callback only and does not claim to release real hardware or media resources.
 The generator does not invent a second timer, cancellation queue or lifecycle owner.
@@ -57,8 +59,9 @@ arbitrary permission closure; neither creates a fallback component or target exp
 `examples/android/fixtures/src/native/java/com/example/refract/media/` contains only a static Compose surface and a
 synthetic controller. It imports no Android media, camera, intent, URI or permission API. Native JVM Compose tests
 exercise unmodified generated screens for explicit absence, permission states, approval, cancellation, a stale approval
-after camera cancellation, share cancellation and native disposal. No media bytes, capture data, personal URI,
-recipient or permission dialog is used.
+after camera cancellation, same-revision replacement of the pending identifier or capability kind, share cancellation
+and native disposal. Those two replacement tests keep the revision unchanged to prove that revision alone cannot
+authorize a late result. No media bytes, capture data, personal URI, recipient or permission dialog is used.
 
 Run after a bounded `swift build`:
 
