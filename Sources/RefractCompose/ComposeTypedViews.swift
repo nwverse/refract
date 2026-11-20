@@ -12,7 +12,9 @@ extension ComposeBackend {
             try emitScroll(axis: axis, child: child, modifiers: modifiers, isRoot: isRoot,
                            location: location, into: &out, context: &context)
         case let .list(children, modifiers, location):
-            if children.count == 1, case let .forEach(items, _) = children[0] {
+            if children.count == 1, case let .horizontalSections(sections, _) = children[0] {
+                try emitHorizontalSections(sections, isRoot: isRoot, into: &out, context: &context)
+            } else if children.count == 1, case let .forEach(items, _) = children[0] {
                 try emitDynamicList(items, modifiers: modifiers, isRoot: isRoot,
                                     into: &out, context: &context)
             } else {
@@ -53,6 +55,8 @@ extension ComposeBackend {
                 ? "Modifier.weight(1f)" : "Modifier"
             context.imports.insert("androidx.compose.foundation.layout.Spacer")
             out.line("Spacer(modifier = \(base))")
+        case let .horizontalSections(sections, location):
+            try emitHorizontalSections(sections, isRoot: isRoot, into: &out, context: &context)
         case let .forEach(items, location):
             throw Diagnostic(code: "RF-C003",
                              message: "Dynamic list lowering requires the resolved model collection contract.",

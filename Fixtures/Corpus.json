@@ -154,6 +154,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "horizontal-sections",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "horizontal-sections-reject-nested",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-document-preview",
       "implementationStatus": "ready"
     },

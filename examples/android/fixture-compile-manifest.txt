@@ -65,3 +65,4 @@ form-validation
 chat-message-projection
 chat-message-cross-file
 resource-typed-assets
+horizontal-sections

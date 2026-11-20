@@ -103,6 +103,20 @@ extension ViewNode {
                 guard lhsNested.parent == rhsNested.parent,
                       lhsNested.message == rhsNested.message, lhsNested.block == rhsNested.block else { return false }
                 pending.append((.forEach(lhsNested.items, location: nil), .forEach(rhsNested.items, location: nil)))
+            case let (.horizontalSections(lhsSections, _), .horizontalSections(rhsSections, _)):
+                guard lhsSections.collection == rhsSections.collection,
+                      lhsSections.modelType == rhsSections.modelType,
+                      lhsSections.sectionName == rhsSections.sectionName,
+                      lhsSections.sectionType == rhsSections.sectionType,
+                      lhsSections.sectionKey == rhsSections.sectionKey,
+                      lhsSections.sectionKeyType == rhsSections.sectionKeyType,
+                      lhsSections.titleProperty == rhsSections.titleProperty,
+                      lhsSections.rows.property == rhsSections.rows.property,
+                      lhsSections.rows.itemName == rhsSections.rows.itemName,
+                      lhsSections.rows.itemType == rhsSections.rows.itemType,
+                      lhsSections.rows.key == rhsSections.rows.key,
+                      lhsSections.rows.keyType == rhsSections.rows.keyType else { return false }
+                pending.append((lhsSections.rows.content, rhsSections.rows.content))
             case let (.image(lhsSource, lhsModifiers, _), .image(rhsSource, rhsModifiers, _)):
                 guard lhsSource == rhsSource, lhsModifiers == rhsModifiers else { return false }
             case let (.toggle(lhsTitle, lhsValue, lhsModifiers, lhsNativeModifiers, lhsLabelsHidden, _),

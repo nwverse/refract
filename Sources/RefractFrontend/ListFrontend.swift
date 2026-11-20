@@ -67,6 +67,13 @@ extension Builder {
         if owner == "ChatMessage", typeName == "UInt64", name == "revision" {
             return ItemProperty(name: name, type: .revision, declaredType: typeName)
         }
+        if let arrayType = annotation.as(ArrayTypeSyntax.self),
+           let elementName = arrayType.element.as(IdentifierTypeSyntax.self)?.name.text,
+           name != "id", itemTypes.contains(where: { $0.name == elementName }) {
+            return ItemProperty(name: name, type: .string,
+                                collection: ItemCollection(itemType: elementName, owner: owner, property: name),
+                                declaredType: typeName)
+        }
         let enumName = enums.contains(where: { $0.name == typeName && $0.payloadTypes.isEmpty }) ? typeName : nil
         guard let type = scalarType(typeName) ?? (enumName == nil ? nil : .string) else { return nil }
         return ItemProperty(name: name, type: type, declaredType: typeName, enumName: enumName)
