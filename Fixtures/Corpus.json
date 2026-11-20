@@ -178,6 +178,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-media-capabilities",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-media-capability-reject",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-native-animation",
       "implementationStatus": "ready"
     },
@@ -247,6 +255,14 @@
     },
     {
       "path": "interop-remote-image-reject",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-swipe-archive",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-swipe-reject-action",
       "implementationStatus": "ready"
     },
     {

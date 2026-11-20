@@ -1,0 +1,25 @@
+{
+  "string": [
+    { "name": "media_playback_unavailable", "value": "Playback capability unavailable" },
+    { "name": "media_playback_permissionrequired", "value": "Playback permission requires app handling" },
+    { "name": "media_playback_permissiondenied", "value": "Playback permission denied" },
+    { "name": "media_playback_approvalrequired", "value": "Playback approval required" },
+    { "name": "media_playback_approve", "value": "Request synthetic playback approval" },
+    { "name": "media_playback_cancel", "value": "Cancel synthetic playback" },
+    { "name": "media_playback_cancelled", "value": "Synthetic playback cancelled" },
+    { "name": "media_camera_unavailable", "value": "Camera capability unavailable" },
+    { "name": "media_camera_permissionrequired", "value": "Camera permission requires app handling" },
+    { "name": "media_camera_permissiondenied", "value": "Camera permission denied" },
+    { "name": "media_camera_approvalrequired", "value": "Camera approval required" },
+    { "name": "media_camera_approve", "value": "Request synthetic camera approval" },
+    { "name": "media_camera_cancel", "value": "Cancel synthetic camera" },
+    { "name": "media_camera_cancelled", "value": "Synthetic camera cancelled" },
+    { "name": "media_share_unavailable", "value": "Share capability unavailable" },
+    { "name": "media_share_permissionrequired", "value": "Share permission requires app handling" },
+    { "name": "media_share_permissiondenied", "value": "Share permission denied" },
+    { "name": "media_share_approvalrequired", "value": "Share approval required" },
+    { "name": "media_share_approve", "value": "Request synthetic share approval" },
+    { "name": "media_share_cancel", "value": "Cancel synthetic share" },
+    { "name": "media_share_cancelled", "value": "Synthetic share cancelled" }
+  ]
+}

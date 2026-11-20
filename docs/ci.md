@@ -95,9 +95,31 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
    (`gradle-wrapper.properties`) pins Gradle 9.8.2 with its distribution SHA-256; the wrapper downloads Gradle
    through `services.gradle.org`. Android Gradle Plugin, Kotlin and the Compose BOM are pinned in the same
    Gradle scripts; no version is left to resolve at CI time.
+
+### TestKit dependency-resolution evidence
+
+`tools/gradle` uses `kotlin-dsl`, which brings the Kotlin 2.4.10 Gradle plugin/standard-library family into the
+consumer buildscript classpath. Maven Central publishes `org.jetbrains.kotlin:kotlin-stdlib:2.4.10` with valid POM
+and module metadata, and the Gradle Plugin Portal redirects that POM to Maven Central. Google Maven need not mirror
+this artifact. A failure that names only a missing artifact is therefore not sufficient evidence to change the patch
+version, replace a public repository or weaken the consumer check.
+
+The #272 CI failure named the stdlib and also the Kotlin Gradle plugin, BOM and API across all three public sources
+before any functional assertion ran. An unmodified local run of all seven `RefractPluginFunctionalTest` cases passed
+with the fresh CLI, and the later #274 CI run `44614236032` passed its `Exercise incremental generation in a real
+Android consumer` step. Those results support an environment-specific transient dependency-resolution blocker, not a
+missing version. They do not retroactively turn the failed #272 check green or establish a permanent network fix.
+
+On recurrence, retain the full nested TestKit failure, record the exact repository/artifact/configuration and runner
+attempt, and compare public POM/metadata plus a fresh real TestKit run. Do not commit speculative version changes,
+private mirrors, checked-in binaries or test skips without a reproducible repository root cause. If the blocker is
+outside repository configuration, keep the failed check visible and report it rather than changing an unrelated UI
+or claiming that local success proves CI passed.
+
 5. Restore `~/.gradle/caches` and `~/.gradle/wrapper` via `actions/cache` keyed by the wrapper and Gradle build
    scripts. The cache is read-only on pull requests from forks. The job never runs `gradlew --write-locks` or
    accepts an untrusted lockfile change as part of the gate.
+
 6. Run `python3 scripts/check_fixture_compilation.py` to regenerate every fixture listed in
    `examples/android/fixture-compile-manifest.txt` through the CLI, diff the output against the committed
    `Expected.kt`, and stage the Kotlin plus the fixture's `values/strings.xml` under

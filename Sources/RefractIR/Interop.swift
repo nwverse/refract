@@ -75,6 +75,21 @@ public struct NativeDeclaration: Codable, Equatable, Sendable {
 }
 
 public struct NativeArgument: Codable, Equatable, Sendable {
+    /// A checked forwarding closure for the dedicated native swipe/archive host only.
+    public struct SwipeStringAction: Codable, Equatable, Sendable {
+        public let model: String
+        public let name: String
+        public let externalLabel: String?
+        public let parameterName: String
+
+        public init(model: String, name: String, externalLabel: String?, parameterName: String) {
+            self.model = model
+            self.name = name
+            self.externalLabel = externalLabel
+            self.parameterName = parameterName
+        }
+    }
+
     public let label: String
     public let expression: Expression?
     public let action: StateAction?
@@ -82,15 +97,18 @@ public struct NativeArgument: Codable, Equatable, Sendable {
     public let location: SourceLocation?
     /// Closed literal selection content, never an arbitrary serialized payload.
     public let selection: SelectionContent?
+    public let swipeAction: SwipeStringAction?
 
-    private enum CodingKeys: String, CodingKey { case label, expression, action, type, location, selection }
+    private enum CodingKeys: String, CodingKey { case label, expression, action, type, location, selection, swipeAction }
 
     public init(label: String, expression: Expression? = nil, action: StateAction? = nil,
-                selection: SelectionContent? = nil, type: NativeParameterType?, location: SourceLocation? = nil) {
+                selection: SelectionContent? = nil, swipeAction: SwipeStringAction? = nil,
+                type: NativeParameterType?, location: SourceLocation? = nil) {
         self.label = label
         self.expression = expression
         self.action = action
         self.selection = selection
+        self.swipeAction = swipeAction
         self.type = type
         self.location = location
     }
@@ -101,6 +119,7 @@ public struct NativeArgument: Codable, Equatable, Sendable {
         expression = try values.decodeIfPresent(Expression.self, forKey: .expression)
         action = try values.decodeIfPresent(StateAction.self, forKey: .action)
         selection = try values.decodeIfPresent(SelectionContent.self, forKey: .selection)
+        swipeAction = try values.decodeIfPresent(SwipeStringAction.self, forKey: .swipeAction)
         type = try values.decodeIfPresent(NativeParameterType.self, forKey: .type)
         location = try values.decodeIfPresent(SourceLocation.self, forKey: .location)
     }

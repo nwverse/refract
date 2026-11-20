@@ -309,6 +309,8 @@ struct Generation {
                     return "(destination: string): void => { this.\(model).\(name)(destination); }"
                 } renderSelection: { content in
                     try emitArkSelectionContent(content)
+                } renderSwipeStringAction: { action in
+                    "(\(action.parameterName): string): void => { this.\(action.model).\(action.name)(\(action.parameterName)); }"
                 }
                 writer.line("\(target.symbol)({ \(arguments.joined(separator: ", ")) })")
             }

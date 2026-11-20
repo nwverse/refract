@@ -431,6 +431,9 @@ public struct ComposeBackend: Sendable {
             return "{ destination -> \(model).\(name)(destination) }"
         } renderSelection: { content in
             try emitComposeSelectionContent(content)
+        } renderSwipeStringAction: { action in
+            let label = action.externalLabel.map { "\($0) = " } ?? ""
+            return "{ \(action.parameterName) -> \(action.model).\(action.name)(\(label)\(action.parameterName)) }"
         }
         if isRoot, let modifier = resolver.nativeComponent(for: component, platform: .android)?.modifierParameter {
             arguments.append("\(modifier) = modifier")

@@ -1,0 +1,1 @@
+Input.swift:36:28: error [RFSWIPE002]: Swipe request/confirmation must forward the current row's String id unchanged. Suggestion: Use `{ identifier in model.requestArchive(identifier) }` and `{ identifier in model.archive(identifier) }`
