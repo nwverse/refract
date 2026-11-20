@@ -117,6 +117,22 @@ func selectionTypesOutsideTheCompleteLiteralHostAreDiagnostics(_ declaration: St
     #expect(diagnostic.location?.column == 8)
 }
 
+@Test(arguments: [
+    "let onRequest: (String) -> Void\n    let onConfirm: (String) -> Void",
+    "let onRequest: (String) -> Void",
+    "let onConfirm: (String) -> Void",
+])
+func swipeDeclarationCannotBypassLiteralSelectionRestriction(_ callback: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct NativeSwipeArchiveRow: RefractNativeView {
+        \(callback)
+        var body: some View { Text(verbatim: "Synthetic") }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
+    #expect(unit.diagnostics.first?.message.contains("literal-selection host") == true)
+}
+
 @Test func selectionContentRoundTripsLiteralUnicodeAndEmptyRange() throws {
     let content = SelectionContent(text: "🌸", links: [
         SelectionLink(range: SelectionRange(start: 0, end: 2), destination: "https://example.test"),

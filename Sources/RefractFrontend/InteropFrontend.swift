@@ -66,9 +66,11 @@ struct InteropFrontend {
         }
         // These payload/callback types share one closed literal-selection ABI. Accepting a
         // subset or a renamed callback on an arbitrary native view would widen that ABI.
+        // The dedicated swipe row has its own separately checked String-id forwarding contract.
         if parameters.contains(where: {
             [.selectionContent, .actionString, .selectionContextAction].contains($0.type)
-        }), !Self.isLiteralSelectionHost(parameters) {
+        }), !Self.isLiteralSelectionHost(parameters),
+           !(node.name.text == "NativeSwipeArchiveRow" && Self.isSwipeArchiveHost(parameters)) {
             invalidDeclarations.insert(node.name.text)
             diagnostics.append(error("RFNATIVE001",
                 "Native component `\(node.name.text)` does not have the complete literal-selection host signature.",
@@ -148,6 +150,18 @@ struct InteropFrontend {
         ("onUseAsContext", .selectionContextAction),
         ("onEditWithAI", .selectionContextAction),
     ]
+
+    private static let swipeArchiveParameters: [(String, NativeParameterType)] = [
+        ("identifier", .string),
+        ("title", .string),
+        ("onRequest", .actionString),
+        ("onConfirm", .actionString),
+        ("onCancel", .action),
+    ]
+
+    private static func isSwipeArchiveHost(_ parameters: [NativeParameter]) -> Bool {
+        parameters.map { ($0.label, $0.type) }.elementsEqual(swipeArchiveParameters, by: ==)
+    }
 
     private static func isLiteralSelectionHost(_ parameters: [NativeParameter]) -> Bool {
         parameters.map { ($0.label, $0.type) }.elementsEqual(literalSelectionParameters, by: ==)
