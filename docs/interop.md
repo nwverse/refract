@@ -231,9 +231,11 @@ A native component can declare a zero-argument `() -> Void` callback. Its only a
 no-argument model method such as `{ model.closePreview() }`; Compose emits a `() -> Unit` lambda and ArkTS emits a
 `() => void` lambda. Arbitrary closures, function values and parameterized callbacks remain diagnostics. The typed
 document preview boundary, its app-owned URI/permission/decode/lifecycle ownership, and synthetic Native JVM evidence
-are specified in `docs/document-preview.md`. The bounded swipe/archive row, its shared confirmation and equivalent
-accessible action are specified in `docs/swipe-actions.md`; that dedicated component permits checked String-id
-request/confirm actions without widening the link-only String-action ABI to other components.
+are specified in `docs/document-preview.md`. The bounded playback, camera and system-share capability states and their
+absence/approval/cancellation ownership are specified in `docs/media-capabilities.md`; these are not real system
+capability implementations. The bounded swipe/archive row, its shared confirmation and equivalent accessible action are
+specified in `docs/swipe-actions.md`; that dedicated component permits checked String-id request/confirm actions
+without widening the link-only String-action ABI to other components.
 Other closures and arbitrary Swift objects are otherwise rejected until their typed native representation is specified;
 they are never converted to untyped target expressions.
 

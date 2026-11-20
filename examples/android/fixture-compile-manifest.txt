@@ -33,6 +33,7 @@ interop-text-input-host
 interop-native-state-transition
 interop-document-preview
 interop-swipe-archive
+interop-media-capabilities
 benchmark-settings
 child-view-layout-priority
 child-view-foreach-content-type

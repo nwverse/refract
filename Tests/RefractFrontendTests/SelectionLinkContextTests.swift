@@ -76,6 +76,63 @@ func invalidSelectionRangesAndDestinationsAreDiagnostics(content: String) {
     #expect(Frontend.parse(arbitrary).diagnostics.contains { $0.code == "RFSELECTION006" })
 }
 
+@Test(arguments: [
+    "let content: RefractSelectionContent",
+    "let onLink: (String) -> Void",
+    "let onOpen: (String) -> Void",
+    "let onUseAsContext: (RefractSelectionContext) -> Void",
+    "let onEditWithAI: (RefractSelectionContext) -> Void",
+    """
+    let content: RefractSelectionContent
+    let onOpen: (String) -> Void
+    let onUseAsContext: (RefractSelectionContext) -> Void
+    let onEditWithAI: (RefractSelectionContext) -> Void
+    """,
+    """
+    let onLink: (String) -> Void
+    let content: RefractSelectionContent
+    let onUseAsContext: (RefractSelectionContext) -> Void
+    let onEditWithAI: (RefractSelectionContext) -> Void
+    """,
+    """
+    let content: RefractSelectionContent
+    let onLink: (String) -> Void
+    let onUseAsContext: (RefractSelectionContext) -> Void
+    let onEditWithAI: (RefractSelectionContext) -> Void
+    let extra: String
+    """,
+])
+func selectionTypesOutsideTheCompleteLiteralHostAreDiagnostics(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct UnboundedSelection: RefractNativeView {
+        \(declaration)
+        var body: some View { Text(verbatim: "Synthetic") }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
+    guard let diagnostic = unit.diagnostics.first else { return }
+    #expect(diagnostic.message.contains("literal-selection host"))
+    #expect(diagnostic.suggestion?.contains("content") == true)
+    #expect(diagnostic.location?.line == 1)
+    #expect(diagnostic.location?.column == 8)
+}
+
+@Test(arguments: [
+    "let onRequest: (String) -> Void\n    let onConfirm: (String) -> Void",
+    "let onRequest: (String) -> Void",
+    "let onConfirm: (String) -> Void",
+])
+func swipeDeclarationCannotBypassLiteralSelectionRestriction(_ callback: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct NativeSwipeArchiveRow: RefractNativeView {
+        \(callback)
+        var body: some View { Text(verbatim: "Synthetic") }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["RFNATIVE001"])
+    #expect(unit.diagnostics.first?.message.contains("literal-selection host") == true)
+}
+
 @Test func selectionContentRoundTripsLiteralUnicodeAndEmptyRange() throws {
     let content = SelectionContent(text: "🌸", links: [
         SelectionLink(range: SelectionRange(start: 0, end: 2), destination: "https://example.test"),

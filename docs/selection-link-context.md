@@ -33,8 +33,12 @@ NativeSelectionMessage(
 ```
 
 A Screen still has only `let model: SelectionMessageModel`. The new closure forms belong to the native host call;
-the generator resolves their single body against a declared `RefractModel` action. Arbitrary closures, captured
-values, snapshot rewriting and unrelated method signatures are rejected. No second callback ABI is introduced:
+the generator resolves their single body against a declared `RefractModel` action. The native declaration must
+contain exactly `content`, `onLink`, `onUseAsContext` and `onEditWithAI`, with the source types above, in that
+order. A partial, renamed, reordered or extended declaration, or use of `(String) -> Void` on an unrelated native
+component, is an `RFNATIVE001` build-time diagnostic. Neither backend emits output for that declaration.
+Arbitrary closures, captured values, snapshot rewriting and unrelated method signatures are rejected. No second
+callback ABI is introduced:
 `NativeArgument` carries the closed literal content or the already-resolved model action.
 
 The `ModelParameter` scalar boundary cannot directly represent `RefractSelectionContext`, so this implementation
@@ -67,6 +71,7 @@ preserve live revisions and range ownership.
   and ArkTS. `Fixtures/selection-link-context-reject/` rejects a range that splits an emoji surrogate pair.
 - `SelectionLinkContextTests` verifies model callback resolution, dual-backend lowering, empty/Unicode metadata,
   invalid bounds, overlapping ranges, non-HTTPS destinations, arbitrary callbacks and projected-content rejection.
+  Its declaration tests also reject eight partial, renamed, reordered or extended literal-selection host signatures.
 - `examples/android/fixtures` compiles the generated Kotlin and runs plain Native JVM host tests for empty and
   Unicode snapshots, movement without callbacks, separate explicit actions, link delegation and invalid ranges.
   These tests do not use an emulator, device, IME, clipboard or actual URL opener.

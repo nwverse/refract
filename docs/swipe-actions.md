@@ -40,6 +40,7 @@ The source body is an app-owned ordinary SwiftUI sketch with a native swipe acti
 and a confirmation dialog. Its private `@State isConfirming` is iOS implementation state only, explicitly whitelisted
 on this one component and never emitted as a sixth native argument. Other native components cannot use that exception.
 It is not a shared animation specification and is not translated into another platform's implementation.
+on this one component and never emitted as a sixth native argument. Other native components cannot use that exception. It is not a shared animation specification and is not translated into another platform's
 implementation. On HarmonyOS, the mapping delegates the same typed inputs to the app's `NativeSwipeArchiveRow`; its
 implementation, compiler and lifecycle are not verified here.
 
@@ -60,6 +61,10 @@ model method, callback registry or runtime gesture state machine is added.
 Dismissal or the Cancel button calls the same `onCancel` and never invokes the archive method. The pending dialog is
 closed before the confirm/cancel action, and both paths reset the native swipe state. Normal completion does not emit
 a second cancellation. Returning to the screen does not replay the disposed confirmation.
+Confirmation calls `onConfirm(identifier)`. Dismissal or the Cancel button calls the same `onCancel` and never invokes
+the archive method. The pending dialog is closed before the confirm/cancel action, and both paths reset the native
+swipe state. The model implementation is responsible for retaining/clearing its corresponding business pending state;
+there is no hidden runtime model or registry in Refract.
 
 The fixture uses native `SwipeToDismissBox`. A partial swipe may settle back to its native resting position; this
 contract does not invent a persistent reveal state. Normal motion uses `reset()`. At zero `MotionDurationScale` it
@@ -71,6 +76,8 @@ DSL. Native cancellation/disposal belongs to the app implementation and native c
 The real CLI regenerates both `Expected.kt` and `Expected.ets`. `interop-swipe-reject-action` rejects a confirmation
 closure that does not forward the identifier, and `interop-swipe-reject-receiver` rejects a VStack-wrapped component
 with `RFSWIPE001` before either backend writes output. The direct-row golden remains byte-identical. Generated calls preserve `item.id`, title and all three
+closure that does not forward the identifier; focused tests also cover non-String row identity, wrong component shape
+and the unchanged restriction on unrelated String actions. Generated calls preserve `item.id`, title and all three
 checked callbacks on both backends.
 
 `examples/android/fixtures/src/native/java/com/example/refract/gesture/NativeSwipeArchiveRow.kt` is compiled with the
@@ -81,6 +88,9 @@ A stale-confirmation gate test rejects replacement and generation mismatches whi
 identity; the generated confirm button uses that gate. Leaving and returning does not replay pending confirmation.
 These are not emulator, device, physical gesture or performance results. iOS source and ArkTS native components are
 source/golden evidence only, not native compilation claims.
+pending-request idempotence, identifier replacement and leaving composition on the same app-owned native component. They are not emulator,
+device, physical gesture or performance results. iOS source and ArkTS native components are source/golden evidence only, not
+native compilation claims.
 
 Run after a bounded `swift build`:
 

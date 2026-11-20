@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated" },
+    "imports": [], "components": {}, "nativeComponents": {
+      "NativeShareCapability": {
+        "kind": "composable", "module": "com.example.refract.media", "target": "NativeShareCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "named", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      }
+    }, "modifiers": {}, "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "className": "refract.generated.R", "catalog": "values/strings.xml", "strings": {
+      "media.share.cancel": "media_share_cancel"
+    } }
+  },
+  "harmonyOS": {
+    "output": { "directory": "generated" },
+    "imports": [{ "module": "example.media", "symbols": ["NativeShareCapability"] }],
+    "components": {}, "nativeComponents": {
+      "NativeShareCapability": {
+        "kind": "component", "module": "example.media", "target": "NativeShareCapability",
+        "content": "none", "modifiers": [], "argumentStyle": "object", "attributes": {},
+        "parameters": [
+          { "label": "identifier", "type": "string", "required": true },
+          { "label": "revision", "type": "int", "required": true },
+          { "label": "onCancel", "type": "action", "required": true }
+        ],
+        "arguments": [
+          { "source": "identifier", "target": "identifier" },
+          { "source": "revision", "target": "revision" },
+          { "source": "onCancel", "target": "onCancel" }
+        ]
+      }
+    }, "modifiers": {}, "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": { "namespace": "app", "stringTable": "string", "catalog": "resources/base/element/string.json", "strings": {
+      "media.share.cancel": "media_share_cancel"
+    } }
+  }
+}
