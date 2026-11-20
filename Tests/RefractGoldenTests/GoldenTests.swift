@@ -54,7 +54,7 @@ struct CorpusTests {
             "interop-native-undeclared", "interop-platform-text-localized-rejected",
             "interop-platform-value", "interop-platform-value-incomplete", "interop-platform-view",
             "interop-reject-conditional-compilation", "interop-remote-image", "interop-remote-image-reject",
-            "interop-swipe-archive", "interop-swipe-reject-action",
+            "interop-swipe-archive", "interop-swipe-reject-action", "interop-swipe-reject-receiver",
             "interop-text-input-host",
         ])
         #expect(cases.allSatisfy { !$0.name.hasPrefix("interop-") || $0.status == .ready })

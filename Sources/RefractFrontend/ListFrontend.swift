@@ -137,6 +137,13 @@ extension Builder {
                 parameters: parameters, states: currentStates, body: content)
             return nil
         }
+        if content.containsSwipeArchiveRow, !content.isDirectSwipeArchiveRow {
+            diagnostics.append(Diagnostic(code: "RFSWIPE001",
+                message: "NativeSwipeArchiveRow must be the direct receiver of a dynamic List row.",
+                suggestion: "Do not wrap the bounded swipe component in VStack/HStack, another container or a child view",
+                location: content.sourceLocation))
+            return nil
+        }
         let items = ListItems(collection: collection, itemName: itemName, itemType: descriptor.itemType,
                               key: descriptor.key, keyType: descriptor.keyType, content: content,
                               contentType: rowContentType(content), projection: projection,
@@ -226,6 +233,13 @@ extension Builder {
                               key: item.identity.name, keyType: item.identity.type, content: content,
                               contentType: rowContentType(content), projection: projection, modelType: modelType,
                               location: location(of: call))
+        if content.containsSwipeArchiveRow, !content.isDirectSwipeArchiveRow {
+            diagnostics.append(Diagnostic(code: "RFSWIPE001",
+                message: "NativeSwipeArchiveRow must be the direct receiver of a dynamic List row.",
+                suggestion: "Do not wrap the bounded swipe component in VStack/HStack, another container or a child view",
+                location: content.sourceLocation))
+            return nil
+        }
         return .list(children: [.forEach(items, location: location(of: call))], modifiers: [],
                      location: location(of: owner))
     }
@@ -306,5 +320,17 @@ extension Builder {
         guard let parameters = closure.signature?.parameterClause?.as(ClosureShorthandParameterListSyntax.self),
               parameters.count == 1 else { return nil }
         return parameters.first?.name.text
+    }
+}
+
+extension ViewNode {
+    var isDirectSwipeArchiveRow: Bool {
+        if case let .native(component, _) = self { return component.name == "NativeSwipeArchiveRow" }
+        return false
+    }
+
+    var containsSwipeArchiveRow: Bool {
+        if case let .native(component, _) = self { return component.name == "NativeSwipeArchiveRow" }
+        return children.contains(where: \.containsSwipeArchiveRow)
     }
 }

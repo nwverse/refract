@@ -266,6 +266,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-swipe-reject-receiver",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-text-input-host",
       "implementationStatus": "ready"
     },
