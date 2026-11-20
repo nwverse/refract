@@ -1,0 +1,1 @@
+Input.swift:24:40: error [RFLIST004]: A horizontal section needs one ScrollView(.horizontal) with one LazyHStack and one identified ForEach over the section's item collection. Suggestion: Use Section(section.title) { ScrollView(.horizontal) { LazyHStack { ForEach(section.items) { item in ... } } } }

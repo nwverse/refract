@@ -33,16 +33,18 @@ export interface GalleryModel {
 export struct GalleryScreen {
   @Require @Param model: GalleryModel;
   build() {
-    LazyForEach(this.model.sections, (section: GallerySection) => {
-      ListItemGroup({ header: Text(section.title) }) {
-        ListItem() {
-          LazyRow(Scroller()) {
-            ForEach(section.items, (item: GalleryItem) => {
-              Text(item.title).width(160)
-            }, (item: GalleryItem): string => item.id)
+    List() {
+      LazyForEach(this.model.sections, (section: GallerySection) => {
+        ListItemGroup({ header: Text(section.title) }) {
+          ListItem() {
+            LazyRow(Scroller()) {
+              ForEach(section.items, (item: GalleryItem) => {
+                Text(item.title).width(160)
+              }, (item: GalleryItem): string => item.id)
+            }
           }
         }
-      }
-    }, (section: GallerySection): string => section.id)
+      }, (section: GallerySection): string => section.id)
+    }
   }
 }

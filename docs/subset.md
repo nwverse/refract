@@ -106,9 +106,10 @@ is accepted when the section type and the inner item type both conform to `Ident
 The outer `List` remains the sole vertical lazy owner. Compose emits one `LazyColumn` with keyed `items` for sections;
 each section row contains a `Column` with a header `Text` and a keyed `LazyRow` for the inner items. ArkUI emits one
 `List` with `LazyForEach` over the section data source, `ListItemGroup` with a header, and one `LazyRow(Scroller())` per
-section row. No independent nested vertical scroll container is generated. The generated-screen Native JVM tests verify
-horizontal swipe, section replacement with identity preservation, and composition recreation with app-owned state.
-iOS SwiftUI compiles the same source file directly; ArkTS native compilation is not yet verified.
+section row. No independent nested vertical scroll container is generated. The generated-screen Native JVM tests read
+native horizontal scroll semantics while sections reorder, shrink their item collections and are replaced by new ids.
+This verifies keyed state ownership and replacement behavior, not only visible text. iOS SwiftUI uses the same source;
+its native compilation/behavior and ArkTS native compilation/behavior are not verified.
 Unsupported inner shapes (nested vertical scroll containers, missing identity, multiple section children, etc.) produce
 `RFLIST004` at the offending source location.
 

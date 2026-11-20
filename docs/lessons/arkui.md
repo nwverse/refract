@@ -22,6 +22,12 @@ Replacement model data must update that app-owned data source and use its native
 do not claim to observe in-place mutations of an ordinary app-owned array. The native compiler and an integration
 example are still required to verify the concrete implementation.
 
+A specialized dynamic-section lowering must retain the same outer `List()` as the ordinary `.list` path. Emitting its
+`LazyForEach` directly in `build()` drops the only vertical owner and can pass source-only golden tests while producing
+an invalid component structure. Prefer routing specialized children through the shared List wrapper; review the
+resulting `LazyForEach` keyGenerator position and `ListItemGroup` nesting. This source review is not ArkTS compiler
+verification.
+
 ## A Scroll has one child, and a component is not an entry page
 
 A `Scroll` needs a single direct container, so a multi-child Swift `ScrollView` becomes `Scroll { Column { ... } }`.
