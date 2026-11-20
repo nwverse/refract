@@ -37,7 +37,7 @@ func emitLocalState(_ declaration: StateDeclaration, into writer: inout ArkWrite
     }
     if case let .form(ownership, declaration, _) = declaration {
         for field in declaration.fields {
-            let name = declaration.name + field.name.prefix(1).uppercased() + field.name.dropFirst()
+            let name = declaration.name + field.name.prefix(1).uppercased() + String(field.name.dropFirst())
             let type = try stateType(field.type)
             switch ownership {
             case .state:

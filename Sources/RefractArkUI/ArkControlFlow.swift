@@ -108,7 +108,7 @@ extension Generation {
     }
 
     private func enumCaseClass(enum name: String, case caseName: String) -> String {
-        name + caseName.prefix(1).uppercased() + caseName.dropFirst()
+        name + caseName.prefix(1).uppercased() + String(caseName.dropFirst())
     }
 
     private func arkScalar(_ type: ValueType) -> String {

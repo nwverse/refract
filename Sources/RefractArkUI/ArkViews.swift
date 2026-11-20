@@ -151,7 +151,7 @@ extension Generation {
             case let .valueProperty(.binding(name)):
                 writer.line("this.on\(name.prefix(1).uppercased())\(name.dropFirst())Change(value);")
             case let .formField(form, field):
-                let name = form + field.prefix(1).uppercased() + field.dropFirst()
+                let name = form + field.prefix(1).uppercased() + String(field.dropFirst())
                 let isBinding = module.screens.flatMap(\.states).contains { state in
                     if case let .form(.binding, declared, _) = state { return declared.name == form }
                     return false

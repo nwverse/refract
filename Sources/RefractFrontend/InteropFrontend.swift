@@ -10,6 +10,11 @@ struct InteropFrontend {
     private var names: Set<String> = []
     var invalidDeclarations: Set<String> = []
 
+    init(file: String, converter: SourceLocationConverter) {
+        self.file = file
+        self.converter = converter
+    }
+
     mutating func takeDiagnostics() -> [Diagnostic] {
         defer { diagnostics.removeAll() }
         return diagnostics
