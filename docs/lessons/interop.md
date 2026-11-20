@@ -109,6 +109,12 @@
   native accessibility, measurement modifiers or `remember(model, row.id)`. Inspect both output paths for duplicate
   wrappers rather than relying on an unused `title` variable to prevent one.
   select the node that defines `SemanticsActions.Dismiss`, not an arbitrary `onRoot()`.
+- A bounded native swipe row is not a persistent reveal runtime. Compose `SwipeToDismissBox` may settle a partial
+  swipe back immediately; the pending native confirmation owns the request. Keep swipe and menu/custom-action requests
+  idempotent while pending, close confirmation before confirm/cancel and use native reset/snap for settling. A model
+  action with a real String parameter cannot reuse the generic zero-argument or link-placeholder emitter: preserve a
+  dedicated checked forwarding representation and generate the identifier argument on both backends. Keep any iOS-only
+  private confirmation state on the specific component's whitelist, never as a cross-platform parameter.
 - A media capability ABI is not a media implementation. Keep permission/approval/cancellation as explicit app-owned
   states and checked model actions; absence branches must not place a native player, camera or share component.
   Compact native-component mappings accept scalar parameters only: a checked no-argument action requires the schema-1

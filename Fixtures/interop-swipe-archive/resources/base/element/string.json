@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "swipe_archive", "value": "Archive" },
+    { "name": "swipe_confirm_title", "value": "Archive this item?" },
+    { "name": "swipe_confirm_message", "value": "The app will archive the selected item after confirmation." },
+    { "name": "swipe_confirm", "value": "Archive item" },
+    { "name": "swipe_cancel", "value": "Cancel" }
+  ]
+}

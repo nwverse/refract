@@ -250,6 +250,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-swipe-archive",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "interop-swipe-reject-action",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-text-input-host",
       "implementationStatus": "ready"
     },
