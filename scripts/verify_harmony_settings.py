@@ -190,12 +190,13 @@ def validate_result(output: str) -> dict[str, object]:
             else:
                 raise VerificationError("class record is neither a suite end nor a case")
         elif kind == "summary":
-            if len(suite_starts) != 1 or len(suite_ends) != 1:
-                raise VerificationError("summary arrived before the selected suite completed")
+            if len(suite_starts) != 1 or len(suite_ends) != 1 or index != len(lifecycle) - 3:
+                raise VerificationError("summary arrived before the selected suite completed or after task completion")
             index += 1
         elif kind == "terminal":
-            if index + 1 >= len(lifecycle) or lifecycle[index + 1][0] != "taskconsuming":
-                raise VerificationError("terminal result has no task completion record")
+            if index != len(lifecycle) - 2 or len(suite_starts) != 1 or len(suite_ends) != 1 \
+                    or lifecycle[index - 1][0] != "summary" or lifecycle[index + 1][0] != "taskconsuming":
+                raise VerificationError("terminal/task records are not the final ordered lifecycle records")
             index += 2
         else:
             raise VerificationError("unexpected or ambiguous native lifecycle record")

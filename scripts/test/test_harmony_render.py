@@ -117,6 +117,25 @@ class RenderingEvidenceTests(unittest.TestCase):
             with self.subTest(output=output), self.assertRaises(MODULE.VerificationError):
                 MODULE.validate_result(output)
 
+    def test_early_terminal_and_task_completion_fail_closed(self) -> None:
+        fixture = (Path(__file__).parent / "fixtures/harmony_hypium_1_0_25_representative.log").read_text(
+            encoding="utf-8"
+        )
+        terminal = "OHOS_REPORT_CODE: 0\n"
+        task_done = "OHOS_REPORT_STATUS: taskconsuming=6112\n"
+        second_case = (
+            "OHOS_REPORT_STATUS: class=GeneratedSettingsRender\n"
+            "OHOS_REPORT_STATUS: current=2\n"
+        )
+        second_case += fixture.split(second_case, 1)[1].split("OHOS_REPORT_STATUS_CODE: 1\n", 1)[0]
+        second_case += "OHOS_REPORT_STATUS_CODE: 1\n"
+        reordered = fixture.replace(terminal + task_done, "").replace(
+            second_case, terminal + task_done + second_case, 1
+        )
+        self.assertIn(terminal + task_done + second_case, reordered)
+        with self.assertRaises(MODULE.VerificationError):
+            MODULE.validate_result(reordered)
+
     def test_native_test_target_selects_real_generated_host_and_controls(self) -> None:
         root = MODULE.EXAMPLE / "entry/src/ohosTest"
         host = (root / "ets/testability/GeneratedSettingsHost.ets").read_text(encoding="utf-8")
