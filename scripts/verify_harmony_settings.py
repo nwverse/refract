@@ -41,7 +41,17 @@ CAPTURES = (
     "generated-settings-dark.png",
     "generated-settings-dark-layout.json",
 )
-SUMMARY = re.compile(r"OHOS_REPORT_RESULT: stream=Tests run: (\d+), Failure: (\d+), Error: (\d+), Pass: (\d+), Ignore: (\d+)")
+EXPECTED_CASES = (
+    ("GeneratedSettingsRender", "native_controls_binding_model_list_and_captures"),
+    ("GeneratedSettingsRender", "native_dark_theme_and_accessibility_layout"),
+)
+SUMMARY = re.compile(r"(?m)^OHOS_REPORT_RESULT: stream=Tests run: (\d+), Failure: (\d+), Error: (\d+), Pass: (\d+), Ignore: (\d+)$")
+CASE_RESULT = re.compile(r"(?m)^OHOS_REPORT_STATUS: (class|test)=(.*)$")
+CASE_STATUS = re.compile(r"(?m)^OHOS_REPORT_STATUS_CODE: (-?\d+)$")
+SUITE_START = re.compile(r"(?m)^OHOS_REPORT_SUM: (\d+)$")
+SUITE_DONE = re.compile(r"(?m)^OHOS_REPORT_STATUS: suiteconsuming=(\d+)$")
+TASK_DONE = re.compile(r"(?m)^OHOS_REPORT_STATUS: taskconsuming=(\d+)$")
+TERMINAL = re.compile(r"(?m)^OHOS_REPORT_CODE: (-?\d+)$")
 ARGUMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$")
 
 
@@ -69,17 +79,151 @@ def execute(command: Sequence[str], log_path: Path, *, cwd: Path = ROOT,
     return result
 
 
-def validate_result(output: str) -> dict[str, int]:
-    """Require an exact, complete native result; an overall code alone is insufficient."""
+def validate_result(output: str) -> dict[str, object]:
+    """Parse pinned suite/case/task lifecycles and require one successful terminal result."""
     results = SUMMARY.findall(output)
-    if len(results) != 1:
-        raise VerificationError("missing or ambiguous Hypium summary; no rendering success is reported")
+    terminals = TERMINAL.findall(output)
+    if len(results) != 1 or terminals != ["0"]:
+        raise VerificationError("missing, ambiguous or failed native summary/terminal result")
     tests, failures, errors, passed, ignored = (int(value) for value in results[0])
-    if tests < 3 or failures or errors or ignored or passed != tests:
+    if tests != len(EXPECTED_CASES) or failures or errors or ignored or passed != tests:
         raise VerificationError(f"native test summary did not pass completely: {results[0]}")
-    if "OHOS_REPORT_CODE: 0" not in output:
-        raise VerificationError("native test runner did not finish successfully")
-    return {"tests": tests, "failures": failures, "errors": errors, "passed": passed, "ignored": ignored}
+
+    lifecycle: list[tuple[str, str, int | None]] = []
+    fields: list[tuple[str, str, int | None]] = []
+
+    def flush_record() -> None:
+        nonlocal fields
+        if not fields:
+            return
+        kinds = [kind for kind, _, _ in fields]
+        if "class" in kinds:
+            if kinds == ["sum", "class"] or kinds == ["class", "suiteconsuming"] \
+                    or (kinds[0] == "class" and kinds[-1] == "code" and kinds.count("class") == 1
+                        and kinds.count("test") == 1 and kinds.count("code") == 1):
+                lifecycle.extend(fields)
+                fields = []
+                return
+            raise VerificationError("incomplete, reordered or ambiguous native report record")
+        if fields[0][0] == "sum" or any(kind in ("code", "test", "suiteconsuming") for kind in kinds):
+            raise VerificationError("native lifecycle record has no suite or case identity")
+        # Timing and diagnostic fields from an earlier case do not form a new record.
+        fields = []
+
+    for line in output.splitlines():
+        if re.fullmatch(
+            r"OHOS_REPORT_STATUS: (current|id|numtests|stream|consuming|stack|skipReason|shortMsg|hookError|"
+            r"currentWorkerName)=.*",
+            line,
+        ):
+            continue
+        match = re.fullmatch(r"OHOS_REPORT_STATUS: (class|test)=(.*)", line)
+        if match:
+            if match[1] == "class" and not (len(fields) == 1 and fields[0][0] == "sum"):
+                flush_record()
+            kind, value = match.groups()
+            fields.append((kind, value, None))
+            continue
+        match = SUITE_DONE.fullmatch(line)
+        if match:
+            fields.append(("suiteconsuming", "", int(match[1])))
+            continue
+        match = TASK_DONE.fullmatch(line)
+        if match:
+            if fields:
+                raise VerificationError("task completed before a native record was complete")
+            lifecycle.append(("taskconsuming", "", int(match[1])))
+            continue
+        match = SUITE_START.fullmatch(line)
+        if match:
+            if fields:
+                flush_record()
+            fields.append(("sum", match[1], int(match[1])))
+            continue
+        match = CASE_STATUS.fullmatch(line)
+        if match:
+            fields.append(("code", match[1], int(match[1])))
+            continue
+        if SUMMARY.fullmatch(line):
+            flush_record()
+            lifecycle.append(("summary", "", None))
+            continue
+        if TERMINAL.fullmatch(line):
+            if fields:
+                raise VerificationError("terminal result interrupted a native report record")
+            lifecycle.append(("terminal", "", None))
+            continue
+        if fields:
+            raise VerificationError("malformed or ambiguous native report record")
+    flush_record()
+
+    suites = {suite for suite, _ in EXPECTED_CASES}
+    suite_starts: list[str] = []
+    suite_ends: list[str] = []
+    case_records: list[tuple[str, str, int]] = []
+    index = 0
+    while index < len(lifecycle):
+        kind, value, duration = lifecycle[index]
+        if kind == "sum":
+            if duration != len(EXPECTED_CASES) or index + 1 >= len(lifecycle):
+                raise VerificationError("invalid suite start record")
+            next_kind, next_value, _ = lifecycle[index + 1]
+            if next_kind != "class" or next_value not in suites:
+                raise VerificationError("suite start has no selected suite name")
+            suite_starts.append(next_value)
+            index += 2
+        elif kind == "class":
+            if index + 1 >= len(lifecycle) or value not in suites:
+                raise VerificationError("class-only or unknown native report record")
+            next_kind, next_value, next_duration = lifecycle[index + 1]
+            if next_kind == "suiteconsuming":
+                suite_ends.append(value)
+                index += 2
+            elif next_kind == "test":
+                if index + 2 >= len(lifecycle):
+                    raise VerificationError("incomplete native case record")
+                code_kind, code_value, code = lifecycle[index + 2]
+                if code_kind != "code":
+                    raise VerificationError("native case has no status code")
+                case_records.append((value, next_value, int(code)))
+                index += 3
+            else:
+                raise VerificationError("class record is neither a suite end nor a case")
+        elif kind == "summary":
+            if len(suite_starts) != 1 or len(suite_ends) != 1 or index != len(lifecycle) - 3:
+                raise VerificationError("summary arrived before the selected suite completed or after task completion")
+            index += 1
+        elif kind == "terminal":
+            if index != len(lifecycle) - 2 or len(suite_starts) != 1 or len(suite_ends) != 1 \
+                    or lifecycle[index - 1][0] != "summary" or lifecycle[index + 1][0] != "taskconsuming":
+                raise VerificationError("terminal/task records are not the final ordered lifecycle records")
+            index += 2
+        else:
+            raise VerificationError("unexpected or ambiguous native lifecycle record")
+    if len(suite_starts) != 1 or len(suite_ends) != 1 or suite_starts != suite_ends:
+        raise VerificationError("selected suite start/end records are incomplete or ambiguous")
+
+    observed: list[tuple[str, str]] = []
+    pending: tuple[str, str] | None = None
+    for suite, name, code in case_records:
+        case = (suite, name)
+        if case not in EXPECTED_CASES or code not in (0, 1):
+            raise VerificationError(f"unexpected or failed native case result: {suite}#{name}={code}")
+        if code == 1:
+            if pending is not None:
+                raise VerificationError(f"native case has no success result: {pending[0]}#{pending[1]}")
+            pending = case
+        elif pending != case or case in observed:
+            raise VerificationError(f"native case has an incomplete or duplicate success: {suite}#{name}")
+        else:
+            observed.append(case)
+            pending = None
+    if pending is not None or observed != list(EXPECTED_CASES):
+        raise VerificationError("not every required native rendering case completed successfully")
+    return {
+        "tests": tests, "failures": failures, "errors": errors, "passed": passed, "ignored": ignored,
+        "cases": [f"{suite}#{name}" for suite, name in EXPECTED_CASES],
+    }
 
 
 def source_revision() -> str:

@@ -78,10 +78,13 @@ given `--skip-build`, installs the two identified HAPs, and runs the native chec
 vendor output and commands in the private log. `--skip-build` is only for an already compiled exact source revision;
 it is not a portability or success shortcut.
 
-The runner checks the complete Hypium summary: no failures, errors, ignored tests or missing result
-is accepted. It retrieves the fixed PNG/layout manifest after the complete interaction sequence, including the
-return from the scrolled position. Invalid/missing files fail closed. It never reports `renderVerified: true`: successful
-execution ends as `executed-awaiting-human-capture-inspection`.
+The runner parses the pinned suite/case/task lifecycle in order: the selected `GeneratedSettingsRender` suite start,
+exactly its two named cases with start and successful completion records, suite end, one complete summary, exactly one
+zero terminal record and task completion. Package-level `numtests` may include the separately filtered contract test;
+it is not the selected suite count. Missing, duplicate, wrong, failed, reordered or mixed terminal records fail closed.
+It retrieves the fixed PNG/layout manifest after the complete interaction sequence, including the return from the
+scrolled position. Invalid/missing files fail closed. It never reports `renderVerified: true`: successful execution
+ends as `executed-awaiting-human-capture-inspection`.
 
 Finally, open all light/dark PNGs and layout JSON files. Inspect the actual labels, input, switch, Save control,
 scrolled content, backgrounds and native attributes. Record the reviewer, inspected source/tool/target metadata and

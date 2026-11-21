@@ -101,3 +101,13 @@ A test runner must require the complete Hypium summary rather than accepting its
 and retrieve every expected capture/layout artifact after the interaction sequence. Screenshots/layout dumps and
 source/tool/target metadata remain private evidence until reviewed; successful execution alone must not be labelled
 inspected rendering.
+
+A class-filtered Hypium run counts only the selected cases in its final summary, even when the test ability also
+registers unrelated contract tests. Check the exact expected suite/case start and successful completion records rather
+than rejecting that summary against an unrelated registered-test minimum; retain the complete-summary and artifact
+checks. The optional per-case metadata describes the package and is not the selected suite's case count.
+
+The pinned reporter also emits class-only `suiteStart`/`suiteDone` records around the case records, then a summary,
+terminal code and `taskconsuming`. Do not split every `class` line into a test case or accept one zero among mixed
+terminal codes. Parse suite/case/task records distinctly and atomically, retain a representative pinned-format fixture,
+and require exactly one successful terminal record.
