@@ -41,7 +41,13 @@ CAPTURES = (
     "generated-settings-dark.png",
     "generated-settings-dark-layout.json",
 )
+EXPECTED_CASES = (
+    ("GeneratedSettingsRender", "native_controls_binding_model_list_and_captures"),
+    ("GeneratedSettingsRender", "native_dark_theme_and_accessibility_layout"),
+)
 SUMMARY = re.compile(r"OHOS_REPORT_RESULT: stream=Tests run: (\d+), Failure: (\d+), Error: (\d+), Pass: (\d+), Ignore: (\d+)")
+CASE_RESULT = re.compile(r"(?m)^OHOS_REPORT_STATUS: (class|test)=(.*)$")
+CASE_STATUS = re.compile(r"(?m)^OHOS_REPORT_STATUS_CODE: (-?\d+)$")
 ARGUMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$")
 
 
@@ -69,17 +75,47 @@ def execute(command: Sequence[str], log_path: Path, *, cwd: Path = ROOT,
     return result
 
 
-def validate_result(output: str) -> dict[str, int]:
-    """Require an exact, complete native result; an overall code alone is insufficient."""
+def validate_result(output: str) -> dict[str, object]:
+    """Require the selected suite's exact cases and an exact, complete native summary."""
     results = SUMMARY.findall(output)
     if len(results) != 1:
         raise VerificationError("missing or ambiguous Hypium summary; no rendering success is reported")
     tests, failures, errors, passed, ignored = (int(value) for value in results[0])
-    if tests < 3 or failures or errors or ignored or passed != tests:
+    if tests != len(EXPECTED_CASES) or failures or errors or ignored or passed != tests:
         raise VerificationError(f"native test summary did not pass completely: {results[0]}")
-    if "OHOS_REPORT_CODE: 0" not in output:
+    if not re.search(r"(?m)^OHOS_REPORT_CODE: 0$", output):
         raise VerificationError("native test runner did not finish successfully")
-    return {"tests": tests, "failures": failures, "errors": errors, "passed": passed, "ignored": ignored}
+
+    records: list[tuple[str, str, int]] = []
+    for block in re.split(r"(?=^OHOS_REPORT_STATUS: class=)", output, flags=re.MULTILINE):
+        fields = dict(CASE_RESULT.findall(block))
+        statuses = CASE_STATUS.findall(block)
+        if not fields and not statuses:
+            continue
+        if "class" not in fields or "test" not in fields or len(statuses) != 1:
+            raise VerificationError("incomplete or ambiguous per-case Hypium result")
+        records.append((fields["class"], fields["test"], int(statuses[0])))
+    observed: list[tuple[str, str]] = []
+    pending: tuple[str, str] | None = None
+    for suite, name, code in records:
+        case = (suite, name)
+        if case not in EXPECTED_CASES or code not in (0, 1):
+            raise VerificationError(f"unexpected or failed native case result: {suite}#{name}={code}")
+        if code == 1:
+            if pending is not None:
+                raise VerificationError(f"native case has no success result: {pending[0]}#{pending[1]}")
+            pending = case
+        elif pending != case or case in observed:
+            raise VerificationError(f"native case has an incomplete or duplicate success: {suite}#{name}")
+        else:
+            observed.append(case)
+            pending = None
+    if pending is not None or set(observed) != set(EXPECTED_CASES) or len(observed) != len(EXPECTED_CASES):
+        raise VerificationError("not every required native rendering case completed successfully")
+    return {
+        "tests": tests, "failures": failures, "errors": errors, "passed": passed, "ignored": ignored,
+        "cases": [f"{suite}#{name}" for suite, name in EXPECTED_CASES],
+    }
 
 
 def source_revision() -> str:
