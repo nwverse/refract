@@ -41,6 +41,7 @@ and `GRADLE_USER_HOME` for your machine, not in repository files. Dependency ver
 # No device needed:
 python3 -I bench/android/report_test.py
 python3 -I bench/android/evidence_test.py
+python3 -I bench/android/runner_test.py
 bench/android/gradlew -p bench/android :app:assembleRelease :benchmark:assembleRelease
 
 # Regenerate and compile, or fail if any committed generated output is stale:
@@ -56,18 +57,24 @@ bench/android/run-emulator.sh bench/android/results/emulator-01
 properties. It does not create, boot, stop, root or reboot an emulator, and it rejects an offline, incomplete or
 storage-unready target before Gradle instrumentation starts. Its only target write is the documented output-directory
 writability test; the runner separately disables animations. The JSON records model, device, OS/build, ABI, rendering
-properties, compilation mode, macro iteration count and the exact Git revision. Local run metadata retains the
-selected target serial and Gradle receives that exact serial through `android.test.devices`, so a second attached
-target cannot redirect or duplicate the measurement. Run directories and serial-bearing reports are not committed.
-A dirty source tree is rejected. Any old `additional-output` directory is moved intact into the new run directory
-before instrumentation so historical JSON/traces cannot be mistaken for this run's evidence.
+properties, compilation mode, macro iteration count and the exact Git revision. Gradle passes that same revision through
+AndroidX `output.payload.refract.sourceRevision`, and both collector and report require it to match the preserved
+AndroidX `context.payload`. The runner also records that HEAD matched and the worktree remained clean after
+generation, compilation and measurement. The environment is copied into `raw/environment.json` and protected by the
+same evidence checksum manifest; a missing, mismatched or changed environment blocks the report. Local run metadata
+retains the selected target serial and Gradle receives that exact serial through `android.test.devices`, so a second
+attached target cannot redirect or duplicate the measurement. Run directories and serial-bearing reports are not
+committed. A dirty source tree is rejected. Any old `additional-output` directory is moved intact into the new run
+directory before instrumentation so historical JSON/traces cannot be mistaken for this run's evidence.
 
 `run-emulator.sh` first checks that the real CLI regenerates the exact committed Kotlin and fixture ArkTS without
 installing changes, then compiles the release artifacts. After instrumentation it preserves every AndroidX JSON and
 `.perfetto-trace` file with SHA-256 checksums in a new per-run directory. `report.py --require-macro` requires both
-variants of startup, scroll and state update, at least ten iterations, raw startup/frame samples, one memory sample
-per declared scroll/state-update iteration, matching metrics and a distinct indexed Perfetto trace for every declared
-iteration. Each macro record's AndroidX `profilerOutputs` must
+variants of startup, scroll and state update, at least ten iterations, raw `timeToInitialDisplayMs` startup samples,
+`frameDurationCpuMs` frame samples, one `MemoryUsageMetric(Mode.Last)` memory sample per declared scroll/state-update
+iteration (for example `memoryRssAnonLastKb`), matching metrics and a distinct indexed Perfetto trace for every declared
+iteration. Startup samples must match the iteration count; frame runs contain per-frame samples across iterations and
+are not mislabelled as iteration samples. Each macro record's AndroidX `profilerOutputs` must
 reference a retained trace with the matching variant/scenario; unreferenced or ambiguous traces fail closed. Missing
 pairs, JSON, traces, mismatched checksums or incomplete traces fail rather than becoming a partial PASS. AOSP images
 without Google services need the same startup/rendering stability checks; slow first frames are not accepted as

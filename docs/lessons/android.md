@@ -91,6 +91,24 @@ and fail closed on unknown names. Retain raw samples and calculate nearest-rank 
 raw samples. Convert `timeNs` to `timeMs` before applying the time-based gate, and do not apply a millisecond
 threshold to memory or frame-overrun metrics.
 
+Check metric names against the pinned AndroidX implementation rather than inventing a convenient canonical key.
+`StartupTimingMetric` emits `timeToInitialDisplayMs` and optionally `timeToFullDisplayMs`, not `startupMs`;
+`MemoryUsageMetric(Mode.Last)` includes `Last` in names such as `memoryRssAnonLastKb`. One startup or memory run
+corresponds to one iteration, but a frame run is a per-frame sample across all iterations. Requiring every frame run
+to have exactly `repeatIterations` entries would reject ordinary successful output. Keep per-iteration Perfetto and
+memory coverage while retaining the raw frame distribution.
+
+Bind source provenance to AndroidX's own `context.payload`. The instrumentation argument prefix is
+`androidx.benchmark.output.payload.`; a `refract.sourceRevision` value under that prefix becomes a payload entry.
+Check it against the probed revision, preserve the environment in the checksummed raw evidence and require a clean
+unchanged source tree after measurement. A separate environment path supplied only at report time does not bind the
+raw results to the same run. Duplicate JSON keys and conflicting revisions must fail closed.
+
+When fixtures model complete macro evidence, generate all six generated/reference scenarios with ten indexed traces
+each, actual metric keys, one startup/memory run per iteration and multiple frame samples. Mutate the serialized JSON
+for negative cases, and use a fresh output directory for each collection attempt so earlier preserved artifacts are
+not silently reused. This tests evidence handling only, never performance.
+
 `python3 -I script.py` is preferred for scripts reading files in a worktree: it avoids current-directory module
 shadowing. When loading a module with `importlib` and dataclasses, insert it into `sys.modules` before
 `exec_module`, or postponed annotations may fail to resolve. Run test files directly by absolute path rather than

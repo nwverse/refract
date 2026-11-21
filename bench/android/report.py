@@ -27,11 +27,25 @@ HIGHER_IS_WORSE = {
 LOWER_IS_WORSE_ABSOLUTE_MS = 0.1
 MACRO_SCENARIOS = ("startup", "scroll", "stateUpdate")
 MACRO_MINIMUM_ITERATIONS = 10
-MEMORY_METRICS = {"memoryRssAnonKb", "memoryRssFileKb", "memoryJavaHeapKb", "memoryNativeHeapKb"}
+MEMORY_METRICS = {
+    "memoryRssAnonLastKb", "memoryRssFileLastKb", "memoryRssShmemLastKb",
+    "memoryHeapSizeLastKb", "memoryGpuLastKb",
+}
+STARTUP_METRICS = {"timeToInitialDisplayMs", "timeToFullDisplayMs"}
+SOURCE_TREE_VERIFIED = "HEAD matched and worktree clean after generated-source verification, release compilation and measurement"
 
 
 class ReportError(ValueError):
     pass
+
+
+def unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ReportError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
 
 
 @dataclass(frozen=True)
@@ -56,7 +70,7 @@ def load_json(path: Path) -> Any:
         with path.open(encoding="utf-8") as stream:
             return json.load(stream, parse_constant=lambda constant: (_ for _ in ()).throw(
                 ReportError(f"Non-finite JSON value in {path}: {constant}")
-            ))
+            ), object_pairs_hook=unique_keys)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ReportError(f"Cannot read {path}: {error}") from error
 
@@ -132,7 +146,7 @@ def extract(payload: Any, source: Path) -> list[Measurement]:
         variant, scenario = scenarios[method]
         if separator and method not in ("generatedMacrobenchmark", "referenceMacrobenchmark"):
             raise ReportError(f"Unexpected macrobenchmark variant in {name!r}")
-        key = (kind, variant.lower(), scenario, variant)
+        key = (kind, variant.lower(), scenario, name)
         iterations = benchmark.get("repeatIterations", benchmark.get("iterations"))
         if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations < 1:
             raise ReportError(f"{source} has no valid iteration count for {name!r}")
@@ -272,10 +286,17 @@ def markdown(report: dict[str, Any]) -> str:
 
 
 def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
-                   traces: list[dict[str, Any]] | None) -> None:
+                   traces: list[dict[str, Any]] | None, benchmark_json: list[dict[str, Any]]) -> None:
     """Reject partial macro evidence instead of passing whichever tests survived."""
     if traces is None:
         raise ReportError("Complete macro evidence requires a verified Perfetto trace manifest")
+    expected_iterations = {}
+    macro_names = set()
+    for measurement in measurements:
+        if measurement.key[0] != "Macro":
+            continue
+        macro_names.add(measurement.key[3])
+        expected_iterations[measurement.key[3]] = measurement.repeat_iterations
     for measurement in measurements:
         if measurement.key[0] != "Macro":
             continue
@@ -288,6 +309,24 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
             for output in outputs
         ):
             raise ReportError(f"AndroidX JSON has no Perfetto filename for {measurement.key[3]}.{measurement.key[2]}")
+    retained_json = {entry.get("path") for entry in benchmark_json}
+    bound_iterations = set()
+    for trace in traces:
+        if not isinstance(trace, dict):
+            raise ReportError("Perfetto evidence has an invalid manifest record")
+        name = trace.get("androidx_benchmark")
+        if name not in macro_names or trace.get("androidx_json") not in retained_json:
+            raise ReportError("Perfetto evidence is not bound to a retained AndroidX benchmark")
+        iteration = trace.get("iteration")
+        if not isinstance(iteration, int) or isinstance(iteration, bool) or \
+                not 0 <= iteration < expected_iterations[name]:
+            raise ReportError("Perfetto evidence has an invalid iteration binding")
+        binding = (name, trace["androidx_json"], iteration)
+        if binding in bound_iterations:
+            raise ReportError("Perfetto evidence has a duplicate iteration binding")
+        bound_iterations.add(binding)
+    if len(bound_iterations) != len(traces):
+        raise ReportError("Perfetto evidence has incomplete iteration bindings")
     for scenario in MACRO_SCENARIOS:
         for variant in ("generated", "reference"):
             selected = [row for row in rows if row["benchmark_kind"] == "Macro"
@@ -297,16 +336,22 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
             if any(row["sample_kind"] != "runs" or row["repeat_iterations"] < MACRO_MINIMUM_ITERATIONS
                    for row in selected):
                 raise ReportError(f"Macro {variant}.{scenario} needs raw samples and at least ten iterations")
-            if any(row["metric"] in MEMORY_METRICS and row["sample_count"] < row["repeat_iterations"]
-                   for row in selected):
-                raise ReportError(f"Macro {variant}.{scenario} needs one memory sample per declared iteration")
-            required = "startupMs" if scenario == "startup" else "frameDurationCpuMs"
-            if not any(row["metric"] == required for row in selected):
-                raise ReportError(f"Macro {variant}.{scenario} is missing {required} raw samples")
-            if scenario != "startup" and not any(row["metric"] in MEMORY_METRICS for row in selected):
-                raise ReportError(f"Macro {variant}.{scenario} is missing memory samples")
-            if scenario == "startup" and next(row for row in selected if row["metric"] == required)["sample_count"] < 10:
-                raise ReportError(f"Macro {variant}.startup needs at least ten raw startup samples")
+            if scenario == "startup":
+                if not any(row["metric"] == "timeToInitialDisplayMs" for row in selected):
+                    raise ReportError(f"Macro {variant}.startup is missing timeToInitialDisplayMs raw samples")
+                startup_rows = [row for row in selected if row["metric"] in STARTUP_METRICS]
+                if any(row["sample_count"] != row["repeat_iterations"] for row in startup_rows):
+                    raise ReportError(f"Macro {variant}.startup needs one raw startup sample per declared iteration")
+            else:
+                if not any(row["metric"] == "frameDurationCpuMs" for row in selected):
+                    raise ReportError(f"Macro {variant}.{scenario} is missing frameDurationCpuMs raw samples")
+                if not any(row["metric"] in MEMORY_METRICS for row in selected):
+                    raise ReportError(f"Macro {variant}.{scenario} is missing memory samples")
+                memory_rows = [row for row in selected if row["metric"] in MEMORY_METRICS]
+                if any(row["sample_count"] != row["repeat_iterations"] for row in memory_rows):
+                    raise ReportError(f"Macro {variant}.{scenario} needs one memory sample per declared iteration")
+            # AndroidX frame runs contain per-frame samples across all iterations;
+            # their length is not the declared iteration count.
             if not any(trace.get("variant") == variant and trace.get("scenario") == scenario for trace in traces):
                 raise ReportError(f"Perfetto evidence is missing {variant}.{scenario}")
             iteration_counts = {row["repeat_iterations"] for row in selected}
@@ -332,13 +377,14 @@ def file_sha256(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def verify_evidence(manifest: Any, output: Path, inputs: list[Path]) -> dict[str, Any]:
+def verify_evidence(manifest: Any, output: Path, inputs: list[Path],
+                    require_environment: bool = False) -> dict[str, Any]:
     if not isinstance(manifest, dict) or manifest.get("schema") != 1:
         raise ReportError("Evidence manifest has an unsupported schema")
     verified = {}
-    for kind in ("benchmark_json", "traces"):
+    for kind in ("benchmark_json", "traces", "environment"):
         entries = manifest.get(kind)
-        if not isinstance(entries, list) or not entries and kind == "benchmark_json":
+        if not isinstance(entries, list) or not entries and (kind != "traces" or require_environment):
             raise ReportError(f"Evidence manifest has no valid {kind} list")
         seen = set()
         for entry in entries:
@@ -362,6 +408,17 @@ def verify_evidence(manifest: Any, output: Path, inputs: list[Path]) -> dict[str
     return verified
 
 
+def verify_source_provenance(contexts: set[str], metadata: dict[str, Any]) -> None:
+    revision = metadata.get("source_revision")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(revision)):
+        raise ReportError("Complete macro evidence requires a full source revision from the target probe")
+    for encoded in contexts:
+        context = json.loads(encoded)
+        payload = context.get("payload")
+        if not isinstance(payload, dict) or payload.get("refract.sourceRevision") != revision:
+            raise ReportError("AndroidX source provenance does not match the target-probed source revision")
+
+
 def make_report(inputs: list[Path], percent: float, absolute_ms: float,
                 environment_metadata: dict[str, Any] | None = None, require_macro: bool = False,
                 evidence: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -373,6 +430,13 @@ def make_report(inputs: list[Path], percent: float, absolute_ms: float,
         raise ReportError("Complete macro evidence requires a full source revision from the target probe")
     if environment_metadata.get("emulator") is not True:
         raise ReportError("Report generation requires a verified emulator environment")
+    if require_macro:
+        if environment_metadata.get("status") != "ready" or \
+                environment_metadata.get("source_tree") != SOURCE_TREE_VERIFIED:
+            raise ReportError("Complete macro evidence requires an unchanged clean source tree")
+        if len((evidence or {}).get("environment", [])) != 1 or \
+                evidence["environment"][0].get("path") != "raw/environment.json":
+            raise ReportError("Complete macro evidence requires its dedicated preserved environment")
     if percent < 0 or absolute_ms < 0 or not math.isfinite(percent) or not math.isfinite(absolute_ms):
         raise ReportError("Thresholds must be finite and non-negative")
     measurements = []
@@ -381,9 +445,12 @@ def make_report(inputs: list[Path], percent: float, absolute_ms: float,
     contexts = {canonical(measurement.context) for measurement in measurements}
     if len(contexts) != 1:
         raise ReportError("Refusing to compare different devices or build contexts")
+    if require_macro:
+        verify_source_provenance(contexts, environment_metadata)
     rows = [normalize(measurement) for measurement in measurements]
     if require_macro:
-        validate_macro(measurements, rows, evidence.get("traces") if evidence else None)
+        validate_macro(measurements, rows, evidence.get("traces") if evidence else None,
+                       (evidence or {}).get("benchmark_json", []))
     comparisons = compare_pairs(rows, percent, absolute_ms)
     failures = [comparison for comparison in comparisons if any(
         comparison.get(quantile, {}).get("regressed", False) for quantile in ("p50", "p99")
@@ -418,13 +485,22 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.require_macro and not args.evidence_manifest:
             raise ReportError("--require-macro also requires --evidence-manifest")
-        evidence = verify_evidence(load_json(args.evidence_manifest), args.output, args.inputs) \
+        evidence = verify_evidence(load_json(args.evidence_manifest), args.output, args.inputs,
+                                   require_environment=args.require_macro) \
             if args.evidence_manifest else None
+        if args.require_macro and args.environment:
+            raise ReportError("Complete macro evidence reads its environment from the verified manifest")
+        environment_path = args.environment
+        if args.require_macro and evidence:
+            entries = evidence["environment"]
+            if len(entries) != 1:
+                raise ReportError("Complete macro evidence needs exactly one preserved target environment")
+            environment_path = args.output / entries[0]["path"]
         report = make_report(
             args.inputs,
             args.threshold_percent,
             args.threshold_ms,
-            load_json(args.environment) if args.environment else None,
+            load_json(environment_path) if environment_path else None,
             require_macro=args.require_macro,
             evidence=evidence,
         )

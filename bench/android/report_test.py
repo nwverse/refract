@@ -45,8 +45,14 @@ def benchmark(variant, scenario="scroll", metrics=None, model="sdk_gphone64_x86_
             "kernelVersion": "test",
             "memTotalBytes": 1,
             "emulator": True,
+            "payload": {"refract.sourceRevision": "a" * 40},
         },
     }
+
+
+def complete_evidence(traces, benchmarks=None):
+    return {"traces": traces, "environment": [{"path": "raw/environment.json"}],
+            "benchmark_json": benchmarks or [{"path": "raw/001-benchmarkData.json"}]}
 
 
 class ReportTest(unittest.TestCase):
@@ -175,8 +181,8 @@ class ReportTest(unittest.TestCase):
     def test_memory_does_not_use_millisecond_threshold(self):
         path = Path(self.directory.name) / "input.json"
         path.write_text(json.dumps([
-            benchmark("Generated", "scroll", {"memoryRssAnonKb": {"runs": [200.0]}}),
-            benchmark("Reference", "scroll", {"memoryRssAnonKb": {"runs": [100.0]}}),
+            benchmark("Generated", "scroll", {"memoryRssAnonLastKb": {"runs": [200.0]}}),
+            benchmark("Reference", "scroll", {"memoryRssAnonLastKb": {"runs": [100.0]}}),
         ]))
         result = report.make_report([path], 5.0, 0.1)
         self.assertNotIn("p50", result["comparisons"][0])
@@ -195,29 +201,54 @@ class ReportTest(unittest.TestCase):
         path.write_text(json.dumps(values))
         self.assertEqual(report.make_report([path], 5.0, 0.1)["status"], "pass")
 
-    def test_complete_macro_requires_all_scenarios_raw_metrics_and_traces(self):
-        path = Path(self.directory.name) / "input.json"
+    def complete_macro(self):
         values = []
+        traces = []
         for variant in ("Generated", "Reference"):
             for scenario, metrics in (
-                ("startup", {"startupMs": {"runs": [1.0] * 10}}),
-                ("scroll", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}),
-                ("stateUpdate", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}),
+                # StartupTimingMetric has one raw sample per iteration.
+                ("startup", {"timeToInitialDisplayMs": {"runs": [1.0] * 10}}),
+                # MemoryUsageMetric(Mode.Last) includes the mode in its key.
+                # Frame runs are per-frame samples, not iteration samples.
+                ("scroll", {"frameDurationCpuMs": {"runs": [1.0] * 30},
+                            "memoryRssAnonLastKb": {"runs": [100.0] * 10}}),
+                ("stateUpdate", {"frameDurationCpuMs": {"runs": [1.0] * 24},
+                                 "memoryRssAnonLastKb": {"runs": [100.0] * 10}}),
             ):
                 value = benchmark(variant, scenario, metrics)
                 value["repeatIterations"] = 10
                 value["profilerOutputs"] = [{"type": "PerfettoTrace", "filename": "synthetic.perfetto-trace"}]
                 values.append(value)
+                traces.extend({
+                    "variant": variant.lower(), "scenario": scenario, "iteration": iteration,
+                    "androidx_benchmark": value["name"], "androidx_json": "raw/001-benchmarkData.json",
+                } for iteration in range(10))
+        metadata = {"emulator": True, "status": "ready", "source_revision": "a" * 40,
+                    "source_tree": report.SOURCE_TREE_VERIFIED}
+        return values, traces, metadata
+
+    def test_androidx_startup_and_last_memory_keys_complete_macro(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
         path.write_text(json.dumps(values))
-        trace_coverage = [
-            {"variant": variant, "scenario": scenario, "iteration": iteration}
-            for variant in ("generated", "reference")
-            for scenario in ("startup", "scroll", "stateUpdate")
-            for iteration in range(10)
-        ]
-        metadata = {"emulator": True, "source_revision": "a" * 40}
         result = report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
-                                    evidence={"traces": trace_coverage})
+                                    evidence=complete_evidence(traces))
+        self.assertEqual(result["status"], "pass")
+        startup = next(row for row in result["measurements"] if row["benchmark"] == "startup")
+        frames = next(row for row in result["measurements"] if row["benchmark"] == "scroll"
+                      and row["metric"] == "frameDurationCpuMs")
+        memory = next(row for row in result["measurements"] if row["metric"] == "memoryRssAnonLastKb")
+        self.assertEqual(startup["sample_count"], 10)
+        self.assertEqual(frames["sample_count"], 30)
+        self.assertEqual(frames["repeat_iterations"], 10)
+        self.assertEqual(memory["sample_count"], 10)
+
+    def test_complete_macro_requires_all_scenarios_raw_metrics_and_traces(self):
+        path = Path(self.directory.name) / "input.json"
+        values, trace_coverage, metadata = self.complete_macro()
+        path.write_text(json.dumps(values))
+        result = report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                                    evidence=complete_evidence(trace_coverage))
         self.assertEqual(result["status"], "pass")
         self.assertEqual(result["artifact_integrity"], "verified")
         self.assertTrue(result["macro_evidence_required"])
@@ -226,75 +257,117 @@ class ReportTest(unittest.TestCase):
         path.write_text(json.dumps(incomplete))
         with self.assertRaisesRegex(report.ReportError, "missing reference.stateUpdate"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
-                               evidence={"traces": trace_coverage})
+                               evidence=complete_evidence(trace_coverage[:-10]))
         path.write_text(json.dumps(values))
         with self.assertRaisesRegex(report.ReportError, "one trace for every declared iteration"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
-                               evidence={"traces": trace_coverage[:-1]})
+                               evidence=complete_evidence(trace_coverage[:-1]))
         for value in values:
             value["profilerOutputs"] = []
         path.write_text(json.dumps(values))
         with self.assertRaisesRegex(report.ReportError, "AndroidX JSON has no Perfetto filename"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
-                               evidence={"traces": trace_coverage})
+                               evidence=complete_evidence(trace_coverage))
+
+    def test_macro_source_provenance_must_match_androidx_payload(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        for value in values:
+            value["context"] = {**value["context"], "payload": {"refract.sourceRevision": "b" * 40}}
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "source provenance"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence=complete_evidence(traces))
+        for value in values:
+            value["context"] = {**value["context"], "payload": {}}
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "source provenance"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence=complete_evidence(traces))
+
+    def test_macro_rejects_missing_or_dirty_source_attestation(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        path.write_text(json.dumps(values))
+        for change in ({"source_tree": "dirty"}, {"source_tree": None}, {"status": "blocked"}):
+            changed = {**metadata, **change}
+            with self.subTest(change=change), self.assertRaisesRegex(report.ReportError, "clean source tree"):
+                report.make_report([path], 5.0, 0.1, changed, require_macro=True,
+                                   evidence=complete_evidence(traces))
+        with self.assertRaisesRegex(report.ReportError, "dedicated preserved environment"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence={"traces": traces, "environment": []})
+
+    def test_macro_requires_initial_display_and_exact_iteration_samples(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        for value in values:
+            if value["name"].endswith("Startup"):
+                value["metrics"] = {"timeToFullDisplayMs": {"runs": [1.0] * 10}}
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "missing timeToInitialDisplayMs"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence=complete_evidence(traces))
+        values, traces, metadata = self.complete_macro()
+        for value in values:
+            if value["name"].endswith("Startup"):
+                value["metrics"]["timeToInitialDisplayMs"]["runs"] = [1.0] * 11
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "one raw startup sample per declared iteration"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence=complete_evidence(traces))
 
     def test_macro_rejects_short_or_aggregate_runs_and_missing_memory(self):
         path = Path(self.directory.name) / "input.json"
-        metadata = {"emulator": True, "source_revision": "a" * 40}
-        trace_coverage = [
-            {"variant": variant, "scenario": scenario, "iteration": iteration}
-            for variant in ("generated", "reference")
-            for scenario in ("startup", "scroll", "stateUpdate")
-            for iteration in range(10)
-        ]
         for scenario, metrics, error in (
-            ("startup", {"startupMs": {"minimum": 1.0, "maximum": 2.0, "median": 1.0}}, "raw samples"),
-            ("scroll", {"frameDurationCpuMs": {"runs": [1.0]}}, "missing memory"),
+            ("startup", {"timeToInitialDisplayMs": {"minimum": 1.0, "maximum": 2.0, "median": 1.0}}, "raw samples"),
+            ("scroll", {"frameDurationCpuMs": {"runs": [1.0] * 30}}, "missing memory"),
         ):
-            values = []
-            for variant in ("Generated", "Reference"):
-                for current in ("startup", "scroll", "stateUpdate"):
-                    current_metrics = (
-                        {"startupMs": {"runs": [1.0] * 10}} if current == "startup" else
-                        {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}
-                    )
-                    value = benchmark(variant, current, metrics if current == scenario else current_metrics)
-                    value["repeatIterations"] = 10
-                    value["profilerOutputs"] = [{"type": "PerfettoTrace", "filename": "synthetic.perfetto-trace"}]
-                    values.append(value)
+            values, trace_coverage, metadata = self.complete_macro()
+            for value in values:
+                if value["name"].endswith(scenario.capitalize()) or scenario == "scroll" \
+                        and value["name"].endswith("Macrobenchmark.scroll"):
+                    value["metrics"] = metrics
             path.write_text(json.dumps(values))
             with self.subTest(scenario=scenario), self.assertRaisesRegex(report.ReportError, error):
                 report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
-                                   evidence={"traces": trace_coverage})
+                                   evidence=complete_evidence(trace_coverage))
+
+    def test_macro_rejects_invalid_trace_identity_bindings(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        path.write_text(json.dumps(values))
+        invalid = complete_evidence([{**trace, "androidx_benchmark": "wrongBenchmark"}
+                                    for trace in traces])
+        with self.assertRaisesRegex(report.ReportError, "retained AndroidX benchmark"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
+        invalid = complete_evidence([{**trace, "androidx_json": "raw/wrong.json"}
+                                    for trace in traces])
+        with self.assertRaisesRegex(report.ReportError, "retained AndroidX benchmark"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
+        invalid = complete_evidence([{**trace, "iteration": 0} for trace in traces])
+        with self.assertRaisesRegex(report.ReportError, "duplicate iteration binding"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
+        invalid = complete_evidence([{**trace, "iteration": "0"} for trace in traces])
+        with self.assertRaisesRegex(report.ReportError, "invalid iteration binding"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
 
     def test_macro_rejects_incomplete_iteration_samples_and_traces(self):
         path = Path(self.directory.name) / "input.json"
-        values = []
-        for variant in ("Generated", "Reference"):
-            for scenario, metrics in (
-                ("startup", {"startupMs": {"runs": [1.0] * 10}}),
-                ("scroll", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0]}}),
-                ("stateUpdate", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}),
-            ):
-                value = benchmark(variant, scenario, metrics)
-                value["repeatIterations"] = 10
-                value["profilerOutputs"] = [{"type": "PerfettoTrace", "filename": "synthetic.perfetto-trace"}]
-                values.append(value)
-        path.write_text(json.dumps(values))
-        metadata = {"emulator": True, "source_revision": "a" * 40}
-        traces = [{"variant": variant, "scenario": scenario, "iteration": iteration}
-                  for variant in ("generated", "reference")
-                  for scenario in ("startup", "scroll", "stateUpdate")
-                  for iteration in range(10)]
-        with self.assertRaisesRegex(report.ReportError, "one memory sample per declared iteration"):
-            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence={"traces": traces})
+        values, traces, metadata = self.complete_macro()
         for value in values:
             if value["name"].endswith("Macrobenchmark.scroll"):
-                value["metrics"]["memoryRssAnonKb"]["runs"] = [100.0] * 10
+                value["metrics"]["memoryRssAnonLastKb"]["runs"] = [100.0]
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "one memory sample per declared iteration"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=complete_evidence(traces))
+        for value in values:
+            if value["name"].endswith("Macrobenchmark.scroll"):
+                value["metrics"]["memoryRssAnonLastKb"]["runs"] = [100.0] * 10
         path.write_text(json.dumps(values))
         with self.assertRaisesRegex(report.ReportError, "one trace for every declared iteration"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
-                               evidence={"traces": [trace for trace in traces if trace["iteration"] != 1]})
+                               evidence=complete_evidence([trace for trace in traces if trace["iteration"] != 1]))
 
     def test_macro_requires_probe_revision(self):
         path = Path(self.directory.name) / "input.json"

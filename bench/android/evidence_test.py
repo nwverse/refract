@@ -26,6 +26,27 @@ report_test = load("report_test")
 REVISION = "a" * 40
 
 
+def complete_androidx_benchmarks(iterations=10):
+    values = []
+    for variant in ("Generated", "Reference"):
+        for scenario, metrics in (
+            ("startup", {"timeToInitialDisplayMs": {"runs": [1.0] * 10}}),
+            ("scroll", {"frameDurationCpuMs": {"runs": [1.0] * 30},
+                        "memoryRssAnonLastKb": {"runs": [100.0] * 10}}),
+            ("stateUpdate", {"frameDurationCpuMs": {"runs": [1.0] * 24},
+                             "memoryRssAnonLastKb": {"runs": [100.0] * 10}}),
+        ):
+            value = report_test.benchmark(variant, scenario, metrics)
+            value["profilerOutputs"] = [{
+                "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
+                "filename": faithful_trace_filename(variant.lower(), scenario, iteration),
+            } for iteration in range(iterations)]
+            values.append(value)
+    for value in values:
+        value["repeatIterations"] = iterations
+    return values
+
+
 def faithful_trace_filename(variant, scenario, iteration):
     method = {"startup": "Startup", "scroll": "Macrobenchmark[scroll]", "stateUpdate": "StateUpdate"}[scenario]
     # AndroidX 1.4.1 MacrobenchmarkRule uses the simple class name and
@@ -114,26 +135,31 @@ class EvidenceCollectionTest(unittest.TestCase):
         self.inputs = self.root / "androidx-output"
         self.output = self.root / "run"
         self.inputs.mkdir()
+        self.environment = self.root / "environment.json"
+        self.environment.write_text(json.dumps({
+            "status": "ready", "emulator": True, "source_revision": REVISION,
+        }))
 
-    def add_json(self, name="benchmarkData.json", benchmarks=None, iterations=1):
+    def collect(self):
+        return collect_results.collect(self.inputs, self.output, self.environment)
+
+    def add_json(self, name="benchmarkData.json", benchmarks=None, declared_iterations=10):
         path = self.inputs / name
         if benchmarks is None:
-            benchmarks = []
-            for variant in ("generated", "reference"):
-                for scenario in ("startup", "scroll", "stateUpdate"):
-                    benchmarks.append({
-                        "name": f"dev.refract.bench.test.SettingsMacrobenchmark.{variant}{scenario}",
-                        "className": "dev.refract.bench.test.SettingsMacrobenchmark",
-                        "repeatIterations": iterations,
-                        "profilerOutputs": [{
-                            "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
-                            "filename": faithful_trace_filename(variant, scenario, iteration),
-                        } for iteration in range(iterations)],
-                    })
-        path.write_text(json.dumps(benchmarks))
+            benchmarks = complete_androidx_benchmarks(declared_iterations)
+        for value in benchmarks:
+            value.pop("context", None)
+        document = {"context": report_test.benchmark("Generated")["context"], "benchmarks": benchmarks}
+        document["context"]["payload"] = {"refract.sourceRevision": REVISION}
+        path.write_text(json.dumps(document))
         return path
 
-    def add_traces(self, iterations=1):
+    def write_json(self, benchmarks, revision=REVISION):
+        source = self.inputs / "benchmarkData.json"
+        source.write_text(json.dumps({"context": {"payload": {"refract.sourceRevision": revision}},
+                                     "benchmarks": benchmarks}))
+
+    def add_traces(self, iterations=10):
         for variant in ("generated", "reference"):
             for scenario in ("startup", "scroll", "stateUpdate"):
                 for iteration in range(iterations):
@@ -143,9 +169,10 @@ class EvidenceCollectionTest(unittest.TestCase):
     def test_copies_json_and_all_six_perfetto_scenarios(self):
         self.add_json()
         self.add_traces()
-        manifest = collect_results.collect(self.inputs, self.output)
+        manifest = collect_results.collect(self.inputs, self.output, self.environment)
         self.assertEqual(len(manifest["benchmark_json"]), 1)
-        self.assertEqual(len(manifest["traces"]), 6)
+        self.assertEqual(len(manifest["traces"]), 60)
+        self.assertEqual(len(manifest["environment"]), 1)
         self.assertTrue(all(item["variant"] and item["scenario"] for item in manifest["traces"]))
         self.assertTrue(all(item["androidx_benchmark"] for item in manifest["traces"]))
         for item in manifest["traces"]:
@@ -155,102 +182,146 @@ class EvidenceCollectionTest(unittest.TestCase):
         for item in manifest["traces"]:
             self.assertEqual((self.output / item["path"]).read_bytes(), b"trace")
         verified = report.verify_evidence(manifest, self.output, [self.output / "raw/001-benchmarkData.json"])
-        self.assertEqual(len(verified["traces"]), 6)
+        self.assertEqual(len(verified["traces"]), 60)
 
     def test_ten_timestamped_androidx_iterations_bind_exact_relative_paths(self):
-        self.add_json(benchmarks=[{
-            "name": "EMULATOR_dev.refract.bench.test.SettingsMacrobenchmark_generatedMacrobenchmark.scroll",
-            "className": "dev.refract.bench.test.SettingsMacrobenchmark",
-            "repeatIterations": 10,
-            "profilerOutputs": [{
-                "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
-                "filename": f"generatedMacrobenchmark[scroll]_iter{iteration:03d}_2026-01-02-03-04-{iteration:02d}.perfetto-trace",
-            } for iteration in range(10)],
-        }])
+        benchmarks = complete_androidx_benchmarks()
+        for value in benchmarks:
+            if value["name"].endswith("Macrobenchmark.scroll") and value["name"].startswith("dev") \
+                    and "generated" in value["name"]:
+                value["profilerOutputs"] = [{
+                    "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
+                    "filename": f"generatedMacrobenchmark[scroll]_iter{iteration:03d}_2026-01-02-03-04-{iteration:02d}.perfetto-trace",
+                } for iteration in range(10)]
+        self.add_json(benchmarks=benchmarks)
+        self.add_traces(iterations=10)
         for iteration in range(10):
             filename = f"generatedMacrobenchmark[scroll]_iter{iteration:03d}_2026-01-02-03-04-{iteration:02d}.perfetto-trace"
+            (self.inputs / faithful_trace_filename("generated", "scroll", iteration)).unlink()
             (self.inputs / filename).write_bytes(b"trace")
-        manifest = collect_results.collect(self.inputs, self.output)
-        self.assertEqual([trace["iteration"] for trace in manifest["traces"]], list(range(10)))
-        self.assertTrue(all(trace["scenario"] == "scroll" and trace["variant"] == "generated"
-                            for trace in manifest["traces"]))
+        manifest = collect_results.collect(self.inputs, self.output, self.environment)
+        traces = [trace for trace in manifest["traces"] if trace["scenario"] == "scroll"
+                  and trace["variant"] == "generated" and "generatedMacrobenchmark[scroll]" in trace["source_name"]]
+        self.assertEqual([trace["iteration"] for trace in traces], list(range(10)))
+
+    def test_provenance_mismatch_duplicate_keys_and_changed_environment_fail(self):
+        for state, error in (
+            ({"status": "ready", "emulator": True, "source_revision": "b" * 40}, "source payload"),
+            (None, "Duplicate evidence JSON key"),
+        ):
+            self.add_json()
+            self.add_traces()
+            if state is None:
+                self.environment.write_text('{"status":"ready","status":"ready"}')
+            else:
+                self.environment.write_text(json.dumps(state))
+            with self.subTest(error=error), self.assertRaisesRegex(collect_results.EvidenceError, error):
+                collect_results.collect(self.inputs, self.output, self.environment)
+            self.output = self.root / f"run-{error.replace(' ', '-')}"
+
+        self.output = self.root / "run-valid"
+        self.add_json()
+        self.add_traces()
+        self.environment.write_text(json.dumps({
+            "status": "ready", "emulator": True, "source_revision": REVISION,
+            "source_tree": report.SOURCE_TREE_VERIFIED,
+        }))
+        collect_results.collect(self.inputs, self.output, self.environment)
+        (self.output / "raw/environment.json").write_text('{"emulator":true}')
+        arguments = ["--output", str(self.output), "--require-macro",
+                     "--evidence-manifest", str(self.output / "evidence-manifest.json"),
+                     str(self.output / "raw/001-benchmarkData.json")]
+        self.assertEqual(report.main(arguments), 2)
+        with self.assertRaisesRegex(report.ReportError, "Duplicate JSON key"):
+            report.load_json(self._duplicate_json())
+
+    def _duplicate_json(self):
+        path = self.inputs / "duplicate-key.json"
+        path.write_text('{"refract.sourceRevision":"a","refract.sourceRevision":"b"}')
+        return path
+
+    def test_duplicate_macro_scenario_cannot_replace_a_missing_pair(self):
+        document = json.loads(self.add_json().read_text())
+        document["benchmarks"][-1] = document["benchmarks"][0]
+        self.write_json(document["benchmarks"])
+        self.add_traces()
+        with self.assertRaisesRegex(collect_results.EvidenceError, "Duplicate or unidentified"):
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_json_is_required(self):
         with self.assertRaisesRegex(collect_results.EvidenceError, "No AndroidX"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_missing_or_unreferenced_trace_is_rejected(self):
-        payload = json.loads(self.add_json().read_text())
+        payload = json.loads(self.add_json().read_text())["benchmarks"]
         payload[0]["profilerOutputs"][0]["filename"] = "missing.perfetto-trace"
-        source = self.inputs / "benchmarkData.json"
-        source.write_text(json.dumps(payload))
+        self.write_json(payload)
         self.add_traces()
         with self.assertRaisesRegex(collect_results.EvidenceError, "missing or ambiguous"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_unreferenced_trace_is_rejected(self):
         self.add_json()
         self.add_traces()
         (self.inputs / "unreferenced_2026-01-02-03-04-05.perfetto-trace").write_bytes(b"extra")
         with self.assertRaisesRegex(collect_results.EvidenceError, "not referenced"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_misassigned_trace_cannot_satisfy_another_iteration(self):
-        payload = json.loads(self.add_json(iterations=10).read_text())
+        payload = json.loads(self.add_json().read_text())["benchmarks"]
         payload[0]["profilerOutputs"][1]["filename"] = payload[0]["profilerOutputs"][0]["filename"]
-        (self.inputs / "benchmarkData.json").write_text(json.dumps(payload))
+        self.write_json(payload)
         self.add_traces(iterations=10)
         with self.assertRaisesRegex(collect_results.EvidenceError, "multiple benchmark iterations"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_duplicate_relative_filename_is_ambiguous(self):
         source = self.add_json()
-        payload = json.loads(source.read_text())
+        payload = json.loads(source.read_text())["benchmarks"]
         filename = Path(payload[0]["profilerOutputs"][0]["filename"]).name
         payload[0]["profilerOutputs"][0]["filename"] = filename
-        source.write_text(json.dumps(payload))
+        self.write_json(payload)
         (self.inputs / filename).write_bytes(b"trace")
         (self.inputs / "duplicate").mkdir()
         (self.inputs / "duplicate" / filename).write_bytes(b"trace")
         with self.assertRaisesRegex(collect_results.EvidenceError, "missing or ambiguous"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_trace_path_cannot_escape_output_directory(self):
         source = self.add_json()
-        payload = json.loads(source.read_text())
+        payload = json.loads(source.read_text())["benchmarks"]
         payload[0]["profilerOutputs"][0]["filename"] = "../outside.perfetto-trace"
-        source.write_text(json.dumps(payload))
+        self.write_json(payload)
         self.add_traces()
         with self.assertRaisesRegex(collect_results.EvidenceError, "escapes"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_ten_declared_iterations_require_ten_distinct_traces(self):
-        self.add_json(iterations=10)
+        self.add_json()
         self.add_traces(iterations=1)
         with self.assertRaisesRegex(collect_results.EvidenceError, "missing or ambiguous"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_duplicate_iteration_label_cannot_fill_a_missing_iteration(self):
-        payload = json.loads(self.add_json(iterations=10).read_text())
+        payload = json.loads(self.add_json().read_text())["benchmarks"]
         payload[0]["profilerOutputs"][1] = payload[0]["profilerOutputs"][0]
-        (self.inputs / "benchmarkData.json").write_text(json.dumps(payload))
+        self.write_json(payload)
         self.add_traces(iterations=10)
         with self.assertRaisesRegex(collect_results.EvidenceError, "every declared iteration"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_macro_without_profiler_outputs_cannot_pass(self):
-        payload = json.loads(self.add_json().read_text())
+        payload = json.loads(self.add_json().read_text())["benchmarks"]
         payload[0]["profilerOutputs"] = []
-        source = self.inputs / "benchmarkData.json"
-        source.write_text(json.dumps(payload))
+        self.write_json(payload)
         self.add_traces()
         with self.assertRaisesRegex(collect_results.EvidenceError, "no profilerOutputs"):
-            collect_results.collect(self.inputs, self.output)
+            collect_results.collect(self.inputs, self.output, self.environment)
 
     def test_checksum_mismatch_and_wrong_input_are_rejected(self):
         source = self.add_json()
         self.add_traces()
-        manifest = collect_results.collect(self.inputs, self.output)
+        manifest = collect_results.collect(self.inputs, self.output, self.environment)
         copied = self.output / "raw/001-benchmarkData.json"
         copied.write_text("changed")
         with self.assertRaisesRegex(report.ReportError, "checksum mismatch"):
@@ -263,7 +334,7 @@ class EvidenceCollectionTest(unittest.TestCase):
     def test_empty_trace_is_rejected_without_changing_the_manifest(self):
         self.add_json()
         self.add_traces()
-        manifest = collect_results.collect(self.inputs, self.output)
+        manifest = collect_results.collect(self.inputs, self.output, self.environment)
         trace = self.output / manifest["traces"][0]["path"]
         trace.write_bytes(b"")
         self.assertEqual(manifest["traces"][0]["bytes"], 5)
@@ -272,37 +343,31 @@ class EvidenceCollectionTest(unittest.TestCase):
                                    [self.output / "raw/001-benchmarkData.json"])
 
     def test_complete_macro_cli_verifies_preserved_evidence(self):
-        values = []
-        for variant in ("Generated", "Reference"):
-            for scenario, metrics in (
-                ("startup", {"startupMs": {"runs": [1.0] * 10}}),
-                ("scroll", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}),
-                ("stateUpdate", {"frameDurationCpuMs": {"runs": [1.0]}, "memoryRssAnonKb": {"runs": [100.0] * 10}}),
-            ):
-                value = report_test.benchmark(variant, scenario, metrics)
-                value["repeatIterations"] = 10
-                value["profilerOutputs"] = [{
-                    "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
-                    "filename": faithful_trace_filename(variant.lower(), scenario, iteration),
-                } for iteration in range(10)]
-                values.append(value)
-        source = self.add_json(benchmarks=values, iterations=10)
-        self.add_traces(iterations=10)
-        collect_results.collect(self.inputs, self.output)
+        source = self.add_json()
+        self.add_traces()
         environment = self.output / "environment.json"
-        environment.write_text(json.dumps({"emulator": True, "source_revision": REVISION}))
-        arguments = ["--output", str(self.output), "--environment", str(environment),
+        self.output.mkdir()
+        environment.write_text(json.dumps({
+            "status": "ready", "emulator": True, "source_revision": REVISION,
+            "source_tree": report.SOURCE_TREE_VERIFIED,
+        }))
+        collect_results.collect(self.inputs, self.output, environment)
+        arguments = ["--output", str(self.output),
                      "--require-macro", "--evidence-manifest", str(self.output / "evidence-manifest.json"),
                      str(self.output / "raw/001-benchmarkData.json")]
         self.assertEqual(report.main(arguments), 0)
         result = json.loads((self.output / "report.json").read_text())
         self.assertTrue(result["macro_evidence_required"])
         self.assertEqual(result["environment"]["verification"]["source_revision"], REVISION)
+        startup = next(row for row in result["measurements"] if row["benchmark"] == "startup")
+        frames = next(row for row in result["measurements"] if row["metric"] == "frameDurationCpuMs")
+        self.assertEqual(startup["sample_count"], 10)
+        self.assertEqual(frames["sample_count"], 30)
 
     def test_path_traversal_is_rejected(self):
         self.add_json()
         self.add_traces()
-        manifest = collect_results.collect(self.inputs, self.output)
+        manifest = collect_results.collect(self.inputs, self.output, self.environment)
         manifest["benchmark_json"][0]["path"] = "../outside.json"
         with self.assertRaisesRegex(report.ReportError, "inside"):
             report.verify_evidence(manifest, self.output, [])

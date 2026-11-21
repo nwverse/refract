@@ -57,22 +57,29 @@ set +e
         ./gradlew --no-daemon --max-workers="${GRADLE_WORKERS:-2}" --console=plain \
         :benchmark:connectedReleaseAndroidTest \
         -Pandroid.testInstrumentationRunnerArguments.class=dev.refract.bench.test.SettingsMacrobenchmark \
-        -Pandroid.test.devices="$ANDROID_SERIAL"
+        -Pandroid.test.devices="$ANDROID_SERIAL" \
+        -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.refract.sourceRevision="$revision"
 )
 instrumentation_status=$?
 set -e
 python3 -I -c 'import json,sys; json.dump({"status":"completed" if sys.argv[1]=="0" else "failed","exit_code":int(sys.argv[1])},open(sys.argv[2],"w"),indent=2)' \
     "$instrumentation_status" "$out/instrumentation-status.json"
+if [ "$instrumentation_status" -ne 0 ]; then
+    printf 'Instrumentation failed or timed out; no benchmark pass is claimed: %s\n' "$out" >&2
+    exit 1
+fi
+if [ -n "$(git -C "$here" status --porcelain --untracked-files=normal)" ] || \
+        [ "$(git -C "$here" rev-parse --verify HEAD)" != "$revision" ]; then
+    printf 'Source changed during measurement; raw files are quarantined and no evidence is collected: %s\n' "$out" >&2
+    exit 2
+fi
+python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["source_tree"]="HEAD matched and worktree clean after generated-source verification, release compilation and measurement"; json.dump(d,open(p,"w"),indent=2,sort_keys=True)' "$out/environment.json"
 set +e
 python3 -I "$here/collect_results.py" \
     --input-directory "$here/benchmark/build/outputs/connected_android_test_additional_output" \
-    --output "$out"
+    --output "$out" --environment "$out/environment.json"
 evidence_status=$?
 set -e
-if [ "$instrumentation_status" -ne 0 ]; then
-    printf 'Instrumentation failed or timed out; any partial evidence is retained and no pass is claimed: %s\n' "$out" >&2
-    exit 1
-fi
 if [ "$evidence_status" -ne 0 ]; then
     printf 'Required evidence was not preserved; no benchmark pass is claimed: %s\n' "$out" >&2
     exit 2
@@ -81,6 +88,6 @@ inputs=()
 while IFS= read -r file; do
     inputs+=("$out/$file")
 done < "$out/json-files.txt"
-python3 -I "$here/report.py" "${inputs[@]}" --output "$out" --environment "$out/environment.json" \
+python3 -I "$here/report.py" "${inputs[@]}" --output "$out" \
     --require-macro --evidence-manifest "$out/evidence-manifest.json"
 printf 'Verified macro report and preserved evidence written to %s.\n' "$out"
