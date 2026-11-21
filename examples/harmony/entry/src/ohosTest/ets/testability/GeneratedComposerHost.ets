@@ -1,5 +1,12 @@
-import { ComposerScreen } from '../../../main/ets/generated/InteropTextInputHost';
+import { ComposerModel, ComposerScreen } from '../../../main/ets/generated/InteropTextInputHost';
 import { ComposerDraftModel } from './ComposerDraftModel';
+
+/** Application-owned model/draft for the second mounted generated instance. */
+@ObservedV2
+class SecondComposerModel implements ComposerModel {
+  commitDraft(_value: string): void {}
+  commit(): void {}
+}
 
 /** Native parent for the exact CLI-generated composer; no replacement screen. */
 @Entry
@@ -7,8 +14,11 @@ import { ComposerDraftModel } from './ComposerDraftModel';
 export struct GeneratedComposerHost {
   @Local private draft: string = 'Retained draft';
   @Local private focusRequest: number = 0;
+  @Local private secondFocusRequest: number = 0;
   @Local private showComposer: boolean = true;
   @Local private model: ComposerDraftModel = new ComposerDraftModel();
+  @Local private secondDraft: string = 'Second retained draft';
+  private secondModel: SecondComposerModel = new SecondComposerModel();
 
   build() {
     Scroll() {
@@ -30,7 +40,10 @@ export struct GeneratedComposerHost {
           })
         Button('Focus another control')
           .id('native_other_focus')
-          .onClick((): void => {})
+          .focusOnTouch(true)
+          .onClick((): void => {
+            this.getUIContext().getFocusController().requestFocus('native_other_focus');
+          })
         Button('Replace committed parent draft')
           .id('native_external_draft')
           .onClick((): void => {
@@ -60,6 +73,24 @@ export struct GeneratedComposerHost {
             model: this.model
           })
         }
+        Text(this.secondDraft)
+          .id('native_second_parent_draft')
+        Button('Focus second generated composer')
+          .id('native_second_focus_request')
+          .onClick((): void => {
+            this.secondFocusRequest += 1;
+          })
+        ComposerScreen({
+          draft: this.secondDraft,
+          onDraftChange: (value: string): void => {
+            this.secondDraft = value;
+          },
+          focusRequest: this.secondFocusRequest,
+          onFocusRequestChange: (value: number): void => {
+            this.secondFocusRequest = value;
+          },
+          model: this.secondModel
+        })
       }
       .padding(24)
       .width('100%')

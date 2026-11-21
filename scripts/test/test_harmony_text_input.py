@@ -36,6 +36,10 @@ class HarmonyTextInputSourceTests(unittest.TestCase):
         self.assertIn(old, source)
         path.write_text(source.replace(old, new, 1), encoding="utf-8")
 
+    def replace_both_hosts(self, old: str, new: str) -> None:
+        for relative in (MODULE.HOST, MODULE.CANONICAL_HOST):
+            self.replace(relative, old, new)
+
     def assert_rejected(self, message: str) -> None:
         with self.assertRaises(MODULE.SourceContractError) as failure:
             MODULE.validate_source_contract(self.root)
@@ -49,14 +53,73 @@ class HarmonyTextInputSourceTests(unittest.TestCase):
         self.assert_rejected("byte-identical")
 
     def test_preedit_cannot_be_published_as_a_committed_draft(self) -> None:
-        for relative in (MODULE.HOST, MODULE.CANONICAL_HOST):
-            self.replace(relative, "if (this.previewActive) {", "if (false) {")
+        self.replace_both_hosts("if (this.previewActive) {", "if (false) {")
         self.assert_rejected("if (this.previewActive)")
 
+    def test_commit_calls_inside_preview_branch_are_rejected(self) -> None:
+        self.replace_both_hosts(
+            "      event.keepEditableState();\n      return;",
+            "      event.keepEditableState();\n"
+            "      this.onDraftCommit(event.text);\n"
+            "      this.onDraftChange(event.text);\n"
+            "      this.getUIContext().getFocusController().clearFocus();\n"
+            "      this.onCommit();\n      return;",
+        )
+        self.assert_rejected("preview/stale-session branch must not submit or clear focus")
+
+    def test_stale_callback_session_guard_is_required(self) -> None:
+        self.replace_both_hosts("!this.mounted || !this.editing", "false")
+        self.assert_rejected("stale edits require a mounted native editing-session guard")
+
+    def test_editing_loss_must_invalidate_cached_preview(self) -> None:
+        self.replace_both_hosts(
+            "    this.editing = isEditing;\n    this.previewActive = false;",
+            "    this.editing = isEditing;",
+        )
+        self.assert_rejected("editing-state transitions must invalidate cached preview")
+
+    def test_disappearance_must_invalidate_delayed_callbacks(self) -> None:
+        self.replace_both_hosts("this.invalidateNativeSession(", "// removed invalidation\n")
+        self.assert_rejected("disappearance must invalidate")
+
+    def test_parent_edit_during_preview_cannot_be_dropped(self) -> None:
+        self.replace_both_hosts(
+            "    }\n    this.editorDraft = this.draft;\n    if (this.previewActive) {",
+            "    }\n    if (this.previewActive) {",
+        )
+        self.assert_rejected("every mounted external parent draft must be retained")
+
+    def test_parent_edit_during_preview_must_end_old_session(self) -> None:
+        self.replace_both_hosts(
+            "      this.editing = false;\n      this.previewActive = false;\n      this.completingSubmit = false;\n"
+            "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview; editing ended and the uncommitted preview was not submitted.';",
+            "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview; editing ended and the uncommitted preview was not submitted.';",
+        )
+        self.assert_rejected("external update during preview must invalidate")
+
+    def test_unique_focus_identity_is_required(self) -> None:
+        self.replace_both_hosts("this.focusId", "'refract_native_text_input'")
+        self.assert_rejected("missing required calls in order")
+
+    def test_focus_other_control_must_transfer_focus(self) -> None:
+        self.replace(MODULE.PARENT, "this.getUIContext().getFocusController().requestFocus('native_other_focus');", "")
+        self.assert_rejected("must actually transfer native focus")
+
+    def test_two_real_instances_and_focus_assertions_are_required(self) -> None:
+        self.replace(MODULE.PARENT, "        ComposerScreen({", "        // no second instance\n")
+        self.assert_rejected("two real generated instances")
+
+    def test_focus_scaffold_requires_native_focus_assertions(self) -> None:
+        self.replace(MODULE.NATIVE_TEST, "await found[0].getId() !== await found[1].getId()", "true")
+        self.assert_rejected("compared across two mounted hosts")
+
     def test_external_draft_cannot_overwrite_preedit(self) -> None:
-        for relative in (MODULE.HOST, MODULE.CANONICAL_HOST):
-            self.replace(relative, "if (!this.previewActive) {", "if (true) {")
-        self.assert_rejected("external drafts must not replace")
+        self.replace_both_hosts(
+            "      this.editing = false;\n      this.previewActive = false;\n      this.completingSubmit = false;\n"
+            "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview;",
+            "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview;",
+        )
+        self.assert_rejected("external update during preview must invalidate")
 
     def test_stale_binding_cannot_be_submitted(self) -> None:
         for relative in (MODULE.HOST, MODULE.CANONICAL_HOST):
@@ -64,9 +127,11 @@ class HarmonyTextInputSourceTests(unittest.TestCase):
         self.assert_rejected("onDraftCommit(committed)")
 
     def test_done_order_is_required(self) -> None:
-        for relative in (MODULE.HOST, MODULE.CANONICAL_HOST):
-            self.replace(relative, "this.controller.stopEditing();", "this.onCommit();\n    this.controller.stopEditing();")
-        self.assert_rejected("out of order")
+        self.replace_both_hosts(
+            "    this.completingSubmit = true;\n    this.controller.stopEditing();",
+            "    this.completingSubmit = true;\n    this.onCommit();\n    this.controller.stopEditing();",
+        )
+        self.assert_rejected("main-control-flow statements differ")
 
     def test_preview_cannot_be_cleared_or_translated(self) -> None:
         for relative in (MODULE.HOST, MODULE.CANONICAL_HOST):

@@ -136,35 +136,47 @@ The host implements the bounded behavior as follows:
 
 - `TextInput` owns its `PreviewText`, selection and IME interaction. `onChange(value, previewText)` publishes neither
   `value` nor the preview while nonempty preview text is active; the host keeps only a Boolean `previewActive` gate,
-  not a composition string. Parent draft changes cannot replace the editor's value during that interval. A later
-  callback with no nonempty preview publishes the actual native value as the committed draft.
+  not a composition string. Publication additionally requires a mounted native editing session. `onEditChange(false)`
+  invalidates that session and cached preview without publishing it, while `aboutToDisappear` marks the host unmounted
+  so delayed edit callbacks cannot publish stale text or enable Done. A new mount initializes a fresh session.
+- If the parent draft changes during preview, its new value is retained in the parent/editor rather than silently
+  discarded. The host ends the old native editing session, displays an explicit uncommitted-preview diagnostic and
+  rejects any delayed callback from that session. It does not cache preview for restoration or choose a candidate.
+  A subsequent user focus request and fresh native editing session are required before further committed edits.
 - Each increased focus token calls the native `FocusController.requestFocus` followed by the public foreground-app
-  `inputMethod.getController().showTextInput()` request. Focus alone is not presented as keyboard evidence. Either
-  failure becomes a visible native diagnostic; no system-application-only keyboard permission is requested. Ordinary focus loss does not reset the draft or reconstruct selection, and a later token restores
-  native focus without copying a preedit into the parent.
-- A Done callback with active preview does **not** clear the preview, select a candidate or call the application's
-  commit actions. It displays an explicit candidate-selection diagnostic and calls `keepEditableState()` so the user
-  can choose through the real IME. This is an intentional unsupported-operation diagnostic, not a fabricated commit.
-- Once no preview is active, submit calls `stopEditing()`, publishes `SubmitEvent.text` rather than the possibly stale
-  parent binding, invokes `onDraftCommit`, publishes that same ongoing committed draft, clears native focus and then
-  invokes `onCommit`. The binding callback is unconditional during submit so it cannot be skipped because a parent
-  update is still pending. `stopEditing()` is the documented native edit/keyboard exit; it is not treated as a general operation for committing an active IME
-  candidate. `clearPreviewText()` is deliberately never used as a substitute.
+  `inputMethod.getController().showTextInput()` request. The target is derived from API 12+
+  `this.getUniqueId()`, not a constant shared by multiple host instances. Focus alone is not presented as keyboard
+  evidence. Either failure becomes a visible native diagnostic; no system-application-only keyboard permission is
+  requested. Ordinary focus loss does not reset the committed draft or reconstruct selection, and a later token
+  restores native focus without copying a preedit into the parent.
+- A Done callback outside a mounted native editing session or with active preview does **not** clear the preview,
+  select a candidate, clear focus or call the application's commit actions. It displays an explicit
+  candidate/session diagnostic and calls `keepEditableState()` so the user can choose through the real IME. This is an
+  intentional unsupported-operation diagnostic, not a fabricated commit.
+- Once the mounted session is actively editing with no preview, submit invalidates that session, calls `stopEditing()`,
+  publishes `SubmitEvent.text` rather than the possibly stale parent binding, invokes `onDraftCommit`, publishes that
+  same ongoing committed draft, clears native focus and then invokes `onCommit`. The binding callback is unconditional
+  during submit so it cannot be skipped because a parent update is still pending. `stopEditing()` is the documented
+  native edit/keyboard exit; it is not treated as a general operation for committing an active IME candidate.
+  `clearPreviewText()` is deliberately never used as a substitute.
 - The application owns the retained draft and submitted value. The separate
-  `examples/harmony/entry/src/ohosTest/ets/testability/GeneratedComposerHost.ets` recreates the generated child in
-  separate UI actions, demonstrating where retention must be tested. Hypium/UI Test source in
-  `GeneratedComposer.test.ets` covers only committed text injection, focus requests, hardware Enter, recreation and
-  callback state; `inputText()` is not preedit or candidate evidence.
+  `examples/harmony/entry/src/ohosTest/ets/testability/GeneratedComposerHost.ets` mounts two actual generated children
+  with independent drafts/focus tokens, recreates one in separate UI actions and explicitly transfers focus to another
+  native control. Hypium/UI Test source in `GeneratedComposer.test.ets` compares distinct editor IDs, asserts focus
+  transfer/restoration and covers committed text, hardware Enter, recreation and callback state. These tests remain
+  source-prepared; `inputText()` is not preedit or candidate evidence.
 
 The exact remaining gate is an authorized matching DevEco CLI/SDK compile of the application and `entry@ohosTest`,
 followed by an owned signed simulator/device run. A native tester must select a named real Chinese IME, create visible
-preview text, change the parent during preview, choose a candidate in that IME, verify that only the chosen committed
-value reaches the draft, and exercise focus loss/restoration plus both software Done and hardware Enter. Record the
-actual preedit-to-commit transition, native callback order and keyboard dismissal. An active-preview Done must show the
-native diagnostic without invoking either commit callback; a subsequent real candidate selection followed by Done must
-publish exactly once. If the chosen SDK/IME does not supply the preview transition or native submit ordering assumed
-above, stop and revise the host against compiler/runtime evidence rather than adding a composition mirror or synthetic
-candidate.
+preview text, change the parent during preview and verify the explicit session-ending diagnostic, retained parent value
+and rejection of delayed old-session callbacks. With an unchanged parent, choose a candidate in that IME and verify
+that only the chosen committed value reaches the draft. Exercise focus loss/restoration plus both software Done and
+hardware Enter, with the two mounted editors demonstrating distinct focus targets. Record the actual
+preedit-to-commit transition, native callback order and keyboard dismissal. An active-preview or stale-session Done
+must show the native diagnostic without invoking either commit callback; a subsequent real candidate selection in a
+fresh active session followed by Done must publish exactly once. If the chosen SDK/IME does not supply the preview or
+editing-state transitions assumed above, stop and revise the host against compiler/runtime evidence rather than
+adding a composition mirror or synthetic candidate.
 
 Portable checks:
 
@@ -179,7 +191,9 @@ The first two are source-contract checks with negative mutations, not ArkTS pars
 `check_examples.py` regenerates the exact shared Swift source through the same CLI transaction as the other example
 screens and diffs both native outputs. This preserves the existing Android host implementation without modifying its
 native code or changing its behavior. The CI `refract check` includes this same input over both committed output roots,
-so an added generated host cannot be rejected as unexpected. The final
+so an added generated host cannot be rejected as unexpected. `scripts/test_example_output_transaction.py --self-test`
+runs that exact workflow command and its missing-input/missing-output negative cases. The final preflight currently
+exits 2 because the authorized tools are absent. Signing, `hdc`, simulator/device execution and
 Chinese-IME compatibility therefore remain unexecuted; this preparation slice does not close #245.
 
 ## Diagnostics and verification levels

@@ -47,8 +47,13 @@ def require(condition: bool, message: str) -> None:
 
 def body(source: str, signature: str) -> str:
     """Extract one brace-delimited method, after locating its exact signature."""
+    opening, closing = block_span(source, signature)
+    return source[opening + 1:closing]
+
+
+def block_span(source: str, signature: str) -> tuple[int, int]:
     start = source.find(signature)
-    require(start >= 0, f"missing native method: {signature}")
+    require(start >= 0, f"missing native method or guard: {signature}")
     opening = source.find("{", start + len(signature))
     require(opening >= 0, f"missing body: {signature}")
     depth = 0
@@ -58,8 +63,22 @@ def body(source: str, signature: str) -> str:
         elif source[index] == "}":
             depth -= 1
             if depth == 0:
-                return source[opening + 1:index]
-    raise SourceContractError(f"unterminated native method: {signature}")
+                return opening, index
+    raise SourceContractError(f"unterminated native method or guard: {signature}")
+
+
+def top_level_lines(source: str) -> list[str]:
+    """Return non-empty lines in the main control flow of this method body."""
+    lines: list[str] = []
+    depth = 0
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped and depth == 0:
+            lines.append(stripped)
+        depth += line.count("{") - line.count("}")
+        require(depth >= 0, "unbalanced method body")
+    require(depth == 0, "unterminated method body")
+    return lines
 
 
 def ordered(source: str, calls: Sequence[str]) -> None:
@@ -111,6 +130,9 @@ def validate_source_contract(root: Path = ROOT) -> None:
         "@Event onDraftCommit: (value: string) => void = (value: string): void => {};",
         "@Event onCommit: () => void = (): void => {};",
         "private previewActive: boolean = false;",
+        "private mounted: boolean = false;",
+        "private editing: boolean = false;",
+        "private readonly focusId: string = `refract_native_text_input_${this.getUniqueId()}`;",
     ):
         require(declaration in executable, f"missing bounded native declaration: {declaration}")
     require("enablePreviewText(true)" in executable, "native IME preview must remain enabled")
@@ -123,47 +145,111 @@ def validate_source_contract(root: Path = ROOT) -> None:
     )
 
     editing = body(executable, "private nativeEditChanged(")
-    ordered(editing, (
-        "previewText !== undefined && previewText.value.length > 0",
-        "if (this.previewActive)", "return;", "this.editorDraft = value;",
-        "this.onDraftChange(value);",
-    ))
+    editing_main = top_level_lines(editing)
     require(
-        re.search(r"(?:draft|editorDraft|onDraftChange|onDraftCommit)\([^)]*previewText", editing) is None,
-        "preview must be isolated before any committed-draft publication",
+        "if (!this.mounted || !this.editing) {" in editing_main,
+        "stale edits require a mounted native editing-session guard",
     )
+    require("this.previewActive = previewText !== undefined && previewText.value.length > 0;" in editing_main,
+            "preview state must come from the current native callback")
+    require("this.editorDraft = value;" in editing_main and "this.onDraftChange(value);" in editing_main,
+            "committed native edits must publish in the guarded main control flow")
+    preview_guard_open, preview_guard_close = block_span(editing, "if (this.previewActive)")
+    require("return;" in editing[preview_guard_open:preview_guard_close],
+            "active preview must return before committed-draft publication")
+    require("this.onDraftChange" not in editing[preview_guard_open:preview_guard_close],
+            "preview must never publish a committed draft")
+    require("this.editorDraft = value;" not in editing[preview_guard_open:preview_guard_close],
+            "preview must not overwrite the committed editor value")
+    require(
+        re.search(r"(?:draft|editorDraft)\s*=\s*previewText", editing) is None,
+        "preview text must never enter either committed-draft value",
+    )
+
+    lifecycle = body(executable, "private nativeEditingChanged(")
+    require("this.editing = isEditing;" in top_level_lines(lifecycle), "native editing state must be tracked")
+    require("this.previewActive = false;" in top_level_lines(lifecycle),
+            "editing-state transitions must invalidate cached preview")
+    require("if (!isEditing)" in lifecycle and "uncommitted preview was discarded, not published" in lifecycle,
+            "focus/edit loss must expose a non-publication diagnostic")
+    ordered(lifecycle, ("this.previewActive = false;", "if (this.completingSubmit)", "if (!isEditing)"))
+    require("this.completingSubmit = false;" not in lifecycle,
+            "normal completion must outlive a synchronous native blur")
+    disappearance = body(executable, "aboutToDisappear(")
+    require("this.invalidateNativeSession(" in disappearance, "disappearance must invalidate the native session")
+    invalidation = body(executable, "private invalidateNativeSession(")
+    for assignment in ("this.mounted = false;", "this.editing = false;", "this.previewActive = false;"):
+        require(assignment in top_level_lines(invalidation), f"missing lifecycle invalidation: {assignment}")
+    appearance = body(executable, "aboutToAppear(")
+    require("this.mounted = true;" in top_level_lines(appearance), "a new mount must start a fresh session")
+    require("this.editing = false;" in top_level_lines(appearance), "a new mount must not inherit editing state")
+
     external = body(executable, "applyExternalDraft(")
-    require("if (!this.previewActive)" in external, "external drafts must not replace active native preview")
-    require("this.editorDraft = this.draft;" in external, "committed external edits must reach the editor")
+    external_main = top_level_lines(external)
+    require("this.editorDraft = this.draft;" in external_main,
+            "every mounted external parent draft must be retained, including during preview")
+    external_guard_open, external_guard_close = block_span(external, "if (this.previewActive)")
+    external_guard = external[external_guard_open:external_guard_close]
+    require("this.editing = false;" in external_guard and "this.previewActive = false;" in external_guard
+            and "this.completingSubmit = false;" in external_guard,
+            "an external update during preview must invalidate the old native edit session")
+    require("this.controller.stopEditing();" in external_guard,
+            "an external update during preview must end native editing explicitly")
+    require("the parent draft changed during preview" in external_guard,
+            "preview replacement by a parent edit needs an explicit diagnostic")
+    require("this.onDraftChange" not in external, "parent updates must not echo through their own binding callback")
 
     submit = body(executable, "private finishNativeSubmit(")
-    ordered(submit, (
-        "if (this.previewActive)", "event.keepEditableState();", "return;",
-        "this.controller.stopEditing();", "const committed: string = event.text;",
-        "this.editorDraft = committed;", "this.onDraftCommit(committed);",
-        "this.onDraftChange(committed);", "getFocusController().clearFocus();", "this.onCommit();",
-    ))
-    require("if (this.draft !== committed)" not in submit, "ongoing committed-draft publication must not depend on a stale parent binding")
-    require("previewActive = false" not in submit, "Done must not pretend preview was committed")
-    require("select an IME candidate before Done" in host, "unsupported active-preview submit needs a visible diagnostic")
+    guard_open, guard_close = block_span(
+        submit, "if (!this.mounted || !this.editing || this.previewActive)",
+    )
+    guard = submit[guard_open:guard_close]
+    require("event.keepEditableState();" in guard and "return;" in guard,
+            "stale or active-preview Done must retain native editing and return")
+    for forbidden in ("this.onDraftCommit(", "this.onDraftChange(", "this.onCommit(",
+                      "getFocusController().clearFocus("):
+        require(forbidden not in guard, f"preview/stale-session branch must not submit or clear focus: {forbidden}")
+    success = submit[guard_close + 1:]
+    success_main = top_level_lines(success)
+    required_success = (
+        "this.editing = false;", "this.previewActive = false;", "this.completingSubmit = true;",
+        "this.controller.stopEditing();", "const committed: string = event.text;", "this.editorDraft = committed;",
+        "this.diagnostic = '';", "this.onDraftCommit(committed);", "this.onDraftChange(committed);",
+        "this.getUIContext().getFocusController().clearFocus();", "this.onCommit();",
+        "this.completingSubmit = false;",
+    )
+    for call in required_success:
+        require(call in success_main, f"successful Done must execute in guarded main control flow: {call}")
+    require(success_main == list(required_success),
+            f"successful Done main-control-flow statements differ: {success_main}")
+    require("if (this.draft !== committed)" not in submit,
+            "ongoing committed-draft publication must not depend on a stale parent binding")
+    require("active native editing session before Done" in host,
+            "unsupported active-preview submit needs a visible diagnostic")
     require("Text(this.diagnostic)" in executable, "the native diagnostic must be visible")
 
     focus = body(executable, "requestNativeFocus(")
+    require("if (!this.mounted)" in focus, "a delayed focus token must not target a destroyed host")
     ordered(focus, (
         "if (this.focusRequest <= this.lastFocusRequest)",
         "this.lastFocusRequest = this.focusRequest;",
-        "getFocusController().requestFocus('refract_native_text_input')",
+        "getFocusController().requestFocus(this.focusId)",
         "inputMethod.getController().showTextInput((error: BusinessError)",
         "native keyboard request failed", "console.error(this.diagnostic)",
         "catch (error)", "native focus request failed",
     ))
-    require(".id('refract_native_text_input')" in executable, "native focus must target the editor")
+    require(".id(this.focusId)" in executable, "native focus must target the unique editor instance")
+    require("refract_native_text_input');" not in executable, "a constant focus ID is unsafe for multiple hosts")
 
     require("ComposerScreen({" in parent, "the native parent must invoke the real generated composer")
     require("@Local private draft: string = 'Retained draft';" in parent, "the parent must retain its draft")
     require("this.draft = value;" in parent, "the parent must own ongoing committed-draft updates")
     require("this.focusRequest += 1;" in parent, "focus restoration must issue a new token")
     require("if (this.showComposer)" in parent, "recreation must exercise the actual generated child")
+    require(parent.count("ComposerScreen({") == 2, "the scaffold must mount two real generated instances")
+    require("getFocusController().requestFocus('native_other_focus')" in parent,
+            "the focus-loss control must actually transfer native focus")
+    require("focusId: string" not in parent, "host identity must not depend on a duplicated parent literal")
     require("@Trace lastSubmittedDraft: string" in (root / "examples/harmony/entry/src/ohosTest/ets/testability/ComposerDraftModel.ets").read_text(encoding="utf-8"), "submitted drafts must be retained by the application model")
 
     ability = (root / "examples/harmony/entry/src/ohosTest/ets/testability/ComposerTestAbility.ets").read_text(encoding="utf-8")
@@ -178,6 +264,17 @@ def validate_source_contract(root: Path = ROOT) -> None:
     require("inputText('Native committed edit')" in test_code, "native committed-edit scaffold is missing")
     require("KeyCode.KEYCODE_ENTER" in test_code, "native hardware Enter scaffold is missing")
     require("native_restore_composer" in test_code, "native recreation/draft-retention scaffold is missing")
+    require("expect(found.length).assertEqual(2);" in test_code, "multi-instance focus requires two actual native editors")
+    require("await found[0].getId() !== await found[1].getId()" in test_code,
+            "native focus IDs must be compared across two mounted hosts")
+    require("isFocused()).assertTrue()" in test_code and "isFocused()).assertFalse()" in test_code,
+            "native focus transfer/restoration must be asserted, not just clicked")
+    require("native_other_focus" in test_code and "assertOnlyFocused(inputs[1], inputs[0])" in test_code,
+            "the test must assert blur after moving focus to another control")
+    require("native_second_focus_request" in test_code and "assertOnlyFocused(inputs[1], inputs[0])" in test_code,
+            "the second generated host must receive its own focus request")
+    require("native_remove_composer" in test_code and "native_restore_composer" in test_code,
+            "recreation must use separate mounted/unmounted UI actions")
     require("inputText('ni')" not in test_code, "text injection must not masquerade as IME preedit")
     for forbidden in ("setComposingText", "previewText", "commitText("):
         require(forbidden not in test_code, f"native UI Test cannot synthesize IME operations: {forbidden}")

@@ -12,6 +12,7 @@ import { inputMethod } from '@kit.IMEKit';
  * Public API references:
  * https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-textinput.md
  * https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis-arkui/arkui-ts/ts-text-common.md
+ * https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis-arkui/arkui-ts/ts-custom-component-api.md
  */
 @ComponentV2
 export struct NativeTextInputHost {
@@ -22,38 +23,90 @@ export struct NativeTextInputHost {
   @Event onCommit: () => void = (): void => {};
 
   private controller: TextInputController = new TextInputController();
+  private readonly focusId: string = `refract_native_text_input_${this.getUniqueId()}`;
   @Local private editorDraft: string = '';
   @Local private diagnostic: string = '';
+  private mounted: boolean = false;
+  private editing: boolean = false;
   private previewActive: boolean = false;
+  private completingSubmit: boolean = false;
+  private pendingKeyboardFailure: boolean = false;
   private lastFocusRequest: number = 0;
 
   aboutToAppear(): void {
+    this.mounted = true;
+    this.editing = false;
+    this.previewActive = false;
+    this.completingSubmit = false;
+    this.pendingKeyboardFailure = false;
     this.editorDraft = this.draft;
     this.lastFocusRequest = this.focusRequest;
   }
 
+  private invalidateNativeSession(message: string): void {
+    this.mounted = false;
+    this.editing = false;
+    this.previewActive = false;
+    this.completingSubmit = false;
+    this.diagnostic = message;
+  }
+
+  aboutToDisappear(): void {
+    this.invalidateNativeSession('NativeTextInputHost: the editor disappeared; its pending preview was not submitted.');
+  }
+
+  private nativeEditingChanged(isEditing: boolean): void {
+    this.editing = isEditing;
+    this.previewActive = false;
+    if (this.completingSubmit) {
+      this.diagnostic = '';
+    } else if (!isEditing) {
+      this.diagnostic = 'NativeTextInputHost: native editing ended; uncommitted preview was discarded, not published.';
+    }
+  }
+
   @Monitor('draft')
   applyExternalDraft(): void {
-    // A parent re-render or edit must not replace live native preview text.
-    if (!this.previewActive) {
-      this.editorDraft = this.draft;
+    if (!this.mounted) {
+      return;
+    }
+    this.editorDraft = this.draft;
+    if (this.previewActive) {
+      // Keep the newer parent value. Do not cancel, retain or synthesize the
+      // native candidate, and do not let a delayed callback overwrite it.
+      this.editing = false;
+      this.previewActive = false;
+      this.completingSubmit = false;
+      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview; editing ended and the uncommitted preview was not submitted.';
+      this.controller.stopEditing();
+      this.getUIContext().getFocusController().clearFocus();
     }
   }
 
   @Monitor('focusRequest')
   requestNativeFocus(): void {
+    if (!this.mounted) {
+      return;
+    }
     if (this.focusRequest <= this.lastFocusRequest) {
       this.diagnostic = 'NativeTextInputHost: focusRequest must increase; request a new token.';
       return;
     }
     this.lastFocusRequest = this.focusRequest;
+    this.diagnostic = this.pendingKeyboardFailure
+      ? 'NativeTextInputHost: an earlier keyboard request failed; requesting native input again.'
+      : '';
+    this.pendingKeyboardFailure = false;
     try {
-      this.getUIContext().getFocusController().requestFocus('refract_native_text_input');
+      this.getUIContext().getFocusController().requestFocus(this.focusId);
       // A focus request alone is not evidence of a visible software keyboard.
       inputMethod.getController().showTextInput((error: BusinessError): void => {
-        if (error) {
+        if (error && this.mounted) {
           this.diagnostic = `NativeTextInputHost: native keyboard request failed (${error.code}). Request a new focus token.`;
           console.error(this.diagnostic);
+        } else if (error) {
+          this.pendingKeyboardFailure = true;
+          console.error('NativeTextInputHost: a keyboard request failed after the editor disappeared.');
         }
       });
     } catch (error) {
@@ -64,6 +117,10 @@ export struct NativeTextInputHost {
   }
 
   private nativeEditChanged(value: string, previewText?: PreviewText): void {
+    if (!this.mounted || !this.editing) {
+      this.diagnostic = 'NativeTextInputHost: ignored a stale native edit outside an active editing session.';
+      return;
+    }
     this.previewActive = previewText !== undefined && previewText.value.length > 0;
     if (this.previewActive) {
       return;
@@ -76,30 +133,36 @@ export struct NativeTextInputHost {
   }
 
   private finishNativeSubmit(event: SubmitEvent): void {
-    if (this.previewActive) {
-      // The public controller can clear preview text, but exposes no operation
-      // that commits the IME's selected candidate. Never approximate either.
-      this.diagnostic = 'NativeTextInputHost: select an IME candidate before Done; uncommitted preview text was not submitted.';
+    if (!this.mounted || !this.editing || this.previewActive) {
+      this.diagnostic = 'NativeTextInputHost: select a candidate in an active native editing session before Done; stale or uncommitted preview was not submitted.';
       event.keepEditableState();
       return;
     }
 
+    this.editing = false;
+    this.previewActive = false;
+    this.completingSubmit = true;
     this.controller.stopEditing();
     const committed: string = event.text;
     this.editorDraft = committed;
+    this.diagnostic = '';
     this.onDraftCommit(committed);
     // Callers may inspect the last publication while handling onDraftCommit.
     this.onDraftChange(committed);
     this.getUIContext().getFocusController().clearFocus();
     this.onCommit();
+    this.completingSubmit = false;
   }
 
   build(): void {
     Column({ space: 8 }) {
       TextInput({ text: this.editorDraft, controller: this.controller })
-        .id('refract_native_text_input')
+        .id(this.focusId)
         .enterKeyType(EnterKeyType.Done)
         .enablePreviewText(true)
+        .onEditChange((isEditing: boolean): void => {
+          this.nativeEditingChanged(isEditing);
+        })
         .onChange((value: string, previewText?: PreviewText): void => {
           this.nativeEditChanged(value, previewText);
         })
@@ -108,7 +171,6 @@ export struct NativeTextInputHost {
         })
       if (this.diagnostic.length > 0) {
         Text(this.diagnostic)
-          .id('native_text_input_diagnostic')
           .fontColor(Color.Red)
       }
     }
