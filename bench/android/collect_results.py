@@ -8,12 +8,30 @@ import hashlib
 import json
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 
 class EvidenceError(RuntimeError):
     pass
+
+
+def load_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"),
+                          object_pairs_hook=unique_keys)
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise EvidenceError(f"Cannot parse evidence JSON {path.name}: {error}") from error
+
+
+def unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise EvidenceError(f"Duplicate evidence JSON key: {key}")
+        result[key] = value
+    return result
 
 
 def perfetto_iterations(outputs: list[Any], repeat_iterations: int) -> list[int]:
@@ -67,20 +85,25 @@ def copy_artifact(source: Path, raw: Path, index: int) -> dict[str, object]:
 
 
 def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
-                traces: list[dict[str, object]]) -> None:
-    """Bind the exact AndroidX relative paths; never construct an expected filename."""
+                traces: list[dict[str, object]], source_revision: str) -> None:
+    """Bind exact AndroidX paths and its source payload; never construct either."""
     referenced = set()
+    macro_identities = set()
+    for json_source in json_sources:
+        payload = load_json(json_source)
+        context = payload.get("context") if isinstance(payload, dict) else None
+        context_payload = context.get("payload") if isinstance(context, dict) else None
+        if not isinstance(context_payload, dict) or context_payload.get(
+                "refract.sourceRevision") != source_revision:
+            raise EvidenceError("AndroidX source payload does not match the target probe")
     by_name = {}
     for trace in traces:
         by_name.setdefault(trace["source_name"], []).append(trace)
     for source, copied in zip(json_sources, copied_json):
-        try:
-            payload = json.loads(source.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
-            raise EvidenceError(f"Cannot parse AndroidX JSON {source.name}: {error}") from error
-        benchmarks = payload if isinstance(payload, list) else payload.get("benchmarks") if isinstance(payload, dict) else None
-        if not isinstance(benchmarks, list):
-            raise EvidenceError("AndroidX JSON has no benchmarks array")
+        payload = load_json(source)
+        if not isinstance(payload, dict) or not isinstance(payload.get("benchmarks"), list):
+            raise EvidenceError("AndroidX macro JSON needs its top-level context and benchmarks array")
+        benchmarks = payload["benchmarks"]
         for benchmark in benchmarks:
             if not isinstance(benchmark, dict) or benchmark.get("className") != "dev.refract.bench.test.SettingsMacrobenchmark":
                 continue
@@ -88,8 +111,9 @@ def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
             if not isinstance(name, str):
                 raise EvidenceError("Macro benchmark has no name")
             variant, scenario = trace_identity(name)
-            if not variant or not scenario:
-                raise EvidenceError(f"Cannot identify macro benchmark from its AndroidX name: {name}")
+            if not variant or not scenario or (variant, scenario) in macro_identities:
+                raise EvidenceError(f"Duplicate or unidentified macro benchmark: {name}")
+            macro_identities.add((variant, scenario))
             outputs = benchmark.get("profilerOutputs")
             if not isinstance(outputs, list) or not outputs:
                 raise EvidenceError(f"AndroidX JSON has no profilerOutputs for {name}")
@@ -119,44 +143,77 @@ def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
                 trace["androidx_json"] = copied["path"]
                 trace["iteration"] = iterations[trace_index]
                 referenced.add(trace["source_name"])
+    if macro_identities != {(variant, scenario) for variant in ("generated", "reference")
+                            for scenario in ("startup", "scroll", "stateUpdate")}:
+        raise EvidenceError("Complete macro evidence requires exactly six generated/reference scenario records")
     unreferenced = [trace["source_name"] for trace in traces if trace["source_name"] not in referenced]
     if unreferenced:
         raise EvidenceError("Perfetto trace is not referenced by AndroidX JSON; refusing to infer ownership")
 
 
-def collect(input_directory: Path, output: Path) -> dict[str, object]:
+def collect(input_directory: Path, output: Path, environment: Path | None = None) -> dict[str, object]:
     if not input_directory.is_dir():
         raise EvidenceError("AndroidX additional-output directory is absent; instrumentation did not produce evidence.")
+    if environment is None:
+        raise EvidenceError("Macro collection requires --environment; no partial report can be produced")
+    output.mkdir(parents=True, exist_ok=True)
     if (output / "evidence-manifest.json").exists() or (output / "json-files.txt").exists():
         raise EvidenceError("Refusing to replace an existing evidence manifest; choose a new run directory.")
-    raw = output / "raw"
-    raw.mkdir(parents=True, exist_ok=True)
-    json_sources = sorted(path for path in input_directory.rglob("*benchmarkData.json") if path.is_file())
-    if not json_sources:
-        raise EvidenceError("No AndroidX benchmark JSON was produced; this is not a passing run.")
-    benchmark_json = [copy_artifact(path, raw, index) for index, path in enumerate(json_sources, 1)]
-    trace_sources = sorted(path for path in input_directory.rglob("*.perfetto-trace") if path.is_file())
-    traces = []
-    for index, path in enumerate(trace_sources, len(benchmark_json) + 1):
-        item = copy_artifact(path, raw, index)
-        relative = path.relative_to(input_directory).as_posix()
-        item.update({"source_name": relative})
-        traces.append(item)
-    bind_traces(json_sources, benchmark_json, traces)
-    manifest = {"schema": 1, "benchmark_json": benchmark_json, "traces": traces}
-    (output / "evidence-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                                                   encoding="utf-8")
-    (output / "json-files.txt").write_text("".join(f"{item['path']}\n" for item in benchmark_json), encoding="utf-8")
-    return manifest
+    staging = Path(tempfile.mkdtemp(prefix=".evidence-staging-", dir=output))
+    published = False
+    try:
+        metadata = load_json(environment)
+        source_revision = metadata.get("source_revision") if isinstance(metadata, dict) else None
+        if not isinstance(source_revision, str) or metadata.get("status") != "ready" or metadata.get("emulator") is not True:
+            raise EvidenceError("A verified target environment with a source revision is required")
+        raw = staging / "raw"
+        raw.mkdir()
+        raw_environment = raw / "environment.json"
+        shutil.copyfile(environment, raw_environment)
+        environment_artifact = {"path": "raw/environment.json", "bytes": raw_environment.stat().st_size,
+                                "sha256": digest(raw_environment)}
+        json_sources = sorted(path for path in input_directory.rglob("*benchmarkData.json") if path.is_file())
+        if not json_sources:
+            raise EvidenceError("No AndroidX benchmark JSON was produced; this is not a passing run.")
+        benchmark_json = [copy_artifact(path, raw, index) for index, path in enumerate(json_sources, 1)]
+        trace_sources = sorted(path for path in input_directory.rglob("*.perfetto-trace") if path.is_file())
+        traces = []
+        for index, path in enumerate(trace_sources, len(benchmark_json) + 1):
+            item = copy_artifact(path, raw, index)
+            relative = path.relative_to(input_directory).as_posix()
+            item.update({"source_name": relative})
+            traces.append(item)
+        bind_traces(json_sources, benchmark_json, traces, source_revision)
+        manifest = {"schema": 1, "benchmark_json": benchmark_json, "traces": traces,
+                    "environment": [environment_artifact]}
+        (staging / "evidence-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                                                        encoding="utf-8")
+        (staging / "json-files.txt").write_text("".join(f"{item['path']}\n" for item in benchmark_json),
+                                                encoding="utf-8")
+        # Publish each completed run artifact only after the whole binding passes.
+        # A rejected or interrupted staging remains quarantined, never a valid manifest.
+        raw_output = output / "raw"
+        if raw_output.exists() and any(raw_output.iterdir()):
+            raise EvidenceError("Refusing to publish over existing raw evidence")
+        raw.rename(raw_output)
+        (staging / "evidence-manifest.json").rename(output / "evidence-manifest.json")
+        (staging / "json-files.txt").rename(output / "json-files.txt")
+        published = True
+        return manifest
+    finally:
+        if published:
+            staging.rmdir()
+        # Otherwise retain the unique staging directory as explicitly incomplete evidence.
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-directory", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--environment", type=Path, help="Verified target probe to preserve with the raw evidence")
     args = parser.parse_args(argv)
     try:
-        manifest = collect(args.input_directory, args.output)
+        manifest = collect(args.input_directory, args.output, args.environment)
     except (EvidenceError, OSError) as error:
         print(f"evidence-collection: ERROR: {error}", file=sys.stderr)
         return 2
