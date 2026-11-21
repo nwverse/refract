@@ -22,7 +22,7 @@ python3 -I scripts/test/test_harmony_text_input.py
 python3 scripts/check_harmony_toolchain.py --check-only
 ```
 
-The example check uses the real CLI and committed expected output. The static checker and its 21 negative mutations
+The example check uses the real CLI and committed expected output. The static checker and its 24 negative/scenario checks
 cover the host ABI, mounted/editing-session invalidation, delayed-callback rejection, parent updates during preview,
 unique focus identity, actual focus-transfer scaffolding, actual `SubmitEvent.text` and main-control-flow callback
 order. One mutation moves commit calls into the active-preview branch and must fail even though their textual order is

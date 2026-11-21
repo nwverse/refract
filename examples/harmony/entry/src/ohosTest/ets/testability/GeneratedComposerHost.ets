@@ -95,6 +95,7 @@ export struct GeneratedComposerHost {
       .padding(24)
       .width('100%')
     }
+    .id('native_composer_scroll')
     .width('100%')
     .height('100%')
   }

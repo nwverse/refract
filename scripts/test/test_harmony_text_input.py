@@ -67,6 +67,47 @@ class HarmonyTextInputSourceTests(unittest.TestCase):
         )
         self.assert_rejected("preview/stale-session branch must not submit or clear focus")
 
+    def test_conflict_delayed_true_cannot_reactivate_or_publish(self) -> None:
+        self.replace_both_hosts(
+            "      this.editingEpoch = -1;\n      this.editing = false;\n"
+            "      this.previewActive = false;\n      this.completingSubmit = false;\n"
+            "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview; editing ended and the uncommitted preview was not submitted.';",
+            "      this.editing = false;\n      this.previewActive = false;\n      this.completingSubmit = false;\n"
+            "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview; editing ended and the uncommitted preview was not submitted.';",
+        )
+        # The required regression sequence is conflict -> delayed onEditChange(true)
+        # -> rejected onChange/Done. Without generation invalidation, the old true
+        # callback reopens editing and both subsequent callbacks are accepted.
+        self.assert_rejected("external update during preview must invalidate")
+
+    def test_conflict_delayed_true_scenario_is_rejected_by_current_host(self) -> None:
+        host = MODULE.strip_comments((MODULE.ROOT / MODULE.HOST).read_text(encoding="utf-8"))
+        conflict = MODULE.body(host, "applyExternalDraft(")
+        self.assertIn("this.editingEpoch = -1;", conflict)
+        lifecycle = MODULE.body(host, "private nativeEditingChanged(")
+        guard_open, guard_close = MODULE.block_span(lifecycle, "if (!this.mounted || epoch !== this.editingEpoch)")
+        self.assertIn("return;", lifecycle[guard_open:guard_close])
+        self.assertLess(guard_close, lifecycle.index("this.editing = isEditing;"))
+        for method in ("private nativeEditChanged(", "private finishNativeSubmit("):
+            self.assertIn("!this.mounted || !this.editing", MODULE.body(host, method))
+        focus = MODULE.body(host, "requestNativeFocus(")
+        self.assertIn("this.editingEpoch = requestEpoch;", focus)
+        self.assertLess(focus.index("this.editingEpoch = requestEpoch;"),
+                        focus.index("getFocusController().requestFocus(this.focusId)"))
+        self.assertIn("if (!isEditing)", lifecycle)
+        self.assertIn("this.editingEpoch = -1;", lifecycle)
+
+    def test_delayed_editing_true_cannot_bypass_epoch_guard(self) -> None:
+        self.replace_both_hosts(
+            "    if (!this.mounted || epoch !== this.editingEpoch) {\n"
+            "      this.diagnostic = 'NativeTextInputHost: ignored a native editing callback from an invalidated session.';\n"
+            "      return;\n    }",
+            "    if (!this.mounted) {\n"
+            "      this.diagnostic = 'NativeTextInputHost: ignored a native editing callback from an invalidated session.';\n"
+            "      return;\n    }",
+        )
+        self.assert_rejected("every editing callback must reject an invalidated generation")
+
     def test_stale_callback_session_guard_is_required(self) -> None:
         self.replace_both_hosts("!this.mounted || !this.editing", "false")
         self.assert_rejected("stale edits require a mounted native editing-session guard")
@@ -91,15 +132,19 @@ class HarmonyTextInputSourceTests(unittest.TestCase):
 
     def test_parent_edit_during_preview_must_end_old_session(self) -> None:
         self.replace_both_hosts(
-            "      this.editing = false;\n      this.previewActive = false;\n      this.completingSubmit = false;\n"
+            "      this.editingEpoch = -1;\n      this.editing = false;\n      this.previewActive = false;\n      this.completingSubmit = false;\n"
             "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview; editing ended and the uncommitted preview was not submitted.';",
             "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview; editing ended and the uncommitted preview was not submitted.';",
         )
         self.assert_rejected("external update during preview must invalidate")
 
     def test_unique_focus_identity_is_required(self) -> None:
-        self.replace_both_hosts("this.focusId", "'refract_native_text_input'")
-        self.assert_rejected("missing required calls in order")
+        self.replace_both_hosts(
+            "    const uniqueId: number = this.getUniqueId();\n"
+            "    this.focusId = uniqueId >= 0 ? `refract_native_text_input_${uniqueId}` : '';",
+            "    this.focusId = 'refract_native_text_input';",
+        )
+        self.assert_rejected("native identity must be read from the mounted component lifecycle")
 
     def test_focus_other_control_must_transfer_focus(self) -> None:
         self.replace(MODULE.PARENT, "this.getUIContext().getFocusController().requestFocus('native_other_focus');", "")
@@ -115,7 +160,7 @@ class HarmonyTextInputSourceTests(unittest.TestCase):
 
     def test_external_draft_cannot_overwrite_preedit(self) -> None:
         self.replace_both_hosts(
-            "      this.editing = false;\n      this.previewActive = false;\n      this.completingSubmit = false;\n"
+            "      this.editingEpoch = -1;\n      this.editing = false;\n      this.previewActive = false;\n      this.completingSubmit = false;\n"
             "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview;",
             "      this.diagnostic = 'NativeTextInputHost: the parent draft changed during preview;",
         )

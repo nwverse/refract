@@ -146,14 +146,17 @@ The host implements the bounded behavior as follows:
   `value` nor the preview while nonempty preview text is active; the host keeps only a Boolean `previewActive` gate,
   not a composition string. Publication additionally requires a mounted native editing session. `onEditChange(false)`
   invalidates that session and cached preview without publishing it, while `aboutToDisappear` marks the host unmounted
-  so delayed edit callbacks cannot publish stale text or enable Done. A new mount initializes a fresh session.
+  so delayed edit callbacks cannot publish stale text or enable Done. Every editing callback is accepted only for the
+  latest explicit focus-request generation; invalidation rejects a delayed `onEditChange(true)` as well as
+  `onChange`/Done. A new mount initializes a fresh session.
 - If the parent draft changes during preview, its new value is retained in the parent/editor rather than silently
   discarded. The host ends the old native editing session, displays an explicit uncommitted-preview diagnostic and
   rejects any delayed callback from that session. It does not cache preview for restoration or choose a candidate.
   A subsequent user focus request and fresh native editing session are required before further committed edits.
 - Each increased focus token calls the native `FocusController.requestFocus` followed by the public foreground-app
   `inputMethod.getController().showTextInput()` request. The target is derived from API 12+
-  `this.getUniqueId()`, not a constant shared by multiple host instances. Focus alone is not presented as keyboard
+  `this.getUniqueId()` in `aboutToAppear`, not a constant or a pre-node property initializer; an invalid `-1` identity
+  disables editing explicitly rather than targeting a shared fallback. Focus alone is not presented as keyboard
   evidence. Either failure becomes a visible native diagnostic; no system-application-only keyboard permission is
   requested. Ordinary focus loss does not reset the committed draft or reconstruct selection, and a later token
   restores native focus without copying a preedit into the parent.

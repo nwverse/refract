@@ -23,10 +23,11 @@ export struct NativeTextInputHost {
   @Event onCommit: () => void = (): void => {};
 
   private controller: TextInputController = new TextInputController();
-  private readonly focusId: string = `refract_native_text_input_${this.getUniqueId()}`;
+  @Local private focusId: string = '';
   @Local private editorDraft: string = '';
   @Local private diagnostic: string = '';
   private mounted: boolean = false;
+  private editingEpoch: number = -1;
   private editing: boolean = false;
   private previewActive: boolean = false;
   private completingSubmit: boolean = false;
@@ -34,7 +35,11 @@ export struct NativeTextInputHost {
   private lastFocusRequest: number = 0;
 
   aboutToAppear(): void {
-    this.mounted = true;
+    const uniqueId: number = this.getUniqueId();
+    this.focusId = uniqueId >= 0 ? `refract_native_text_input_${uniqueId}` : '';
+    this.diagnostic = uniqueId >= 0 ? '' : 'NativeTextInputHost: native component identity is unavailable; focus and editing are disabled.';
+    this.mounted = uniqueId >= 0;
+    this.editingEpoch = -1;
     this.editing = false;
     this.previewActive = false;
     this.completingSubmit = false;
@@ -45,6 +50,7 @@ export struct NativeTextInputHost {
 
   private invalidateNativeSession(message: string): void {
     this.mounted = false;
+    this.editingEpoch = -1;
     this.editing = false;
     this.previewActive = false;
     this.completingSubmit = false;
@@ -55,12 +61,17 @@ export struct NativeTextInputHost {
     this.invalidateNativeSession('NativeTextInputHost: the editor disappeared; its pending preview was not submitted.');
   }
 
-  private nativeEditingChanged(isEditing: boolean): void {
+  private nativeEditingChanged(isEditing: boolean, epoch: number): void {
+    if (!this.mounted || epoch !== this.editingEpoch) {
+      this.diagnostic = 'NativeTextInputHost: ignored a native editing callback from an invalidated session.';
+      return;
+    }
     this.editing = isEditing;
     this.previewActive = false;
     if (this.completingSubmit) {
       this.diagnostic = '';
     } else if (!isEditing) {
+      this.editingEpoch = -1;
       this.diagnostic = 'NativeTextInputHost: native editing ended; uncommitted preview was discarded, not published.';
     }
   }
@@ -74,6 +85,7 @@ export struct NativeTextInputHost {
     if (this.previewActive) {
       // Keep the newer parent value. Do not cancel, retain or synthesize the
       // native candidate, and do not let a delayed callback overwrite it.
+      this.editingEpoch = -1;
       this.editing = false;
       this.previewActive = false;
       this.completingSubmit = false;
@@ -93,6 +105,10 @@ export struct NativeTextInputHost {
       return;
     }
     this.lastFocusRequest = this.focusRequest;
+    const requestEpoch: number = this.focusRequest;
+    this.editingEpoch = requestEpoch;
+    this.editing = false;
+    this.previewActive = false;
     this.diagnostic = this.pendingKeyboardFailure
       ? 'NativeTextInputHost: an earlier keyboard request failed; requesting native input again.'
       : '';
@@ -101,7 +117,7 @@ export struct NativeTextInputHost {
       this.getUIContext().getFocusController().requestFocus(this.focusId);
       // A focus request alone is not evidence of a visible software keyboard.
       inputMethod.getController().showTextInput((error: BusinessError): void => {
-        if (error && this.mounted) {
+        if (error && this.mounted && requestEpoch === this.editingEpoch) {
           this.diagnostic = `NativeTextInputHost: native keyboard request failed (${error.code}). Request a new focus token.`;
           console.error(this.diagnostic);
         } else if (error) {
@@ -152,6 +168,7 @@ export struct NativeTextInputHost {
     this.getUIContext().getFocusController().clearFocus();
     this.onCommit();
     this.completingSubmit = false;
+    this.editingEpoch = -1;
   }
 
   build(): void {
@@ -161,7 +178,7 @@ export struct NativeTextInputHost {
         .enterKeyType(EnterKeyType.Done)
         .enablePreviewText(true)
         .onEditChange((isEditing: boolean): void => {
-          this.nativeEditingChanged(isEditing);
+          this.nativeEditingChanged(isEditing, this.editingEpoch);
         })
         .onChange((value: string, previewText?: PreviewText): void => {
           this.nativeEditChanged(value, previewText);

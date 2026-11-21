@@ -52,6 +52,10 @@ export default function generatedComposerTests(): void {
       let inputs: Component[] = await editors(driver);
       const firstId: string = await inputs[0].getId();
       const secondId: string = await inputs[1].getId();
+      const scroll: Component = await component(driver, 'native_composer_scroll');
+      await scroll.scrollSearch(ON.id(secondId));
+      await idle(driver);
+      inputs = await editors(driver);
       expect(await text(driver, 'native_parent_draft')).assertEqual('Retained draft');
 
       await click(driver, 'native_second_focus_request');
