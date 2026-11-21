@@ -132,7 +132,11 @@ or claiming that local success proves CI passed.
    package declared by every fixture's `Expected.kt`, so the generated code's `R` class is `refract.generated.R`
    exactly as the fixtures reference. Adding a fixture to the compile set is a manifest-only change; there is no
    skip list, so a new compile failure must be fixed in the same PR.
-8. Run `./gradlew --no-daemon :fixtures:testDebugUnitTest`. Robolectric 4.18 and the Compose test rule execute the
+8. Run `./gradlew --no-daemon :ime-verification:assembleDebug :ime-verification:assembleDebugAndroidTest`. This
+   compiles the exact staged generated text-input host and its fail-closed real-IME UIAutomator scenario into separate
+   test APKs. It installs nothing, selects no IME and runs no connected test; it is Kotlin-compilation preparation, not
+   real-IME acceptance. The required target/IME inputs are documented in `examples/android/ime-verification/README.md`.
+9. Run `./gradlew --no-daemon :fixtures:testDebugUnitTest`. Robolectric 4.18 and the Compose test rule execute the
    unmodified generated save-confirmation caller with a test-provided `MotionDurationScale`. The tests cover the
    generated call's final stable state, identity replacement, exit removal, zero scale and leaving composition.
    The app-owned implementation is added to the fixture module through the AGP `kotlin` source-set directory;
@@ -143,7 +147,7 @@ or claiming that local success proves CI passed.
    accessibility action on the JVM. They do not establish hardware-back or physical screen-reader behavior; direct
    Activity back dispatch did not dismiss those modals in this host, so that boundary is explicit in
    `docs/navigation.md` and requires a separately owned device check.
-9. Run `./gradlew --no-daemon :app:testDebugUnitTest` from `examples/android/`. The `src/test` source set invokes
+10. Run `./gradlew --no-daemon :app:testDebugUnitTest` from `examples/android/`. The `src/test` source set invokes
    the same CLI-generated `SettingsScreen.kt` that the compile gate checks, in the real application resource package.
    This is essential: an Android library's local test APK does not include a dependent application's resource table,
    so numeric `R` IDs can otherwise resolve to unrelated dependency strings. Tests first verify the actual localized
@@ -158,7 +162,7 @@ or claiming that local success proves CI passed.
     must be inspected rather than inferred from a green test. Tests and their dependencies are confined to the app's
     test source set and add no runtime dependency to generated code or consumers. The `native-jvm-compose-theme`
     artifact also contains the fixture's dark/light and enlarged-font captures and test reports.
-11. Run `./gradlew --no-daemon :theme-fixture:testDebugUnitTest`. The independent theme module invokes the actual
+12. Run `./gradlew --no-daemon :theme-fixture:testDebugUnitTest`. The independent theme module invokes the actual
     generated `ThemedSettingsControl` through the app-owned `ThemedSettingsAction`. One mutable interaction source
     supplies the native clickable and its pressed/focused observations. Tests drive real touch/focus changes and
     assert the generated component's normal, pressed, focused and disabled rendered colors, including disabled
@@ -169,10 +173,11 @@ or claiming that local success proves CI passed.
     and JUnit reports, while `native-jvm-compose-theme` retains the dark/light and default/large-font evidence.
     These are Native JVM Compose results, not physical
     configuration changes, screen-reader traversal, device or performance evidence.
-12. Reject any untracked files left in the checkout after compilation and tests.
+13. Reject any untracked files left in the checkout after compilation and tests.
 
-The `:app:compileDebugKotlin` and `:fixtures:compileDebugKotlin` gates are compile-only. They produce no APK, no
-emulator or device run, and no performance measurement; `docs/GOALS.md` goal 2 is not exercised by those jobs and no
+The `:app:compileDebugKotlin` and `:fixtures:compileDebugKotlin` gates are compile-only. They run no emulator or device
+and no performance measurement; `:ime-verification:assembleDebugAndroidTest` packages test APKs but likewise performs
+no target execution. `docs/GOALS.md` goal 2 is not exercised by those jobs and no
 such claim may be inferred from them. The separate JVM tests do not close that gap. HarmonyOS remains unverified in
 CI until a Linux-compatible hvigor toolchain is obtained; that gap is tracked separately and is not hidden by this
 job. To run the same checks locally, follow `examples/android/README.md`: build the CLI, run

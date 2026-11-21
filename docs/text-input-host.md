@@ -106,6 +106,14 @@ These are **Native JVM / Robolectric** results on the pinned Android API test ru
 results. They establish real Android host code behavior under that runtime, not third-party Chinese-IME compatibility,
 real window-manager behavior or device performance.
 
+The separate `examples/android/ime-verification/` test application supplies the fail-closed UIAutomator harness for the
+Android slice of #245; its preparation subtask is #286. It compiles the same CLI-staged generated host, requires the
+target owner's exact authorized IME component/version and selected Chinese subtype, and clicks only actual keyboard
+keys, the named candidate and Done. It fails on missing prerequisites rather than injecting composition or text. The
+harness covers preedit isolation, candidate commit, recomposition, focus restoration, Done order, keyboard dismissal
+and parent-owned draft retention across view recreation. **It is preparation and Kotlin-compilation evidence only until
+its connected test passes on a named target with a named IME.** No such target or real-IME result is supplied here.
+
 ## iOS and HarmonyOS boundaries
 
 The iOS body above uses SwiftUI's native `TextField`, `@FocusState`, `.submitLabel(.done)` and `.onSubmit`. SwiftUI owns

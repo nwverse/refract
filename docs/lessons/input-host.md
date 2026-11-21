@@ -27,6 +27,21 @@ draft, translate it to Chinese, or replace an active composing span during recom
 actual native editor content after finishing composition. Test that behavior directly with `InputConnection`, and
 label Robolectric as Native JVM rather than an emulator/device or third-party IME result.
 
+## Real IME automation must not inject the behavior it claims to verify
+
+A UIAutomator test is not real-IME evidence merely because it runs in an instrumentation APK. Click the actual IME's
+letter keys, candidate and Done control; read the editor and composing span only for observation. Never replace an
+unavailable keyboard/candidate with `InputConnection`, editor `setText`, paste, key injection or `adb shell input text`.
+Require the exact enabled/default IME package, service, installed version and selected Chinese subtype before starting.
+A test app reading that package metadata on Android 11+ needs the bounded `android.view.InputMethod` `<queries>`
+declaration; package visibility is separate from permission to configure an IME.
+Fail closed on missing arguments, ambiguous key/candidate controls or an invisible keyboard. Test activity recomposition
+can be driven natively without touching the editor; do not click an unrelated control during live preedit if that would
+finish composition. `InputMethodInfo` exposes `subtypeCount`/`getSubtypeAt`, not Kotlin's `subtypeList`.
+
+Compiling this harness and staging the exact generated host are preparation evidence, not emulator/device acceptance.
+Retain the target class, OS build, IME version/subtype and connected-test output only after the real run.
+
 ## Do not race fixture staging with Kotlin compilation
 
 The fixture staging script cleans and repopulates its ignored Kotlin source directory. Never launch it in parallel

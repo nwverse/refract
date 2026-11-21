@@ -21,3 +21,4 @@ rootProject.name = "RefractExample"
 include(":app")
 include(":fixtures")
 include(":theme-fixture")
+include(":ime-verification")
