@@ -109,6 +109,12 @@ generated settings component, native model/binding, real UI Test interactions an
 complete native test results, retrieved layout/captures and subsequent human inspection; it makes no rendering,
 accessibility-service or performance claim.
 
+A separate [native committed-draft text-input host](verification/text-input.md) connects the exact CLI-generated
+composer to an app-owned ArkUI `NativeTextInputHost`. It preserves native preview/IME ownership and provides portable
+static checks plus a source-prepared Hypium/UI Test scaffold. **Neither it nor the ordinary application has been
+compiled or run.** No SDK, signing, real Chinese IME or device evidence is available; the documented blocker and
+remaining manual candidate-selection checks are explicit. It does not close umbrella issue #245.
+
 Unsigned HAPs are for compile/package verification, not installation. To install on a device, use the official signing
 workflow to obtain your `.p12`, `.cer` and `.p7b` materials and configure signing locally. Automatic signing and
 debug-profile setup may require login and device registration; never commit those materials. Device screenshots and

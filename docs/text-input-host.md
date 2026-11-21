@@ -117,54 +117,68 @@ Linux Swift tests cannot type-check SwiftUI. macOS/Xcode compilation is CI evide
 editing remains a separate runtime check; neither is inferred from the frontend accepting this source.
 
 HarmonyOS receives a direct `NativeTextInputHost` object call with the committed draft, draft-change callback, focus
-request and typed commit callbacks. Its application component must own `TextInputController`, native focus, keyboard
-dismissal and native composition/editing behavior. The following is a required app-owned contract sketch, not a
-compiled implementation or evidence that a particular HarmonyOS release exposes every shown spelling:
+request and typed commit callbacks. The app-owned implementation is
+`examples/harmony/entry/src/main/ets/native/NativeTextInputHost.ets`, byte-identical to
+`Fixtures/interop-text-input-host/NativeTextInputHost.ets`. The native test ability imports the unchanged CLI-generated
+`examples/harmony/entry/src/main/ets/generated/InteropTextInputHost.ets` (the canonical output apart from its
+source-name header), so no hand-written substitute screen or runtime adapter sits between the generated call and this
+host.
 
-```typescript
-@ComponentV2
-export struct NativeTextInputHost {
-  @Require @Param draft: string;
-  @Event onDraftChange: (value: string) => void = (value: string): void => {};
-  @Require @Param focusRequest: number;
-  @Event onDraftCommit: (value: string) => void = (value: string): void => {};
-  @Event onCommit: () => void = (): void => {};
-  private controller: TextInputController = new TextInputController();
-  private lastFocusRequest: number = 0;
+**The implementation is source-prepared only, not compiled or executed.** It selects APIs from the public
+[TextInput reference](https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-textinput.md)
+and [shared text types](https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis-arkui/arkui-ts/ts-text-common.md).
+Those references are not evidence that the selected vendor compiler accepts the source or that a real IME follows the
+same event sequence. The API 12+ `EditableTextOnChangeCallback` preview argument and API 18+ two-argument
+`OnSubmitCallback` require the chosen API 26 SDK; compilation must verify their exact ArkTS signatures before use.
 
-  aboutToAppear(): void {
-    this.lastFocusRequest = this.focusRequest;
-  }
+The host implements the bounded behavior as follows:
 
-  build() {
-    TextInput({ text: this.draft, controller: this.controller })
-      .onChange((value: string) => {
-        // Verify against the native SDK that this is a committed edit, never
-        // an intermediate IME composition preview, before publishing it.
-        this.onDraftChange(value);
-      })
-      .onSubmit((enterKey: EnterKeyType) => {
-        // Finish native editing through the actual SDK/IME, then publish the
-        // editor's committed value. Never construct Chinese from a pinyin key.
-        this.controller.stopEditing();
-        this.onDraftCommit(this.draft);
-        this.onCommit();
-      })
-  }
-}
+- `TextInput` owns its `PreviewText`, selection and IME interaction. `onChange(value, previewText)` publishes neither
+  `value` nor the preview while nonempty preview text is active; the host keeps only a Boolean `previewActive` gate,
+  not a composition string. Parent draft changes cannot replace the editor's value during that interval. A later
+  callback with no nonempty preview publishes the actual native value as the committed draft.
+- Each increased focus token calls the native `FocusController.requestFocus` followed by the public foreground-app
+  `inputMethod.getController().showTextInput()` request. Focus alone is not presented as keyboard evidence. Either
+  failure becomes a visible native diagnostic; no system-application-only keyboard permission is requested. Ordinary focus loss does not reset the draft or reconstruct selection, and a later token restores
+  native focus without copying a preedit into the parent.
+- A Done callback with active preview does **not** clear the preview, select a candidate or call the application's
+  commit actions. It displays an explicit candidate-selection diagnostic and calls `keepEditableState()` so the user
+  can choose through the real IME. This is an intentional unsupported-operation diagnostic, not a fabricated commit.
+- Once no preview is active, submit calls `stopEditing()`, publishes `SubmitEvent.text` rather than the possibly stale
+  parent binding, invokes `onDraftCommit`, publishes that same ongoing committed draft, clears native focus and then
+  invokes `onCommit`. The binding callback is unconditional during submit so it cannot be skipped because a parent
+  update is still pending. `stopEditing()` is the documented native edit/keyboard exit; it is not treated as a general operation for committing an active IME
+  candidate. `clearPreviewText()` is deliberately never used as a substitute.
+- The application owns the retained draft and submitted value. The separate
+  `examples/harmony/entry/src/ohosTest/ets/testability/GeneratedComposerHost.ets` recreates the generated child in
+  separate UI actions, demonstrating where retention must be tested. Hypium/UI Test source in
+  `GeneratedComposer.test.ets` covers only committed text injection, focus requests, hardware Enter, recreation and
+  callback state; `inputText()` is not preedit or candidate evidence.
+
+The exact remaining gate is an authorized matching DevEco CLI/SDK compile of the application and `entry@ohosTest`,
+followed by an owned signed simulator/device run. A native tester must select a named real Chinese IME, create visible
+preview text, change the parent during preview, choose a candidate in that IME, verify that only the chosen committed
+value reaches the draft, and exercise focus loss/restoration plus both software Done and hardware Enter. Record the
+actual preedit-to-commit transition, native callback order and keyboard dismissal. An active-preview Done must show the
+native diagnostic without invoking either commit callback; a subsequent real candidate selection followed by Done must
+publish exactly once. If the chosen SDK/IME does not supply the preview transition or native submit ordering assumed
+above, stop and revise the host against compiler/runtime evidence rather than adding a composition mirror or synthetic
+candidate.
+
+Portable checks:
+
+```sh
+python3 -I scripts/check_harmony_text_input.py
+python3 -I scripts/test/test_harmony_text_input.py
+python3 scripts/check_examples.py
+python3 scripts/check_harmony_toolchain.py --check-only
 ```
 
-The concrete focus-token observation and exact `stopEditing`/submit behavior must be implemented and compiled against
-the chosen SDK. Do not copy this sketch into an app without that verification. The source-level host ABI deliberately
-omits native selection/composition objects, so none of these controls becomes a generated runtime adapter. A composed
-value must not be mirrored into a separate generated
-composition string. Submit must finish/commit native editing before the app callback, and losing focus must preserve
-the committed draft. The mapping checks this host ABI at generation time; it does not prove an ArkUI SDK API.
-
-There is no HarmonyOS command-line toolchain or runtime available in the current environment. The ArkTS fixture is
-therefore source-generation evidence only: it is not compiled ArkTS, a simulator run, a device IME test or a claim
-that an as-yet unprovided application host implements every native behavior. Actual ArkTS compilation and native
-Chinese editing need the authorized HarmonyOS toolchain and a suitable simulator/device.
+The first two are source-contract checks with negative mutations, not ArkTS parsing, compilation or runtime tests.
+`check_examples.py` regenerates the exact shared Swift source through the CLI for Harmony only and diffs the committed
+ArkTS; Android remains the separate owner's slice. The final
+preflight currently exits 2 because the authorized tools are absent. Signing, `hdc`, simulator/device execution and
+Chinese-IME compatibility therefore remain unexecuted; this preparation slice does not close #245.
 
 ## Diagnostics and verification levels
 

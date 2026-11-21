@@ -1,3 +1,6 @@
 {
-  "src": ["testability/GeneratedSettingsHost"]
+  "src": [
+    "testability/GeneratedSettingsHost",
+    "testability/GeneratedComposerHost"
+  ]
 }

@@ -8,6 +8,26 @@
     "imports": ["com.example.refract.settings.NativeProfileStatusBadge"],
     "components": {},
     "nativeComponents": {
+      "NativeTextInputHost": {
+        "parameters": [
+          { "label": "draft", "type": "string", "required": true },
+          { "label": "focusRequest", "type": "int", "required": true },
+          { "label": "onDraftCommit", "type": "actionString", "required": true },
+          { "label": "onCommit", "type": "action", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeTextInputHost",
+        "argumentStyle": "named",
+        "modifierParameter": "modifier",
+        "arguments": [
+          { "source": "draft", "target": "draft" },
+          { "source": "focusRequest", "target": "focusRequest" },
+          { "source": "onDraftCommit", "target": "onDraftCommit" },
+          { "source": "onCommit", "target": "onCommit" }
+        ],
+        "attributes": {}
+      },
       "NativeProfileStatusBadge": {
         "parameters": [],
         "content": "none",
@@ -45,12 +65,35 @@
     "output": { "directory": "generated" },
     "imports": [
       {
+        "module": "../native/NativeTextInputHost",
+        "symbols": ["NativeTextInputHost"]
+      },
+      {
         "module": "../native/NativeProfileStatusBadge",
         "symbols": ["NativeProfileStatusBadge"]
       }
     ],
     "components": {},
     "nativeComponents": {
+      "NativeTextInputHost": {
+        "parameters": [
+          { "label": "draft", "type": "string", "required": true },
+          { "label": "focusRequest", "type": "int", "required": true },
+          { "label": "onDraftCommit", "type": "actionString", "required": true },
+          { "label": "onCommit", "type": "action", "required": true }
+        ],
+        "content": "none",
+        "modifiers": [],
+        "target": "NativeTextInputHost",
+        "argumentStyle": "object",
+        "arguments": [
+          { "source": "draft", "target": "draft" },
+          { "source": "focusRequest", "target": "focusRequest" },
+          { "source": "onDraftCommit", "target": "onDraftCommit" },
+          { "source": "onCommit", "target": "onCommit" }
+        ],
+        "attributes": {}
+      },
       "NativeProfileStatusBadge": {
         "parameters": [],
         "content": "none",

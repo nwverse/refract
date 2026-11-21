@@ -26,7 +26,7 @@ def regenerate_hello() -> None:
         "kotlin": ROOT / "examples/android/app/refract/generated/screens",
         "arkts": ROOT / "examples/harmony/entry/src/main/ets/generated",
     }
-    sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift")
+    sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift", "InteropTextInputHost.swift")
     with tempfile.TemporaryDirectory(prefix="refract-example-check.") as temporary:
         output = Path(temporary)
         for source in sources:
@@ -36,18 +36,24 @@ def regenerate_hello() -> None:
                 "--input", str(ROOT / "examples/shared" / source),
             ]
             command += ["--mapping", str(ROOT / "examples/refract.json")]
-            command += [
-                "--android-out", str(output / "android"),
-                "--harmony-out", str(output / "harmony"),
-            ]
+            if source == "InteropTextInputHost.swift":
+                # #285 owns only the Harmony native host; Android keeps its own slice.
+                command += ["--harmony-out", str(output / "harmony")]
+            else:
+                command += [
+                    "--android-out", str(output / "android"),
+                    "--harmony-out", str(output / "harmony"),
+                ]
             subprocess.run(command, cwd=ROOT, check=True)
             for platform, directory in outputs.items():
+                if source == "InteropTextInputHost.swift" and platform == "kotlin":
+                    continue
                 extension = "kt" if platform == "kotlin" else "ets"
                 actual = output / ("android" if platform == "kotlin" else "harmony") / f"{Path(source).stem}.{extension}"
                 expected = directory / f"{Path(source).stem}.{extension}"
                 if actual.read_bytes() != expected.read_bytes():
                     fail(f"regenerated {platform} differs from {expected.relative_to(ROOT)}; regenerate and review it")
-    print("Hello, native-component and full-settings Kotlin/ArkTS are identical to actual regenerated output")
+    print("Shared example Kotlin/ArkTS and the Harmony text-input-host ArkTS match actual regenerated output")
 
 
 def regenerate_identified_list() -> None:

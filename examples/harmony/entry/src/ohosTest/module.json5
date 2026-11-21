@@ -11,6 +11,13 @@
         "exported": false,
         "startWindowIcon": "$media:native_test_icon",
         "startWindowBackground": "$color:native_test_background"
+      },
+      {
+        "name": "ComposerTestAbility",
+        "srcEntry": "./ets/testability/ComposerTestAbility.ets",
+        "exported": false,
+        "startWindowIcon": "$media:native_test_icon",
+        "startWindowBackground": "$color:native_test_background"
       }
     ],
     "deviceTypes": ["phone"],

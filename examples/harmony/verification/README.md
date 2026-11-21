@@ -91,9 +91,14 @@ run passes; an emulator result must never be relabelled as device evidence.
 
 ## Portable checks available without the SDK
 
+The separate [committed-draft text-input guide](text-input.md) adds its own source-only host checks. It shares this
+page's missing authorized compiler/signing/target blocker and is not a native IME or device result.
+
 ```sh
 python3 -I scripts/test/test_harmony_toolchain.py
 python3 -I scripts/test/test_harmony_render.py
+python3 -I scripts/check_harmony_text_input.py
+python3 -I scripts/test/test_harmony_text_input.py
 python3 -I scripts/check_harmony_toolchain.py --check-only
 ```
 
