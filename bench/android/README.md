@@ -59,9 +59,10 @@ storage-unready target before Gradle instrumentation starts. Its only target wri
 writability test; the runner separately disables animations. The JSON records model, device, OS/build, ABI, rendering
 properties, compilation mode, macro iteration count and the exact Git revision. Gradle passes that same revision through
 AndroidX `output.payload.refract.sourceRevision`, and both collector and report require it to match the preserved
-AndroidX `context.payload`. The runner also records that HEAD matched and the worktree remained clean after
-generation, compilation and measurement. The environment is copied into `raw/environment.json` and protected by the
-same evidence checksum manifest; a missing, mismatched or changed environment blocks the report. Local run metadata
+AndroidX `context.payload`. The model, device, build ID, SDK and compilation mode in that context must also match the
+probe. The runner records that HEAD matched and the worktree remained clean after generation, compilation and
+measurement. The environment is copied into `raw/environment.json` and protected by the same evidence checksum
+manifest; a missing, mismatched or changed environment blocks the report. Local run metadata
 retains the selected target serial and Gradle receives that exact serial through `android.test.devices`, so a second
 attached target cannot redirect or duplicate the measurement. Run directories and serial-bearing reports are not
 committed. A dirty source tree is rejected. Any old `additional-output` directory is moved intact into the new run
@@ -75,7 +76,11 @@ variants of startup, scroll and state update, at least ten iterations, raw `time
 iteration (for example `memoryRssAnonLastKb`), matching metrics and a distinct indexed Perfetto trace for every declared
 iteration. Startup samples must match the iteration count; frame runs contain per-frame samples across iterations and
 are not mislabelled as iteration samples. Each macro record's AndroidX `profilerOutputs` must
-reference a retained trace with the matching variant/scenario; unreferenced or ambiguous traces fail closed. Missing
+reference a retained trace with the matching variant/scenario; those identities must agree with the full AndroidX
+benchmark name, retained JSON path and unique iteration, not merely have the right count. Unreferenced or ambiguous
+traces fail closed. Collection copies and validates artifacts in a unique staging directory before publishing any
+manifest; a rejected recollection cannot overwrite a previously valid run, and a failed first collection publishes no
+manifest or raw directory. Missing
 pairs, JSON, traces, mismatched checksums or incomplete traces fail rather than becoming a partial PASS. AOSP images
 without Google services need the same startup/rendering stability checks; slow first frames are not accepted as
 passing startup measurements. The existing frame deadline and 5% AND 0.1 ms latency gate are unchanged.

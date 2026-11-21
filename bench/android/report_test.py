@@ -35,7 +35,8 @@ def benchmark(variant, scenario="scroll", metrics=None, model="sdk_gphone64_x86_
         "repeatIterations": 3,
         "thermalThrottleSleepSeconds": 0,
         "context": {
-            "build": {"brand": "google", "device": "emu64xa", "fingerprint": "test", "model": model, "version": {"sdk": 35}},
+            "build": {"brand": "google", "device": "emu64xa", "fingerprint": "test", "id": "test-build",
+                      "model": model, "version": {"sdk": 35}},
             "device": {"id": "test", "version": 35},
             "compilationMode": "Partial",
             "cpuCoreCount": 2,
@@ -53,6 +54,16 @@ def benchmark(variant, scenario="scroll", metrics=None, model="sdk_gphone64_x86_
 def complete_evidence(traces, benchmarks=None):
     return {"traces": traces, "environment": [{"path": "raw/environment.json"}],
             "benchmark_json": benchmarks or [{"path": "raw/001-benchmarkData.json"}]}
+
+
+def complete_metadata():
+    return {"emulator": True, "status": "ready", "source_revision": "a" * 40,
+            "source_tree": report.SOURCE_TREE_VERIFIED,
+            "benchmark_build_type": "release",
+            "compilation_mode": "Partial",
+            "macro_iterations": 10,
+            "target": {"model": "sdk_gphone64_x86_64", "device": "emu64xa",
+                       "build_id": "test-build", "sdk": 35}}
 
 
 class ReportTest(unittest.TestCase):
@@ -223,8 +234,7 @@ class ReportTest(unittest.TestCase):
                     "variant": variant.lower(), "scenario": scenario, "iteration": iteration,
                     "androidx_benchmark": value["name"], "androidx_json": "raw/001-benchmarkData.json",
                 } for iteration in range(10))
-        metadata = {"emulator": True, "status": "ready", "source_revision": "a" * 40,
-                    "source_tree": report.SOURCE_TREE_VERIFIED}
+        metadata = complete_metadata()
         return values, traces, metadata
 
     def test_androidx_startup_and_last_memory_keys_complete_macro(self):
@@ -268,6 +278,18 @@ class ReportTest(unittest.TestCase):
         with self.assertRaisesRegex(report.ReportError, "AndroidX JSON has no Perfetto filename"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
                                evidence=complete_evidence(trace_coverage))
+
+    def test_macro_target_identity_must_match_probe(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        path.write_text(json.dumps(values))
+        for key, value in (("model", "other-model"), ("device", "other-device"),
+                           ("build_id", "other-build"), ("sdk", 34)):
+            changed = complete_metadata()
+            changed["target"][key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(report.ReportError, "target/build identity"):
+                report.make_report([path], 5.0, 0.1, changed, require_macro=True,
+                                   evidence=complete_evidence(traces))
 
     def test_macro_source_provenance_must_match_androidx_payload(self):
         path = Path(self.directory.name) / "input.json"
@@ -347,6 +369,10 @@ class ReportTest(unittest.TestCase):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
         invalid = complete_evidence([{**trace, "iteration": 0} for trace in traces])
         with self.assertRaisesRegex(report.ReportError, "duplicate iteration binding"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
+        invalid = complete_evidence([{**trace, "scenario": "stateUpdate" if trace["scenario"] == "scroll"
+                                       else trace["scenario"]} for trace in traces])
+        with self.assertRaisesRegex(report.ReportError, "contradicts its AndroidX benchmark identity"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
         invalid = complete_evidence([{**trace, "iteration": "0"} for trace in traces])
         with self.assertRaisesRegex(report.ReportError, "invalid iteration binding"):

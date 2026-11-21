@@ -291,12 +291,13 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
     if traces is None:
         raise ReportError("Complete macro evidence requires a verified Perfetto trace manifest")
     expected_iterations = {}
-    macro_names = set()
+    benchmark_identities = {}
     for measurement in measurements:
         if measurement.key[0] != "Macro":
             continue
-        macro_names.add(measurement.key[3])
-        expected_iterations[measurement.key[3]] = measurement.repeat_iterations
+        name = measurement.key[3]
+        benchmark_identities[name] = (measurement.key[1], measurement.key[2])
+        expected_iterations[name] = measurement.repeat_iterations
     for measurement in measurements:
         if measurement.key[0] != "Macro":
             continue
@@ -315,8 +316,10 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
         if not isinstance(trace, dict):
             raise ReportError("Perfetto evidence has an invalid manifest record")
         name = trace.get("androidx_benchmark")
-        if name not in macro_names or trace.get("androidx_json") not in retained_json:
+        if name not in benchmark_identities or trace.get("androidx_json") not in retained_json:
             raise ReportError("Perfetto evidence is not bound to a retained AndroidX benchmark")
+        if (trace.get("variant"), trace.get("scenario")) != benchmark_identities[name]:
+            raise ReportError("Perfetto variant/scenario contradicts its AndroidX benchmark identity")
         iteration = trace.get("iteration")
         if not isinstance(iteration, int) or isinstance(iteration, bool) or \
                 not 0 <= iteration < expected_iterations[name]:
@@ -412,11 +415,26 @@ def verify_source_provenance(contexts: set[str], metadata: dict[str, Any]) -> No
     revision = metadata.get("source_revision")
     if not re.fullmatch(r"[0-9a-f]{40}", str(revision)):
         raise ReportError("Complete macro evidence requires a full source revision from the target probe")
+    target = metadata.get("target")
+    if not isinstance(target, dict):
+        raise ReportError("Complete macro evidence requires a named probed target")
     for encoded in contexts:
         context = json.loads(encoded)
         payload = context.get("payload")
         if not isinstance(payload, dict) or payload.get("refract.sourceRevision") != revision:
             raise ReportError("AndroidX source provenance does not match the target-probed source revision")
+        build = context.get("build")
+        if not isinstance(build, dict) or not isinstance(build.get("version"), dict):
+            raise ReportError("AndroidX target/build identity is incomplete")
+        actual = {
+            "model": build.get("model"), "device": build.get("device"),
+            "build_id": build.get("id"), "sdk": build["version"].get("sdk"),
+        }
+        expected = {key: target.get(key) for key in actual}
+        if actual != expected or any(value in (None, "") for value in actual.values()):
+            raise ReportError("AndroidX target/build identity does not match the target probe")
+        if context.get("compilationMode") != metadata.get("compilation_mode"):
+            raise ReportError("AndroidX compilation mode does not match the probed benchmark configuration")
 
 
 def make_report(inputs: list[Path], percent: float, absolute_ms: float,

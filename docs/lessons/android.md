@@ -102,7 +102,11 @@ Bind source provenance to AndroidX's own `context.payload`. The instrumentation 
 `androidx.benchmark.output.payload.`; a `refract.sourceRevision` value under that prefix becomes a payload entry.
 Check it against the probed revision, preserve the environment in the checksummed raw evidence and require a clean
 unchanged source tree after measurement. A separate environment path supplied only at report time does not bind the
-raw results to the same run. Duplicate JSON keys and conflicting revisions must fail closed.
+raw results to the same run. Duplicate JSON keys and conflicting revisions must fail closed. A trace's variant and
+scenario must also agree with the full AndroidX benchmark name and its retained JSON; matching iteration counts alone
+still permits generated/reference identity swaps. Check the probed model, device, build ID, SDK and compilation mode
+against AndroidX `context.build`. Stage artifacts before publishing the manifest, and reject an existing run before
+copying anything so a failed recollection cannot corrupt already valid evidence.
 
 When fixtures model complete macro evidence, generate all six generated/reference scenarios with ten indexed traces
 each, actual metric keys, one startup/memory run per iteration and multiple frame samples. Mutate the serialized JSON

@@ -140,6 +140,13 @@ class EvidenceCollectionTest(unittest.TestCase):
             "status": "ready", "emulator": True, "source_revision": REVISION,
         }))
 
+    def write_environment(self):
+        environment = self.output / "environment.json"
+        metadata = report_test.complete_metadata()
+        metadata["source_revision"] = REVISION
+        environment.write_text(json.dumps(metadata))
+        return environment
+
     def collect(self):
         return collect_results.collect(self.inputs, self.output, self.environment)
 
@@ -318,6 +325,34 @@ class EvidenceCollectionTest(unittest.TestCase):
         with self.assertRaisesRegex(collect_results.EvidenceError, "no profilerOutputs"):
             collect_results.collect(self.inputs, self.output, self.environment)
 
+    def test_failed_collection_publishes_no_manifest_or_raw_artifacts(self):
+        payload = json.loads(self.add_json().read_text())["benchmarks"]
+        payload[0]["profilerOutputs"][0]["filename"] = "missing.perfetto-trace"
+        self.write_json(payload)
+        self.add_traces()
+        with self.assertRaisesRegex(collect_results.EvidenceError, "missing or ambiguous"):
+            collect_results.collect(self.inputs, self.output, self.environment)
+        self.assertFalse((self.output / "evidence-manifest.json").exists())
+        self.assertFalse((self.output / "json-files.txt").exists())
+        self.assertFalse((self.output / "raw").exists())
+        staging = list(self.output.glob(".evidence-staging-*"))
+        self.assertEqual(len(staging), 1)
+        self.assertFalse((staging[0] / "evidence-manifest.json").exists())
+
+    def test_existing_evidence_is_not_modified_by_a_rejected_recollection(self):
+        self.add_json()
+        self.add_traces()
+        manifest = collect_results.collect(self.inputs, self.output, self.environment)
+        environment_path = self.output / "raw/environment.json"
+        before = environment_path.read_bytes()
+        self.add_json()
+        self.add_traces()
+        with self.assertRaisesRegex(collect_results.EvidenceError, "Refusing to replace"):
+            collect_results.collect(self.inputs, self.output, self.environment)
+        self.assertEqual(environment_path.read_bytes(), before)
+        report.verify_evidence(manifest, self.output, [self.output / "raw/001-benchmarkData.json"],
+                               require_environment=True)
+
     def test_checksum_mismatch_and_wrong_input_are_rejected(self):
         source = self.add_json()
         self.add_traces()
@@ -345,12 +380,8 @@ class EvidenceCollectionTest(unittest.TestCase):
     def test_complete_macro_cli_verifies_preserved_evidence(self):
         source = self.add_json()
         self.add_traces()
-        environment = self.output / "environment.json"
         self.output.mkdir()
-        environment.write_text(json.dumps({
-            "status": "ready", "emulator": True, "source_revision": REVISION,
-            "source_tree": report.SOURCE_TREE_VERIFIED,
-        }))
+        environment = self.write_environment()
         collect_results.collect(self.inputs, self.output, environment)
         arguments = ["--output", str(self.output),
                      "--require-macro", "--evidence-manifest", str(self.output / "evidence-manifest.json"),
@@ -363,6 +394,22 @@ class EvidenceCollectionTest(unittest.TestCase):
         frames = next(row for row in result["measurements"] if row["metric"] == "frameDurationCpuMs")
         self.assertEqual(startup["sample_count"], 10)
         self.assertEqual(frames["sample_count"], 30)
+
+    def test_complete_macro_cli_rejects_swapped_variant_trace_identities(self):
+        self.add_json()
+        self.add_traces()
+        self.output.mkdir()
+        environment = self.write_environment()
+        collect_results.collect(self.inputs, self.output, environment)
+        manifest_path = self.output / "evidence-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for trace in manifest["traces"]:
+            trace["variant"] = "reference" if trace["variant"] == "generated" else "generated"
+        manifest_path.write_text(json.dumps(manifest))
+        self.assertEqual(report.main([
+            "--output", str(self.output), "--require-macro", "--evidence-manifest", str(manifest_path),
+            str(self.output / "raw/001-benchmarkData.json"),
+        ]), 2)
 
     def test_path_traversal_is_rejected(self):
         self.add_json()

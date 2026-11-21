@@ -8,6 +8,7 @@ import hashlib
 import json
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -153,41 +154,56 @@ def bind_traces(json_sources: list[Path], copied_json: list[dict[str, object]],
 def collect(input_directory: Path, output: Path, environment: Path | None = None) -> dict[str, object]:
     if not input_directory.is_dir():
         raise EvidenceError("AndroidX additional-output directory is absent; instrumentation did not produce evidence.")
-    source_revision = None
-    environment_artifact = None
     if environment is None:
         raise EvidenceError("Macro collection requires --environment; no partial report can be produced")
-    metadata = load_json(environment)
-    source_revision = metadata.get("source_revision") if isinstance(metadata, dict) else None
-    if not isinstance(source_revision, str) or metadata.get("status") != "ready" or metadata.get("emulator") is not True:
-        raise EvidenceError("A verified target environment with a source revision is required")
-    raw_environment = output / "raw/environment.json"
-    raw_environment.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(environment, raw_environment)
-    environment_artifact = {"path": "raw/environment.json", "bytes": raw_environment.stat().st_size,
-                            "sha256": digest(raw_environment)}
+    output.mkdir(parents=True, exist_ok=True)
     if (output / "evidence-manifest.json").exists() or (output / "json-files.txt").exists():
         raise EvidenceError("Refusing to replace an existing evidence manifest; choose a new run directory.")
-    raw = output / "raw"
-    raw.mkdir(parents=True, exist_ok=True)
-    json_sources = sorted(path for path in input_directory.rglob("*benchmarkData.json") if path.is_file())
-    if not json_sources:
-        raise EvidenceError("No AndroidX benchmark JSON was produced; this is not a passing run.")
-    benchmark_json = [copy_artifact(path, raw, index) for index, path in enumerate(json_sources, 1)]
-    trace_sources = sorted(path for path in input_directory.rglob("*.perfetto-trace") if path.is_file())
-    traces = []
-    for index, path in enumerate(trace_sources, len(benchmark_json) + 1):
-        item = copy_artifact(path, raw, index)
-        relative = path.relative_to(input_directory).as_posix()
-        item.update({"source_name": relative})
-        traces.append(item)
-    bind_traces(json_sources, benchmark_json, traces, source_revision)
-    manifest = {"schema": 1, "benchmark_json": benchmark_json, "traces": traces,
-                "environment": [environment_artifact] if environment_artifact else []}
-    (output / "evidence-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                                                   encoding="utf-8")
-    (output / "json-files.txt").write_text("".join(f"{item['path']}\n" for item in benchmark_json), encoding="utf-8")
-    return manifest
+    staging = Path(tempfile.mkdtemp(prefix=".evidence-staging-", dir=output))
+    published = False
+    try:
+        metadata = load_json(environment)
+        source_revision = metadata.get("source_revision") if isinstance(metadata, dict) else None
+        if not isinstance(source_revision, str) or metadata.get("status") != "ready" or metadata.get("emulator") is not True:
+            raise EvidenceError("A verified target environment with a source revision is required")
+        raw = staging / "raw"
+        raw.mkdir()
+        raw_environment = raw / "environment.json"
+        shutil.copyfile(environment, raw_environment)
+        environment_artifact = {"path": "raw/environment.json", "bytes": raw_environment.stat().st_size,
+                                "sha256": digest(raw_environment)}
+        json_sources = sorted(path for path in input_directory.rglob("*benchmarkData.json") if path.is_file())
+        if not json_sources:
+            raise EvidenceError("No AndroidX benchmark JSON was produced; this is not a passing run.")
+        benchmark_json = [copy_artifact(path, raw, index) for index, path in enumerate(json_sources, 1)]
+        trace_sources = sorted(path for path in input_directory.rglob("*.perfetto-trace") if path.is_file())
+        traces = []
+        for index, path in enumerate(trace_sources, len(benchmark_json) + 1):
+            item = copy_artifact(path, raw, index)
+            relative = path.relative_to(input_directory).as_posix()
+            item.update({"source_name": relative})
+            traces.append(item)
+        bind_traces(json_sources, benchmark_json, traces, source_revision)
+        manifest = {"schema": 1, "benchmark_json": benchmark_json, "traces": traces,
+                    "environment": [environment_artifact]}
+        (staging / "evidence-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                                                        encoding="utf-8")
+        (staging / "json-files.txt").write_text("".join(f"{item['path']}\n" for item in benchmark_json),
+                                                encoding="utf-8")
+        # Publish each completed run artifact only after the whole binding passes.
+        # A rejected or interrupted staging remains quarantined, never a valid manifest.
+        raw_output = output / "raw"
+        if raw_output.exists() and any(raw_output.iterdir()):
+            raise EvidenceError("Refusing to publish over existing raw evidence")
+        raw.rename(raw_output)
+        (staging / "evidence-manifest.json").rename(output / "evidence-manifest.json")
+        (staging / "json-files.txt").rename(output / "json-files.txt")
+        published = True
+        return manifest
+    finally:
+        if published:
+            staging.rmdir()
+        # Otherwise retain the unique staging directory as explicitly incomplete evidence.
 
 
 def main(argv: list[str] | None = None) -> int:
