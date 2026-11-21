@@ -79,6 +79,11 @@ def execute(command: Sequence[str], log_path: Path, *, cwd: Path = ROOT,
     return result
 
 
+def format_observed_cases(cases: Sequence[tuple[str, str]]) -> list[str]:
+    """Serialize the successful case identities observed in the native output."""
+    return [f"{suite}#{name}" for suite, name in cases]
+
+
 def validate_result(output: str) -> dict[str, object]:
     """Parse pinned suite/case/task lifecycles and require one successful terminal result."""
     results = SUMMARY.findall(output)
@@ -222,7 +227,7 @@ def validate_result(output: str) -> dict[str, object]:
         raise VerificationError("not every required native rendering case completed successfully")
     return {
         "tests": tests, "failures": failures, "errors": errors, "passed": passed, "ignored": ignored,
-        "cases": [f"{suite}#{name}" for suite, name in EXPECTED_CASES],
+        "cases": format_observed_cases(observed),
     }
 
 
