@@ -19,8 +19,10 @@ interval, not a CPU frame duration. A vendor frame profiler's frame duration is 
 metric definition in the report and never compare absolute numbers across operating systems, targets or toolchains.
 
 A `.xcresult` bundle, Instruments `.trace` recording, vendor trace and UI test timing are separate raw artifacts.
-Preserve them with exact source/toolchain/target metadata, acquisition/export commands and checksums. ZIP a result
-bundle when an ordinary file is needed for public review; do not treat a directory named `.trace` as a trace file.
+Preserve them with exact source/toolchain/target metadata, acquisition/export commands and checksums. ZIP result and
+Instruments packages when ordinary files are needed for public review; a directory named `.trace` is not a trace file.
+`bench/ios/archive_trace.py` archives only an already completed package, never overwrites output and does not establish
+that capture finished or that a package belongs to a measurement.
 Every sample must be directly bound to its variant, scenario and iteration and to the corresponding native trace.
 On iOS, also require exactly one identity-matched `xcode-metric-json` per timing measurement; a profiler trace is
 supporting evidence, not a substitute for the native launch or display-interval export. Do not infer ownership from a
