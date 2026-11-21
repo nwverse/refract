@@ -143,6 +143,14 @@ cd examples/android
 ./gradlew :fixtures:compileDebugKotlin
 ```
 
+### Real Chinese-IME harness preparation
+
+`ime-verification/` is a separate test application that compiles the exact staged text-input host and provides a
+fail-closed UIAutomator scenario for a target-supplied, authorized Chinese IME. It never injects text or composition,
+changes IME settings or treats compilation as runtime evidence. See [its verification contract](ime-verification/README.md)
+for prerequisites, bounded build/run commands and evidence limits. **No connected target or real-IME run is supplied by
+this preparation; #245 remains open.** The existing Robolectric input-host tests remain Native JVM evidence only.
+
 ### Theme interaction and dynamic-type Native JVM tests
 
 `theme-interaction-states` supplies one generated settings component, an app-owned state resolver and light/night
