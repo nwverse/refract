@@ -37,6 +37,26 @@ preview is active, use `SubmitEvent.text`, not a possibly stale parent binding. 
 error callbacks native: `FocusController.requestFocus` alone does not prove a visible keyboard, and the public
 `showTextInput()` request still needs authorized compiler and real-IME verification.
 
+Scope preview publication to a mounted native editing session: editing loss and disappearance invalidate the gate, and
+late callbacks cannot publish. A parent edit during preview must not be silently discarded; retain the parent value,
+end the old session explicitly and reject its delayed callbacks. Use the custom component's `getUniqueId()` for each
+native focus target. Source checks must inspect guarded control flow, not only the textual order of commit calls.
+
+## Real IME automation must not inject the behavior it claims to verify
+
+A UIAutomator test is not real-IME evidence merely because it runs in an instrumentation APK. Click the actual IME's
+letter keys, candidate and Done control; read the editor and composing span only for observation. Never replace an
+unavailable keyboard/candidate with `InputConnection`, editor `setText`, paste, key injection or `adb shell input text`.
+Require the exact enabled/default IME package, service, installed version and selected Chinese subtype before starting.
+A test app reading that package metadata on Android 11+ needs the bounded `android.view.InputMethod` `<queries>`
+declaration; package visibility is separate from permission to configure an IME.
+Fail closed on missing arguments, ambiguous key/candidate controls or an invisible keyboard. Test activity recomposition
+can be driven natively without touching the editor; do not click an unrelated control during live preedit if that would
+finish composition. `InputMethodInfo` exposes `subtypeCount`/`getSubtypeAt`, not Kotlin's `subtypeList`.
+
+Compiling this harness and staging the exact generated host are preparation evidence, not emulator/device acceptance.
+Retain the target class, OS build, IME version/subtype and connected-test output only after the real run.
+
 ## Do not race fixture staging with Kotlin compilation
 
 The fixture staging script cleans and repopulates its ignored Kotlin source directory. Never launch it in parallel
