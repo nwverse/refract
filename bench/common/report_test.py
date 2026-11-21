@@ -74,6 +74,36 @@ class PairedReportTest(unittest.TestCase):
         self.assertEqual(len(report["comparisons"]), 3)
         self.assertIn("SIMULATOR RESULTS — not device results", markdown(report))
 
+    def test_trace_only_ios_manifest_cannot_pass_without_native_metric_exports(self):
+        # Synthetic schema-validation fixtures only: these bytes are not native
+        # traces, launch samples or any other performance evidence.
+        self.manifest["artifacts"] = [entry for entry in self.manifest["artifacts"]
+                                      if entry["kind"] != "xcode-metric-json"]
+        for measurement in self.manifest["measurements"] + self.manifest["resources"]:
+            identity = f"{measurement['variant']}-{measurement['scenario']}-{measurement['iteration']}"
+            measurement["artifacts"] = [f"raw/{identity}-xctrace"]
+        with self.assertRaisesRegex(EvidenceError, "exactly one xcode-metric-json"):
+            make_report(self.manifest, self.root)
+
+    def test_every_ios_timing_measurement_requires_its_own_metric_export(self):
+        for scenario in ("startup", "scroll", "stateUpdate"):
+            manifest = json.loads(json.dumps(self.manifest))
+            measurement = next(entry for entry in manifest["measurements"] if entry["scenario"] == scenario)
+            measurement["artifacts"] = [path for path in measurement["artifacts"] if path.endswith("xctrace")]
+            with self.subTest(scenario=scenario), self.assertRaisesRegex(EvidenceError, "exactly one xcode-metric-json"):
+                make_report(manifest, self.root)
+
+        duplicate = self.manifest["measurements"][0]
+        original = next(entry for entry in self.manifest["artifacts"]
+                        if entry["kind"] == "xcode-metric-json" and entry["path"] in duplicate["artifacts"])
+        path = f"{original['path']}-second"
+        (self.root / path).write_bytes(b"synthetic metric fixture")
+        self.manifest["artifacts"].append(self.artifact(path, original["variant"], original["scenario"],
+                                                         original["iteration"], original["kind"]))
+        duplicate["artifacts"].append(path)
+        with self.assertRaisesRegex(EvidenceError, "exactly one xcode-metric-json"):
+            make_report(self.manifest, self.root)
+
     def test_missing_one_iteration_is_not_a_pass(self):
         self.manifest["measurements"].pop()
         with self.assertRaisesRegex(EvidenceError, "Missing or duplicate raw sample"):

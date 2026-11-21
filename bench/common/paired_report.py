@@ -176,6 +176,8 @@ def samples_for(measurement: dict[str, Any], artifacts: list[dict[str, Any]]) ->
     for artifact in matches:
         if (artifact["variant"], artifact["scenario"], artifact["iteration"]) != (variant, scenario, iteration):
             raise EvidenceError("Timing sample is not bound to its variant/scenario/iteration")
+    if platform == "ios" and sum(match["kind"] == "xcode-metric-json" for match in matches) != 1:
+        raise EvidenceError("iOS timing requires exactly one xcode-metric-json from its variant/scenario/iteration")
     return [{
         "variant": variant, "scenario": scenario, "iteration": iteration,
         "metric": metric, "value": value, "artifacts": sorted(referenced),

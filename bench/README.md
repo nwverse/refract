@@ -43,9 +43,11 @@ scenario source, a passing synthetic report test and a manually constructed mani
    ZIP-copied `.xcresult` bundles, Xcode `xcresulttool` JSON exports and `.trace` recordings; HarmonyOS uses the
    vendor's native trace and metric exports. A directory merely named `.trace` is not accepted as a trace file.
 3. `measurements`: positive finite millisecond samples, one per iteration, directly referencing that iteration's raw
-   native metric export and profiler trace. `startupMs` means the native launch-to-first-frame metric; iOS
-   `frameIntervalMs` is explicitly a `CADisplayLink` target interval, not CPU frame duration. HarmonyOS uses its
-   native frame duration. These metrics are not interchangeable.
+   native metric export and profiler trace. Every iOS timing measurement references exactly one identity-matched
+   `xcode-metric-json`; an Instruments trace alone cannot supply an `XCTApplicationLaunchMetric` or labelled
+   `CADisplayLink` export. `startupMs` means the native launch-to-first-frame metric; iOS `frameIntervalMs` is
+   explicitly a `CADisplayLink` target interval, not CPU frame duration. HarmonyOS uses its native frame duration.
+   These metrics are not interchangeable.
 4. `resources`: positive integer bytes for resident memory and installed binary size with native artifact provenance.
 
 The report includes the exact commands and limits; raw evidence is retained beside it. Do not commit a report without

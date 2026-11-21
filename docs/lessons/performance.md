@@ -22,8 +22,9 @@ A `.xcresult` bundle, Instruments `.trace` recording, vendor trace and UI test t
 Preserve them with exact source/toolchain/target metadata, acquisition/export commands and checksums. ZIP a result
 bundle when an ordinary file is needed for public review; do not treat a directory named `.trace` as a trace file.
 Every sample must be directly bound to its variant, scenario and iteration and to the corresponding native trace.
-Do not infer ownership from a similar filename, duplicate a trace to fill missing iterations, or accept a median as a
-p99 sample.
+On iOS, also require exactly one identity-matched `xcode-metric-json` per timing measurement; a profiler trace is
+supporting evidence, not a substitute for the native launch or display-interval export. Do not infer ownership from a
+similar filename, duplicate a trace to fill missing iterations, or accept a median as a p99 sample.
 
 ## Equal inputs need equal native behavior
 
