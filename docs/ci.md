@@ -14,6 +14,7 @@ python3 -I scripts/test/test_doc_paths.py --self-test
 python3 -I scripts/test/test_doc_paths.py
 node scripts/test/pr_needs_issue_test.mjs
 python3 -I scripts/test/test_harmony_toolchain.py
+python3 -I scripts/test_example_output_transaction.py --self-test
 python3 -I scripts/test/test_harmony_text_input.py
 python3 -I scripts/check_harmony_text_input.py
 actionlint
@@ -86,6 +87,9 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 1. Build the `refract` CLI with the same locked dependencies as the Swift job.
 2. Run `refract check` over every shared example input and both committed native output directories. This generates
    only in memory and rejects missing, stale or unexpected Kotlin/ArkTS files without writing to the checkout.
+   `scripts/test_example_output_transaction.py --self-test` reads the exact workflow command, runs the actual CLI over
+   both output roots, then rejects a missing text-input input and either missing generated host in temporary checkouts.
+   This guards the transaction's freshness/unexpected-output boundary rather than substituting a source-list check.
    Run `python3 scripts/check_examples.py` to independently regenerate the example sources through the actual CLI,
    validate resource catalogs and confirm the shared iOS source set. The final unexpected-file check rejects any
    unexpected drift.

@@ -1,5 +1,11 @@
 # Repository tooling lessons
 
+- **Every generated example file must belong to the CI input/output transaction.** A single-platform regeneration or a
+  file-existence check can pass while `refract check` rejects a newly committed output as unexpected. Keep its shared
+  canonical input in the same native-output step and in the consumer's explicit input set. Regression-test the exact
+  workflow transaction over both roots, including missing input and missing generated output, rather than moving the
+  file, disabling freshness or creating a hand-maintained substitute list.
+
 - **Test output transactions at the replacement boundary.** Linux Foundation may reject `replaceItem` for a new
   destination and its file-manager wrappers can differ from direct POSIX behavior. Stage beside the destination,
   use a same-filesystem rename, and test both a new and an existing destination on each supported host. Keep backups

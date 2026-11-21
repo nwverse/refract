@@ -122,7 +122,8 @@ request and typed commit callbacks. The app-owned implementation is
 `Fixtures/interop-text-input-host/NativeTextInputHost.ets`. The native test ability imports the unchanged CLI-generated
 `examples/harmony/entry/src/main/ets/generated/InteropTextInputHost.ets` (the canonical output apart from its
 source-name header), so no hand-written substitute screen or runtime adapter sits between the generated call and this
-host.
+host. The example generation transaction also emits the corresponding Kotlin call against the existing Android host;
+this slice changes no Android implementation or behavior.
 
 **The implementation is source-prepared only, not compiled or executed.** It selects APIs from the public
 [TextInput reference](https://gitee.com/openharmony/docs/blob/master/en/application-dev/reference/apis-arkui/arkui-ts/ts-basic-components-textinput.md)
@@ -175,9 +176,10 @@ python3 scripts/check_harmony_toolchain.py --check-only
 ```
 
 The first two are source-contract checks with negative mutations, not ArkTS parsing, compilation or runtime tests.
-`check_examples.py` regenerates the exact shared Swift source through the CLI for Harmony only and diffs the committed
-ArkTS; Android remains the separate owner's slice. The final
-preflight currently exits 2 because the authorized tools are absent. Signing, `hdc`, simulator/device execution and
+`check_examples.py` regenerates the exact shared Swift source through the same CLI transaction as the other example
+screens and diffs both native outputs. This preserves the existing Android host implementation without modifying its
+native code or changing its behavior. The CI `refract check` includes this same input over both committed output roots,
+so an added generated host cannot be rejected as unexpected. The final
 Chinese-IME compatibility therefore remain unexecuted; this preparation slice does not close #245.
 
 ## Diagnostics and verification levels

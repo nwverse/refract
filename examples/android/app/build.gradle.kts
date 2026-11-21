@@ -21,6 +21,7 @@ refract {
             rootProject.file("../shared/Hello.swift"),
             rootProject.file("../shared/NativeComponentScreen.swift"),
             rootProject.file("../shared/IdentifiedList.swift"),
+            rootProject.file("../shared/InteropTextInputHost.swift"),
             rootProject.file("../shared/SettingsScreen.swift"),
         )
         mapping.set(rootProject.file("../refract.json"))

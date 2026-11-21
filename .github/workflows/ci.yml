@@ -117,10 +117,13 @@ jobs:
             --input examples/shared/Hello.swift \
             --input examples/shared/NativeComponentScreen.swift \
             --input examples/shared/IdentifiedList.swift \
+            --input examples/shared/InteropTextInputHost.swift \
             --input examples/shared/SettingsScreen.swift \
             --mapping examples/refract.json \
             --android-out examples/android/app/refract/generated/screens \
             --harmony-out examples/harmony/entry/src/main/ets/generated
+      - name: Regress the actual CI output transaction over its intended roots
+        run: python3 -I scripts/test_example_output_transaction.py --self-test
       - name: Verify committed benchmark ArkTS against actual CLI generation
         run: python3 -I bench/harmony/generate.py --check
       - name: Regenerate examples and verify resource catalogs
