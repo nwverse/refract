@@ -14,6 +14,9 @@ python3 -I scripts/test/test_doc_paths.py --self-test
 python3 -I scripts/test/test_doc_paths.py
 node scripts/test/pr_needs_issue_test.mjs
 python3 -I scripts/test/test_harmony_toolchain.py
+python3 -I scripts/test_example_output_transaction.py --self-test
+python3 -I scripts/test/test_harmony_text_input.py
+python3 -I scripts/check_harmony_text_input.py
 actionlint
 ```
 
@@ -35,6 +38,11 @@ missing-tool behavior without running or imitating a vendor compiler. Run the en
 nonzero blocker, never be skipped and reported as a native compile pass. The actual application and native-test build
 commands and the acquisition blocker are in `docs/harmony-toolchain.md`. No public CI HarmonyOS compile job is enabled
 until a licensed reproducible distribution is available.
+
+The text-input source-contract tests mutate copies of the app-owned host and reject preedit publication, stale-draft
+submission, out-of-order Done callbacks, composition synthesis, ordinary-`TextInput` substitution and missing focus or
+recreation checks. The main static check requires byte-identical fixture/application hosts and the exact generated
+composer. These checks do not parse, compile or execute ArkTS and do not exercise a keyboard or an IME.
 
 Install actionlint separately when changing `.github/workflows/`. CI downloads the pinned release only when a
 workflow changes, validates the archive against the SHA-256 published in that release's checksums file, and invokes
@@ -79,6 +87,9 @@ The job runs on Ubuntu 24.04 and uses no emulator or device. Its steps:
 1. Build the `refract` CLI with the same locked dependencies as the Swift job.
 2. Run `refract check` over every shared example input and both committed native output directories. This generates
    only in memory and rejects missing, stale or unexpected Kotlin/ArkTS files without writing to the checkout.
+   `scripts/test_example_output_transaction.py --self-test` reads the exact workflow command, runs the actual CLI over
+   both output roots, then rejects a missing text-input input and either missing generated host in temporary checkouts.
+   This guards the transaction's freshness/unexpected-output boundary rather than substituting a source-list check.
    Run `python3 scripts/check_examples.py` to independently regenerate the example sources through the actual CLI,
    validate resource catalogs and confirm the shared iOS source set. The final unexpected-file check rejects any
    unexpected drift.

@@ -26,7 +26,7 @@ def regenerate_hello() -> None:
         "kotlin": ROOT / "examples/android/app/refract/generated/screens",
         "arkts": ROOT / "examples/harmony/entry/src/main/ets/generated",
     }
-    sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift")
+    sources = ("Hello.swift", "NativeComponentScreen.swift", "SettingsScreen.swift", "InteropTextInputHost.swift")
     with tempfile.TemporaryDirectory(prefix="refract-example-check.") as temporary:
         output = Path(temporary)
         for source in sources:
@@ -47,7 +47,7 @@ def regenerate_hello() -> None:
                 expected = directory / f"{Path(source).stem}.{extension}"
                 if actual.read_bytes() != expected.read_bytes():
                     fail(f"regenerated {platform} differs from {expected.relative_to(ROOT)}; regenerate and review it")
-    print("Hello, native-component and full-settings Kotlin/ArkTS are identical to actual regenerated output")
+    print("Shared example Kotlin/ArkTS match actual regenerated output, including the text-input host ABI")
 
 
 def regenerate_identified_list() -> None:

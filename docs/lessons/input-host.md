@@ -27,6 +27,21 @@ draft, translate it to Chinese, or replace an active composing span during recom
 actual native editor content after finishing composition. Test that behavior directly with `InputConnection`, and
 label Robolectric as Native JVM rather than an emulator/device or third-party IME result.
 
+## ArkUI preview and submit are not Android InputConnection operations
+
+ArkUI `TextInput` reports native preview through the optional `PreviewText` argument of `onChange`; do not publish its
+`value` as a committed binding while that preview is nonempty. `TextInputController.clearPreviewText()` clears preview;
+it does not select or commit the IME's candidate. If a public commit-preview operation is unavailable, an active-preview
+Done must retain editing and produce an explicit diagnostic, not clear preview or fabricate Chinese text. Once no
+preview is active, use `SubmitEvent.text`, not a possibly stale parent binding. Keep focus/keyboard requests and their
+error callbacks native: `FocusController.requestFocus` alone does not prove a visible keyboard, and the public
+`showTextInput()` request still needs authorized compiler and real-IME verification.
+
+Scope preview publication to a mounted native editing session: editing loss and disappearance invalidate the gate, and
+late callbacks cannot publish. A parent edit during preview must not be silently discarded; retain the parent value,
+end the old session explicitly and reject its delayed callbacks. Use the custom component's `getUniqueId()` for each
+native focus target. Source checks must inspect guarded control flow, not only the textual order of commit calls.
+
 ## Real IME automation must not inject the behavior it claims to verify
 
 A UIAutomator test is not real-IME evidence merely because it runs in an instrumentation APK. Click the actual IME's

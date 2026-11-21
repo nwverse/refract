@@ -117,14 +117,19 @@ jobs:
             --input examples/shared/Hello.swift \
             --input examples/shared/NativeComponentScreen.swift \
             --input examples/shared/IdentifiedList.swift \
+            --input examples/shared/InteropTextInputHost.swift \
             --input examples/shared/SettingsScreen.swift \
             --mapping examples/refract.json \
             --android-out examples/android/app/refract/generated/screens \
             --harmony-out examples/harmony/entry/src/main/ets/generated
+      - name: Regress the actual CI output transaction over its intended roots
+        run: python3 -I scripts/test_example_output_transaction.py --self-test
       - name: Verify committed benchmark ArkTS against actual CLI generation
         run: python3 -I bench/harmony/generate.py --check
       - name: Regenerate examples and verify resource catalogs
         run: python3 scripts/check_examples.py
+      - name: Check the Harmony text-input host source boundary
+        run: python3 -I scripts/check_harmony_text_input.py
       - name: Select JDK 21 for the Android toolchain
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
@@ -276,6 +281,8 @@ jobs:
           python3 -I bench/common/source_contract_test.py
           python3 -I bench/common/report_test.py
           python3 -I scripts/test/test_fixture_output_isolation.py
+      - name: Test the Harmony text-input source contracts
+        run: python3 -I scripts/test/test_harmony_text_input.py
       - name: Check public repository content and paths
         # Hosted CI has the built-in rules; the local hooks additionally use machine-specific private values.
         run: python3 scripts/privacy_check.py

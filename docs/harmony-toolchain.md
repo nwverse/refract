@@ -122,6 +122,15 @@ No device, emulator, `hdc`, rendering or performance result was obtained. Do not
 without ownership coordination. Keep signing secrets and device captures out of the repository; record separately
 whether the evidence is compile-only, an emulator run or a physical-device run.
 
+The committed-draft text-input host added by #285 is **also uncompiled and unexecuted**. Its concrete ArkUI source,
+unchanged generated composer and separate `ComposerTestAbility` are prepared under the same native-test target. They
+use documented preview/submit/focus APIs but have not passed an ArkTS compiler. In this environment `devecocli`,
+`ohpm`, `hvigorw` and `hdc` are not available; no signing workflow or owned simulator/device is allocated. Native
+Chinese preedit, candidate selection, focus restoration, keyboard dismissal, Done/Enter ordering and retained-draft
+behavior therefore remain unverified. Its portable source-contract check is explicitly not an ArkTS compile or IME
+test. Follow [the host verification guide](../examples/harmony/verification/text-input.md) after supplying the
+authorized SDK and target; #285 does not close umbrella #245.
+
 Issue #166's [native rendering host and runner](../examples/harmony/verification/README.md) uses this preflight and
 build path, then adds explicit target selection, native UI behavior, theme capture and evidence checks. It is also
 source-prepared only. The runner requires an already allocated target and authorized signing; it does not expand
