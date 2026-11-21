@@ -56,6 +56,13 @@ class RenderingEvidenceTests(unittest.TestCase):
         self.assertEqual(result["passed"], 2)
         self.assertEqual(result["cases"], [f"{suite}#{name}" for suite, name in MODULE.EXPECTED_CASES])
 
+    def test_native_case_report_serializes_observed_successes(self) -> None:
+        with mock.patch.object(MODULE, "format_observed_cases", side_effect=lambda cases: [
+            f"observed:{suite}#{name}" for suite, name in cases
+        ]):
+            result = MODULE.validate_result(self.result())
+        self.assertEqual(result["cases"], [f"observed:{suite}#{name}" for suite, name in MODULE.EXPECTED_CASES])
+
     def test_overall_zero_cannot_hide_failures_errors_or_ignored_tests(self) -> None:
         wrong_suite = self.case_result("GeneratedSettings", "generated_model_interface_accepts_a_typed_native_implementation")
         light, dark = MODULE.EXPECTED_CASES
