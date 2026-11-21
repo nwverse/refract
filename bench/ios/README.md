@@ -51,11 +51,19 @@ TARGET_UDID=<owned-udid> DERIVED_DATA=<new-output-directory> \
 xcrun xcresulttool get test-results summary --path <run>/results.xcresult --format json > <run>/summary.json
 xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --format json > <run>/metrics.json
 
-# Record exactly one profiler artifact per variant/scenario/iteration.
+# Record exactly one profiler package per variant/scenario/iteration.
 # The --attach PID and time window must be captured from that exact iteration.
 xcrun xctrace record --device <owned-udid> --template 'Animation Hitches' \
   --attach <iteration-pid> --time-limit <iteration-window> \
   --output <new-run>/raw/<variant>-<scenario>-<iteration>.trace
+
+# xctrace writes a package directory; the reporter requires an ordinary raw file.
+# Archive only after recording finishes. Repeat for every exact iteration and do
+# not infer identity from the filename. This emits byte count and SHA-256 for the
+# manifest, rejects links and never replaces an existing archive.
+python3 -I bench/ios/archive_trace.py \
+  <new-run>/raw/<variant>-<scenario>-<iteration>.trace \
+  --output <new-run>/raw/<variant>-<scenario>-<iteration>.trace.zip
 
 # Preserve the native result bundle as an ordinary ZIP for independent review.
 ditto -c -k --keepParent <run>/results.xcresult <run>/raw/results.xcresult.zip

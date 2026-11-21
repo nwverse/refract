@@ -18,8 +18,9 @@ generated observer registry or business-logic interpreter. These are settings-sh
 - Memory is positive integer bytes, never a millisecond value. Installed binary size is reported separately from
   resident memory; neither is silently replaced by a build directory's size.
 - `python3 -I bench/common/report.py <run>/manifest.json --output <new-report-directory>` verifies every raw artifact,
-  checksum, sample identity and paired metric before producing a report. Synthetic unit-test inputs are not timing
-  evidence. No partial report is promoted to PASS.
+  checksum, sample identity and paired metric before producing a report. An `xctrace` entry names the archived
+  `.trace.zip` file, not the original package directory. Synthetic unit-test inputs are not timing evidence. No partial
+  report is promoted to PASS.
 
 ## Current evidence, not a timing claim
 
@@ -40,8 +41,10 @@ scenario source, a passing synthetic report test and a manually constructed mani
    compiler/SDK/profiler versions, target model/OS/architecture and explicit `DEVICE`, `SIMULATOR` or `EMULATOR`.
    `device_result` must agree with the label. A simulator or emulator never closes the physical-device gate.
 2. `artifacts`: ordinary raw files below `raw/`, with SHA-256 and exact variant/scenario/iteration ownership. iOS uses
-   ZIP-copied `.xcresult` bundles, Xcode `xcresulttool` JSON exports and `.trace` recordings; HarmonyOS uses the
-   vendor's native trace and metric exports. A directory merely named `.trace` is not accepted as a trace file.
+   ZIP-copied `.xcresult` bundles, Xcode `xcresulttool` JSON exports and archived `.trace.zip` packages; HarmonyOS
+   uses the vendor's native trace and metric exports. A directory merely named `.trace` is not accepted as a trace file.
+   `bench/ios/archive_trace.py` preserves an already recorded Instruments package without replacing existing evidence;
+   it does not run a profiler or establish native provenance.
 3. `measurements`: positive finite millisecond samples, one per iteration, directly referencing that iteration's raw
    native metric export and profiler trace. Every iOS timing measurement references exactly one identity-matched
    `xcode-metric-json`; an Instruments trace alone cannot supply an `XCTApplicationLaunchMetric` or labelled
