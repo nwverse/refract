@@ -317,10 +317,12 @@ def test_command(test_run: Path, target_udid: str, test: str, revision: str,
 
 
 def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration: int) -> Path:
+    # An xctestrun resolves __TESTROOT__ from its containing Build/Products
+    # directory; copying it elsewhere changes the native test product paths.
     sources = sorted((derived_data / "Build/Products").glob("*.xctestrun"))
     if len(sources) != 1:
         raise HandshakeError("Exactly one generated xctestrun file is required")
-    destination = derived_data / "iteration-trace-config.xctestrun"
+    destination = sources[0].with_name("iteration-trace-config.xctestrun")
     subprocess.run(["plutil", "-convert", "binary1", "-o", str(destination), "--", str(sources[0])], check=True)
     values = {"REFRACT_BENCH_REVISION": revision,
               "REFRACT_BENCH_TRACE_CONTROL": str(control),
