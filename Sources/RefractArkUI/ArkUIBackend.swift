@@ -23,6 +23,7 @@ struct Generation {
     let itemTypes: [ItemType]
     let enums: [EnumDeclaration]
     var screenItemTypes: [String: String] = [:]
+    var declaredItemInputs: Set<String> = []
     var listItemTypes: [String: String] = [:]
     var currentModals: [ModalPresentation] = []
 
@@ -133,6 +134,7 @@ struct Generation {
             writer.open("build()")
             currentModals = screen.modals
             let previousItemParameters = screenItemTypes
+            declaredItemInputs = Set(screen.parameters.compactMap { $0.itemType == nil ? nil : $0.name })
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
                 input.itemType.map { (input.name, $0) }
             })
@@ -150,7 +152,7 @@ struct Generation {
             }
             defer { screenItemTypes = previousItemParameters }
             try emit(screen.body, into: &writer, mapping: mapping, resolver: resolver,
-                     itemTypeName: listItemTypes.values.first)
+                     itemTypeName: declaredItemInputs.count == 1 ? declaredItemInputs.first : nil)
             for modal in screen.modals {
                 try emitModalAttachment(modal, for: screen, into: &writer)
             }
@@ -356,7 +358,7 @@ struct Generation {
                                      labelsHidden: labelsHidden, location: location),
                              into: &writer, item: item, mapping: mapping, resolver: resolver,
                              itemParameters: screenItemTypes, itemTypeName: itemTypeName, traversal: traversal,
-                             localAliases: localAliases)
+                             localAliases: localAliases, itemInputs: declaredItemInputs)
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
                 try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
