@@ -63,23 +63,25 @@ They are documentation references, not evidence that these sources passed the se
 
 ## Reproduce on an explicitly owned target
 
-After signing and building the app and test HAPs for the same source revision, run from a clean repository root:
+After authorizing the toolchain, signing and target for the same source revision, run from a clean repository root:
 
 ```sh
 python3 scripts/verify_harmony_settings.py \
   --target '<allocated target serial>' \
   --target-class emulator \
   --target-description '<target model, OS build and allocation identifier>' \
-  --app-hap '<signed app HAP>' \
-  --test-hap '<signed entry_test HAP>' \
   --output '<new private evidence directory>'
 ```
 
 Use `--target-class device` only for an actual physical device. The runner rejects a nonempty checkout and missing
-vendor prerequisites, records the full source revision and tool version, compiles both targets unless explicitly
-given `--skip-build`, installs the two identified HAPs, and runs the native checks once across both themes. It preserves
-vendor output and commands in the private log. `--skip-build` is only for an already compiled exact source revision;
-it is not a portability or success shortcut.
+vendor prerequisites, records the full source revision and tool version, compiles both targets, and installs private
+snapshots of the canonical signed app and test outputs from those exact builds. It preserves vendor output and commands
+in the private log. Old canonical outputs are quarantined before building so a no-op build cannot inherit them; they
+are restored on failure, and a restoration conflict preserves rather than deletes the old files. Explicit `--app-hap`
+or `--test-hap` paths are permitted only when their bytes match the corresponding snapshot immediately before each
+installation. Missing, mismatched or replaced inputs fail closed; installation opens the private snapshot, never the
+mutable selected path. Previously built or external HAPs do not bypass the native build or establish their own
+provenance.
 
 The runner parses the pinned suite/case/task lifecycle in order: the selected `GeneratedSettingsRender` suite start,
 exactly its two named cases with start and successful completion records, suite end, one complete summary, exactly one

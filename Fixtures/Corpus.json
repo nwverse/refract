@@ -162,6 +162,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "horizontal-sections-item-shadow",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "horizontal-sections-reject-nested",
       "implementationStatus": "ready"
     },

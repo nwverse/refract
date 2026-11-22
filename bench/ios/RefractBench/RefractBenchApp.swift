@@ -73,6 +73,9 @@ struct RefractBenchApp: App {
                         recorderIsReady = recorderReady(in: directory)
                         try? await Task.sleep(for: .milliseconds(10))
                     }
+                    while !beginSelectedIteration {
+                        try? await Task.sleep(for: .milliseconds(10))
+                    }
                 }
                 switch (variant, scenario) {
                 case ("generated", "scroll"), ("reference", "scroll"):

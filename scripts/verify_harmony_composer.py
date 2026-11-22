@@ -7,7 +7,6 @@ candidate selection, keyboard-window or IME verification.
 """
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 from datetime import datetime, timezone
@@ -40,8 +39,6 @@ def main(argv: list[str] | None = None) -> int:
         print("target must be a serial without whitespace or shell metacharacters", file=sys.stderr)
         return 2
     output = Path(args.output)
-    app_hap = Path(args.app_hap)
-    test_hap = Path(args.test_hap)
     if output.exists():
         print("verification output must be a new directory; refusing to mix evidence", file=sys.stderr)
         return 2
@@ -52,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         "imeVerified": False,
         "renderVerified": False,
         "performanceMeasured": False,
-        "buildSkipped": args.skip_build,
+        "buildProvenance": "both installed HAPs must match the outputs of this run's native builds",
         "evidenceScope": "native committed-draft UI Test injection; no Chinese IME or candidate evidence",
         "targetClass": args.target_class,
         "targetDescription": args.target_description,
@@ -60,26 +57,32 @@ def main(argv: list[str] | None = None) -> int:
     }
     try:
         metadata["sourceRevision"] = SETTINGS.source_revision()
-        metadata["appHapSha256"] = hashlib.sha256(app_hap.read_bytes()).hexdigest()
-        metadata["testHapSha256"] = hashlib.sha256(test_hap.read_bytes()).hexdigest()
         tools, errors = SETTINGS.PREFLIGHT.preflight(os.environ)
         if errors:
             raise SETTINGS.VerificationError("; ".join(errors))
         if not shutil.which("hdc"):
             raise SETTINGS.VerificationError("authorized hdc executable was not found on PATH")
         metadata["toolchainVersion"] = SETTINGS.tool_version(tools, log_path)
-        if not args.skip_build:
-            for build in (["build"], ["build", "--modules", "entry@ohosTest"]):
-                SETTINGS.execute(
-                    [str(tools["devecocli"]), *build], log_path,
-                    cwd=SETTINGS.EXAMPLE, environment=os.environ,
-                )
-        hdc = ["hdc", "-t", args.target]
-        SETTINGS.execute([*hdc, "install", str(app_hap.resolve())], log_path)
-        SETTINGS.execute([*hdc, "install", str(test_hap.resolve())], log_path)
-        result = SETTINGS.execute(
-            SETTINGS.selected_suite_command(hdc, SELECTED_CASE[0]), log_path, timeout=180
-        )
+        with SETTINGS.package_snapshots() as snapshot_paths:
+            metadata["nativePackages"] = SETTINGS.native_packages(
+                tools, log_path, snapshot_paths["app"].parent
+            )
+            selected = {
+                role: args.app_hap if role == "app" and args.app_hap is not None else built
+                for role, built in SETTINGS.PACKAGE_OUTPUTS.items()
+            }
+            if args.test_hap is not None:
+                selected["test"] = args.test_hap
+            hdc = ["hdc", "-t", args.target]
+            for role in selected:
+                # Revalidate every selected input, then install only this run's
+                # private snapshot rather than reopening a mutable caller path.
+                metadata["nativePackages"] = SETTINGS.package_provenance(selected, snapshot_paths)
+                install = SETTINGS.package_provenance(selected, snapshot_paths)["artifacts"][role]["installSnapshotPath"]
+                SETTINGS.execute([*hdc, "install", str(install)], log_path)
+            result = SETTINGS.execute(
+                SETTINGS.selected_suite_command(hdc, SELECTED_CASE[0]), log_path, timeout=180
+            )
         metadata["nativeTests"] = validate_result(result.stdout)
         metadata["status"] = "native-committed-draft-executed-ime-unverified"
         return 0
