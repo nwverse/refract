@@ -72,7 +72,7 @@ extension Generation {
             }
             writer.line("Image(\(try image(source, mapping: mapping)))")
             writer.depth += 1
-            writer.line(".accessibilityText(\(try ArkExpression.emit(description, item: item, mapping: mapping)))")
+            writer.line(".accessibilityText(\(try ArkExpression.emit(description, item: item, mapping: mapping, localAliases: localAliases)))")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
             writer.depth -= 1
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, _):

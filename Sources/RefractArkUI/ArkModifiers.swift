@@ -12,11 +12,11 @@ enum ArkModifiers {
         if !measurement.isEmpty {
             let native = try Self.emitAccessibility(measurement, item: item, mapping: mapping, traversal: traversal,
                                                      localAliases: localAliases)
-            if native.isEmpty { return try emit(layout, item: item, mapping: mapping, isText: isText) }
+            if native.isEmpty { return try emit(layout, item: item, mapping: mapping, isText: isText, localAliases: localAliases) }
             guard !layout.isEmpty else {
                 return native.hasPrefix("\n") ? String(native.dropFirst()) : native
             }
-            let remainder = try emit(layout, item: item, mapping: mapping, isText: isText)
+            let remainder = try emit(layout, item: item, mapping: mapping, isText: isText, localAliases: localAliases)
             if native.hasPrefix("\n") { return native + remainder }
             if remainder.hasPrefix("\n") { return native + remainder }
             return native + "\n" + remainder
