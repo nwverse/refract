@@ -22,6 +22,10 @@ replace the outer optional alias with the row item. Test the modifier on both Te
 Text leaf's local reference; rejected dynamic stack arguments are not alias-scope coverage.
 Event payload lowering needs the same set: retaining it only for the wrapped Text is insufficient when `onDragStart`
 reads an optional scalar, because that separate expression would incorrectly emit `this.alias` for a local binding.
+Platform selection is recursive expression lowering too: selecting the HarmonyOS branch of `refractValue` must retain
+the aliases received by a native argument. Dropping them at that recursion turns a List row's valid local alias into
+`this.alias`, even when the same argument works without platform selection. Test the selected scalar inside the lazy
+row, not only an unwrapped argument or a row-free screen.
 
 ## A declared item input is not a lazy-row local
 
