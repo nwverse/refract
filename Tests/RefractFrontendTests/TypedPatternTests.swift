@@ -64,6 +64,49 @@ struct ContentView: View {
     #expect(!arkTS.contains(" as "))
 }
 
+@Test func optionalBindingKeepsOuterTextAliasInsideForEachRow() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct SettingItem: Identifiable {
+        let id: String
+        let title: String
+    }
+
+    protocol SettingsListModel: RefractModel {
+        var items: [SettingItem] { get }
+    }
+
+    struct ForEachList: View {
+        let model: SettingsListModel
+        let title: String?
+
+        var body: some View {
+            if let value = title {
+                List {
+                    ForEach(model.items) { item in
+                        VStack {
+                            Text(value)
+                            Text(item.title)
+                        }
+                    }
+                }
+            } else {
+                Text(verbatim: "Empty")
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let arkTS = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("Text(text = value)"))
+    #expect(kotlin.contains("Text(text = item.title)"))
+    #expect(arkTS.contains("const value = this.title;"))
+    #expect(arkTS.contains("Text(value)"), Comment(rawValue: arkTS))
+    #expect(arkTS.contains("Text(item.title)"))
+    #expect(!arkTS.contains("Text(this.value)"))
+    #expect(arkTS.contains("Text('Empty')"))
+}
+
 @Test func optionalBooleanBindingSupportsNestedCondition() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct OptionalEnabled: View {
