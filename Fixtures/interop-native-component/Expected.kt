@@ -5,15 +5,46 @@
 package refract.generated
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import example.maps.RoutePreview
 
+@Immutable
+public data class SettingItem(
+    public val id: String,
+    public val title: String,
+)
+
+public interface OptionalNativeModel {
+    public val items: State<List<SettingItem>>
+}
+
 @Composable
-public fun RouteScreen(modifier: Modifier = Modifier) {
+public fun RouteScreen(
+    title: String?,
+    model: OptionalNativeModel,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier) {
         Text(text = "Route")
-        RoutePreview(cameraZoom = 12.0, showsTraffic = true)
+        if (title != null) {
+            val value = title
+            LazyColumn(modifier = Modifier) {
+                items(
+                    items = model.items.value,
+                    key = { item -> item.id },
+                    contentType = { "SettingItem" },
+                ) { item ->
+                    RoutePreview(cameraZoom = 12.0, showsTraffic = true, title = value)
+                }
+            }
+        } else {
+            Text(text = "Empty")
+        }
     }
 }
