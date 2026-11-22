@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import TARGET_PROBE_FILENAMES, HandshakeError, Session, traced_test_name
+from iteration_trace_runner import TARGET_PROBE_FILENAMES, HandshakeError, Session, test_command, traced_test_name
 import iteration_trace_runner as runner
 
 
@@ -32,6 +32,7 @@ class RecorderFixture:
         self.work.mkdir(exist_ok=True)
         self.commands = self.work / "commands.jsonl"
         self.process = None
+        self.recorder = None
         self.cleanup = lambda: None
         self.output = root / "xcodebuild.log"
         if create_run_directory:
@@ -78,15 +79,22 @@ with open(os.environ["REFRACT_SYNTHETIC_XCRUN"], "a") as stream:
 output = sys.argv[sys.argv.index("--output") + 1]
 control = pathlib.Path(sys.argv[sys.argv.index("--control-directory") + 1])
 def finish(status):
+    if {write_trace!r}:
+        trace = pathlib.Path(output)
+        (trace / "Data").mkdir(parents=True, exist_ok=True)
+        (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
     print("Output saved: " + ({saved_path!r} or output), flush=True)
-    sys.exit(status)
+    os._exit(status)
 signal.signal(signal.SIGINT, lambda *_: finish(0))
 signal.signal(signal.SIGTERM, lambda *_: finish(143))
-time.sleep({ready_delay!r})
+import json, os, pathlib, time
+
 if {ready!r} is None:
     sys.exit(7)
 print({ready!r}.format(trace=output), flush=True)
 if {recorder_after_ready_exit!r}:
+    while not (control / "recorder-ready.json").exists():
+        time.sleep(0.001)
     sys.exit({recorder_after_ready_exit!r})
 time.sleep({completion_delay!r})
 if {recorder_stop_status!r}:
@@ -106,21 +114,24 @@ while not (control / "recorder-stop").exists():
 
         def factory(command, log):
             environment = dict(os.environ, REFRACT_SYNTHETIC_XCRUN=str(self.commands))
-            return subprocess.Popen(
+            self.recorder = subprocess.Popen(
                 ["python3", "-I", str(recorder_script), *command,
                  "--control-directory", str(self.root / "control")],
                 env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            return self.recorder
         self.recorder_factory = factory
 
         def stop():
-            if self.process is not None:
-                if self.process.poll() is None:
-                    self.process.terminate()
+            for process in (self.process, self.recorder):
+                if process is None:
+                    continue
+                if process.poll() is None:
+                    process.terminate()
                 try:
-                    self.process.communicate(timeout=5)
+                    process.communicate(timeout=5)
                 except subprocess.TimeoutExpired:
-                    self.process.kill()
-                    self.process.communicate(timeout=5)
+                    process.kill()
+                    process.communicate(timeout=5)
         self.cleanup = stop
 
     def stop(self):
@@ -219,11 +230,24 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.recorder = RecorderFixture(self.root, create_run_directory=False)
         self.addCleanup(self.recorder.stop)
         self.recorder.prepare()
+        products = self.root.parent / "DerivedData/Build/Products"
+        products.mkdir(parents=True)
+        original = products / "RefractBench.xctestrun"
+        original_bytes = b"original Xcode-generated test-run bytes\n"
+        original.write_bytes(original_bytes)
+        configured = {"PRODUCT_MODULE_NAME": "RefractBenchUITests"}
         calls = []
 
         def run(command, **kwargs):
             calls.append(command)
-            if "devicectl" in command:
+            if command[0] == "plutil":
+                if command[1:3] == ["-convert", "binary1"]:
+                    Path(command[4]).write_bytes(Path(command[6]).read_bytes())
+                else:
+                    prefix = "RefractBenchUITests.TestingEnvironmentVariables."
+                    self.assertTrue(command[2].startswith(prefix))
+                    configured[command[2][len(prefix):]] = command[4]
+            elif "devicectl" in command:
                 (self.root / "targets.json").write_text('{"devices": []}\n')
             elif "simctl" in command:
                 kwargs["stdout"].write('{"devices": {}}\n')
@@ -267,7 +291,14 @@ class IterationTraceRunnerTest(unittest.TestCase):
         _, process_stderr = self.recorder.process.communicate(timeout=5)
         self.assertEqual(status, 0, process_stderr)
         self.assertEqual(json.loads(stdout.getvalue())["status"], "complete")
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 7)
+        self.assertEqual(original.read_bytes(), original_bytes)
+        self.assertEqual(configured, {
+            "PRODUCT_MODULE_NAME": "RefractBenchUITests",
+            "REFRACT_BENCH_REVISION": "a" * 40,
+            "REFRACT_BENCH_TRACE_CONTROL": str(self.root / "control"),
+            "REFRACT_BENCH_TRACE_ITERATION": "0",
+        })
         self.assertEqual(self.recorder.process.returncode, 0)
         self.assertTrue(all((self.root / name).is_file() for name in TARGET_PROBE_FILENAMES))
 
@@ -396,6 +427,69 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
+
+    def test_prepare_copies_original_and_injects_only_selected_test_environment(self):
+        products = self.root / "DerivedData/Build/Products"
+        products.mkdir(parents=True)
+        source = products / "RefractBench.xctestrun"
+        original = b"original Xcode-generated test-run bytes\n"
+        source.write_bytes(original)
+        control = self.root / "run/control"
+        control.mkdir(parents=True)
+        existing = {"PRODUCT_MODULE_NAME": "RefractBenchUITests"}
+        replacements = []
+
+        def plutil(command, check):
+            self.assertTrue(check)
+            self.assertEqual(command[0], "plutil")
+            if command[1:3] == ["-convert", "binary1"]:
+                self.assertEqual(command[3:6], ["-o", str(products / "iteration-trace-config.xctestrun"), "--"])
+                self.assertEqual(Path(command[6]), source)
+                self.assertFalse(Path(command[4]).exists())
+                Path(command[4]).write_bytes(source.read_bytes())
+                return subprocess.CompletedProcess(command, 0)
+            self.assertEqual(command[:2], ["plutil", "-replace"])
+            prefix = "RefractBenchUITests.TestingEnvironmentVariables."
+            self.assertTrue(command[2].startswith(prefix))
+            name = command[2][len(prefix):]
+            self.assertEqual(command[3], "-string")
+            self.assertEqual(Path(command[5]), products / "iteration-trace-config.xctestrun")
+            self.assertEqual(source.read_bytes(), original)
+            replacements.append(name)
+            existing[name] = command[4]
+            return subprocess.CompletedProcess(command, 0)
+
+        with mock.patch.object(runner.subprocess, "run", side_effect=plutil) as run:
+            result = runner.prepare_test_run(products.parents[1], control, "a" * 40, 29)
+
+        self.assertEqual(result, products / "iteration-trace-config.xctestrun")
+        self.assertEqual(source.read_bytes(), original)
+        self.assertEqual(existing, {
+            "PRODUCT_MODULE_NAME": "RefractBenchUITests",
+            "REFRACT_BENCH_REVISION": "a" * 40,
+            "REFRACT_BENCH_TRACE_CONTROL": str(control),
+            "REFRACT_BENCH_TRACE_ITERATION": "29",
+        })
+        self.assertCountEqual(replacements, existing.keys() - {"PRODUCT_MODULE_NAME"})
+        self.assertEqual(run.call_count, 4)
+
+    def test_prepare_rejects_ambiguous_original_xctestruns(self):
+        products = self.root / "DerivedData/Build/Products"
+        products.mkdir(parents=True)
+        (products / "first.xctestrun").write_bytes(b"first")
+        (products / "second.xctestrun").write_bytes(b"second")
+        with mock.patch.object(runner.subprocess, "run") as run:
+            with self.assertRaisesRegex(HandshakeError, "Exactly one generated xctestrun"):
+                runner.prepare_test_run(products.parents[1], self.root / "control", "a" * 40, 0)
+        run.assert_not_called()
+
+    def test_main_prepares_only_the_trace_xctestrun(self):
+        source = (HERE / "iteration_trace_runner.py").read_text()
+        prepare = source.index("test_run = prepare_test_run(")
+        self.assertGreater(prepare, source.index('parser.add_argument("--variant"'))
+        self.assertEqual(source[:prepare].count("\n        test_run = prepare_test_run("), 0)
+        self.assertEqual(source[prepare:].count("prepare_test_run("), 1)
+        self.assertLess(prepare, source.index('test_command(test_run', prepare))
 
     def test_exact_existing_xctest_selectors(self):
         for variant in ("generated", "reference"):
