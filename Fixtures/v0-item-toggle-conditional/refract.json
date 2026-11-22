@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "android": {
-    "output": { "directory": "generated", "packageName": "refract.generated.itemtoggle" },
+    "output": { "directory": "generated", "packageName": "refract.generated.conditionalitemtoggle" },
     "imports": [],
     "components": {},
     "nativeComponents": {},
     "modifiers": {},
     "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
     "resources": {
-      "className": "refract.generated.itemtoggle.R",
+      "className": "refract.generated.conditionalitemtoggle.R",
       "catalog": "values/strings.xml",
       "strings": { "settings.item": "settings_item" }
     }

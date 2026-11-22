@@ -2,7 +2,7 @@
 // Source: Input.swift
 @file:Suppress("RemoveRedundantQualifierName")
 
-package refract.generated.itemtoggle
+package refract.generated.conditionalitemtoggle
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -15,7 +15,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import refract.generated.itemtoggle.R
+import refract.generated.conditionalitemtoggle.R
 
 @Immutable
 public data class SettingRow(
