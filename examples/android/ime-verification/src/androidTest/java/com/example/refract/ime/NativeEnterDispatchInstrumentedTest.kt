@@ -118,15 +118,11 @@ class NativeEnterDispatchInstrumentedTest {
             // would hide the duplicate-submission regression.
             val connection = editor.value.onCreateInputConnection(EditorInfo())
             assertTrue(connection is BaseInputConnection)
-            val downDispatched = connection.sendKeyEvent(
-                KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER),
-            )
-            val upDispatched = connection.sendKeyEvent(
-                KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER),
-            )
+            // BaseInputConnection may return false after dispatching, so the
+            // drained callback state below is the success criterion.
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
             instrumentation.waitForIdleSync()
-            assertTrue("The host connection must dispatch Enter down", downDispatched)
-            assertTrue("The host connection must dispatch Enter up", upDispatched)
         }
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync {
