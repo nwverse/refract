@@ -218,7 +218,7 @@ class Session:
             if status != 0:
                 raise HandshakeError(f"Instruments recorder exited with status {status}; trace is not accepted")
             saved = SAVED_OUTPUT.findall(self._output)
-            if len(saved) != 1 or Path(saved[0].strip()) != self.trace:
+            if len(saved) != 1 or not saved_trace_matches(saved[0], self.trace):
                 raise HandshakeError("Instruments did not save the exact requested trace package")
             size, checksum = archive_trace(self.trace, self.archive)
             finished = dict(completion, state="recorder-finished", recorder_exit=status,
@@ -335,6 +335,10 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
                         f"RefractBenchUITests.TestingEnvironmentVariables.{name}",
                         "-string", value, str(destination)], check=True)
     return destination
+def saved_trace_matches(saved: str, requested: Path) -> bool:
+    """xctrace may print a bare package name even when --output was absolute."""
+    path = Path(saved.strip())
+    return path == requested or (path.parent == Path(".") and path.name == requested.name)
 
 
 def main(argv: list[str] | None = None) -> int:

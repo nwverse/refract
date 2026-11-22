@@ -16,7 +16,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import HandshakeError, SAVED_OUTPUT, Session, test_command, traced_test_name
+from iteration_trace_runner import (
+    HandshakeError, SAVED_OUTPUT, Session, saved_trace_matches, test_command, traced_test_name,
+)
 
 
 class RecorderFixture:
@@ -349,6 +351,11 @@ class IterationTraceRunnerTest(unittest.TestCase):
             "Output file saved as: generated-scroll-0.trace\n"), ["generated-scroll-0.trace"])
         self.assertEqual(SAVED_OUTPUT.findall("Output saved: generated-scroll-0.trace\n"),
                          ["generated-scroll-0.trace"])
+
+        self.assertTrue(saved_trace_matches("generated-scroll-0.trace", self.trace))
+        self.assertTrue(saved_trace_matches(str(self.trace), self.trace))
+        self.assertFalse(saved_trace_matches("another.trace", self.trace))
+        self.assertFalse(saved_trace_matches("subdir/generated-scroll-0.trace", self.trace))
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"
