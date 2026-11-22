@@ -440,7 +440,11 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         }))
         self.source = self.derived_data / "Build/Products/RefractBench.xctestrun"
         self.source.write_bytes(plistlib.dumps({
-            "RefractBenchUITests": {"TestingEnvironmentVariables": {}},
+            "RefractBenchUITests": {"TestingEnvironmentVariables": {
+                "DYLD_LIBRARY_PATH": "__TESTROOT__/Release-iphonesimulator",
+                "DYLD_FRAMEWORK_PATH": "__TESTROOT__/Release-iphonesimulator",
+                "XCODE_SCHEME_NAME": "RefractBench",
+            }},
         }))
         record_build_provenance(self.derived_data, "a" * 40)
 
@@ -500,9 +504,13 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                 self.assertEqual(receipt["control_directory"], str(run / "control"))
                 self.assertEqual(receipt["iteration"], iteration)
                 values = plistlib.loads(path.read_bytes())["RefractBenchUITests"]["TestingEnvironmentVariables"]
-                self.assertEqual(values, {"REFRACT_BENCH_REVISION": "a" * 40,
-                                          "REFRACT_BENCH_TRACE_CONTROL": str(run / "control"),
-                                          "REFRACT_BENCH_TRACE_ITERATION": str(iteration)})
+                self.assertEqual({name: values[name] for name in (
+                    "REFRACT_BENCH_REVISION", "REFRACT_BENCH_TRACE_CONTROL", "REFRACT_BENCH_TRACE_ITERATION"
+                )}, {"REFRACT_BENCH_REVISION": "a" * 40,
+                     "REFRACT_BENCH_TRACE_CONTROL": str(run / "control"),
+                     "REFRACT_BENCH_TRACE_ITERATION": str(iteration)})
+                self.assertEqual(values["XCODE_SCHEME_NAME"], "RefractBench")
+                self.assertIn("DYLD_LIBRARY_PATH", values)
                 (run / "control/iteration-marker").write_text(str(iteration))
         self.assertNotEqual(first.read_bytes(), second.read_bytes())
         with self.assertRaisesRegex(HandshakeError, "Refusing to replace|new run"):

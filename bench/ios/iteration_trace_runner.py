@@ -457,6 +457,20 @@ def test_command(test_run: Path, target_udid: str, test: str, revision: str,
             f"-only-testing:{test}", "CODE_SIGNING_ALLOWED=NO", f"REFRACT_BENCH_REVISION={revision}"]
 
 
+def checked_trace_environment(destination: Path, values: dict) -> None:
+    extracted = subprocess.run(["plutil", "-extract",
+                                "RefractBenchUITests.TestingEnvironmentVariables", "json",
+                                "-o", "-", str(destination)], check=True, capture_output=True, text=True)
+    try:
+        environment = json.loads(extracted.stdout)
+        if not isinstance(environment, dict):
+            raise TypeError("the hosted-test environment must be an object")
+        if any(environment.get(name) != value for name, value in values.items()):
+            raise HandshakeError("The final trace revision, control directory and iteration do not match this run")
+    except (json.JSONDecodeError, TypeError) as error:
+        raise HandshakeError("Cannot verify the final trace configuration") from error
+
+
 def validate_trace_configuration(run_directory: Path, revision: str, control: Path, iteration: int,
                                  derived_data: Path | None = None) -> dict:
     receipt = read_json(run_directory / "iteration-trace-config.json")
@@ -475,14 +489,7 @@ def validate_trace_configuration(run_directory: Path, revision: str, control: Pa
     values = {"REFRACT_BENCH_REVISION": revision,
               "REFRACT_BENCH_TRACE_CONTROL": str(control),
               "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
-    extracted = subprocess.run(["plutil", "-extract",
-                                "RefractBenchUITests.TestingEnvironmentVariables", "json",
-                                "-o", "-", str(destination)], check=True, capture_output=True, text=True)
-    try:
-        if json.loads(extracted.stdout) != values:
-            raise HandshakeError("The final trace environment does not match this run")
-    except json.JSONDecodeError as error:
-        raise HandshakeError("Cannot verify the final trace configuration") from error
+    checked_trace_environment(destination, values)
     return receipt
 
 
@@ -527,15 +534,7 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
                         f"RefractBenchUITests.TestingEnvironmentVariables.{name}",
                         "-string", value, str(destination)], check=True)
     checksum = file_sha256(destination)
-    extracted = subprocess.run(["plutil", "-extract",
-                                "RefractBenchUITests.TestingEnvironmentVariables", "json",
-                                "-o", "-", str(destination)], check=True, capture_output=True, text=True)
-    try:
-        final_values = json.loads(extracted.stdout)
-    except json.JSONDecodeError as error:
-        raise HandshakeError("Cannot verify the final trace configuration") from error
-    if final_values != values:
-        raise HandshakeError("Final trace revision, control directory and iteration do not match this run")
+    checked_trace_environment(destination, values)
     archived = run_directory / "iteration-trace-config.xctestrun"
     with archived.open("xb") as archive_stream:
         archive_stream.write(bounded_file_bytes(destination))
