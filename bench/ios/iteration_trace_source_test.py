@@ -8,6 +8,8 @@ HERE = Path(__file__).resolve().parent
 APP = (HERE / "RefractBench/RefractBenchApp.swift").read_text()
 RECORDER = (HERE / "RefractBench/BenchmarkDisplayRecorder.swift").read_text()
 TESTS = (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text()
+BUILD = (HERE / "build.sh").read_text()
+RUNNER = (HERE / "iteration_trace_runner.py").read_text()
 
 
 class TraceSourceContractTest(unittest.TestCase):
@@ -46,6 +48,21 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('named: "completion.json"', TESTS)
         self.assertIn('name: "recorder-finished.json"', TESTS)
         self.assertIn("recorder-finished.json", TESTS)
+
+
+    def test_build_and_trace_provenance_precedes_unchanged_capture_contract(self):
+        build = BUILD.index("build-for-testing")
+        source_check = BUILD.index('git -C "$root" rev-parse HEAD', build)
+        record = BUILD.index("record_build_provenance.py", build)
+        self.assertLess(build, source_check)
+        self.assertLess(source_check, record)
+        validate = RUNNER.index("validate_build_provenance(args.derived_data")
+        prepare = RUNNER.index("test_run = prepare_test_run(", validate)
+        self.assertLess(validate, prepare)
+        self.assertLess(prepare, RUNNER.index("test_command(test_run", prepare))
+        self.assertIn('parser.add_argument("--readiness-timeout", type=float, default=60)', RUNNER)
+        self.assertIn('parser.add_argument("--completion-timeout", type=float, default=180)', RUNNER)
+        self.assertIn('"-only-testing:{test}"', RUNNER)
 
 
 if __name__ == "__main__":

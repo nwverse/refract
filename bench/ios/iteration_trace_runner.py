@@ -12,8 +12,10 @@ import argparse
 import hashlib
 import json
 import os
+import plistlib
 import re
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -51,9 +53,17 @@ def atomic_json(path: Path, payload: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def bounded_file_bytes(path: Path) -> bytes:
+    bounded_regular_file(path)
+    data = path.read_bytes()
+    if len(data) > MAX_EVIDENCE_FILE_BYTES:
+        raise HandshakeError(f"Evidence file exceeds the {MAX_EVIDENCE_FILE_BYTES}-byte bound: {path.name}")
+    return data
+
+
 def read_json(path: Path) -> dict:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(bounded_file_bytes(path))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise HandshakeError(f"Cannot read handshake {path.name}: {error}") from error
     if not isinstance(payload, dict):
@@ -107,7 +117,7 @@ class Session:
                  control_directory: Path, readiness_timeout: float = 60,
                  completion_timeout: float = 180, window: str = "5s",
                  template: str = "Animation Hitches", session_id: int = 1,
-                 target_label: str = "SIMULATOR"):
+                 target_label: str = "SIMULATOR", derived_data: Path | None = None):
         if variant not in VARIANTS or scenario not in SCENARIOS:
             raise HandshakeError("Unsupported variant or scenario")
         if iteration not in range(30):
@@ -132,6 +142,7 @@ class Session:
         self.template = template
         self.session_id = session_id
         self.target_label = target_label
+        self.derived_data = derived_data
         self.raw = run_directory / "raw"
         self.identity = f"{variant}-{scenario}-{iteration}"
         self.trace = run_directory / f"{self.identity}.trace"
@@ -142,6 +153,9 @@ class Session:
             # The caller creates a new run directory for the test log and empty
             # control directory before capture; nothing else may already exist.
             allowed = {self.xcodebuild_log, self.control_directory,
+                       self.run_directory / "iteration-trace-config.json",
+                       self.run_directory / "iteration-trace-config.xctestrun",
+                       self.run_directory / BUILD_PROVENANCE_NAME,
                        *(self.run_directory / name for name in
                          ("targets.json", "simulators.json", "target.json"))}
             unexpected = [p for p in self.run_directory.iterdir() if p not in allowed]
@@ -150,6 +164,8 @@ class Session:
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
+        validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
+                                     self.derived_data)
         if any(self.control_directory.iterdir()):
             raise HandshakeError("Refusing a reused or stale control directory")
         self.raw.mkdir(exist_ok=False)
@@ -233,6 +249,8 @@ class Session:
                 "archived_package_name": self.trace.name, "bytes": size, "sha256": checksum,
                 "native_iteration_completion": expected_completion,
             }
+            validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
+                                     self.derived_data)
             atomic_json(self.raw / "iteration-trace.json", result)
             return result
         finally:
@@ -303,6 +321,129 @@ class Session:
             raise HandshakeError(f"Instruments recorder exited before native completion with status {process.returncode}")
 
 
+MAX_EVIDENCE_FILE_BYTES = 64 * 1024 * 1024
+BUILD_PROVENANCE_NAME = "refract-build-provenance.json"
+BUNDLE_NAMES = ("RefractBench.app", "RefractBenchUITests-Runner.app",
+                "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest")
+
+
+def bounded_regular_file(path: Path) -> os.stat_result:
+    path = path.absolute()
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise HandshakeError(f"Expected a bounded ordinary file, not a link, directory or special file: {path.name}")
+    if metadata.st_size > MAX_EVIDENCE_FILE_BYTES:
+        raise HandshakeError(f"Evidence file exceeds the {MAX_EVIDENCE_FILE_BYTES}-byte bound: {path.name}")
+    return metadata
+
+
+def file_sha256(path: Path) -> str:
+    bounded_regular_file(path)
+    digest = hashlib.sha256()
+    for offset in range(0, len(data := bounded_file_bytes(path)), 1024 * 1024):
+        digest.update(data[offset:offset + 1024 * 1024])
+    return digest.hexdigest()
+
+
+def bundle_identity(products: Path, relative: str) -> dict:
+    bundle = products / relative
+    if not bundle.is_dir() or bundle.is_symlink():
+        raise HandshakeError(f"Build product is not a real bundle directory: {relative}")
+    files = []
+    directories = []
+    for directory, directory_names, file_names in os.walk(bundle, topdown=True, followlinks=False):
+        directory_names.sort()
+        file_names.sort()
+        for name in (*directory_names, *file_names):
+            path = Path(directory) / name
+            mode = path.lstat().st_mode
+            if not stat.S_ISDIR(mode) and not stat.S_ISREG(mode):
+                raise HandshakeError(f"Build product contains a symbolic link or special file: {relative}")
+    for directory, directory_names, file_names in os.walk(bundle, followlinks=False):
+        directory_names.sort()
+        directories.extend((Path(directory) / name).relative_to(products).as_posix()
+                           for name in sorted(directory_names))
+        for name in sorted(file_names):
+            path = Path(directory) / name
+            files.append({"path": path.relative_to(products).as_posix(),
+                          "bytes": path.stat(follow_symlinks=False).st_size,
+                          "executable": bool(path.stat(follow_symlinks=False).st_mode & 0o111),
+                          "sha256": file_sha256(path)})
+    if not files:
+        raise HandshakeError(f"Build product bundle has no files: {relative}")
+    try:
+        executable = plistlib.loads(bounded_file_bytes(bundle / "Info.plist")).get("CFBundleExecutable")
+    except (OSError, plistlib.InvalidFileException) as error:
+        raise HandshakeError(f"Build product bundle Info.plist is missing or invalid: {relative}") from error
+    expected_executable = f"{relative}/{executable}" if isinstance(executable, str) and executable else ""
+    if not any(item["path"] == expected_executable for item in files):
+        raise HandshakeError(f"Build product CFBundleExecutable is missing from its identity: {relative}")
+    return {"directories": sorted(directories), "files": files}
+
+
+def generated_test_runs(derived_data: Path) -> list[Path]:
+    sources = sorted(path for path in (derived_data / "Build/Products").glob("*.xctestrun")
+                     if path.name != "iteration-trace-config.xctestrun"
+                     and not path.name.startswith("iteration-trace-config-"))
+    if len(sources) != 1 or sources[0].is_symlink():
+        raise HandshakeError("Exactly one original generated xctestrun file is required")
+    bounded_regular_file(sources[0])
+    return sources
+
+
+def record_build_provenance(derived_data: Path, revision: str, destination: Path | None = None) -> dict:
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise HandshakeError("Build provenance requires a committed 40-character source revision")
+    products = derived_data / "Build/Products/Release-iphonesimulator"
+    sources = generated_test_runs(derived_data)
+    manifest = {"schema": 1, "source_revision": revision, "configuration": "Release-iphonesimulator",
+                "source_xctestrun": {"path": sources[0].name, "sha256": file_sha256(sources[0])},
+                "products": {name: bundle_identity(products, name) for name in BUNDLE_NAMES}}
+    path = destination or derived_data / BUILD_PROVENANCE_NAME
+    atomic_json(path, manifest)
+    return {**manifest, "path": path}
+
+
+def validate_build_provenance(derived_data: Path, revision: str) -> dict:
+    path = derived_data / BUILD_PROVENANCE_NAME
+    if not path.is_file() or path.is_symlink():
+        raise HandshakeError("Build provenance manifest is missing; rebuild these products with build.sh")
+    try:
+        if (not path.parent.is_dir() or path.parent.is_symlink()
+                or (path.exists() and not path.is_file()) or path.is_symlink()):
+            raise HandshakeError("Build provenance must be an ordinary file in a real DerivedData directory")
+        manifest = read_json(path)
+        if manifest.get("schema") != 1 or manifest.get("source_revision") != revision:
+            raise HandshakeError("Build product source revision does not match the requested current HEAD")
+        if manifest.get("configuration") != "Release-iphonesimulator":
+            raise HandshakeError("Build product configuration does not match the trace destination")
+        expected_products = manifest.get("products")
+        source = manifest.get("source_xctestrun")
+        sources = generated_test_runs(derived_data)
+        expected_source = {"path": sources[0].name, "sha256": file_sha256(sources[0])}
+        if source != expected_source:
+            raise HandshakeError("The original xctestrun changed; rebuild the build-for-testing products")
+        if not isinstance(expected_products, dict) or set(expected_products) != set(BUNDLE_NAMES):
+            raise HandshakeError("Build provenance does not identify exactly the app and test bundles")
+        products = derived_data / "Build/Products/Release-iphonesimulator"
+        for name in BUNDLE_NAMES:
+            expected = bundle_identity(products, name)
+            if expected_products[name] != expected:
+                raise HandshakeError(f"Build product file digest or identity changed: {name}; rebuild with build.sh")
+        return {**manifest, "path": path}
+    except (KeyError, TypeError, ValueError, OSError) as error:
+        if isinstance(error, HandshakeError):
+            raise
+        raise HandshakeError(f"Invalid build provenance manifest: {error}") from error
+
+
+def original_test_run(derived_data: Path, build_provenance: dict) -> Path:
+    if build_provenance.get("schema") != 1 or "path" not in build_provenance:
+        raise HandshakeError("Validated build provenance is required before reading an xctestrun")
+    sources = generated_test_runs(derived_data)
+    return sources[0]
+
+
 def traced_test_name(variant: str, scenario: str) -> str:
     """Return the existing Swift XCTest selector without changing its camel case."""
     selector = {"scroll": "Scroll", "stateUpdate": "StateUpdate"}[scenario]
@@ -316,15 +457,68 @@ def test_command(test_run: Path, target_udid: str, test: str, revision: str,
             f"-only-testing:{test}", "CODE_SIGNING_ALLOWED=NO", f"REFRACT_BENCH_REVISION={revision}"]
 
 
-def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration: int) -> Path:
-    # An xctestrun resolves __TESTROOT__ from its containing Build/Products
-    # directory; copying it elsewhere changes the native test product paths.
-    sources = sorted(path for path in (derived_data / "Build/Products").glob("*.xctestrun")
-                     if path.name != "iteration-trace-config.xctestrun")
-    if len(sources) != 1:
-        raise HandshakeError("Exactly one generated xctestrun file is required")
-    destination = sources[0].with_name("iteration-trace-config.xctestrun")
-    subprocess.run(["plutil", "-convert", "binary1", "-o", str(destination), "--", str(sources[0])], check=True)
+def validate_trace_configuration(run_directory: Path, revision: str, control: Path, iteration: int,
+                                 derived_data: Path | None = None) -> dict:
+    receipt = read_json(run_directory / "iteration-trace-config.json")
+    if (receipt.get("schema") != 1 or receipt.get("source_revision") != revision
+            or receipt.get("control_directory") != str(control) or receipt.get("iteration") != iteration):
+        raise HandshakeError("Trace configuration revision, control directory or iteration does not match this run")
+    manifest = run_directory / BUILD_PROVENANCE_NAME
+    if file_sha256(manifest) != receipt.get("build_provenance_sha256"):
+        raise HandshakeError("Archived build provenance no longer matches this iteration")
+    archived = run_directory / "iteration-trace-config.xctestrun"
+    if archived.is_symlink() or file_sha256(archived) != receipt.get("configuration_sha256"):
+        raise HandshakeError("Archived trace configuration no longer matches this iteration")
+    destination = derived_from_receipt(receipt, derived_data)
+    if destination.is_symlink() or file_sha256(destination) != receipt["configuration_sha256"]:
+        raise HandshakeError("The trace configuration to execute differs from its retained bytes")
+    values = {"REFRACT_BENCH_REVISION": revision,
+              "REFRACT_BENCH_TRACE_CONTROL": str(control),
+              "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
+    extracted = subprocess.run(["plutil", "-extract",
+                                "RefractBenchUITests.TestingEnvironmentVariables", "json",
+                                "-o", "-", str(destination)], check=True, capture_output=True, text=True)
+    try:
+        if json.loads(extracted.stdout) != values:
+            raise HandshakeError("The final trace environment does not match this run")
+    except json.JSONDecodeError as error:
+        raise HandshakeError("Cannot verify the final trace configuration") from error
+    return receipt
+
+
+def derived_from_receipt(receipt: dict, derived_data: Path | None) -> Path:
+    name = receipt.get("path")
+    if (not isinstance(name, str) or not re.fullmatch(r"iteration-trace-config-[0-9a-f]{24}\.xctestrun", name)
+            or receipt.get("archive") != "iteration-trace-config.xctestrun"):
+        raise HandshakeError("Invalid retained trace configuration identity")
+    if derived_data is None:
+        return Path(name)
+    return derived_data / "Build/Products" / name
+
+
+def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration: int,
+                     run_directory: Path | None = None, build_provenance: dict | None = None) -> Path:
+    if run_directory is None or build_provenance is None:
+        raise HandshakeError("Each trace configuration requires a new run directory and validated build provenance")
+    if not re.fullmatch(r"[0-9a-f]{40}", revision) or iteration not in range(30):
+        raise HandshakeError("Trace configuration requires an exact source revision and iteration in 0..29")
+    if (build_provenance.get("path") != derived_data / BUILD_PROVENANCE_NAME
+            or build_provenance.get("source_revision") != revision):
+        raise HandshakeError("Validated build provenance must match this exact revision and DerivedData")
+    if not control.is_dir() or control.is_symlink() or control.parent != run_directory:
+        raise HandshakeError("Trace control must be a real directory inside its own run directory")
+    unexpected = [path for path in run_directory.iterdir() if path != control]
+    if (not run_directory.is_dir() or run_directory.is_symlink() or unexpected
+            or any(control.iterdir()) or (run_directory / "iteration-trace-config.xctestrun").exists()):
+        raise HandshakeError("Trace configuration requires a new run directory containing only an empty control")
+    # Keep __TESTROOT__ resolution in Build/Products. Include the new control
+    # directory's full name and retain the final bytes beside the iteration receipt.
+    source = original_test_run(derived_data, build_provenance)
+    identity = hashlib.sha256(f"{revision}\0{control}\0{iteration}".encode()).hexdigest()[:24]
+    destination = source.with_name(f"iteration-trace-config-{identity}.xctestrun")
+    if destination.exists() or destination.is_symlink():
+        raise HandshakeError("Refusing to replace an existing trace configuration")
+    subprocess.run(["plutil", "-convert", "binary1", "-o", str(destination), "--", str(source)], check=True)
     values = {"REFRACT_BENCH_REVISION": revision,
               "REFRACT_BENCH_TRACE_CONTROL": str(control),
               "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
@@ -332,6 +526,35 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
         subprocess.run(["plutil", "-replace",
                         f"RefractBenchUITests.TestingEnvironmentVariables.{name}",
                         "-string", value, str(destination)], check=True)
+    checksum = file_sha256(destination)
+    extracted = subprocess.run(["plutil", "-extract",
+                                "RefractBenchUITests.TestingEnvironmentVariables", "json",
+                                "-o", "-", str(destination)], check=True, capture_output=True, text=True)
+    try:
+        final_values = json.loads(extracted.stdout)
+    except json.JSONDecodeError as error:
+        raise HandshakeError("Cannot verify the final trace configuration") from error
+    if final_values != values:
+        raise HandshakeError("Final trace revision, control directory and iteration do not match this run")
+    archived = run_directory / "iteration-trace-config.xctestrun"
+    with archived.open("xb") as archive_stream:
+        archive_stream.write(bounded_file_bytes(destination))
+    if file_sha256(archived) != checksum:
+        raise HandshakeError("Archived trace configuration does not match its executed bytes")
+    with (run_directory / BUILD_PROVENANCE_NAME).open("xb") as archive_stream:
+        archive_stream.write(bounded_file_bytes(build_provenance["path"]))
+    archived_manifest = run_directory / BUILD_PROVENANCE_NAME
+    if (archived_manifest.is_symlink()
+            or file_sha256(archived_manifest) != file_sha256(build_provenance["path"])):
+        raise HandshakeError("Archived build provenance does not match the validated build")
+    atomic_json(run_directory / "iteration-trace-config.json", {
+        "schema": 1, "path": destination.name, "archive": archived.name,
+        "configuration_sha256": checksum,
+        "build_provenance_sha256": file_sha256(build_provenance["path"]),
+        "source_xctestrun": source.name, "source_revision": revision,
+        "control_directory": str(control), "iteration": iteration,
+    })
+    validate_trace_configuration(run_directory, revision, control, iteration, derived_data)
     return destination
 
 
@@ -386,7 +609,10 @@ def main(argv: list[str] | None = None) -> int:
         environment = dict(os.environ, REFRACT_BENCH_REVISION=args.source_revision,
                            REFRACT_BENCH_TRACE_CONTROL=str(control),
                            REFRACT_BENCH_TRACE_ITERATION=str(args.iteration))
-        test_run = prepare_test_run(args.derived_data, control, args.source_revision, args.iteration)
+        build_provenance = validate_build_provenance(args.derived_data, args.source_revision)
+        test_run = prepare_test_run(args.derived_data, control, args.source_revision, args.iteration,
+                                    run, build_provenance)
+        validate_trace_configuration(run, args.source_revision, control, args.iteration, args.derived_data)
         with log.open("x", encoding="utf-8") as stream:
             process = subprocess.Popen(
                 test_command(test_run, args.target_udid, test, args.source_revision, run / "results.xcresult"),
@@ -395,7 +621,7 @@ def main(argv: list[str] | None = None) -> int:
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
                               xcodebuild_log=log, control_directory=control,
                               readiness_timeout=args.readiness_timeout,
-                              completion_timeout=args.completion_timeout)
+                              completion_timeout=args.completion_timeout, derived_data=args.derived_data)
             result = session.capture(process)
             status = process.wait(timeout=args.completion_timeout)
             if status != 0:

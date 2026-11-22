@@ -21,6 +21,12 @@ xcodebuild -project bench/ios/RefractBench.xcodeproj -scheme RefractBench \
 This is native compiler evidence only. No simulator was created, started, restarted, used or stopped. No application
 was installed. There are no timing, rendering, memory or physical-device results in this change.
 
+`build.sh` requires a clean committed checkout before and after compilation. It writes an immutable
+`refract-build-provenance.json` in DerivedData with the exact source revision, original xctestrun SHA-256 and the
+app/UI-test bundle file identities. The trace runner requires this manifest and rechecks every listed file before
+launch. Do not pair a checkout at one revision with products built from another, reuse a generic-device build or
+reuse products without their manifest; rebuild in a new DerivedData directory instead.
+
 ## Scenario construction
 
 The generated and reference screens have the same explicit `.plain` list style, title/subtitle typography, switch
@@ -63,6 +69,12 @@ python3 -I bench/ios/iteration_trace_runner.py \
   --variant <generated-or-reference> --scenario <scroll-or-stateUpdate> \
   --iteration <0-through-29> --source-revision <clean-committed-revision> \
   --run-directory <new-iteration-run-directory>
+
+Each iteration writes a uniquely named final xctestrun beside the original in `Build/Products`, preserving
+`__TESTROOT__` resolution without modifying that original. The run directory retains an identical
+`iteration-trace-config.xctestrun`, the build manifest and `iteration-trace-config.json`. The receipt separately
+records the configuration SHA-256, build-manifest SHA-256, source revision, control directory and iteration. The
+runner reads back the final hosted-test environment and refuses to replace an existing configuration or receipt.
 
 # Equivalent lower-level recorder command used by the driver after the app
 # publishes its PID. Do not use a filename as a substitute for the handshake:
