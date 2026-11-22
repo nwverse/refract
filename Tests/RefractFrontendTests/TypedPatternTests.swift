@@ -64,6 +64,30 @@ struct ContentView: View {
     #expect(!arkTS.contains(" as "))
 }
 
+@Test func optionalBooleanBindingSupportsNestedCondition() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct OptionalEnabled: View {
+        let maybeEnabled: Bool?
+        var body: some View {
+            if let enabled = maybeEnabled {
+                if enabled {
+                    Text(verbatim: "Enabled")
+                } else {
+                    Text(verbatim: "Disabled")
+                }
+            } else {
+                Text(verbatim: "Unknown")
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let arkTS = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("if (enabled)"))
+    #expect(arkTS.contains("if (enabled)"))
+}
+
 @Test func scalarPayloadSwitchUsesTypedLazyBranches() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: payloadSource))
     #expect(unit.diagnostics.map(\.rendered) == [])
