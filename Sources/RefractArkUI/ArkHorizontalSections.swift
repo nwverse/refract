@@ -3,7 +3,7 @@ import RefractMapping
 
 extension Generation {
     func emitHorizontalSections(_ sections: HorizontalSectionCollection, into writer: inout ArkWriter,
-                                mapping: Mapping, resolver: InteropResolver?) throws {
+                                mapping: Mapping, resolver: InteropResolver?, localAliases: Set<String> = []) throws {
         guard case let .valueProperty(.model(_, property)) = sections.collection.value,
               let owner = module.models.first(where: { $0.name == sections.modelType }),
               owner.properties.contains(where: { $0.name == property && $0.collection != nil }),
@@ -33,7 +33,8 @@ extension Generation {
         writer.open("LazyRow(Scroller())")
         writer.open("ForEach(\(sections.sectionName).\(sections.rows.property), (\(sections.rows.itemName): \(sections.rows.itemType)) =>")
         try emit(sections.rows.content, into: &writer, item: sections.rows.itemName,
-                 mapping: mapping, resolver: resolver, itemTypeName: sections.rows.itemType)
+                 mapping: mapping, resolver: resolver, itemTypeName: sections.rows.itemType,
+                 localAliases: localAliases)
         let key = "\(sections.rows.itemName).\(sections.rows.key)"
         writer.close(suffix: ", (\(sections.rows.itemName): \(sections.rows.itemType)): string => \(sections.rows.keyType == .int ? "String(\(key))" : key))")
         writer.close()

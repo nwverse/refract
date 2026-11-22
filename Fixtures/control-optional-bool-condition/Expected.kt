@@ -5,6 +5,7 @@
 package refract.generated
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,15 +15,25 @@ import refract.generated.R
 @Composable
 public fun OptionalEnabled(
     maybeEnabled: Boolean?,
+    maybeReady: Boolean?,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
         if (maybeEnabled != null) {
             val enabled = maybeEnabled
-            if (enabled) {
-                Text(text = stringResource(R.string.content_enabled))
+            if (maybeReady != null) {
+                val ready = maybeReady
+                Column(modifier = Modifier) {
+                    if (enabled) {
+                        Text(text = stringResource(R.string.content_enabled))
+                    } else if (ready) {
+                        Text(text = stringResource(R.string.content_disabled))
+                    } else {
+                        Text(text = stringResource(R.string.content_unavailable))
+                    }
+                }
             } else {
-                Text(text = stringResource(R.string.content_disabled))
+                Text(text = stringResource(R.string.content_pending))
             }
         } else {
             Text(text = stringResource(R.string.content_unknown))

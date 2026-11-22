@@ -41,7 +41,8 @@ extension Generation {
     }
 
     func emitEnumSwitch(subject: Expression, enumName: String, cases: [SwitchCase],
-                        into writer: inout ArkWriter, mapping: Mapping, resolver: InteropResolver?) throws {
+                        into writer: inout ArkWriter, mapping: Mapping, resolver: InteropResolver?,
+                        localAliases: Set<String> = []) throws {
         guard let declaration = enums.first(where: { $0.name == enumName }),
               cases.map(\.name).sorted() == declaration.cases.sorted(), Set(cases.map(\.name)).count == cases.count else {
             throw Diagnostic(code: "arkui.non_exhaustive_switch",
@@ -68,7 +69,8 @@ extension Generation {
                 }
                 writer.line("const \(binding) = \(eventValue).value;")
                 for child in branch.children {
-                    try emit(child, into: &writer, item: binding, mapping: mapping, resolver: resolver)
+                    try emit(child, into: &writer, item: binding, mapping: mapping, resolver: resolver,
+                             localAliases: localAliases)
                 }
                 continue
             } else {
@@ -82,7 +84,7 @@ extension Generation {
                 }
             }
             for child in branch.children {
-                try emit(child, into: &writer, mapping: mapping, resolver: resolver)
+                try emit(child, into: &writer, mapping: mapping, resolver: resolver, localAliases: localAliases)
             }
         }
         writer.close()
@@ -90,7 +92,7 @@ extension Generation {
 
     func emitOptionalBinding(subject: Expression, binding: String, children: [ViewNode], otherwise: [ViewNode],
                              location: SourceLocation?, into writer: inout ArkWriter,
-                             mapping: Mapping, resolver: InteropResolver?) throws {
+                             mapping: Mapping, resolver: InteropResolver?, localAliases: Set<String> = []) throws {
         guard ArkText.isIdentifier(binding), let name = referenceName(subject),
               module.screens.flatMap(\.parameters)
                 .contains(where: { $0.name == name && $0.isOptional && $0.enumName == nil }),
@@ -101,9 +103,14 @@ extension Generation {
         }
         writer.open("if (this.\(name) !== null && this.\(name) !== undefined)")
         writer.line("const \(binding) = this.\(name);")
-        for child in children { try emit(child, into: &writer, item: binding, mapping: mapping, resolver: resolver) }
+        for child in children {
+            try emit(child, into: &writer, item: binding, mapping: mapping, resolver: resolver,
+                     localAliases: localAliases)
+        }
         writer.closeBranch("else")
-        for child in otherwise { try emit(child, into: &writer, mapping: mapping, resolver: resolver) }
+        for child in otherwise {
+            try emit(child, into: &writer, mapping: mapping, resolver: resolver, localAliases: localAliases)
+        }
         writer.close()
     }
 

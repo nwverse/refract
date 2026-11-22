@@ -13,6 +13,8 @@
       "strings": {
         "content.enabled": "content_enabled",
         "content.disabled": "content_disabled",
+        "content.unavailable": "content_unavailable",
+        "content.pending": "content_pending",
         "content.unknown": "content_unknown"
       }
     }
@@ -31,6 +33,8 @@
       "strings": {
         "content.enabled": "content_enabled",
         "content.disabled": "content_disabled",
+        "content.unavailable": "content_unavailable",
+        "content.pending": "content_pending",
         "content.unknown": "content_unknown"
       }
     }

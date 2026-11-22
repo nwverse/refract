@@ -2,7 +2,8 @@ import RefractIR
 import RefractMapping
 
 enum ArkExpression {
-    static func emit(_ expression: Expression, item: String? = nil, mapping: Mapping = .empty) throws -> String {
+    static func emit(_ expression: Expression, item: String? = nil, mapping: Mapping = .empty,
+                     localAliases: Set<String> = []) throws -> String {
         switch expression.value {
         case let .stringLiteral(value):
             return try ArkText.string(value)
@@ -52,7 +53,10 @@ enum ArkExpression {
         case let .layoutSpacing(token):
             return String(token.points)
         case let .reference(name):
-            if let item, name == item || name.hasPrefix(item + ".") {
+            if localAliases.contains(name) || item == name {
+                return try referenceName(name, location: expression.location)
+            }
+            if let item, name.hasPrefix(item + ".") {
                 return try referenceName(name, location: expression.location)
             }
             return "this.\(try referenceName(name, location: expression.location))"

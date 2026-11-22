@@ -68,8 +68,9 @@ extension Builder {
         }
         currentBindings[name] = input.type
         defer { currentBindings.removeValue(forKey: name) }
-        guard let children = builderChildren(statement.body.statements),
-              let fallback = builderChildren(otherwise.statements) else { return nil }
+        guard let children = builderChildren(statement.body.statements) else { return nil }
+        currentBindings.removeValue(forKey: name)
+        guard let fallback = builderChildren(otherwise.statements) else { return nil }
         return .optionalBinding(subject: Expression(.reference(subject.baseName.text),
                                                     location: location(of: subject)),
                                 binding: name, children: children, otherwise: fallback,
@@ -110,11 +111,20 @@ extension Builder {
                   "Use a declared Bool model, @State or @Binding property", at: expression)
             return nil
         }
+        let referenceName = reference.baseName.text
+        guard scalarType(named: referenceName) == .bool else {
+            error("RFCTRL001", "The condition `\(expression.trimmedDescription)` is not a supported typed Boolean.",
+                  "Use a declared Bool model, @State or @Binding property", at: expression)
+            return nil
+        }
+        guard currentBindings[referenceName] == nil else {
+            return Expression(.reference(referenceName), type: .bool, location: location(of: expression))
+        }
         for declaration in currentStates {
             switch declaration {
-            case let .state(name, _, _, _) where name == reference.baseName.text:
+            case let .state(name, _, _, _) where name == referenceName:
                 return Expression(.valueProperty(.state(name)), type: .bool, location: location(of: expression))
-            case let .binding(name, _, _) where name == reference.baseName.text:
+            case let .binding(name, _, _) where name == referenceName:
                 return Expression(.valueProperty(.binding(name)), type: .bool, location: location(of: expression))
             default: continue
             }
