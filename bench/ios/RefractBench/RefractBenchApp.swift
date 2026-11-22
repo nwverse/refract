@@ -70,18 +70,25 @@ struct RefractBenchApp: App {
                     Text("Unsupported benchmark selection")
                 }
             }
-            .overlay(alignment: .bottom) {
+            .safeAreaInset(edge: .bottom) {
                 if selectedIteration != nil {
-                    Text(traceIdentityError)
-                        .accessibilityIdentifier("refract_benchmark_trace_identity_error")
-                    if !recorder.beginSelectedIteration {
-                        Button("BeginIteration", action: beginTrace)
-                        .disabled(!traceReadiness.isReady)
-                        .accessibilityIdentifier("refract_benchmark_begin_iteration")
-                        Text("\(variant) \(scenario) \(traceReadiness.isReady ? "ready" : "waiting")")
-                            .accessibilityIdentifier("refract_benchmark_iteration_ready")
+                    VStack {
+                        Text(traceIdentityError)
+                            .accessibilityIdentifier("refract_benchmark_trace_identity_error")
+                        if !recorder.beginSelectedIteration {
+                            Button("BeginIteration", action: beginTrace)
+                                .disabled(!traceReadiness.isReady)
+                                .accessibilityIdentifier("refract_benchmark_begin_iteration")
+                            Text("\(variant) \(scenario) \(traceReadiness.isReady ? "ready" : "waiting")")
+                                .accessibilityIdentifier("refract_benchmark_iteration_ready")
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.white)
                 }
+            }
+            .overlay(alignment: .bottom) {
                 if let completion = recorder.completion {
                     Text("\(completion.variant) \(completion.scenario) complete \(completion.count)")
                         .accessibilityIdentifier("refract_benchmark_complete")
