@@ -21,6 +21,10 @@ class BenchmarkSourceContractTest(unittest.TestCase):
         self.assertIn("SettingsScreen(model: model)",
                       (self.ios / "RefractBench/GeneratedSettingsScreen.swift").read_text(encoding="utf-8"))
 
+    def test_ios_ui_test_target_binds_the_application_under_test(self):
+        project = (self.ios / "RefractBench.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
+        self.assertEqual(project.count("TEST_TARGET_NAME = RefractBench;"), 2)
+
     def test_native_reference_is_separate_and_preserves_row_behavior(self):
         reference = (self.ios / "RefractBench/ReferenceSettingsScreen.swift").read_text(encoding="utf-8")
         code = "\n".join(line for line in reference.splitlines() if not line.lstrip().startswith("//"))

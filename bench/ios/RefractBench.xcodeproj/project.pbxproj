@@ -229,6 +229,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.refract.bench.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = RefractBench;
 			};
 			name = Debug;
 		};
@@ -242,6 +243,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.refract.bench.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = RefractBench;
 			};
 			name = Release;
 		};
