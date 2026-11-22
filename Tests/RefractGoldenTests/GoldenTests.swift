@@ -47,6 +47,7 @@ struct CorpusTests {
         #expect(cases.filter { $0.name.hasPrefix("interop-") && $0.status == .ready }.map(\.name) == [
             "interop-document-preview", "interop-document-preview-reject",
             "interop-link-handoff", "interop-link-handoff-reject",
+            "interop-list-row-input-shadow",
             "interop-media-capabilities", "interop-media-capability-reject",
             "interop-native-animation", "interop-native-background-work", "interop-native-callers", "interop-native-component",
             "interop-native-lifecycle", "interop-native-measurement", "interop-native-mismatch",
