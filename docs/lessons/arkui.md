@@ -64,7 +64,9 @@ ordinary native navigation without a host or global initialization.
 A `LazyForEach` row has both a local name and an item type. ArkUI's typed-layout recursion must retain both when a
 `VStack(spacing:)` contains an item Toggle. Passing only the local name leaves the model-action projection guard
 without its row type and rejects an accepted input with `state.invalid_projection`. Keep this context propagation
-separate from conditional recursion and receiver selection, and cover the exact path with paired output.
+separate from conditional recursion and receiver selection, and cover the exact path with paired output. When that
+golden joins the shared Android fixture compile set, give it a unique package if another case declares the same model
+type; independent CLI regeneration cannot detect a cross-fixture Kotlin `CLASSIFIER_REDECLARATION`.
 
 ## Declarative builders are not ordinary closures
 
