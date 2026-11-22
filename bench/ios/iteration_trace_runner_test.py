@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
@@ -10,19 +11,22 @@ import sys
 import tempfile
 import threading
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import HandshakeError, Session
+from iteration_trace_runner import TARGET_PROBE_FILENAMES, HandshakeError, Session
+import iteration_trace_runner as runner
 
 
 class RecorderFixture:
     """Separate fake XCTest and xctrace processes with observable commands."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, create_run_directory: bool = True):
         self.root = root
         self.work = root.parent / f"{root.name}-synthetic-tools"
         self.work.mkdir(exist_ok=True)
@@ -30,17 +34,22 @@ class RecorderFixture:
         self.process = None
         self.cleanup = lambda: None
         self.output = root / "xcodebuild.log"
-        root.mkdir(exist_ok=True)
-        (root / "control").mkdir()
+        if create_run_directory:
+            root.mkdir(exist_ok=True)
+            (root / "control").mkdir(exist_ok=True)
 
-    def start(self, ready: str | None = "Starting recording with the Animation Hitches template. Attach to stop.",
-              completion: str = "generated scroll complete 1", pid: int | None = 4242,
-              session: int = 1, duplicate_completion: bool = False, duplicate_request: bool = False,
-              recorder_after_ready_exit: int = 0, ready_delay: float = 0,
-              write_trace: bool = True, process_state: str = "running",
-              missing_completion: bool = False, app_iteration: int = 0,
-              saved_path: str | None = None, recorder_stop_status: int = 0,
-              completion_delay: float = 0):
+    def start(self, **kwargs):
+        self.prepare(**kwargs)
+        self.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n", encoding="utf-8")
+
+    def prepare(self, ready: str | None = "Starting recording with the Animation Hitches template. Attach to stop.",
+                completion: str = "generated scroll complete 1", pid: int | None = 4242,
+                session: int = 1, duplicate_completion: bool = False, duplicate_request: bool = False,
+                recorder_after_ready_exit: int = 0, ready_delay: float = 0,
+                write_trace: bool = True, process_state: str = "running",
+                missing_completion: bool = False, app_iteration: int = 0,
+                saved_path: str | None = None, recorder_stop_status: int = 0,
+                completion_delay: float = 0):
         app_script = self.work / "fake_xcodebuild.py"
         app_script.write_text(f'''import json, pathlib, sys, time
 control = pathlib.Path(sys.argv[1])
@@ -91,7 +100,6 @@ if {write_trace!r}:
 while not (control / "recorder-stop").exists():
     time.sleep(0.01)
 ''')
-        self.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n", encoding="utf-8")
         self.process = subprocess.Popen(
             ["python3", "-I", str(app_script), str(self.root / "control")],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -178,10 +186,90 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertTrue((self.root / "raw/recorder-finished.json").is_file())
         self.assertEqual(result["archived_package_name"], "generated-scroll-0.trace")
 
-    def test_current_target_probe_files_are_admitted(self):
-        for name in ("targets.json", "simulators.json", "target.json"):
+    def test_current_target_probe_files_require_explicit_current_run_admission(self):
+        for name in TARGET_PROBE_FILENAMES:
             (self.root / name).write_text('{"current_probe": true}\n')
-        self.assertEqual(self.run_success()["status"], "complete")
+        self.recorder.start()
+        with self.assertRaisesRegex(HandshakeError, "unexpected or stale"):
+            self.capture(self.session())
+        self.assertFalse((self.root / "raw").exists())
+        self.assertFalse(self.recorder.commands.exists())
+
+        probes = tuple(self.root / name for name in TARGET_PROBE_FILENAMES)
+        result = self.capture(self.session(target_probe_files=probes))
+        self.assertEqual(result["status"], "complete")
+        self.recorder.process.wait(timeout=5)
+
+    def test_unexpected_files_are_rejected_with_current_target_probes(self):
+        probes = tuple(self.root / name for name in TARGET_PROBE_FILENAMES)
+        for path in probes:
+            path.write_text('{"current_probe": true}\n')
+        unexpected = self.root / "unexpected.json"
+        unexpected.write_text("stale evidence\n")
+        self.recorder.start()
+        with self.assertRaisesRegex(HandshakeError, "unexpected or stale"):
+            self.capture(self.session(target_probe_files=probes))
+        self.assertEqual(unexpected.read_text(), "stale evidence\n")
+        self.assertFalse((self.root / "raw").exists())
+        self.assertFalse(self.recorder.commands.exists())
+
+    def test_ordinary_cli_admits_only_the_probes_it_generated(self):
+        self.recorder.stop()
+        self.root = self.root / "current-cli-run"
+        self.recorder = RecorderFixture(self.root, create_run_directory=False)
+        self.addCleanup(self.recorder.stop)
+        self.recorder.prepare()
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            if "devicectl" in command:
+                (self.root / "targets.json").write_text('{"devices": []}\n')
+            elif "simctl" in command:
+                kwargs["stdout"].write('{"devices": {}}\n')
+            elif command[1:3] == ["-I", str(HERE / "probe_target.py")]:
+                (self.root / "target.json").write_text(json.dumps({
+                    "target_label": "SIMULATOR", "device_result": False,
+                    "udid": "synthetic-target",
+                }) + "\n")
+            return subprocess.CompletedProcess(command, 0)
+
+        original_popen = subprocess.Popen
+
+        def popen(command, **kwargs):
+            if command[0] == "xcodebuild":
+                return self.recorder.process
+            return original_popen(command, **kwargs)
+
+        original_capture = Session.capture
+
+        def capture(session, process):
+            self.assertEqual(session.target_probe_files,
+                             tuple(self.root / name for name in TARGET_PROBE_FILENAMES))
+            return original_capture(session, process, self.recorder.recorder_factory)
+
+        with mock.patch.object(runner.subprocess, "check_output",
+                               side_effect=["a" * 40 + "\n", ""]), \
+                mock.patch.object(runner.subprocess, "run", side_effect=run), \
+                mock.patch.object(runner.subprocess, "Popen", side_effect=popen), \
+                mock.patch.object(Session, "capture", capture), \
+                mock.patch.object(runner, "archive_trace", return_value=(1, "a" * 64)):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                status = runner.main([
+                    "--run-directory", str(self.root),
+                    "--derived-data", str(self.root.parent / "DerivedData"),
+                    "--target-udid", "synthetic-target",
+                    "--variant", "generated", "--scenario", "scroll", "--iteration", "0",
+                    "--source-revision", "a" * 40,
+                    "--readiness-timeout", "0.5", "--completion-timeout", "0.5",
+                ])
+        _, process_stderr = self.recorder.process.communicate(timeout=5)
+        self.assertEqual(status, 0, process_stderr)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "complete")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(self.recorder.process.returncode, 0)
+        self.assertTrue(all((self.root / name).is_file() for name in TARGET_PROBE_FILENAMES))
 
     def test_reused_run_directory_or_trace_is_never_replaced(self):
         self.run_success()
