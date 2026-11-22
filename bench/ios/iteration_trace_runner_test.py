@@ -74,12 +74,11 @@ def finish(status):
         (trace / "Data").mkdir(parents=True, exist_ok=True)
         (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
     print("Output saved: " + ({saved_path!r} or output), flush=True)
-    sys.stdout.flush()
-    sys.stderr.flush()
     os._exit(status)
 signal.signal(signal.SIGINT, lambda *_: finish(0))
 signal.signal(signal.SIGTERM, lambda *_: finish(143))
-time.sleep({ready_delay!r})
+import json, os, pathlib, time
+
 if {ready!r} is None:
     sys.exit(7)
 print({ready!r}.format(trace=output), flush=True)
