@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -193,13 +194,111 @@ class RenderingEvidenceTests(unittest.TestCase):
             run.assert_not_called()
             self.assertIn('"status": "failed-or-blocked"', (output / "metadata.json").read_text(encoding="utf-8"))
 
+    def write_packages(self, root: Path) -> dict[str, Path]:
+        outputs = root / "entry/build/default/outputs/default"
+        outputs.mkdir(parents=True)
+        paths = {"app": outputs / "entry-default-signed.hap",
+                 "test": outputs / "entry-ohosTest-signed.hap"}
+        for role, path in paths.items():
+            path.write_bytes(f"portable-{role}-package".encode())
+        return paths
+
+    def test_native_packages_are_hashed_after_the_exact_two_builds(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-packages-test.") as temporary:
+            packages = self.write_packages(Path(temporary))
+            commands: list[list[str]] = []
+            observed_hashes: dict[str, str] = {}
+            original_sha256 = MODULE.sha256
+
+            def record_hash(path: Path) -> str:
+                observed_hashes[path.name] = original_sha256(path)
+                return observed_hashes[path.name]
+
+            def build_output(command: Sequence[str], log_path: Path, **kwargs: object) -> mock.Mock:
+                if command[1:] == ["build"]:
+                    packages["app"].write_bytes(b"fresh-app-package")
+                if command[1:] == ["build", "--modules", "entry@ohosTest"]:
+                    packages["test"].write_bytes(b"fresh-test-package")
+                return mock.Mock(stdout="", returncode=0)
+
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE, "sha256", side_effect=record_hash), \
+                 mock.patch.object(MODULE, "execute", side_effect=build_output) as execute:
+                provenance = MODULE.native_packages({"devecocli": SCRIPT}, Path(temporary) / "commands.log")
+                commands = [call.args[0] for call in execute.call_args_list]
+            self.assertEqual(len(observed_hashes), 4)
+            self.assertEqual([command[1:] for command in commands],
+                             [["build"], ["build", "--modules", "entry@ohosTest"]])
+            for role, package in packages.items():
+                artifact = provenance["artifacts"][role]
+                self.assertEqual(Path(artifact["buildOutputPath"]), package.resolve())
+                self.assertEqual(Path(artifact["installSnapshotPath"]).name, f"snapshot-{role}.hap")
+                self.assertEqual(Path(artifact["selectedPath"]), package.resolve())
+                self.assertEqual(artifact["selectedSha256"], MODULE.sha256(package))
+                self.assertEqual(artifact["buildOutputSha256"], artifact["selectedSha256"])
+                self.assertTrue(artifact["matchesBuildOutput"])
+            self.assertNotIn("appHapSha256", provenance)
+
+    def test_package_selection_rejects_a_mismatch_or_incomplete_pair(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-packages-test.") as temporary:
+            packages = self.write_packages(Path(temporary))
+            unrelated = Path(temporary) / "unrelated.hap"
+            unrelated.write_bytes(b"unrelated-package")
+            for selected in (
+                {"app": unrelated, "test": packages["test"]},
+                {"app": packages["app"], "test": unrelated},
+                {"app": packages["app"]},
+            ):
+                with self.subTest(selected=selected), self.assertRaises(MODULE.VerificationError):
+                    MODULE.package_provenance(selected, packages)
+            with self.assertRaises(MODULE.VerificationError):
+                MODULE.package_provenance(packages, {"app": packages["app"]})
+            for path in packages.values():
+                path.unlink()
+            with self.assertRaises(OSError):
+                MODULE.package_provenance(packages, packages)
+
+    def test_build_without_each_canonical_hap_fails_before_installation(self) -> None:
+        for missing_role in ("app", "test"):
+            with self.subTest(missing_role=missing_role), \
+                 tempfile.TemporaryDirectory(prefix="refract-harmony-packages-test.") as temporary:
+                root = Path(temporary)
+                packages = self.write_packages(root)
+                packages[missing_role].unlink()
+
+                def build_output(command: Sequence[str], log_path: Path, **kwargs: object) -> mock.Mock:
+                    if command[1:] == ["build"]:
+                        if missing_role == "app":
+                            packages["app"].unlink(missing_ok=True)
+                        else:
+                            packages["app"].write_bytes(b"fresh-app-package")
+                    if command[1:] == ["build", "--modules", "entry@ohosTest"]:
+                        if missing_role == "test":
+                            packages["test"].unlink(missing_ok=True)
+                        else:
+                            packages["test"].write_bytes(b"fresh-test-package")
+                    return mock.Mock(stdout="", returncode=0)
+
+                with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                     mock.patch.object(MODULE, "execute", side_effect=build_output) as execute:
+                    with self.assertRaises(OSError):
+                        MODULE.native_packages({"devecocli": SCRIPT}, root / "commands.log")
+                self.assertGreaterEqual(execute.call_count, 1)
+                self.assertLessEqual(execute.call_count, 2)
+                self.assertFalse(any("install" in call.args[0] for call in execute.call_args_list))
+
     def test_mocked_complete_execution_still_requires_human_inspection(self) -> None:
         # This exercises only the local evidence state machine, not an SDK or device.
         with tempfile.TemporaryDirectory(prefix="refract-harmony-render-test.") as temporary:
             root = Path(temporary)
             output = root / "private-evidence"
+            packages = self.write_packages(root)
 
             def command_result(command: Sequence[str], log_path: Path, **kwargs: object) -> mock.Mock:
+                if command[1:] == ["build"]:
+                    packages["app"].write_bytes(b"fresh-app-package")
+                if command[1:] == ["build", "--modules", "entry@ohosTest"]:
+                    packages["test"].write_bytes(b"fresh-test-package")
                 if command[:2] == ["hdc", "-t"] and "recv" in command:
                     destination = Path(command[-1])
                     if destination.suffix == ".png":
@@ -211,14 +310,15 @@ class RenderingEvidenceTests(unittest.TestCase):
                     output_text = self.result()
                 return mock.Mock(stdout=output_text, returncode=0)
 
-            with mock.patch.object(MODULE, "source_revision", return_value="a" * 40), \
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE, "source_revision", return_value="a" * 40), \
                  mock.patch.object(MODULE.PREFLIGHT, "preflight", return_value=({"devecocli": SCRIPT}, [])), \
                  mock.patch.object(MODULE.shutil, "which", return_value="/authorized/hdc"), \
                  mock.patch.object(MODULE, "execute", side_effect=command_result) as execute:
                 status = MODULE.main([
                     "--target", "owned-target", "--target-class", "emulator",
                     "--target-description", "owner-supplied target",
-                    "--app-hap", str(SCRIPT), "--test-hap", str(SCRIPT), "--output", str(output),
+                    "--output", str(output),
                 ])
             self.assertEqual(status, 0)
             commands = [call.args[0] for call in execute.call_args_list]
@@ -230,6 +330,70 @@ class RenderingEvidenceTests(unittest.TestCase):
             metadata = (output / "metadata.json").read_text(encoding="utf-8")
             self.assertIn('"renderVerified": false', metadata)
             self.assertIn('"status": "executed-awaiting-human-capture-inspection"', metadata)
+            native_packages = json.loads(metadata)["nativePackages"]
+            for role, package in packages.items():
+                artifact = native_packages["artifacts"][role]
+                self.assertTrue(artifact["matchesBuildOutput"])
+                self.assertEqual(artifact["selectedPath"], str(package.resolve()))
+                self.assertEqual(artifact["buildOutputSha256"], artifact["selectedSha256"])
+                self.assertEqual(artifact["selectedSha256"], MODULE.sha256(package))
+            install_commands = [command for command in commands if "install" in command]
+            self.assertEqual([Path(command[-1]) for command in install_commands],
+                             [Path(native_packages["artifacts"][role]["installSnapshotPath"])
+                              for role in ("app", "test")])
+
+    def test_mismatched_hap_never_reaches_installation(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-render-test.") as temporary:
+            root = Path(temporary)
+            packages = self.write_packages(root)
+            unrelated = root / "unrelated.hap"
+            unrelated.write_bytes(b"unrelated package")
+
+            def build_output(command: Sequence[str], log_path: Path, **kwargs: object) -> mock.Mock:
+                if "build" in command:
+                    for role, package in packages.items():
+                        package.write_bytes(f"fresh-{role}-package".encode())
+                return mock.Mock(stdout="", returncode=0)
+
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE, "source_revision", return_value="a" * 40), \
+                 mock.patch.object(MODULE.PREFLIGHT, "preflight", return_value=({"devecocli": SCRIPT}, [])), \
+                 mock.patch.object(MODULE.shutil, "which", return_value="/authorized/hdc"), \
+                 mock.patch.object(MODULE, "tool_version", return_value="26.0.0"), \
+                 mock.patch.object(MODULE, "execute", side_effect=build_output) as execute:
+                status = MODULE.main([
+                    "--target", "owned-target", "--target-class", "emulator",
+                    "--target-description", "owner supplied target",
+                    "--app-hap", str(unrelated), "--test-hap", str(packages["test"]),
+                    "--output", str(root / "private-evidence"),
+                ])
+            self.assertEqual(status, 1)
+            self.assertFalse(any("install" in call.args[0] for call in execute.call_args_list))
+            self.assertIn("differs from the native build output", str(
+                (root / "private-evidence/metadata.json").read_text(encoding="utf-8")))
+
+    def test_previous_canonical_packages_survive_failure_and_restore_conflict(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-recovery-test.") as temporary:
+            root = Path(temporary)
+            packages = self.write_packages(root)
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE, "execute", side_effect=MODULE.VerificationError("build failed")):
+                with self.assertRaises(MODULE.VerificationError):
+                    MODULE.native_packages({"devecocli": SCRIPT}, root / "commands.log")
+            self.assertEqual(packages["app"].read_bytes(), b"portable-app-package")
+            self.assertEqual(packages["test"].read_bytes(), b"portable-test-package")
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE.tempfile, "TemporaryDirectory") as temporary_directory:
+                temporary_directory.return_value.__enter__.return_value = str(root / "temporary")
+                (root / "temporary").mkdir()
+                preserved = Path(temporary_directory.return_value.__enter__.return_value).parent / "preserved"
+                preserved.mkdir()
+                with mock.patch.object(MODULE.tempfile, "mkdtemp", return_value=str(preserved)):
+                    with MODULE.package_snapshots():
+                        packages["app"].write_bytes(b"conflicting-new-app")
+                temporary_directory.return_value.__exit__.assert_called_once()
+            self.assertEqual(packages["app"].read_bytes(), b"conflicting-new-app")
+            self.assertEqual((root / "preserved/build/previous-app.hap").read_bytes(), b"portable-app-package")
 
     def test_rejects_an_implicit_or_unsafe_target(self) -> None:
         result = subprocess.run(

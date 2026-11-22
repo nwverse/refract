@@ -111,3 +111,9 @@ The pinned reporter also emits class-only `suiteStart`/`suiteDone` records aroun
 terminal code and `taskconsuming`. Do not split every `class` line into a test case or accept one zero among mixed
 terminal codes. Parse suite/case/task records distinctly and atomically, retain a representative pinned-format fixture,
 and require exactly one successful terminal record.
+
+A HAP hash recorded before compilation identifies only an old caller-selected file, not the package produced by that
+build. Quarantine old canonical outputs before building, restore them on failure, and snapshot the newly produced
+packages into a caller-owned private directory. Require every selected installation input to match its snapshot
+immediately before installation, then install the snapshot rather than reopening the mutable input. A skip-build flag
+without independently verifiable build provenance is an evidence bypass, not a portability shortcut.
