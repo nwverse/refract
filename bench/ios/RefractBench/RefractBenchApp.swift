@@ -5,9 +5,9 @@ import SwiftUI
 struct RefractBenchApp: App {
     @StateObject private var model = BenchmarkSettingsModel()
     @StateObject private var recorder = BenchmarkDisplayRecorder.shared
+    @StateObject private var traceReadiness: TraceReadiness
     @Environment(\.scenePhase) private var scenePhase
     @State private var beginSelectedIteration = false
-    @State private var recorderIsReady = false
     @State private var traceIdentityError = ""
 
     private var selectedIteration: Int? {
@@ -29,6 +29,7 @@ struct RefractBenchApp: App {
 
     init() {
         BenchmarkDisplayRecorder.shared.prepareForLaunch()
+        _traceReadiness = StateObject(wrappedValue: TraceReadiness())
     }
 
     var body: some Scene {
@@ -62,13 +63,14 @@ struct RefractBenchApp: App {
                                                            iteration: iteration, state: "begin")
                                 }
                                 beginSelectedIteration = true
+                                Task { await runTracedIteration(variant: variant, model: model) }
                             } catch {
                                 traceIdentityError = "Native Begin identity failed: \(error.localizedDescription)"
                             }
                         }
-                        .disabled(!recorderIsReady)
+                        .disabled(!traceReadiness.isReady)
                         .accessibilityIdentifier("refract_benchmark_begin_iteration")
-                        Text("\(variant) \(scenario) \(recorderIsReady ? "ready" : "waiting")")
+                        Text("\(variant) \(scenario) \(traceReadiness.isReady ? "ready" : "waiting")")
                             .accessibilityIdentifier("refract_benchmark_iteration_ready")
                     }
                 }
@@ -86,29 +88,7 @@ struct RefractBenchApp: App {
                 }
             }
             .task {
-                let beginSelectedIteration = $beginSelectedIteration
-                if let iteration = selectedIteration, let directory = traceControlDirectory(),
-                   (0..<30).contains(iteration), traceIdentityError.isEmpty {
-                    do {
-                        try publishTracePacket(named: "native-process.json", in: directory,
-                                               revision: revision, variant: variant, scenario: scenario,
-                                               iteration: iteration, state: "ready")
-                        while !recorderIsReady {
-                            recorderIsReady = recorderReady(in: directory)
-                            try await Task.sleep(for: .milliseconds(10))
-                        }
-                        while !beginSelectedIteration.wrappedValue {
-                            try await Task.sleep(for: .milliseconds(10))
-                        }
-                    } catch {
-                        traceIdentityError = "Native trace identity failed: \(error.localizedDescription)"
-                        return
-                    }
-                    guard !Task.isCancelled else { return }
-                } else if selectedIteration != nil {
-                    traceIdentityError = "An exact selected iteration and control directory are required"
-                    return
-                }
+                guard selectedIteration == nil else { return }
                 switch (variant, scenario) {
                 case ("generated", "scroll"), ("reference", "scroll"):
                     await runScroll(variant: variant, model: model)
@@ -117,18 +97,66 @@ struct RefractBenchApp: App {
                 default:
                     break
                 }
-                if let iteration = selectedIteration, let directory = traceControlDirectory() {
-                    do {
-                        try publishTracePacket(named: "native-completion.json", in: directory,
-                                               revision: revision, variant: variant, scenario: scenario,
-                                               iteration: iteration, state: "complete",
-                                               completion: "\(variant) \(scenario) complete 1")
-                    } catch {
-                        traceIdentityError = "Native completion identity failed: \(error.localizedDescription)"
-                    }
-                }
             }
         }
+    }
+}
+
+@MainActor
+private final class TraceReadiness: ObservableObject {
+    @Published private(set) var isReady = false
+
+    init() {
+        guard let iteration = selectedIteration(), (0..<30).contains(iteration),
+              let directory = traceControlDirectory(),
+              let data = try? JSONSerialization.data(withJSONObject: [
+                "schema": 1, "session": 1,
+                "revision": ProcessInfo.processInfo.environment["REFRACT_BENCH_REVISION"] ?? "",
+                "variant": ProcessInfo.processInfo.environment["REFRACT_BENCH_VARIANT"] ?? "",
+                "scenario": ProcessInfo.processInfo.environment["REFRACT_BENCH_SCENARIO"] ?? "",
+                "iteration": iteration, "pid": Int(ProcessInfo.processInfo.processIdentifier),
+                "process": "running", "state": "ready",
+              ], options: [.sortedKeys]) else { return }
+        do {
+            try data.write(to: directory.appendingPathComponent("native-process.json"), options: .withoutOverwriting)
+            Task { [weak self] in
+                guard let self else { return }
+                while !recorderReady(in: directory) {
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+                self.isReady = true
+            }
+        } catch {
+            // XCTest fails closed when the native identity packet is missing.
+        }
+    }
+}
+
+@MainActor
+private func runTracedIteration(variant: String, model: BenchmarkSettingsModel) async {
+    guard let iteration = selectedIteration(), (0..<30).contains(iteration),
+          let directory = traceControlDirectory() else { return }
+    let scenario = ProcessInfo.processInfo.environment["REFRACT_BENCH_SCENARIO"] ?? ""
+    let revision = ProcessInfo.processInfo.environment["REFRACT_BENCH_REVISION"] ?? ""
+    do {
+        while !recorderReady(in: directory) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.yield()
+        switch (variant, scenario) {
+        case ("generated", "scroll"), ("reference", "scroll"):
+            await runScroll(variant: variant, model: model)
+        case ("generated", "stateUpdate"), ("reference", "stateUpdate"):
+            await runUpdates(variant: variant, model: model)
+        default:
+            return
+        }
+        try publishTracePacket(named: "native-completion.json", in: directory,
+                               revision: revision, variant: variant, scenario: scenario,
+                               iteration: iteration, state: "complete",
+                               completion: "\(variant) \(scenario) complete 1")
+    } catch {
+        // XCTest observes the absence of native completion and fails closed.
     }
 }
 
