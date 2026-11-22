@@ -272,7 +272,7 @@ class ReportTest(unittest.TestCase):
                 self.assertEqual(output["label"], f"Trace Iteration {iteration}")
                 self.assertRegex(output["filename"], r"_iter\d{3}_2026-01-02-03-04-\d{2}\.perfetto-trace$")
 
-    def test_complete_macro_rejects_wrong_native_unit_and_missing_macro_prefix(self):
+    def test_complete_macro_rejects_missing_required_startup_metric(self):
         path = Path(self.directory.name) / "input.json"
         values, traces, metadata = self.complete_macro()
         for value in values:
@@ -283,6 +283,26 @@ class ReportTest(unittest.TestCase):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
                                evidence=complete_evidence(traces))
 
+    def test_complete_macro_rejects_incompatible_startup_units(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        path.write_text(json.dumps(values))
+        result = report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                                    evidence=complete_evidence(traces))
+        startup = {row["variant"]: row for row in result["measurements"]
+                   if row["benchmark"] == "startup" and row["metric"] == "timeToInitialDisplayMs"}
+        self.assertEqual({variant: row["raw_unit"] for variant, row in startup.items()},
+                         {"generated": "ms", "reference": "ms"})
+
+        # Preserve the required AndroidX metric and macro identity, but present
+        # an incompatible raw unit at the actual comparison boundary.
+        mismatched = [{**startup["generated"], "raw_unit": "s"}, startup["reference"]]
+        with self.assertRaisesRegex(report.ReportError,
+                                    "Incompatible units for startup.timeToInitialDisplayMs"):
+            report.compare_pairs(mismatched, 5.0, 0.1)
+
+    def test_complete_macro_rejects_missing_macro_prefix(self):
+        path = Path(self.directory.name) / "input.json"
         values, traces, metadata = self.complete_macro()
         for value in values:
             value["name"] = value["name"].removeprefix("EMULATOR_")
