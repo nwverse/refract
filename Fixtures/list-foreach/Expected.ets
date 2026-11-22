@@ -12,14 +12,14 @@ export class SettingItem {
   }
 }
 
-export interface OptionalButtonListModel {
+export interface SettingsListModel {
   items: BasicDataSource<SettingItem>;
 }
 
 @ComponentV2
-export struct OptionalButtonList {
+export struct ForEachList {
   @Param @Require public var title: string | null | undefined
-  @Require @Param model: OptionalButtonListModel;
+  @Require @Param model: SettingsListModel;
   build() {
     if (this.title !== null && this.title !== undefined) {
       const value = this.title;

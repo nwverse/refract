@@ -114,12 +114,12 @@ struct ContentView: View {
         let title: String
     }
 
-    protocol OptionalButtonListModel: RefractModel {
+    protocol SettingsListModel: RefractModel {
         var items: [SettingItem] { get }
     }
 
-    struct OptionalButtonList: View {
-        let model: OptionalButtonListModel
+    struct ForEachList: View {
+        let model: SettingsListModel
         let title: String?
 
         var body: some View {

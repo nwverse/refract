@@ -23,14 +23,14 @@ public data class SettingItem(
     public val title: String,
 )
 
-public interface OptionalButtonListModel {
+public interface SettingsListModel {
     public val items: State<List<SettingItem>>
 }
 
 @Composable
-public fun OptionalButtonList(
+public fun ForEachList(
     title: String?,
-    model: OptionalButtonListModel,
+    model: SettingsListModel,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
