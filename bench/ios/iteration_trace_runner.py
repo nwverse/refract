@@ -141,10 +141,14 @@ class Session:
         if self.run_directory.exists() and any(self.run_directory.iterdir()):
             # The caller creates a new run directory for the test log and empty
             # control directory before capture; nothing else may already exist.
-            allowed = {self.xcodebuild_log, self.control_directory}
+            # The ordinary CLI writes these three fresh read-only target probes
+            # before capture. No other pre-existing content is evidence-safe.
+            allowed = {self.xcodebuild_log, self.control_directory,
+                       *(self.run_directory / name for name in
+                         ("targets.json", "simulators.json", "target.json"))}
             unexpected = [p for p in self.run_directory.iterdir() if p not in allowed]
             if unexpected or not self.xcodebuild_log.is_file():
-                raise HandshakeError("A new run directory containing only the current xcodebuild log is required")
+                raise HandshakeError("A new run directory contains unexpected or stale files")
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)

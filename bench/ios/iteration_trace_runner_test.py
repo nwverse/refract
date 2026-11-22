@@ -178,6 +178,11 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertTrue((self.root / "raw/recorder-finished.json").is_file())
         self.assertEqual(result["archived_package_name"], "generated-scroll-0.trace")
 
+    def test_current_target_probe_files_are_admitted(self):
+        for name in ("targets.json", "simulators.json", "target.json"):
+            (self.root / name).write_text('{"current_probe": true}\n')
+        self.assertEqual(self.run_success()["status"], "complete")
+
     def test_reused_run_directory_or_trace_is_never_replaced(self):
         self.run_success()
         self.recorder.stop()
