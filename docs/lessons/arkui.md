@@ -14,7 +14,9 @@ plain model and claim it updates the UI. A `@Binding` maps to a `@Param` plus `@
 An optional or enum-payload binding name is not the only local name available to its descendants. A nested binding or
 container must retain the outer aliases; replacing that one-name context makes a later Boolean condition incorrectly
 emit `this.alias` instead of `alias`. Keep lexical aliases cumulative through recursive emission and test both aliases
-in a nested container. Removing an inner alias at its native `else` boundary must not remove an outer one.
+in a nested container. Removing an inner alias at its native `else` boundary must not remove an outer one. Pass the cumulative
+set through Text expression lowering too: `LazyForEach` must add its row item without hiding an outer optional alias.
+A Text leaf that ignores this set emits `this.alias` even though recursive container and condition paths are correct.
 
 ## LazyForEach needs a native data source and stable identity
 

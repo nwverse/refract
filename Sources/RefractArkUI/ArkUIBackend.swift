@@ -182,7 +182,7 @@ struct Generation {
         case let .markdown(document, linkAction, modifiers, _):
             try emitMarkdown(document, linkAction: linkAction, modifiers: modifiers, into: &writer, mapping: mapping)
         case let .text(value, modifiers, _):
-            writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, isText: true))")
+            writer.line("Text(\(try emitLocalExpression(value, item: item, mapping: mapping, localAliases: localAliases)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, isText: true))")
         case let .button(label, action, modifiers, _):
             if case let .text(title, _, _) = label, case let .stringKey(key) = title.value {
                 let resource = try mapping.stringResource(key, platform: .harmonyOS, location: title.location)

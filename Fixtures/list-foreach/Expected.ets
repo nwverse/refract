@@ -27,7 +27,7 @@ export struct ForEachList {
         LazyForEach(this.model.items, (item: SettingItem) => {
           ListItem() {
             Column() {
-              Text(this.value)
+              Text(value)
               Text(item.title)
             }
           }
