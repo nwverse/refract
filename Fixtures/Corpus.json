@@ -342,6 +342,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "list-image-accessibility-alias",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-typed-projection",
       "implementationStatus": "ready"
     },

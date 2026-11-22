@@ -70,3 +70,4 @@ resource-typed-assets
 horizontal-sections
 control-optional-bool-condition
 interop-list-row-input-shadow
+list-image-accessibility-alias
