@@ -128,7 +128,7 @@ extension Generation {
                     throw Diagnostic(code: "state.invalid_projection", message: "An item toggle must write through its declared item input or current list item.",
                                      suggestion: "Use the declared item input or current LazyForEach item.", location: value.location)
                 }
-                let receiver = itemInputs.contains(binding.item) ? "this.\(binding.item)" : binding.item
+                let receiver = item != binding.item && itemInputs.contains(binding.item) ? "this.\(binding.item)" : binding.item
                 writer.line("this.\(binding.model).\(binding.action)(\(receiver).\(binding.key), enabled);")
             default:
                 throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state, parent binding or typed item binding.",

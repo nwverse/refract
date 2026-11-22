@@ -104,7 +104,7 @@ func emitLocalExpression(_ expression: Expression, item: String? = nil,
             throw Diagnostic(code: "arkui.invalid_control_binding", message: "An item binding must read the current typed list item.",
                              suggestion: "Use the current LazyForEach item.", location: expression.location)
         }
-        return "\(itemInputs.contains(binding.item) ? "this." : "")\(binding.item).\(binding.property)"
+        return "\(item != binding.item && itemInputs.contains(binding.item) ? "this." : "")\(binding.item).\(binding.property)"
     case let .interpolatedString(segments):
         var result = "`"
         for segment in segments {

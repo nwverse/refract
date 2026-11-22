@@ -29,7 +29,10 @@ A generated child View can receive an `Identifiable` item as a stored input. Ark
 so its Toggle value and model-action identity must read `this.row.enabled` and `this.row.id`, just as its ordinary
 Text and measurement expressions read `this.row`. Only a current `LazyForEach` closure owns the unqualified local
 `row`. Distinguish the two scopes explicitly; a type match or identical property name does not make a component
-parameter a builder-local value. Regenerate every committed artifact derived from the changed lowering: the Fixtures
+parameter a builder-local value. Only declared `Identifiable` types belong to that input set: an interop parameter
+such as `RemoteImageLoader` also carries an `itemType` discriminator but is not an item input. The active local row
+must take precedence even if its name matches either kind of component input. Regenerate every committed artifact
+derived from the changed lowering: the Fixtures
 goldens and the separate `bench/harmony/generate.py` output, whose `--check` must also remain byte-exact.
 
 ## LazyForEach needs a native data source and stable identity
