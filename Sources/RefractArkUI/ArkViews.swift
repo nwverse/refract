@@ -10,7 +10,8 @@ extension Generation {
         switch node {
         case let .layout(layout, children, modifiers, _):
             try emitLayout(layout, children: children, modifiers: modifiers,
-                           into: &writer, item: item, mapping: mapping, resolver: resolver, localAliases: localAliases)
+                           into: &writer, item: item, mapping: mapping, resolver: resolver,
+                           itemTypeName: itemTypeName, localAliases: localAliases)
         case let .scroll(axis, child, modifiers, _):
             writer.open("Scroll()")
             try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
