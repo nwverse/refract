@@ -53,13 +53,15 @@ struct RefractBenchApp: App {
                 if selectedIteration != nil {
                     Text(traceIdentityError)
                         .accessibilityIdentifier("refract_benchmark_trace_identity_error")
-                    Button("BeginIteration") {
-                        beginSelectedIteration = true
+                    if !beginSelectedIteration {
+                        Button("BeginIteration") {
+                            beginSelectedIteration = true
+                        }
+                        .disabled(!recorderIsReady)
+                        .accessibilityIdentifier("refract_benchmark_begin_iteration")
+                        Text("\(variant) \(scenario) \(recorderIsReady ? "ready" : "waiting")")
+                            .accessibilityIdentifier("refract_benchmark_iteration_ready")
                     }
-                    .disabled(!recorderIsReady)
-                    .accessibilityIdentifier("refract_benchmark_begin_iteration")
-                    Text("\(variant) \(scenario) \(recorderIsReady ? "ready" : "waiting")")
-                        .accessibilityIdentifier("refract_benchmark_iteration_ready")
                 }
                 if let completion = recorder.completion {
                     Text("\(completion.variant) \(completion.scenario) complete \(completion.count)")
@@ -75,6 +77,7 @@ struct RefractBenchApp: App {
                 }
             }
             .task {
+                let beginSelectedIteration = $beginSelectedIteration
                 if let iteration = selectedIteration, let directory = traceControlDirectory(),
                    (0..<30).contains(iteration), traceIdentityError.isEmpty {
                     do {
@@ -85,7 +88,7 @@ struct RefractBenchApp: App {
                             recorderIsReady = recorderReady(in: directory)
                             try await Task.sleep(for: .milliseconds(10))
                         }
-                        while !beginSelectedIteration {
+                        while !beginSelectedIteration.wrappedValue {
                             try await Task.sleep(for: .milliseconds(10))
                         }
                     } catch {
