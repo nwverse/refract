@@ -86,6 +86,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "control-optional-bool-condition",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "control-optional-modifier",
       "implementationStatus": "ready"
     },
