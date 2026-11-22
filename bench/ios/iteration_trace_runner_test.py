@@ -16,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import HandshakeError, Session
+from iteration_trace_runner import HandshakeError, SAVED_OUTPUT, Session
 
 
 class RecorderFixture:
@@ -303,6 +303,13 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
+
+    def test_real_xctrace_saved_output_spelling_is_accepted(self):
+        self.assertEqual(SAVED_OUTPUT.findall(
+            "Recording failed with errors. Saving output file...\n"
+            "Output file saved as: generated-scroll-0.trace\n"), ["generated-scroll-0.trace"])
+        self.assertEqual(SAVED_OUTPUT.findall("Output saved: generated-scroll-0.trace\n"),
+                         ["generated-scroll-0.trace"])
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"
