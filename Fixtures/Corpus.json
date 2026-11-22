@@ -334,6 +334,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "list-row-layout-toggle",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-typed-projection",
       "implementationStatus": "ready"
     },

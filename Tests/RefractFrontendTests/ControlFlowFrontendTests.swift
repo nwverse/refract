@@ -1,7 +1,9 @@
+import Foundation
 import RefractArkUI
 import RefractCompose
 import RefractFrontend
 import RefractIR
+import RefractMapping
 import Testing
 
 private let conditionalSource = """
@@ -155,4 +157,46 @@ func unsupportedConditionalFormsHaveCodedDiagnostics(_ body: String, _ code: Str
     """))
     #expect(unit.diagnostics.map(\.code) == ["RFCTRL001"])
     #expect(unit.module.screens.isEmpty)
+}
+
+@Test func explicitSpacingListRowRetainsTypedItemToggleScope() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct SettingRow: Identifiable {
+        let id: Int
+        let title: String
+        let enabled: Bool
+    }
+
+    protocol SettingsModel: RefractModel {
+        var rows: [SettingRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+
+    struct ItemToggle: View {
+        let model: SettingsModel
+
+        var body: some View {
+            List(model.rows) { row in
+                VStack(spacing: 8) {
+                    Toggle("settings.item\\(row.id)", isOn: Binding(
+                        get: { row.enabled },
+                        set: { value in model.setEnabled(row.id, value: value) }
+                    ))
+                }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty, Comment(rawValue: unit.diagnostics.map(\.rendered).joined(separator: "\n")))
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/v0-item-toggle/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("checked = row.enabled"))
+    #expect(kotlin.contains("model.setEnabled(row.id, enabled)"))
+    let arkTS = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    #expect(arkTS.contains("Column({ space: 8 })"))
+    #expect(arkTS.contains("Toggle({ type: ToggleType.Switch, isOn: row.enabled })"))
+    #expect(arkTS.contains("this.model.setEnabled(row.id, enabled);"))
+    #expect(arkTS.contains("(row: SettingRow): string => String(row.id)"))
 }

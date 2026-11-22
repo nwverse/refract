@@ -366,7 +366,7 @@ struct Generation {
             }
         default:
             try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
-                             localAliases: localAliases)
+                             itemTypeName: itemTypeName, localAliases: localAliases)
         }
     }
 
