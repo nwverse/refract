@@ -37,6 +37,7 @@ class NativeEnterDispatchInstrumentedTest {
         assertTrue("The exact generated host must be visible", device.wait(
             Until.hasObject(By.res("com.example.refract.ime", "generatedHost")), 5_000,
         ))
+        val initialView = attachedEditor().value
         instrumentation.runOnMainSync {
             previousModel = RealImeHostState.model
             previousHostVisible = RealImeHostState.hostVisible
@@ -54,8 +55,7 @@ class NativeEnterDispatchInstrumentedTest {
         assertTrue("A fresh host must enter the window", device.wait(
             Until.hasObject(By.res("com.example.refract.ime", "generatedHost")), 5_000,
         ))
-        assertNotSame("The reset must actually recreate the editor",
-            RealImeHostState.editor, attachedEditor())
+        assertNotSame("The reset must actually recreate the native View", initialView, attachedEditor().value)
         device.findObject(By.res("com.example.refract.ime", "generatedHost")).click()
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync {
@@ -77,7 +77,7 @@ class NativeEnterDispatchInstrumentedTest {
     }
 
     @Test
-    fun enterDownAndUpFinishCompositionAndSubmitOnce() {
+    fun hostConnectionEnterDownAndUpFinishCompositionAndSubmitOnce() {
         launchFreshGeneratedHost()
 
         instrumentation.runOnMainSync {
@@ -142,6 +142,29 @@ class NativeEnterDispatchInstrumentedTest {
             assertEquals(listOf("draft:你好", "commit"), RealImeHostState.model.events)
             assertEquals("你好", RealImeHostState.model.draft)
             assertEquals("你好", requireAttachedEditor().value.text.toString())
+        }
+    }
+
+    @Test
+    fun instrumentationEnterDownAndUpSubmitFocusedGeneratedHostOnce() {
+        launchFreshGeneratedHost()
+        instrumentation.runOnMainSync {
+            val connection = requireAttachedEditor().value.onCreateInputConnection(EditorInfo())
+            // A literal committed draft isolates the injected Enter path from
+            // candidate selection. It is not an IME-produced Chinese string.
+            connection.commitText("你好", 1)
+            assertEquals("你好", RealImeHostState.model.draft)
+            assertEquals(emptyList<String>(), RealImeHostState.model.events)
+        }
+        instrumentation.waitForIdleSync()
+
+        // Unlike direct connection.sendKeyEvent, this sends the key through
+        // UiAutomation into the focused View hierarchy's real dispatch path.
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_ENTER)
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            assertEquals(listOf("draft:你好", "commit"), RealImeHostState.model.events)
+            assertFalse(requireAttachedEditor().value.isFocused)
         }
     }
 

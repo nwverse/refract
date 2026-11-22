@@ -12,19 +12,20 @@ runtime, registry or composition mirror.
 
 ## Bounded instrumentation dispatch regression
 
-`NativeEnterDispatchInstrumentedTest` separately covers the event-routing regression fixed by #302. It launches the
-same generated `ComposerScreen`, but does **not** require or claim a Chinese IME. On the Android main thread it sends
-Enter down/up through the host's actual `BaseInputConnection`, waits for native dispatch to drain, and requires exactly
-one `onDraftCommit("你好")` followed by one `onCommit()`. It also checks that deterministic `setComposingText("ni hao")`
-state survives recomposition without publishing a draft, and that deterministic `commitText("你好")` publishes that
-committed draft. These are explicit synthetic editor setup operations, not a Pinyin keyboard, candidate selection or
-third-party-IME result.
+`NativeEnterDispatchInstrumentedTest` separately covers two event-routing boundaries after #302. It launches the
+same generated `ComposerScreen`, but does **not** require or claim a Chinese IME. The first test sends Enter down/up
+through the host's actual `BaseInputConnection`, waits for native dispatch to drain, and requires exactly one
+`onDraftCommit("你好")` followed by one `onCommit()`. The second injects Enter with `Instrumentation.sendKeyDownUpSync`,
+which drives the focused View hierarchy but does not cover the connection's key-up override. Both verify committed-draft
+and overall-commit ordering.
 
-The composition/commit distinction is not new Robolectric evidence: this test is compiled for and must run on a
-separately allocated Android emulator/device. `Instrumentation.sendKeyDownUpSync` alone would inject a View event and
-would not cover the host connection's key-up override, so it is not used for this regression. No native instrumentation
-test was executed on the current target-less Linux host. This test does not replace or relax the fail-closed real-IME
-scenario below.
+The first test also checks that deterministic `setComposingText("ni hao")` state survives recomposition without
+publishing a draft, and that deterministic `commitText("你好")` publishes that committed draft. These are explicit
+synthetic editor setup operations, not a Pinyin keyboard, candidate selection or third-party-IME result.
+
+These checks are not new Robolectric evidence: they are compiled for and must run on a separately allocated Android
+emulator/device. No native instrumentation test was executed on the current target-less Linux host. They do not
+replace or relax the fail-closed real-IME scenario below.
 
 Run only this dispatch regression on an allocated target, binding `ANDROID_SERIAL` to its serial:
 
