@@ -103,24 +103,34 @@ def validate_result(output: str, expected_cases: Sequence[tuple[str, str]] = EXP
             return
         kinds = [kind for kind, _, _ in fields]
         if "class" in kinds:
-            if kinds == ["sum", "class"] or kinds == ["class", "suiteconsuming"] \
-                    or (kinds[0] == "class" and kinds[-1] == "code" and kinds.count("class") == 1
-                        and kinds.count("test") == 1 and kinds.count("code") == 1):
+            if kinds == ["sum", "class"] or kinds == ["class", "suiteconsuming"]:
                 lifecycle.extend(fields)
                 fields = []
                 return
-            raise VerificationError("incomplete, reordered or ambiguous native report record")
+            if kinds[:6] != ["class", "current", "id", "numtests", "stream", "test"] \
+                    or kinds[-1] != "code" or kinds.count("class") != 1 \
+                    or kinds.count("test") != 1 or kinds.count("code") != 1:
+                raise VerificationError("incomplete, reordered or ambiguous native report record")
+            # Validate documented case metadata, then retain the downstream
+            # class/test/code shape unchanged.
+            lifecycle.extend([fields[index] for index in (0, 5, len(fields) - 1)])
+            fields = []
+            return
         if fields[0][0] == "sum" or any(kind in ("code", "test", "suiteconsuming") for kind in kinds):
             raise VerificationError("native lifecycle record has no suite or case identity")
         # Timing and diagnostic fields from an earlier case do not form a new record.
         fields = []
 
     for line in output.splitlines():
-        if re.fullmatch(
-            r"OHOS_REPORT_STATUS: (current|id|numtests|stream|consuming|stack|skipReason|shortMsg|hookError|"
-            r"currentWorkerName)=.*",
+        match = re.fullmatch(
+            r"OHOS_REPORT_STATUS: (consuming|stack|skipReason|shortMsg|hookError|currentWorkerName)=.*",
             line,
-        ):
+        )
+        if match:
+            continue
+        match = re.fullmatch(r"OHOS_REPORT_STATUS: (current|id|numtests|stream)=(.*)", line)
+        if match:
+            fields.append((match[1], match[2], None))
             continue
         match = re.fullmatch(r"OHOS_REPORT_STATUS: (class|test)=(.*)", line)
         if match:

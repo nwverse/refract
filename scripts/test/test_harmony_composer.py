@@ -74,6 +74,28 @@ class CommittedDraftEvidenceTests(unittest.TestCase):
                  self.assertRaises(MODULE.SETTINGS.VerificationError, msg="duplicate suite start must be rejected"):
                 MODULE.validate_result(self.result().replace(start, prefix + start, 1))
 
+    def test_original_bare_class_after_suite_start_is_not_a_case(self) -> None:
+        original = (
+            "OHOS_REPORT_SUM: 1\n"
+            "OHOS_REPORT_STATUS: class=GeneratedComposer\n"
+            + self.case().replace(
+                "OHOS_REPORT_STATUS: current=1\nOHOS_REPORT_STATUS: id=JS\n"
+                "OHOS_REPORT_STATUS: numtests=1\nOHOS_REPORT_STATUS: stream=\n", ""
+            ).replace(
+                "OHOS_REPORT_STATUS: current=2\nOHOS_REPORT_STATUS: id=JS\n"
+                "OHOS_REPORT_STATUS: numtests=1\nOHOS_REPORT_STATUS: stream=\n", ""
+            )
+            + "OHOS_REPORT_STATUS: class=GeneratedComposer\n"
+            "OHOS_REPORT_STATUS: suiteconsuming=123\n"
+            "OHOS_REPORT_RESULT: stream=Tests run: 1, Failure: 0, Error: 0, Pass: 1, Ignore: 0\n"
+            "OHOS_REPORT_CODE: 0\nOHOS_REPORT_STATUS: taskconsuming=125\n"
+        )
+        self.assertNotIn("OHOS_REPORT_SUM: 1\nOHOS_REPORT_STATUS: class=GeneratedComposer\n"
+                         "OHOS_REPORT_STATUS: class=GeneratedComposer\n"
+                         "OHOS_REPORT_STATUS: current=", original)
+        with self.assertRaises(MODULE.SETTINGS.VerificationError):
+            MODULE.validate_result(original)
+
     def test_summary_and_terminal_cannot_hide_an_unsuccessful_run(self) -> None:
         for result in (
             self.result(tests=0, passed=0, cases=""), self.result(failure=1, passed=0),
