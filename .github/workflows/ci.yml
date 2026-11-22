@@ -284,6 +284,11 @@ jobs:
           python3 -I scripts/test/test_fixture_output_isolation.py
       - name: Test the Harmony text-input source contracts
         run: python3 -I scripts/test/test_harmony_text_input.py
+      - name: Test the fail-closed Harmony native evidence contracts
+        run: |
+          python3 -I scripts/test/test_harmony_render.py
+          python3 -I scripts/test/test_harmony_composer.py
+          python3 -I scripts/test/test_harmony_toolchain.py
       - name: Check public repository content and paths
         # Hosted CI has the built-in rules; the local hooks additionally use machine-specific private values.
         run: python3 scripts/privacy_check.py

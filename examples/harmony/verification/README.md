@@ -51,11 +51,14 @@ python3 scripts/check_harmony_toolchain.py --native-test-target
 The `ohosTest` module's `test_pages.json` registers its native host. Its own theme buttons change the application
 color mode in the same session, avoiding an assumption that the test ability will be recreated. The native checks
 also scroll back to the model/save observation before capturing the final light image. Do not substitute the normal
-application ability for this target.
+application ability for this target. The runner passes `refractSuite=GeneratedSettingsRender` through the public
+`AbilityDelegatorArgs.parameters` dictionary, so `TestAbility` registers only that suite and its matching host.
+An unsupported selection throws instead of silently running another suite.
 The UI Test API contracts used here are the public
 [UI Test guide](https://github.com/openharmony/docs/blob/master/en/application-dev/application-test/uitest-guidelines.md),
 [UI Test API reference](https://github.com/openharmony/docs/blob/master/en/application-dev/reference/apis-test-kit/js-apis-uitest.md)
-and [Hypium result protocol](https://github.com/openharmony/docs/blob/master/en/application-dev/application-test/unittest-guidelines.md).
+and [Hypium result protocol](https://github.com/openharmony/docs/blob/master/en/application-dev/application-test/unittest-guidelines.md),
+plus [delegated test arguments](https://github.com/openharmony/docs/blob/master/en/application-dev/reference/apis-test-kit/js-apis-inner-application-abilityDelegatorArgs.md).
 They are documentation references, not evidence that these sources passed the selected vendor compiler.
 
 ## Reproduce on an explicitly owned target

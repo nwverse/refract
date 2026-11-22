@@ -16,6 +16,8 @@ node scripts/test/pr_needs_issue_test.mjs
 python3 -I scripts/test/test_harmony_toolchain.py
 python3 -I scripts/test_example_output_transaction.py --self-test
 python3 -I scripts/test/test_harmony_text_input.py
+python3 -I scripts/test/test_harmony_render.py
+python3 -I scripts/test/test_harmony_composer.py
 python3 -I scripts/check_harmony_text_input.py
 actionlint
 ```
@@ -42,7 +44,10 @@ until a licensed reproducible distribution is available.
 The text-input source-contract tests mutate copies of the app-owned host and reject preedit publication, stale-draft
 submission, out-of-order Done callbacks, composition synthesis, ordinary-`TextInput` substitution and missing focus or
 recreation checks. The main static check requires byte-identical fixture/application hosts and the exact generated
-composer. These checks do not parse, compile or execute ArkTS and do not exercise a keyboard or an IME.
+composer. The repository job also runs the strict Hypium lifecycle/report tests for the selected rendering and
+committed-draft suites. The latter proves that a successful settings report cannot replace composer execution and
+that a report never marks UI Test `inputText()` as Chinese IME or rendering verification. These checks do not parse,
+compile or execute ArkTS and do not exercise a keyboard or an IME.
 
 Install actionlint separately when changing `.github/workflows/`. CI downloads the pinned release only when a
 workflow changes, validates the archive against the SHA-256 published in that release's checksums file, and invokes
