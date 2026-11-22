@@ -234,7 +234,7 @@ struct Generation {
                 }
                 for child in branch.children {
                     try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
-                             localAliases: localAliases)
+                             itemTypeName: itemTypeName, localAliases: localAliases)
                 }
             }
             writer.close()

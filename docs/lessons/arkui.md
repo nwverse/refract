@@ -37,8 +37,10 @@ parameter a builder-local value. Only declared `Identifiable` types belong to th
 such as `RemoteImageLoader` also carries an `itemType` discriminator but is not an item input. A current lazy or
 horizontal `ForEach` row with the same name shadows either kind of parameter: both the Toggle value and model-action
 identity must use the active local, so apply `this.` only when no local alias owns the name. Regenerate every
-committed artifact derived from the changed lowering: the Fixtures
-goldens and the separate `bench/harmony/generate.py` output, whose `--check` must also remain byte-exact.
+committed artifact derived from the changed lowering: the Fixtures goldens and the separate
+`bench/harmony/generate.py` output, whose `--check` must also remain byte-exact. Conditional emission must retain the
+current row's `itemTypeName`, just as stack recursion does; passing only its name makes a valid item Toggle's
+model-action write fail the receiver guard.
 
 ## LazyForEach needs a native data source and stable identity
 
