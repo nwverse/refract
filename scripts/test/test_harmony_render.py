@@ -214,13 +214,19 @@ class RenderingEvidenceTests(unittest.TestCase):
             with mock.patch.object(MODULE, "source_revision", return_value="a" * 40), \
                  mock.patch.object(MODULE.PREFLIGHT, "preflight", return_value=({"devecocli": SCRIPT}, [])), \
                  mock.patch.object(MODULE.shutil, "which", return_value="/authorized/hdc"), \
-                 mock.patch.object(MODULE, "execute", side_effect=command_result):
+                 mock.patch.object(MODULE, "execute", side_effect=command_result) as execute:
                 status = MODULE.main([
                     "--target", "owned-target", "--target-class", "emulator",
                     "--target-description", "owner-supplied target",
                     "--app-hap", str(SCRIPT), "--test-hap", str(SCRIPT), "--output", str(output),
                 ])
             self.assertEqual(status, 0)
+            commands = [call.args[0] for call in execute.call_args_list]
+            test_commands = [command for command in commands if "shell" in command and "test" in command]
+            self.assertEqual(len(test_commands), 1)
+            self.assertIn("refractSuite", test_commands[0])
+            self.assertIn("GeneratedSettingsRender", test_commands[0])
+            self.assertNotIn("GeneratedComposer", test_commands[0])
             metadata = (output / "metadata.json").read_text(encoding="utf-8")
             self.assertIn('"renderVerified": false', metadata)
             self.assertIn('"status": "executed-awaiting-human-capture-inspection"', metadata)

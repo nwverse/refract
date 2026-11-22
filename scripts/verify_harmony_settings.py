@@ -84,14 +84,14 @@ def format_observed_cases(cases: Sequence[tuple[str, str]]) -> list[str]:
     return [f"{suite}#{name}" for suite, name in cases]
 
 
-def validate_result(output: str) -> dict[str, object]:
+def validate_result(output: str, expected_cases: Sequence[tuple[str, str]] = EXPECTED_CASES) -> dict[str, object]:
     """Parse pinned suite/case/task lifecycles and require one successful terminal result."""
     results = SUMMARY.findall(output)
     terminals = TERMINAL.findall(output)
     if len(results) != 1 or terminals != ["0"]:
         raise VerificationError("missing, ambiguous or failed native summary/terminal result")
     tests, failures, errors, passed, ignored = (int(value) for value in results[0])
-    if tests != len(EXPECTED_CASES) or failures or errors or ignored or passed != tests:
+    if tests != len(expected_cases) or failures or errors or ignored or passed != tests:
         raise VerificationError(f"native test summary did not pass completely: {results[0]}")
 
     lifecycle: list[tuple[str, str, int | None]] = []
@@ -162,7 +162,7 @@ def validate_result(output: str) -> dict[str, object]:
             raise VerificationError("malformed or ambiguous native report record")
     flush_record()
 
-    suites = {suite for suite, _ in EXPECTED_CASES}
+    suites = {suite for suite, _ in expected_cases}
     suite_starts: list[str] = []
     suite_ends: list[str] = []
     case_records: list[tuple[str, str, int]] = []
@@ -170,7 +170,7 @@ def validate_result(output: str) -> dict[str, object]:
     while index < len(lifecycle):
         kind, value, duration = lifecycle[index]
         if kind == "sum":
-            if duration != len(EXPECTED_CASES) or index + 1 >= len(lifecycle):
+            if duration != len(expected_cases) or index + 1 >= len(lifecycle):
                 raise VerificationError("invalid suite start record")
             next_kind, next_value, _ = lifecycle[index + 1]
             if next_kind != "class" or next_value not in suites:
@@ -212,7 +212,7 @@ def validate_result(output: str) -> dict[str, object]:
     pending: tuple[str, str] | None = None
     for suite, name, code in case_records:
         case = (suite, name)
-        if case not in EXPECTED_CASES or code not in (0, 1):
+        if case not in expected_cases or code not in (0, 1):
             raise VerificationError(f"unexpected or failed native case result: {suite}#{name}={code}")
         if code == 1:
             if pending is not None:
@@ -223,8 +223,8 @@ def validate_result(output: str) -> dict[str, object]:
         else:
             observed.append(case)
             pending = None
-    if pending is not None or observed != list(EXPECTED_CASES):
-        raise VerificationError("not every required native rendering case completed successfully")
+    if pending is not None or observed != list(expected_cases):
+        raise VerificationError("not every required selected native case completed successfully")
     return {
         "tests": tests, "failures": failures, "errors": errors, "passed": passed, "ignored": ignored,
         "cases": format_observed_cases(observed),
@@ -301,7 +301,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         all_output = ""
         command = [*hdc, "shell", "aa", "test", "-b", "com.example.refract", "-m", "entry_test",
                    "-s", "unittest", "OpenHarmonyTestRunner", "-s", "class", "GeneratedSettingsRender",
-                   "-s", "timeout", "60000"]
+                   "-s", "refractSuite", "GeneratedSettingsRender", "-s", "timeout", "60000"]
         all_output += execute(command, log_path, timeout=180).stdout
         for name in CAPTURES:
             destination = args.output / name
