@@ -76,7 +76,7 @@ private func stateType(_ type: ValueType) throws -> String {
 
 func emitLocalExpression(_ expression: Expression, item: String? = nil,
                          mapping: Mapping = .empty, itemParameters: Set<String> = [],
-                         localAliases: Set<String> = []) throws -> String {
+                         localAliases: Set<String> = [], itemInputs: Set<String> = []) throws -> String {
     switch expression.value {
     case let .nativeValueProperty(value):
         return "this.\(value.value).\(value.field.rawValue)"
@@ -104,7 +104,7 @@ func emitLocalExpression(_ expression: Expression, item: String? = nil,
             throw Diagnostic(code: "arkui.invalid_control_binding", message: "An item binding must read the current typed list item.",
                              suggestion: "Use the current LazyForEach item.", location: expression.location)
         }
-        return "\(binding.item).\(binding.property)"
+        return "\(itemInputs.contains(binding.item) ? "this." : "")\(binding.item).\(binding.property)"
     case let .interpolatedString(segments):
         var result = "`"
         for segment in segments {
