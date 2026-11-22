@@ -8,6 +8,7 @@ import io
 import json
 import os
 import plistlib
+import signal
 import subprocess
 import sys
 import tempfile
@@ -87,7 +88,7 @@ def finish(status):
         trace = pathlib.Path(output)
         (trace / "Data").mkdir(parents=True, exist_ok=True)
         (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
-    print("Output saved: " + ({saved_path!r} or output), flush=True)
+        print("Output saved: " + ({saved_path!r} or output), flush=True)
     os._exit(status)
 signal.signal(signal.SIGINT, lambda *_: finish(0))
 signal.signal(signal.SIGTERM, lambda *_: finish(143))
@@ -142,6 +143,37 @@ while not (control / "recorder-stop").exists():
         self.cleanup()
 
 
+class StopRaceRecorder:
+    def __init__(self, control, stop_poll, send_error=None):
+        self.pid = 4243
+        self.control = control
+        self.stop_poll = stop_poll
+        self.returncode = None
+        self.stdout = io.StringIO("Starting recording with the Animation Hitches template. Attach to stop.\n")
+        self.send_error = send_error
+        self.signals = []
+
+    def poll(self):
+        if (self.control / "recorder-stop").exists():
+            self.returncode = self.stop_poll
+        return self.returncode
+
+    def send_signal(self, signal_number):
+        self.signals.append(signal_number)
+        if self.send_error is not None:
+            raise self.send_error
+
+    def wait(self, timeout):
+        self.returncode = 7
+        return 7
+
+    def terminate(self):
+        self.returncode = -15
+
+    def communicate(self, timeout):
+        return "", ""
+
+
 class IterationTraceRunnerTest(unittest.TestCase):
     def write_synthetic_configuration(self, run, revision, control, iteration):
         derived_data = run.parent / f"{run.name}-derived-data"
@@ -149,6 +181,8 @@ class IterationTraceRunnerTest(unittest.TestCase):
                   "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
         destination = derived_data / "Build/Products/iteration-trace-config-0123456789abcdef01234567.xctestrun"
         destination.parent.mkdir(parents=True, exist_ok=True)
+        (derived_data / "Build/Products/RefractBench.xctestrun").write_bytes(
+            b"synthetic original xctestrun")
         destination.write_bytes(plistlib.dumps({"RefractBenchUITests": {"TestingEnvironmentVariables": values}}))
         configuration = run / "iteration-trace-config.xctestrun"
         configuration.write_bytes(destination.read_bytes())
@@ -159,6 +193,17 @@ class IterationTraceRunnerTest(unittest.TestCase):
                    "build_provenance_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
                    "source_revision": revision, "control_directory": str(control), "iteration": iteration}
         (run / "iteration-trace-config.json").write_text(json.dumps(receipt))
+        products = derived_data / "Build/Products/Release-iphonesimulator"
+        test_bundle = products / "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest"
+        test_bundle.mkdir(parents=True, exist_ok=True)
+        for bundle, executable in ((products / "RefractBench.app", "RefractBench"),
+                                   (products / "RefractBenchUITests-Runner.app", "RefractBenchUITests-Runner"),
+                                   (test_bundle, "RefractBenchUITests")):
+            bundle.mkdir(exist_ok=True)
+            (bundle / executable).write_bytes(b"synthetic build product")
+            (bundle / "Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": executable}))
+        if not (derived_data / "refract-build-provenance.json").exists():
+            record_build_provenance(derived_data, revision)
         return derived_data, destination
 
     def read_synthetic_environment(self, command, check, capture_output, text):
@@ -180,9 +225,11 @@ class IterationTraceRunnerTest(unittest.TestCase):
                       revision="a" * 40, run_directory=self.root, xcodebuild_log=self.recorder.output,
                       control_directory=self.root / "control", readiness_timeout=0.5, completion_timeout=0.5)
         values.update(kwargs)
-        derived_data, destination = self.write_synthetic_configuration(
-            values["run_directory"], values["revision"], values["control_directory"], values["iteration"])
-        values.setdefault("derived_data", derived_data)
+        derived_data = kwargs.get("derived_data")
+        if derived_data is None:
+            derived_data, destination = self.write_synthetic_configuration(
+                values["run_directory"], values["revision"], values["control_directory"], values["iteration"])
+            values["derived_data"] = derived_data
         return Session(**values)
 
     def capture(self, session, fixture=None):
@@ -264,7 +311,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         derived_data = self.root.parent / "DerivedData"
         products = derived_data / "Build/Products/Release-iphonesimulator"
         test_bundle = products / "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest"
-        test_bundle.mkdir(parents=True)
+        test_bundle.mkdir(parents=True, exist_ok=True)
         for bundle, executable in ((products / "RefractBench.app", "RefractBench"),
                                    (products / "RefractBenchUITests-Runner.app", "RefractBenchUITests-Runner"),
                                    (test_bundle, "RefractBenchUITests")):
@@ -476,9 +523,8 @@ class IterationTraceRunnerTest(unittest.TestCase):
 
     def test_archiver_is_called_only_after_exact_completion(self):
         self.recorder.start(write_trace=False)
-        with self.assertRaises((HandshakeError, ArchiveError)) as raised:
+        with self.assertRaisesRegex(HandshakeError, "did not save the exact requested trace package"):
             self.capture(self.session())
-        self.assertIsInstance(raised.exception, ArchiveError)
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertTrue((self.root / "raw/completion.json").is_file())
 
@@ -496,6 +542,28 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
+
+    def capture_stop_race(self, recorder):
+        self.recorder.start()
+        self.recorder.recorder = recorder
+        self.recorder.recorder_factory = lambda command, stream: recorder
+        with self.assertRaisesRegex(HandshakeError, "exited with status 7"):
+            self.capture(self.session())
+        self.assertTrue((self.root / "raw/completion.json").is_file())
+        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
+
+    def test_recorder_exit_before_stop_is_not_overwritten_by_sigint(self):
+        recorder = StopRaceRecorder(self.root / "control", 7)
+        self.capture_stop_race(recorder)
+        self.assertEqual(recorder.signals, [])
+        self.assertEqual(recorder.returncode, 7)
+
+    def test_recorder_sigint_lookup_failure_preserves_real_exit(self):
+        recorder = StopRaceRecorder(self.root / "control", None,
+                                    ProcessLookupError("recorder exited before SIGINT"))
+        self.capture_stop_race(recorder)
+        self.assertEqual(recorder.signals, [signal.SIGINT])
+        self.assertEqual(recorder.returncode, 7)
 
     def test_recorder_failure_at_native_completion_never_accepts_trace(self):
         self.recorder.start(recorder_stop_status=7)
@@ -647,6 +715,167 @@ class TraceBuildProvenanceTest(unittest.TestCase):
             prepare_test_run(self.derived_data, self.root / "run-0/control", "a" * 40, 0,
                              self.root / "run-0", validate_build_provenance(self.derived_data, "a" * 40))
         self.assertEqual(first.read_bytes(), first_bytes)
+
+    def test_failed_preparation_keeps_publication_and_never_deletes_replacement(self):
+        run = self.root / "failed-run"
+        self.make_run(run)
+        published = None
+        converted = None
+        other_bytes = b"another preparation replaced this published path"
+
+        def publish_then_replace(command, check, capture_output=False, text=False):
+            nonlocal published, converted
+            if command[1] == "-convert":
+                converted = Path(command[4])
+                converted.write_bytes(self.source.read_bytes())
+                published = self.derived_data / "Build/Products" / converted.name
+                return subprocess.CompletedProcess(command, 0)
+            published.write_bytes(other_bytes)
+            raise OSError("synthetic failure after publication")
+
+        for attempt in range(2):
+            with self.subTest(retry=attempt):
+                with mock.patch("iteration_trace_runner.subprocess.run", side_effect=publish_then_replace):
+                    expected = OSError if attempt == 0 else HandshakeError
+                    with self.assertRaises(expected) as raised:
+                        prepare_test_run(self.derived_data, run / "control", "a" * 40, 0, run,
+                                         validate_build_provenance(self.derived_data, "a" * 40))
+                    if attempt == 0:
+                        self.assertRegex(str(raised.exception), "synthetic failure after publication")
+                    else:
+                        self.assertRegex(str(raised.exception), "Refusing to replace")
+                self.assertEqual(published.read_bytes(), other_bytes)
+                self.assertFalse((run / "iteration-trace-config.xctestrun").exists())
+                self.assertFalse((run / "iteration-trace-config.json").exists())
+
+    def test_receipt_failure_retains_public_destination_and_rejects_retry(self):
+        run = self.root / "receipt-failure-run"
+        self.make_run(run)
+        original_atomic_json = runner.atomic_json
+        original_link = os.link
+        published = None
+        def retain_link(source, destination):
+            nonlocal published
+            original_link(source, destination)
+            published = Path(destination)
+        def fail_receipt(path, payload):
+            if path == run / "iteration-trace-config.json":
+                raise OSError("receipt write failed")
+            original_atomic_json(path, payload)
+        with mock.patch("iteration_trace_runner.atomic_json", side_effect=fail_receipt), \
+                mock.patch("iteration_trace_runner.os.link", side_effect=retain_link):
+            with self.assertRaisesRegex(OSError, "receipt write failed"):
+                self.prepare_run(run, 0)
+        self.assertIsNotNone(published)
+        self.assertTrue(published.is_file())
+        self.assertFalse((run / "iteration-trace-config.json").exists())
+        (run / "iteration-trace-config.xctestrun").unlink()
+        (run / "refract-build-provenance.json").unlink()
+        with self.assertRaisesRegex(HandshakeError, "Refusing to replace"):
+            self.prepare_run(run, 0)
+
+    def test_failed_conversion_does_not_remove_another_preparations_destination(self):
+        run = self.root / "concurrent-run"
+        self.make_run(run)
+        other_bytes = b"another preparation owns this destination"
+        published = None
+
+        def concurrent_convert(command, check):
+            nonlocal published
+            converted = Path(command[4])
+            converted.write_bytes(self.source.read_bytes())
+            published = self.derived_data / "Build/Products" / converted.name
+            published.write_bytes(other_bytes)
+            raise OSError("synthetic concurrent conversion failure")
+
+        with mock.patch("iteration_trace_runner.subprocess.run", side_effect=concurrent_convert):
+            with self.assertRaisesRegex(OSError, "concurrent conversion failure"):
+                prepare_test_run(self.derived_data, run / "control", "a" * 40, 0, run,
+                                 validate_build_provenance(self.derived_data, "a" * 40))
+        identity = hashlib.sha256(f"{'a' * 40}\0{run / 'control'}\00".encode()).hexdigest()[:24]
+        destination = self.derived_data / "Build/Products" / f"iteration-trace-config-{identity}.xctestrun"
+        self.assertEqual(published.read_bytes(), other_bytes)
+        self.assertFalse((run / "iteration-trace-config.json").exists())
+
+    def test_product_replacement_after_prepare_is_rejected_before_capture(self):
+        run = self.root / "capture-products-run"
+        self.make_run(run)
+        self.prepare_run(run, 0)
+        (run / "control").rmdir()
+        (run / "control").mkdir()
+        executable = (self.derived_data / "Build/Products/Release-iphonesimulator/"
+                      "RefractBench.app/RefractBench")
+        executable.write_bytes(b"products replaced before capture")
+        (run / "xcodebuild.log").write_text("synthetic test log\n")
+        with mock.patch("iteration_trace_runner.subprocess.run") as plutil:
+            with self.assertRaisesRegex(HandshakeError, "product|digest|identity"):
+                session = Session(target="synthetic-target", variant="generated", scenario="scroll", iteration=0,
+                                  revision="a" * 40, run_directory=run,
+                                  xcodebuild_log=run / "xcodebuild.log",
+                                  control_directory=run / "control", derived_data=self.derived_data)
+                session.capture(mock.Mock())
+        plutil.assert_not_called()
+
+    def test_product_replacement_after_prepare_is_rejected_before_xctest_launch(self):
+        target = self.root / "target.json"
+        target.write_text(json.dumps({"target_label": "SIMULATOR", "device_result": False,
+                                      "udid": "synthetic-target"}))
+
+        def source_at_a(command, text):
+            return "a" * 40 + "\n" if command[-1] == "HEAD" else ""
+
+        def prepare_and_replace(*args):
+            path = self.prepare_run(args[4], args[3])
+            executable = (self.derived_data / "Build/Products/Release-iphonesimulator/"
+                          "RefractBench.app/RefractBench")
+            executable.write_bytes(b"products replaced after provenance validation")
+            return path
+
+        with mock.patch("iteration_trace_runner.subprocess.check_output", side_effect=source_at_a), \
+             mock.patch("iteration_trace_runner.prepare_test_run", side_effect=prepare_and_replace), \
+             mock.patch("iteration_trace_runner.validate_trace_configuration"), \
+             mock.patch("iteration_trace_runner.test_command") as launch, \
+             mock.patch("iteration_trace_runner.subprocess.Popen") as process:
+            status = main(["--run-directory", str(self.root / "replaced-before-launch"),
+                           "--derived-data", str(self.derived_data),
+                           "--target-udid", "synthetic-target", "--target-metadata", str(target),
+                           "--variant", "generated", "--scenario", "scroll", "--iteration", "0",
+                           "--source-revision", "a" * 40])
+        self.assertEqual(status, 2)
+        launch.assert_not_called()
+        process.assert_not_called()
+
+    def test_product_replacement_during_capture_is_rejected_before_trace_acceptance(self):
+        run = self.root / "replacement-run"
+        recorder = RecorderFixture(run, create_run_directory=False)
+        self.addCleanup(recorder.stop)
+        self.make_run(run)
+        self.prepare_run(run, 0)
+        recorder.start()
+        session = Session(target="synthetic-target", variant="generated", scenario="scroll", iteration=0,
+                          revision="a" * 40, run_directory=run, xcodebuild_log=recorder.output,
+                          control_directory=run / "control", readiness_timeout=0.5, completion_timeout=0.5,
+                          derived_data=self.derived_data)
+        original_validation = validate_trace_configuration
+
+        def replace_products_after_final_configuration_check(*args, **kwargs):
+            receipt = original_validation(*args, **kwargs)
+            executable = (self.derived_data / "Build/Products/Release-iphonesimulator/"
+                          "RefractBench.app/RefractBench")
+            executable.write_bytes(b"products replaced while XCTest was running")
+            return receipt
+
+        def synthetic_environment(command, check, capture_output, text):
+            values = plistlib.loads(Path(command[-1]).read_bytes())
+            values = values["RefractBenchUITests"]["TestingEnvironmentVariables"]
+            return subprocess.CompletedProcess(command, 0, json.dumps(values), "")
+
+        with mock.patch("iteration_trace_runner.validate_trace_configuration",
+                        side_effect=replace_products_after_final_configuration_check), \
+                mock.patch("iteration_trace_runner.subprocess.run", side_effect=synthetic_environment), \
+                self.assertRaisesRegex(HandshakeError, "product|digest|identity"):
+            session.capture(recorder.process, recorder.recorder_factory)
+        self.assertFalse((run / "raw/iteration-trace.json").exists())
 
     def test_ambiguous_original_xctestrun_is_rejected_after_provenance_validation(self):
         self.source.with_name("second.xctestrun").write_bytes(b"second")

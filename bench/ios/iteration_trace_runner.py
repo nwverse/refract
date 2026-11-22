@@ -18,6 +18,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -171,6 +172,8 @@ class Session:
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
+        if self.derived_data is not None:
+            validate_build_provenance(self.derived_data, self.revision)
         validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
         if any(self.control_directory.iterdir()):
@@ -226,7 +229,13 @@ class Session:
             # Ask only our xctrace child to stop gracefully (SIGINT is the
             # Instruments interrupt path), flush its package, then release XCTest.
             atomic_json(self.control_directory / "recorder-stop", {"session": self.session_id})
-            recorder.send_signal(signal.SIGINT)
+            if recorder.poll() is None:
+                try:
+                    recorder.send_signal(signal.SIGINT)
+                except ProcessLookupError:
+                    # The recorder exited between poll and SIGINT; wait below
+                    # preserves its actual status instead of masking it.
+                    pass
             try:
                 status = recorder.wait(timeout=20)
             except subprocess.TimeoutExpired as error:
@@ -258,6 +267,8 @@ class Session:
             }
             validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
+            if self.derived_data is not None:
+                validate_build_provenance(self.derived_data, self.revision)
             atomic_json(self.raw / "iteration-trace.json", result)
             return result
         finally:
@@ -491,7 +502,10 @@ def validate_trace_configuration(run_directory: Path, revision: str, control: Pa
     if archived.is_symlink() or file_sha256(archived) != receipt.get("configuration_sha256"):
         raise HandshakeError("Archived trace configuration no longer matches this iteration")
     destination = derived_from_receipt(receipt, derived_data)
-    if destination.is_symlink() or file_sha256(destination) != receipt["configuration_sha256"]:
+    configuration_sha256 = receipt.get("configuration_sha256")
+    if not isinstance(configuration_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", configuration_sha256):
+        raise HandshakeError("Trace configuration receipt has no valid configuration SHA-256")
+    if destination.is_symlink() or file_sha256(destination) != configuration_sha256:
         raise HandshakeError("The trace configuration to execute differs from its retained bytes")
     values = {"REFRACT_BENCH_REVISION": revision,
               "REFRACT_BENCH_TRACE_CONTROL": str(control),
@@ -538,35 +552,41 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
     destination = source.with_name(f"iteration-trace-config-{identity}.xctestrun")
     if destination.exists() or destination.is_symlink():
         raise HandshakeError("Refusing to replace an existing trace configuration")
-    subprocess.run(["plutil", "-convert", "binary1", "-o", str(destination), "--", str(source)], check=True)
-    values = {"REFRACT_BENCH_REVISION": revision,
-              "REFRACT_BENCH_TRACE_CONTROL": str(control),
-              "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
-    for name, value in values.items():
-        subprocess.run(["plutil", "-replace",
-                        f"RefractBenchUITests.TestingEnvironmentVariables.{name}",
-                        "-string", value, str(destination)], check=True)
-    checksum = file_sha256(destination)
-    checked_trace_environment(destination, values)
-    archived = run_directory / "iteration-trace-config.xctestrun"
-    with archived.open("xb") as archive_stream:
-        archive_stream.write(bounded_file_bytes(destination))
-    if file_sha256(archived) != checksum:
-        raise HandshakeError("Archived trace configuration does not match its executed bytes")
-    with (run_directory / BUILD_PROVENANCE_NAME).open("xb") as archive_stream:
-        archive_stream.write(bounded_file_bytes(build_provenance["path"]))
-    archived_manifest = run_directory / BUILD_PROVENANCE_NAME
-    if (archived_manifest.is_symlink()
-            or file_sha256(archived_manifest) != file_sha256(build_provenance["path"])):
-        raise HandshakeError("Archived build provenance does not match the validated build")
-    atomic_json(run_directory / "iteration-trace-config.json", {
-        "schema": 1, "path": destination.name, "archive": archived.name,
-        "configuration_sha256": checksum,
-        "build_provenance_sha256": file_sha256(build_provenance["path"]),
-        "source_xctestrun": source.name, "source_revision": revision,
-        "control_directory": str(control), "iteration": iteration,
-    })
-    validate_trace_configuration(run_directory, revision, control, iteration, derived_data)
+    with tempfile.TemporaryDirectory(prefix=".iteration-trace-prepare-", dir=destination.parent) as temporary:
+        converted = Path(temporary) / destination.name
+        subprocess.run(["plutil", "-convert", "binary1", "-o", str(converted), "--", str(source)], check=True)
+        values = {"REFRACT_BENCH_REVISION": revision,
+                  "REFRACT_BENCH_TRACE_CONTROL": str(control),
+                  "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
+        for name, value in values.items():
+            subprocess.run(["plutil", "-replace",
+                            f"RefractBenchUITests.TestingEnvironmentVariables.{name}",
+                            "-string", value, str(converted)], check=True)
+        checksum = file_sha256(converted)
+        checked_trace_environment(converted, values)
+        try:
+            os.link(converted, destination)
+        except FileExistsError as error:
+            raise HandshakeError("Refusing to replace an existing trace configuration") from error
+        archived = run_directory / "iteration-trace-config.xctestrun"
+        with archived.open("xb") as archive_stream:
+            archive_stream.write(bounded_file_bytes(converted))
+        if file_sha256(archived) != checksum:
+            raise HandshakeError("Archived trace configuration does not match its executed bytes")
+        with (run_directory / BUILD_PROVENANCE_NAME).open("xb") as archive_stream:
+            archive_stream.write(bounded_file_bytes(build_provenance["path"]))
+        archived_manifest = run_directory / BUILD_PROVENANCE_NAME
+        if (archived_manifest.is_symlink()
+                or file_sha256(archived_manifest) != file_sha256(build_provenance["path"])):
+            raise HandshakeError("Archived build provenance does not match the validated build")
+        atomic_json(run_directory / "iteration-trace-config.json", {
+            "schema": 1, "path": destination.name, "archive": archived.name,
+            "configuration_sha256": checksum,
+            "build_provenance_sha256": file_sha256(build_provenance["path"]),
+            "source_xctestrun": source.name, "source_revision": revision,
+            "control_directory": str(control), "iteration": iteration,
+        })
+        validate_trace_configuration(run_directory, revision, control, iteration, derived_data)
     return destination
 
 
@@ -628,6 +648,7 @@ def main(argv: list[str] | None = None) -> int:
                                     run, build_provenance, target_probe_files)
         validate_trace_configuration(run, args.source_revision, control, args.iteration, args.derived_data)
         with log.open("x", encoding="utf-8") as stream:
+            validate_build_provenance(args.derived_data, args.source_revision)
             process = subprocess.Popen(
                 test_command(test_run, args.target_udid, test, args.source_revision, run / "results.xcresult"),
                 env=environment, stdout=stream, stderr=subprocess.STDOUT)
