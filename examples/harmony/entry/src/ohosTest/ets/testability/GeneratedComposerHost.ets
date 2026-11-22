@@ -17,6 +17,7 @@ export struct GeneratedComposerHost {
   @Local private secondFocusRequest: number = 0;
   @Local private showComposer: boolean = true;
   @Local private model: ComposerDraftModel = new ComposerDraftModel();
+  @Local private draftEventCount: number = 0;
   @Local private secondDraft: string = 'Second retained draft';
   private secondModel: SecondComposerModel = new SecondComposerModel();
 
@@ -29,9 +30,9 @@ export struct GeneratedComposerHost {
           .id('native_submitted_draft')
         Text(`Native commits: ${this.model.commitCount}`)
           .id('native_commit_count')
-        Text(`Native draft events: ${this.model.drafts.length}`)
+        Text(`Native draft events: ${this.draftEventCount}`)
           .id('native_draft_count')
-        Text(`Native events: ${this.model.events.join(',')}`)
+        Text(`Native events: ${this.model.committedEventLog}`)
           .id('native_commit_events')
         Button('Request native focus')
           .id('native_focus_request')
@@ -64,6 +65,7 @@ export struct GeneratedComposerHost {
             draft: this.draft,
             onDraftChange: (value: string): void => {
               this.model.drafts.push(value);
+              this.draftEventCount += 1;
               this.draft = value;
             },
             focusRequest: this.focusRequest,

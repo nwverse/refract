@@ -27,6 +27,11 @@ draft, translate it to Chinese, or replace an active composing span during recom
 actual native editor content after finishing composition. Test that behavior directly with `InputConnection`, and
 label Robolectric as Native JVM rather than an emulator/device or third-party IME result.
 
+`BaseInputConnection.sendKeyEvent` dispatches an IME's hardware event back through the target View. If the custom
+`EditText.onKeyDown` owns Enter submission, do not submit again from the connection's matching key-up. Cover both
+boundaries and drain the native dispatcher in the regression test; a direct View-only call cannot expose duplicate
+`onDraftCommit`/`onCommit` callbacks.
+
 ## ArkUI preview and submit are not Android InputConnection operations
 
 ArkUI `TextInput` reports native preview through the optional `PreviewText` argument of `onChange`; do not publish its
@@ -41,6 +46,15 @@ Scope preview publication to a mounted native editing session: editing loss and 
 late callbacks cannot publish. A parent edit during preview must not be silently discarded; retain the parent value,
 end the old session explicitly and reject its delayed callbacks. Use the custom component's `getUniqueId()` for each
 native focus target. Source checks must inspect guarded control flow, not only the textual order of commit calls.
+
+## Test observation needs its own scalar invalidation
+
+`@Local` observes the decorated model property itself, not mutation of a nested array on that model. A Text reading
+`this.model.drafts.length` or `this.model.events.join(',')` is not refreshed merely because another local draft
+changed or a separate `@Trace` counter changed. Keep native assertions bound to a scalar updated on each published
+draft, and replace a scalar event snapshot when committed callbacks change. Preserving a private history array is
+fine; do not make its nested mutation the only UI observation path. Static dependency checks are preparation, not
+proof that the vendor compiler or native UI accepted the source.
 
 ## Real IME automation must not inject the behavior it claims to verify
 

@@ -191,6 +191,23 @@ class HarmonyTextInputSourceTests(unittest.TestCase):
         self.replace(MODULE.NATIVE_TEST, "native_restore_composer", "native_other_focus")
         self.assert_rejected("recreation/draft-retention")
 
+    def test_draft_count_requires_an_observable_parent_scalar(self) -> None:
+        self.replace(MODULE.PARENT,
+                     "@Local private draftEventCount: number = 0;\n", "")
+        self.assert_rejected("published draft events must update the parent-local scalar")
+
+    def test_committed_event_snapshot_replaces_the_nested_array_for_ui(self) -> None:
+        self.replace(MODULE.PARENT,
+                     "Text(`Native events: ${this.model.committedEventLog}`)",
+                     "Text(`Native events: ${this.model.events.join(',')}`)")
+        self.assert_rejected("directly observable scalar snapshot")
+        self.replace(MODULE.PARENT,
+                     "Text(`Native events: ${this.model.events.join(',')}`)",
+                     "Text(`Native events: ${this.model.committedEventLog}`)")
+        self.replace(MODULE.DRAFT_MODEL,
+                     "this.committedEventLog = this.events.join(',');", "")
+        self.assert_rejected("missing required calls in order")
+
     def test_missing_host_is_explicit(self) -> None:
         (self.root / MODULE.HOST).unlink()
         self.assert_rejected("missing host sources")

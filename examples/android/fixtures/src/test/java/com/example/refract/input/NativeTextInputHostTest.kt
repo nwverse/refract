@@ -129,8 +129,15 @@ class NativeTextInputHostTest {
         assertTrue(editor.value.isFocused)
 
         runOnIdle {
-            assertTrue(editor.value.onKeyDown(KeyEvent.KEYCODE_ENTER, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER)))
+            // BaseInputConnection dispatches an IME key event back through the
+            // View. The View and connection must not submit the same key twice.
+            assertTrue(editor.value.onKeyDown(
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER),
+            ))
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
         }
+        waitForIdle()
         assertEquals(listOf("你好"), recorder.committedDrafts)
         assertEquals(1, recorder.commits)
     }

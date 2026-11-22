@@ -235,9 +235,9 @@ private class HostInputConnection(
     }
 
     override fun sendKeyEvent(event: KeyEvent?): Boolean {
-        if (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP) {
-            return host.performEditorAction(EditorInfo.IME_ACTION_DONE)
-        }
+        // BaseInputConnection sends IME key events back through this View.
+        // DraftEditText.onKeyDown owns Enter submission; consuming its matching
+        // key-up here would make one IME Enter invoke the commit callbacks twice.
         return super.sendKeyEvent(event)
     }
 }
