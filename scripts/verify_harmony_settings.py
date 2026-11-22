@@ -84,14 +84,14 @@ def format_observed_cases(cases: Sequence[tuple[str, str]]) -> list[str]:
     return [f"{suite}#{name}" for suite, name in cases]
 
 
-def validate_result(output: str) -> dict[str, object]:
+def validate_result(output: str, expected_cases: Sequence[tuple[str, str]] = EXPECTED_CASES) -> dict[str, object]:
     """Parse pinned suite/case/task lifecycles and require one successful terminal result."""
     results = SUMMARY.findall(output)
     terminals = TERMINAL.findall(output)
     if len(results) != 1 or terminals != ["0"]:
         raise VerificationError("missing, ambiguous or failed native summary/terminal result")
     tests, failures, errors, passed, ignored = (int(value) for value in results[0])
-    if tests != len(EXPECTED_CASES) or failures or errors or ignored or passed != tests:
+    if tests != len(expected_cases) or failures or errors or ignored or passed != tests:
         raise VerificationError(f"native test summary did not pass completely: {results[0]}")
 
     lifecycle: list[tuple[str, str, int | None]] = []
@@ -103,24 +103,34 @@ def validate_result(output: str) -> dict[str, object]:
             return
         kinds = [kind for kind, _, _ in fields]
         if "class" in kinds:
-            if kinds == ["sum", "class"] or kinds == ["class", "suiteconsuming"] \
-                    or (kinds[0] == "class" and kinds[-1] == "code" and kinds.count("class") == 1
-                        and kinds.count("test") == 1 and kinds.count("code") == 1):
+            if kinds == ["sum", "class"] or kinds == ["class", "suiteconsuming"]:
                 lifecycle.extend(fields)
                 fields = []
                 return
-            raise VerificationError("incomplete, reordered or ambiguous native report record")
+            if kinds[:6] != ["class", "current", "id", "numtests", "stream", "test"] \
+                    or kinds[-1] != "code" or kinds.count("class") != 1 \
+                    or kinds.count("test") != 1 or kinds.count("code") != 1:
+                raise VerificationError("incomplete, reordered or ambiguous native report record")
+            # Validate documented case metadata, then retain the downstream
+            # class/test/code shape unchanged.
+            lifecycle.extend([fields[index] for index in (0, 5, len(fields) - 1)])
+            fields = []
+            return
         if fields[0][0] == "sum" or any(kind in ("code", "test", "suiteconsuming") for kind in kinds):
             raise VerificationError("native lifecycle record has no suite or case identity")
         # Timing and diagnostic fields from an earlier case do not form a new record.
         fields = []
 
     for line in output.splitlines():
-        if re.fullmatch(
-            r"OHOS_REPORT_STATUS: (current|id|numtests|stream|consuming|stack|skipReason|shortMsg|hookError|"
-            r"currentWorkerName)=.*",
+        match = re.fullmatch(
+            r"OHOS_REPORT_STATUS: (consuming|stack|skipReason|shortMsg|hookError|currentWorkerName)=.*",
             line,
-        ):
+        )
+        if match:
+            continue
+        match = re.fullmatch(r"OHOS_REPORT_STATUS: (current|id|numtests|stream)=(.*)", line)
+        if match:
+            fields.append((match[1], match[2], None))
             continue
         match = re.fullmatch(r"OHOS_REPORT_STATUS: (class|test)=(.*)", line)
         if match:
@@ -162,7 +172,7 @@ def validate_result(output: str) -> dict[str, object]:
             raise VerificationError("malformed or ambiguous native report record")
     flush_record()
 
-    suites = {suite for suite, _ in EXPECTED_CASES}
+    suites = {suite for suite, _ in expected_cases}
     suite_starts: list[str] = []
     suite_ends: list[str] = []
     case_records: list[tuple[str, str, int]] = []
@@ -170,7 +180,7 @@ def validate_result(output: str) -> dict[str, object]:
     while index < len(lifecycle):
         kind, value, duration = lifecycle[index]
         if kind == "sum":
-            if duration != len(EXPECTED_CASES) or index + 1 >= len(lifecycle):
+            if duration != len(expected_cases) or index + 1 >= len(lifecycle):
                 raise VerificationError("invalid suite start record")
             next_kind, next_value, _ = lifecycle[index + 1]
             if next_kind != "class" or next_value not in suites:
@@ -212,7 +222,7 @@ def validate_result(output: str) -> dict[str, object]:
     pending: tuple[str, str] | None = None
     for suite, name, code in case_records:
         case = (suite, name)
-        if case not in EXPECTED_CASES or code not in (0, 1):
+        if case not in expected_cases or code not in (0, 1):
             raise VerificationError(f"unexpected or failed native case result: {suite}#{name}={code}")
         if code == 1:
             if pending is not None:
@@ -223,12 +233,33 @@ def validate_result(output: str) -> dict[str, object]:
         else:
             observed.append(case)
             pending = None
-    if pending is not None or observed != list(EXPECTED_CASES):
-        raise VerificationError("not every required native rendering case completed successfully")
+    if pending is not None or observed != list(expected_cases):
+        raise VerificationError("not every required selected native case completed successfully")
     return {
         "tests": tests, "failures": failures, "errors": errors, "passed": passed, "ignored": ignored,
         "cases": format_observed_cases(observed),
     }
+
+
+def selected_suite(parameters: Sequence[tuple[str, str]]) -> str:
+    """Reject repeated, missing, conflicting or unknown native suite selectors."""
+    selectors = [(key, value) for key, value in parameters if key in ("class", "refractSuite")]
+    values = dict(selectors)
+    if len(selectors) != 2 or set(values) != {"class", "refractSuite"} \
+            or values["class"] != values["refractSuite"] \
+            or values["class"] not in {"GeneratedSettingsRender", "GeneratedComposer"}:
+        raise VerificationError("duplicate, missing, conflicting or unknown native suite parameters")
+    return values["class"]
+
+
+def selected_suite_command(hdc: Sequence[str], suite: str) -> list[str]:
+    """Allow only the registered test suites and exactly one matching selector."""
+    selected = selected_suite((("class", suite), ("refractSuite", suite)))
+    return [
+        *hdc, "shell", "aa", "test", "-b", "com.example.refract", "-m", "entry_test",
+        "-s", "unittest", "OpenHarmonyTestRunner", "-s", "class", selected,
+        "-s", "refractSuite", selected, "-s", "timeout", "60000",
+    ]
 
 
 def source_revision() -> str:
@@ -298,11 +329,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         hdc = ["hdc", "-t", args.target]
         execute([*hdc, "install", str(args.app_hap.resolve())], log_path)
         execute([*hdc, "install", str(args.test_hap.resolve())], log_path)
-        all_output = ""
-        command = [*hdc, "shell", "aa", "test", "-b", "com.example.refract", "-m", "entry_test",
-                   "-s", "unittest", "OpenHarmonyTestRunner", "-s", "class", "GeneratedSettingsRender",
-                   "-s", "timeout", "60000"]
-        all_output += execute(command, log_path, timeout=180).stdout
+        command = selected_suite_command(hdc, "GeneratedSettingsRender")
+        all_output = execute(command, log_path, timeout=180).stdout
         for name in CAPTURES:
             destination = args.output / name
             execute([*hdc, "file", "recv", f"/data/storage/el2/base/cache/{name}", str(destination)], log_path)

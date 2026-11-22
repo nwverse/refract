@@ -19,25 +19,61 @@ From the repository root after `swift build`:
 python3 scripts/check_examples.py
 python3 -I scripts/check_harmony_text_input.py
 python3 -I scripts/test/test_harmony_text_input.py
+python3 -I scripts/test/test_harmony_composer.py
 python3 scripts/check_harmony_toolchain.py --check-only
 ```
 
-The example check uses the real CLI and committed expected output. The static checker and its 24 negative/scenario checks
-cover the host ABI, mounted/editing-session invalidation, delayed-callback rejection, parent updates during preview,
+The example check uses the real CLI and committed expected output. Its source-contract negatives and the static host
+checks cover the host ABI, mounted/editing-session invalidation, delayed-callback rejection, parent updates during preview,
 unique focus identity, actual focus-transfer scaffolding, actual `SubmitEvent.text` and main-control-flow callback
-order. One mutation moves commit calls into the active-preview branch and must fail even though their textual order is
-unchanged. These checks do not parse or execute ArkTS. The preflight currently returns 2 for the missing authorized
-toolchain; that is the expected blocker, not a passing native build.
+order. The separate `scripts/test/test_harmony_composer.py` checks the fail-closed native execution/report contract:
+only the selected `GeneratedComposer` case can pass, and a successful settings-suite output cannot substitute for it.
+It also pins suite/host selection and a report whose IME/render/performance flags remain false. These are portable
+Python checks using synthetic protocol output and mocked commands, not ArkTS execution or native test evidence.
+
+The real entry uses the documented `AbilityDelegatorArgs.parameters` dictionary. Both bounded native runners pass
+`refractSuite` explicitly. `TestAbility` registers exactly the selected settings or composer suite and loads its
+matching generated host; an unsupported selection throws instead of silently running another screen. The separate
+`ComposerTestAbility` remains an explicitly source-prepared manual test entry, not a target selected by the runner.
 
 ## Authorized native checks still required
 
 Follow the toolchain guide to build the application and `entry@ohosTest` in separate invocations. The checked-in
 `ComposerTestAbility.ets` registers `GeneratedComposer.test.ets` and loads `GeneratedComposerHost.ets` through
 `test_pages.json`; `module.json5` registers that separate ability. Do not replace it with the settings ability.
+Keep every native build and its execution under `CPUQuota=200% MemoryHigh=5G MemoryMax=6G TasksMax=512`, for example
+through `systemd-run --user --scope` on the allocated Linux host. Do not run a concurrent Gradle build.
 
-On an explicitly allocated, signed target, launch `ComposerTestAbility` rather than `TestAbility`. Record the exact
-module/ability invocation supplied by the authorized SDK tooling; no native execution command is claimed to have run
-here. The source-prepared Hypium/UI Test case exercises committed text injection, two distinct generated editors,
+On an explicitly allocated, signed target, compile the two HAPs, then run the bounded committed-draft execution entry
+from a clean repository root with both HAPs from that exact source revision:
+
+```sh
+systemd-run --user --scope \
+  -p CPUQuota=200% -p MemoryHigh=5G -p MemoryMax=6G -p TasksMax=512 \
+  python3 -I scripts/check_harmony_toolchain.py
+systemd-run --user --scope \
+  -p CPUQuota=200% -p MemoryHigh=5G -p MemoryMax=6G -p TasksMax=512 \
+  python3 -I scripts/check_harmony_toolchain.py --native-test-target
+systemd-run --user --scope \
+  -p CPUQuota=200% -p MemoryHigh=5G -p MemoryMax=6G -p TasksMax=512 \
+  python3 -I scripts/verify_harmony_composer.py \
+  --target '<allocated target serial>' \
+  --target-class emulator \
+  --target-description '<target model, OS build and allocation identifier>' \
+  --app-hap '<signed app HAP>' \
+  --test-hap '<signed entry_test HAP>' \
+  --output '<new private evidence directory>'
+```
+
+The runner selects the checked-in `GeneratedComposer#committed_draft_focus_done_and_recreation` case through
+`aa test -m entry_test -s unittest OpenHarmonyTestRunner -s class GeneratedComposer -s refractSuite GeneratedComposer`.
+Public `aa test` has no `-a` option for choosing `ComposerTestAbility`; the default `TestAbility` therefore performs
+this explicit suite/host dispatch. A mismatched selection or missing, failed, duplicate, incomplete or wrong-suite
+record fails closed. The private report records source/tool/target/HAP identities and the observed case. Success
+means only `native-committed-draft-executed-ime-unverified`: `imeVerified`, `renderVerified` and
+`performanceMeasured` stay false. No settings-suite report may be substituted for this result.
+
+The source-prepared Hypium/UI Test case exercises committed text injection, two distinct generated editors,
 per-instance focus tokens, an explicit transfer to another native focus target with `isFocused` assertions,
 removal/restoration of one generated composer and hardware Enter. `inputText()` is not a Chinese IME test and
 must not be used to claim preedit or candidate compatibility.
