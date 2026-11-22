@@ -10,6 +10,32 @@ nor the native host is copied here. The test-only activity supplies parent-owned
 focus-request and host-removal controls, and read-only event observation. It adds no production application dependency,
 runtime, registry or composition mirror.
 
+## Bounded instrumentation dispatch regression
+
+`NativeEnterDispatchInstrumentedTest` separately covers the event-routing regression fixed by #302. It launches the
+same generated `ComposerScreen`, but does **not** require or claim a Chinese IME. On the Android main thread it sends
+Enter down/up through the host's actual `BaseInputConnection`, waits for native dispatch to drain, and requires exactly
+one `onDraftCommit("你好")` followed by one `onCommit()`. It also checks that deterministic `setComposingText("ni hao")`
+state survives recomposition without publishing a draft, and that deterministic `commitText("你好")` publishes that
+committed draft. These are explicit synthetic editor setup operations, not a Pinyin keyboard, candidate selection or
+third-party-IME result.
+
+The composition/commit distinction is not new Robolectric evidence: this test is compiled for and must run on a
+separately allocated Android emulator/device. `Instrumentation.sendKeyDownUpSync` alone would inject a View event and
+would not cover the host connection's key-up override, so it is not used for this regression. No native instrumentation
+test was executed on the current target-less Linux host. This test does not replace or relax the fail-closed real-IME
+scenario below.
+
+Run only this dispatch regression on an allocated target, binding `ANDROID_SERIAL` to its serial:
+
+```sh
+./gradlew --no-daemon --max-workers=2 :ime-verification:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.example.refract.ime.NativeEnterDispatchInstrumentedTest
+```
+
+Do not run the module's whole connected suite without supplying the real-IME prerequisites below. Compilation of the
+androidTest APK is only build evidence, whether this focused test or the real-IME test is selected.
+
 ## Fail-closed input boundary
 
 `RealChineseImeInstrumentedTest` requires all of the following instrumentation arguments:
@@ -66,9 +92,9 @@ cd examples/android
 ```
 
 On the bounded Linux development host, run Swift and Gradle sequentially under
-`systemd-run --user --scope -p CPUQuota=200% -p MemoryMax=4G -p TasksMax=256`; use `swift build --jobs 2`, Gradle
-`--max-workers=2`, Gradle heap at most 1536 MiB and Kotlin daemon heap at most 1024 MiB. Compilation alone is not a
-runtime result.
+`systemd-run --user --scope -p CPUQuota=200% -p MemoryHigh=5G -p MemoryMax=6G -p TasksMax=512`; use
+`swift build --jobs 2`, Gradle `--max-workers=2`, Gradle heap at most 1536 MiB and Kotlin daemon heap at most 1024 MiB.
+Compilation alone is not a runtime result.
 
 ## Execute on a separately authorized target
 
