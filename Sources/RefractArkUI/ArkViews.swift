@@ -109,7 +109,7 @@ extension Generation {
                 writer.line("Text(\(try ArkExpression.emit(title, item: item, mapping: mapping)))")
                 writer.line("Blank()")
             }
-            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value, item: item, mapping: mapping, itemParameters: Set(itemParameters.keys), itemInputs: itemInputs)) })")
+            writer.line("Toggle({ type: ToggleType.Switch, isOn: \(try emitLocalExpression(value, item: item, mapping: mapping, itemParameters: Set(itemParameters.keys), localAliases: localAliases, itemInputs: itemInputs)) })")
             writer.depth += 1
             if case .valueProperty(.itemBinding) = value.value {
                 writer.open(".onChange((enabled: boolean) =>")
@@ -128,7 +128,8 @@ extension Generation {
                     throw Diagnostic(code: "state.invalid_projection", message: "An item toggle must write through its declared item input or current list item.",
                                      suggestion: "Use the declared item input or current LazyForEach item.", location: value.location)
                 }
-                let receiver = itemInputs.contains(binding.item) ? "this.\(binding.item)" : binding.item
+                let isLocal = localAliases.contains(binding.item)
+                let receiver = itemInputs.contains(binding.item) && !isLocal ? "this.\(binding.item)" : binding.item
                 writer.line("this.\(binding.model).\(binding.action)(\(receiver).\(binding.key), enabled);")
             default:
                 throw Diagnostic(code: "state.invalid_projection", message: "An editable toggle needs a local state, parent binding or typed item binding.",

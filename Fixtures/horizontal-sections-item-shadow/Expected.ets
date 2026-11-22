@@ -46,9 +46,9 @@ export struct ShadowGalleryToggle {
                 Row() {
                   Text($r('app.string.settings_item', item.id))
                   Blank()
-                  Toggle({ type: ToggleType.Switch, isOn: this.item.enabled })
+                  Toggle({ type: ToggleType.Switch, isOn: item.enabled })
                     .onChange((enabled: boolean) => {
-                      this.model.setEnabled(this.item.id, enabled);
+                      this.model.setEnabled(item.id, enabled);
                     })
                 }
                 .justifyContent(FlexAlign.SpaceBetween)
