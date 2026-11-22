@@ -77,11 +77,9 @@ def main(argv: list[str] | None = None) -> int:
         hdc = ["hdc", "-t", args.target]
         SETTINGS.execute([*hdc, "install", str(app_hap.resolve())], log_path)
         SETTINGS.execute([*hdc, "install", str(test_hap.resolve())], log_path)
-        result = SETTINGS.execute([
-            *hdc, "shell", "aa", "test", "-b", "com.example.refract", "-m", "entry_test",
-            "-s", "unittest", "OpenHarmonyTestRunner", "-s", "class", SELECTED_CASE[0],
-            "-s", "refractSuite", SELECTED_CASE[0], "-s", "timeout", "60000",
-        ], log_path, timeout=180)
+        result = SETTINGS.execute(
+            SETTINGS.selected_suite_command(hdc, SELECTED_CASE[0]), log_path, timeout=180
+        )
         metadata["nativeTests"] = validate_result(result.stdout)
         metadata["status"] = "native-committed-draft-executed-ime-unverified"
         return 0

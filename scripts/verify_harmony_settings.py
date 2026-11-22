@@ -231,6 +231,27 @@ def validate_result(output: str, expected_cases: Sequence[tuple[str, str]] = EXP
     }
 
 
+def selected_suite(parameters: Sequence[tuple[str, str]]) -> str:
+    """Reject repeated, missing, conflicting or unknown native suite selectors."""
+    selectors = [(key, value) for key, value in parameters if key in ("class", "refractSuite")]
+    values = dict(selectors)
+    if len(selectors) != 2 or set(values) != {"class", "refractSuite"} \
+            or values["class"] != values["refractSuite"] \
+            or values["class"] not in {"GeneratedSettingsRender", "GeneratedComposer"}:
+        raise VerificationError("duplicate, missing, conflicting or unknown native suite parameters")
+    return values["class"]
+
+
+def selected_suite_command(hdc: Sequence[str], suite: str) -> list[str]:
+    """Allow only the registered test suites and exactly one matching selector."""
+    selected = selected_suite((("class", suite), ("refractSuite", suite)))
+    return [
+        *hdc, "shell", "aa", "test", "-b", "com.example.refract", "-m", "entry_test",
+        "-s", "unittest", "OpenHarmonyTestRunner", "-s", "class", selected,
+        "-s", "refractSuite", selected, "-s", "timeout", "60000",
+    ]
+
+
 def source_revision() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True,
@@ -298,11 +319,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         hdc = ["hdc", "-t", args.target]
         execute([*hdc, "install", str(args.app_hap.resolve())], log_path)
         execute([*hdc, "install", str(args.test_hap.resolve())], log_path)
-        all_output = ""
-        command = [*hdc, "shell", "aa", "test", "-b", "com.example.refract", "-m", "entry_test",
-                   "-s", "unittest", "OpenHarmonyTestRunner", "-s", "class", "GeneratedSettingsRender",
-                   "-s", "refractSuite", "GeneratedSettingsRender", "-s", "timeout", "60000"]
-        all_output += execute(command, log_path, timeout=180).stdout
+        command = selected_suite_command(hdc, "GeneratedSettingsRender")
+        all_output = execute(command, log_path, timeout=180).stdout
         for name in CAPTURES:
             destination = args.output / name
             execute([*hdc, "file", "recv", f"/data/storage/el2/base/cache/{name}", str(destination)], log_path)

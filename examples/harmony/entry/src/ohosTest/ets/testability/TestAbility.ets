@@ -12,6 +12,13 @@ export default class TestAbility extends UIAbility {
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
     const parameters: Record<string, string> = abilityDelegatorRegistry.getArguments().parameters;
     const selectedSuite: string = parameters['refractSuite'] ?? '';
+    const filteredSuite: string = parameters['class'] ?? '';
+    if (selectedSuite !== 'GeneratedComposer' && selectedSuite !== 'GeneratedSettingsRender') {
+      throw new Error('Unknown or missing native verification suite.');
+    }
+    if (filteredSuite !== selectedSuite) {
+      throw new Error('Native verification suite parameters are missing or contradictory.');
+    }
     Hypium.hypiumTest(
       abilityDelegatorRegistry.getAbilityDelegator(),
       abilityDelegatorRegistry.getArguments(),

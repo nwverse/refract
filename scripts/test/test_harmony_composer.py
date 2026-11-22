@@ -62,6 +62,18 @@ class CommittedDraftEvidenceTests(unittest.TestCase):
             with self.subTest(cases=cases), self.assertRaises(MODULE.SETTINGS.VerificationError):
                 MODULE.validate_result(self.result(cases=cases))
 
+    def test_duplicate_conflicting_and_unknown_suite_starts_fail_closed(self) -> None:
+        start = "OHOS_REPORT_SUM: 1\nOHOS_REPORT_STATUS: class=GeneratedComposer\n"
+        for prefix in (
+            start,
+            "OHOS_REPORT_SUM: 1\nOHOS_REPORT_STATUS: class=GeneratedSettingsRender\n",
+            "OHOS_REPORT_SUM: 1\nOHOS_REPORT_STATUS: class=UnknownSuite\n",
+            "OHOS_REPORT_SUM: 2\nOHOS_REPORT_STATUS: class=GeneratedComposer\n",
+        ):
+            with self.subTest(prefix=prefix), \
+                 self.assertRaises(MODULE.SETTINGS.VerificationError, msg="duplicate suite start must be rejected"):
+                MODULE.validate_result(self.result().replace(start, prefix + start, 1))
+
     def test_summary_and_terminal_cannot_hide_an_unsuccessful_run(self) -> None:
         for result in (
             self.result(tests=0, passed=0, cases=""), self.result(failure=1, passed=0),
@@ -120,12 +132,38 @@ class CommittedDraftEvidenceTests(unittest.TestCase):
         self.assertNotIn("generatedSettingsTests();", ability)
         self.assertIn("abilityDelegatorRegistry.getArguments().parameters", ability)
         self.assertIn("parameters['refractSuite']", ability)
-        self.assertIn("throw new Error('Unsupported native verification selection", ability)
+        self.assertIn("parameters['class']", ability)
+        self.assertIn("filteredSuite !== selectedSuite", ability)
+        self.assertIn("Unknown or missing native verification suite", ability)
+        self.assertIn("Native verification suite parameters are missing or contradictory", ability)
+        self.assertLess(ability.index("filteredSuite !== selectedSuite"), ability.index("Hypium.hypiumTest("))
         native_test = (
             MODULE.SETTINGS.EXAMPLE / "entry/src/ohosTest/ets/test/GeneratedComposer.test.ets"
         ).read_text(encoding="utf-8")
         self.assertIn(f"describe('{MODULE.SELECTED_CASE[0]}'", native_test)
         self.assertIn(f"it('{MODULE.SELECTED_CASE[1]}'", native_test)
+
+    def test_unknown_or_mismatched_suite_command_parameters_fail_closed(self) -> None:
+        selected = ("class", "GeneratedComposer")
+        for parameters in (
+            (selected, selected),
+            (("refractSuite", "GeneratedComposer"), ("refractSuite", "GeneratedComposer")),
+            (selected, ("refractSuite", "GeneratedSettingsRender")),
+            (selected, ("refractSuite", "UnknownSuite")),
+            (selected,), (("class", "UnknownSuite"), ("refractSuite", "UnknownSuite")),
+        ):
+            with self.subTest(parameters=parameters), self.assertRaises(MODULE.SETTINGS.VerificationError):
+                MODULE.SETTINGS.selected_suite(parameters)
+        for suite in ("UnknownSuite", "", "GeneratedSettings"):
+            with self.subTest(suite=suite), self.assertRaises(MODULE.SETTINGS.VerificationError):
+                MODULE.SETTINGS.selected_suite_command(["hdc", "-t", "owned-target"], suite)
+        command = MODULE.SETTINGS.selected_suite_command(["hdc"], MODULE.SELECTED_CASE[0])
+        for selector in ("class", "refractSuite"):
+            self.assertEqual(command.count(selector), 1)
+            self.assertEqual(command[command.index(selector) + 1], MODULE.SELECTED_CASE[0])
+        for key in ("refractSuite", "class"):
+            self.assertIn(f"parameters['{key}']", MODULE.SETTINGS.EXAMPLE.joinpath(
+                "entry/src/ohosTest/ets/testability/TestAbility.ets").read_text(encoding="utf-8"))
 
     def run_complete_state_machine(self, temporary: str, native_output: str) -> tuple[int, dict[str, object]]:
         output = Path(temporary) / "private-evidence"
