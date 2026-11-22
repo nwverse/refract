@@ -31,9 +31,9 @@ export struct ChildSettingRow {
         Text(this.row.title)
         Text(this.row.subtitle)
       }.layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: row.enabled })
+      Toggle({ type: ToggleType.Switch, isOn: this.row.enabled })
         .onChange((enabled: boolean) => {
-          this.settings.setEnabled(row.id, enabled);
+          this.settings.setEnabled(this.row.id, enabled);
         })
         .id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)
     }
