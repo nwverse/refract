@@ -117,18 +117,18 @@ import RefractArkUI
 // An outer optional scalar stays local when a lazy row's drag event reads its payload.
 @Test func dragPayloadKeepsOptionalAliasInsideForEachRow() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
-    struct SettingItem: Identifiable {
+    struct OptionalDragItem: Identifiable {
         let id: String
         let title: String
     }
 
-    protocol SelectionDropModel: RefractModel {
-        var items: [SettingItem] { get }
+    protocol OptionalDragModel: RefractModel {
+        var items: [OptionalDragItem] { get }
         func receiveDrop(kind: String, payload: String)
     }
 
     struct OptionalNativeList: View {
-        let model: SelectionDropModel
+        let model: OptionalDragModel
         let title: String?
 
         var body: some View {
@@ -153,7 +153,7 @@ import RefractArkUI
     #expect(ark.contains("Text(value)"))
     #expect(ark.contains("event.setData({ 'note': value } as Record<string, string>);"), Comment(rawValue: ark))
     #expect(!ark.contains("'note': this.value"))
-    #expect(ark.contains("(item: SettingItem): string => item.id"))
+    #expect(ark.contains("(item: OptionalDragItem): string => item.id"))
 }
 
 // Drop target invokes the model action with the matching kind and a non-empty payload.

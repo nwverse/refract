@@ -2,7 +2,7 @@
 // Source: Input.swift
 
 @ObservedV2
-export class SettingItem {
+export class OptionalDragItem {
   @Trace id: string;
   @Trace title: string;
 
@@ -12,20 +12,20 @@ export class SettingItem {
   }
 }
 
-export interface SelectionDropModel {
-  items: BasicDataSource<SettingItem>;
+export interface OptionalDragModel {
+  items: BasicDataSource<OptionalDragItem>;
   receiveDrop(kind: string, payload: string): void;
 }
 
 @ComponentV2
 export struct OptionalNativeList {
   @Param @Require public var title: string | null | undefined
-  @Require @Param model: SelectionDropModel;
+  @Require @Param model: OptionalDragModel;
   build() {
     if (this.title !== null && this.title !== undefined) {
       const value = this.title;
       List() {
-        LazyForEach(this.model.items, (item: SettingItem) => {
+        LazyForEach(this.model.items, (item: OptionalDragItem) => {
           ListItem() {
             Stack() {
               Text(value)
@@ -35,7 +35,7 @@ export struct OptionalNativeList {
                 event.setData({ 'note': value } as Record<string, string>);
               })
           }
-        }, (item: SettingItem): string => item.id)
+        }, (item: OptionalDragItem): string => item.id)
       }
     } else {
       Text('Empty')

@@ -21,20 +21,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 
 @Immutable
-public data class SettingItem(
+public data class OptionalDragItem(
     public val id: String,
     public val title: String,
 )
 
-public interface SelectionDropModel {
-    public val items: State<List<SettingItem>>
+public interface OptionalDragModel {
+    public val items: State<List<OptionalDragItem>>
     public fun receiveDrop(kind: String, payload: String)
 }
 
 @Composable
 public fun OptionalNativeList(
     title: String?,
-    model: SelectionDropModel,
+    model: OptionalDragModel,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -44,7 +44,7 @@ public fun OptionalNativeList(
                 items(
                     items = model.items.value,
                     key = { item -> item.id },
-                    contentType = { "SettingItem" },
+                    contentType = { "OptionalDragItem" },
                 ) { item ->
                     Box(
                         modifier = Modifier

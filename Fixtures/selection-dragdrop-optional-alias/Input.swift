@@ -1,17 +1,17 @@
 import SwiftUI
 
-struct SettingItem: Identifiable {
+struct OptionalDragItem: Identifiable {
     let id: String
     let title: String
 }
 
-protocol SelectionDropModel: RefractModel {
-    var items: [SettingItem] { get }
+protocol OptionalDragModel: RefractModel {
+    var items: [OptionalDragItem] { get }
     func receiveDrop(kind: String, payload: String)
 }
 
 struct OptionalNativeList: View {
-    let model: SelectionDropModel
+    let model: OptionalDragModel
     let title: String?
 
     var body: some View {
