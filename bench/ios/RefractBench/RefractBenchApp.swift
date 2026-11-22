@@ -33,6 +33,10 @@ struct RefractBenchApp: App {
 
     @MainActor
     private func beginTrace() {
+        if let directory = traceControlDirectory() {
+            try? Data("native-button-action\n".utf8).write(
+                to: directory.appendingPathComponent("native-button-action.txt"), options: .withoutOverwriting)
+        }
         guard let iteration = selectedIteration, let directory = traceControlDirectory() else {
             traceIdentityError = "The selected iteration has no control directory"
             return
