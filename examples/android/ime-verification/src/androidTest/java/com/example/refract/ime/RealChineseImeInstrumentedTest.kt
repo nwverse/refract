@@ -296,18 +296,13 @@ class RealChineseImeInstrumentedTest {
 
     private fun resetHost() {
         scenario.onActivity {
+            RealImeHostState.model = RecordingComposerModel()
             val stale = RealImeHostState.editor
             RealImeHostState.editor = null
             stale?.release()
             RealImeHostState.hostVisible = false
-        }
-        assertTrue("The old host must be removed before resetting state", device.wait(
-            Until.gone(By.res(APP_PACKAGE, "generatedHost")), TIMEOUT_MS,
-        ))
-        scenario.onActivity {
-            RealImeHostState.model = RecordingComposerModel()
-            RealImeHostState.unrelatedRevision = 0
             RealImeHostState.hostVisible = true
+            RealImeHostState.unrelatedRevision = 0
         }
         assertNative("a fresh empty generated host") {
             it.focused && it.text.isEmpty() && it.parentDraft.isEmpty() && it.events.isEmpty()

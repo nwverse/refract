@@ -28,15 +28,22 @@ class NativeEnterDispatchInstrumentedTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val device = UiDevice.getInstance(instrumentation)
     private lateinit var scenario: ActivityScenario<RealImeHostActivity>
+    private var previousModel: RecordingComposerModel? = null
+    private var previousHostVisible = true
+    private var previousRevision = 0
 
     private fun launchFreshGeneratedHost() {
         scenario = ActivityScenario.launch(RealImeHostActivity::class.java)
         assertTrue("The exact generated host must be visible", device.wait(
             Until.hasObject(By.res("com.example.refract.ime", "generatedHost")), 5_000,
         ))
-        val initialEditor = attachedEditor()
         instrumentation.runOnMainSync {
+            previousModel = RealImeHostState.model
+            previousHostVisible = RealImeHostState.hostVisible
+            previousRevision = RealImeHostState.unrelatedRevision
+            RealImeHostState.model = RecordingComposerModel()
             RealImeHostState.hostVisible = false
+            RealImeHostState.unrelatedRevision = 0
         }
         assertTrue("The old host must actually leave the window", device.wait(
             Until.gone(By.res("com.example.refract.ime", "generatedHost")), 5_000,
@@ -47,7 +54,8 @@ class NativeEnterDispatchInstrumentedTest {
         assertTrue("A fresh host must enter the window", device.wait(
             Until.hasObject(By.res("com.example.refract.ime", "generatedHost")), 5_000,
         ))
-        assertNotSame("Do not reuse editor state across view recreation", initialEditor, attachedEditor())
+        assertNotSame("The reset must actually recreate the editor",
+            RealImeHostState.editor, attachedEditor())
         device.findObject(By.res("com.example.refract.ime", "generatedHost")).click()
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync {
@@ -57,7 +65,15 @@ class NativeEnterDispatchInstrumentedTest {
 
     @After
     fun closeHost() {
-        if (::scenario.isInitialized) scenario.close()
+        if (!::scenario.isInitialized) return
+        scenario.close()
+        // The test activity keeps this harness state across scenarios. Restore
+        // its baseline so this test cannot leak state into the real-IME suite.
+        instrumentation.runOnMainSync {
+            previousModel?.let { RealImeHostState.model = it }
+            RealImeHostState.hostVisible = previousHostVisible
+            RealImeHostState.unrelatedRevision = previousRevision
+        }
     }
 
     @Test
