@@ -73,6 +73,8 @@ class TraceSourceContractTest(unittest.TestCase):
                 self.assertIn('in: control, expected: expectedIdentity, name: "native-completion.json")', TESTS)
         self.assertIn('expectedIdentity["state"] = "complete"', TESTS)
         self.assertIn('expectedIdentity["completion"] = completionText', TESTS)
+        self.assertIn('expectedFinished["state"] = "recorder-finished"', TESTS)
+        self.assertIn('TraceHandshake.ready(in: control, expected: expectedFinished,', TESTS)
         self.assertIn('"pid": pid', TESTS)
 
 

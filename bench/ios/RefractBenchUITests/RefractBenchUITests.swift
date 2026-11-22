@@ -213,9 +213,11 @@ final class RefractBenchUITests: XCTestCase {
                 return
             }
             try TraceHandshake.write(completionPacket, named: "completion.json", in: control)
+            var expectedFinished = completionPacket
+            expectedFinished["state"] = "recorder-finished"
             let finished = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
-                    TraceHandshake.ready(in: control, expected: packet,
+                    TraceHandshake.ready(in: control, expected: expectedFinished,
                                          name: "recorder-finished.json") != nil
                 }, object: nil)
             guard XCTWaiter.wait(for: [finished], timeout: 30) == .completed else {
