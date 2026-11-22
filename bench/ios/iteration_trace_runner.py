@@ -311,8 +311,14 @@ def traced_test_name(variant: str, scenario: str) -> str:
     return f"RefractBenchUITests/RefractBenchUITests/test{variant.capitalize()}{selector}Trace"
 
 
-def prepare_test_run(derived_data: Path, run_directory: Path, control: Path,
-                     revision: str, iteration: int) -> Path:
+def test_command(test_run: Path, target_udid: str, test: str, revision: str,
+                 results: Path) -> list[str]:
+    return ["xcodebuild", "test-without-building", "-xctestrun", str(test_run),
+            "-resultBundlePath", str(results), "-destination", f"platform=iOS Simulator,id={target_udid}",
+            f"-only-testing:{test}", "CODE_SIGNING_ALLOWED=NO", f"REFRACT_BENCH_REVISION={revision}"]
+
+
+def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration: int) -> Path:
     sources = sorted((derived_data / "Build/Products").glob("*.xctestrun"))
     if len(sources) != 1:
         raise HandshakeError("Exactly one generated xctestrun file is required")
@@ -379,15 +385,10 @@ def main(argv: list[str] | None = None) -> int:
         environment = dict(os.environ, REFRACT_BENCH_REVISION=args.source_revision,
                            REFRACT_BENCH_TRACE_CONTROL=str(control),
                            REFRACT_BENCH_TRACE_ITERATION=str(args.iteration))
-    test_run = prepare_test_run(args.derived_data, run, control,
-                                args.source_revision, args.iteration)
+        test_run = prepare_test_run(args.derived_data, control, args.source_revision, args.iteration)
         with log.open("x", encoding="utf-8") as stream:
             process = subprocess.Popen(
-                ["xcodebuild", "test-without-building", "-xctestrun", str(test_run),
-                 "-resultBundlePath", str(run / "results.xcresult"),
-                 "-destination", f"platform=iOS Simulator,id={args.target_udid}",
-                 f"-only-testing:{test}", "CODE_SIGNING_ALLOWED=NO",
-                 f"REFRACT_BENCH_REVISION={args.source_revision}"],
+                test_command(test_run, args.target_udid, test, args.source_revision, run / "results.xcresult"),
                 env=environment, stdout=stream, stderr=subprocess.STDOUT)
             session = Session(target=args.target_udid, variant=args.variant, scenario=args.scenario,
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
