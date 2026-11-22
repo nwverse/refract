@@ -198,6 +198,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-list-row-input-shadow",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-media-capabilities",
       "implementationStatus": "ready"
     },
