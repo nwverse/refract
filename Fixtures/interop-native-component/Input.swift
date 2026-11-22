@@ -29,7 +29,8 @@ struct RouteScreen: View {
             if let value = title {
                 List {
                     ForEach(model.items) { item in
-                        RoutePreview(zoom: 12.0, showsTraffic: true, title: value)
+                        RoutePreview(zoom: 12.0, showsTraffic: true,
+                                     title: refractValue(ios: value, android: value, harmonyOS: value))
                     }
                 }
             } else {
