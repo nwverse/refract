@@ -36,6 +36,8 @@ def main():
     parser.add_argument("--simulators", required=True, type=Path)
     parser.add_argument("--targets", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--include-udid", action="store_true",
+                        help="Bind the output to the requested UDID for the iteration runner")
     args = parser.parse_args()
     payload = json.loads(args.simulators.read_text(encoding="utf-8"))
     matches = [device for runtime, devices in payload.get("devices", {}).items()
@@ -47,6 +49,8 @@ def main():
         raise SystemExit("The explicitly owned target must already be booted; this script will not boot it.")
     metadata = {"target_label": "SIMULATOR", "device_result": False,
                 "model": device.get("deviceTypeIdentifier"), "state": device["state"]}
+    if args.include_udid:
+        metadata["udid"] = args.udid
     if metadata["model"] is None:
         raise SystemExit("Simulator metadata lacks its explicit model identifier.")
     targets = json.loads(args.targets.read_text(encoding="utf-8"))
