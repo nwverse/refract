@@ -137,6 +137,7 @@ class CommittedDraftEvidenceTests(unittest.TestCase):
             metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["status"], "failed-or-blocked")
             self.assertFalse(metadata["imeVerified"])
+            self.assertIn("SDK absent", metadata["blocker"])
 
     def test_selected_suite_registers_the_matching_host_only(self) -> None:
         ability = (
@@ -189,21 +190,28 @@ class CommittedDraftEvidenceTests(unittest.TestCase):
 
     def run_complete_state_machine(self, temporary: str, native_output: str) -> tuple[int, dict[str, object]]:
         output = Path(temporary) / "private-evidence"
+        packages = {"app": Path(temporary) / "app.hap", "test": Path(temporary) / "test.hap"}
+        for role, path in packages.items():
+            path.write_bytes(f"portable-{role}-package".encode())
         commands: list[list[str]] = []
 
         def command_result(command: list[str], log_path: Path, **kwargs: object) -> mock.Mock:
             commands.append(command)
+            if command[1:] == ["build"]:
+                packages["app"].write_bytes(b"fresh-app-package")
+            if command[1:] == ["build", "--modules", "entry@ohosTest"]:
+                packages["test"].write_bytes(b"fresh-test-package")
             text = "26.0.0\n" if "--version" in command else native_output if "test" in command else ""
             return mock.Mock(stdout=text, returncode=0)
 
-        with mock.patch.object(MODULE.SETTINGS, "source_revision", return_value="a" * 40), \
+        with mock.patch.dict(MODULE.SETTINGS.PACKAGE_OUTPUTS, packages), \
+             mock.patch.object(MODULE.SETTINGS, "source_revision", return_value="a" * 40), \
              mock.patch.object(MODULE.SETTINGS.PREFLIGHT, "preflight", return_value=({"devecocli": SCRIPT}, [])), \
              mock.patch.object(MODULE.shutil, "which", return_value="/authorized/hdc"), \
              mock.patch.object(MODULE.SETTINGS, "execute", side_effect=command_result):
             status = MODULE.main([
                 "--target", "owned-target", "--target-class", "emulator",
-                "--target-description", "owner supplied target", "--app-hap", str(SCRIPT),
-                "--test-hap", str(SCRIPT), "--output", str(output),
+                "--target-description", "owner supplied target", "--output", str(output),
             ])
         metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
         test_commands = [command for command in commands if "shell" in command and "test" in command]
@@ -222,7 +230,41 @@ class CommittedDraftEvidenceTests(unittest.TestCase):
         self.assertFalse(metadata["imeVerified"])
         self.assertFalse(metadata["renderVerified"])
         self.assertFalse(metadata["performanceMeasured"])
-        self.assertFalse(metadata["buildSkipped"])
+        self.assertEqual(metadata["buildProvenance"],
+                         "both installed HAPs must match the outputs of this run's native builds")
+        self.assertEqual(metadata["nativePackages"]["sourceBinding"],
+                         "byte-identical-to-current-build-snapshots")
+
+    def test_composer_rejects_a_mismatched_hap_before_installation(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-composer-test.") as temporary:
+            root = Path(temporary)
+            packages = {"app": root / "app.hap", "test": root / "test.hap"}
+            unrelated = root / "unrelated.hap"
+            unrelated.write_bytes(b"unrelated-package")
+
+            def build_output(command: list[str], log_path: Path, **kwargs: object) -> mock.Mock:
+                if "build" in command:
+                    for role, path in packages.items():
+                        path.write_bytes(f"fresh-{role}-package".encode())
+                return mock.Mock(stdout="", returncode=0)
+
+            with mock.patch.dict(MODULE.SETTINGS.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE.SETTINGS, "source_revision", return_value="a" * 40), \
+                 mock.patch.object(MODULE.SETTINGS.PREFLIGHT, "preflight", return_value=({"devecocli": SCRIPT}, [])), \
+                 mock.patch.object(MODULE.shutil, "which", return_value="/authorized/hdc"), \
+                 mock.patch.object(MODULE.SETTINGS, "tool_version", return_value="26.0.0"), \
+                 mock.patch.object(MODULE.SETTINGS, "execute", side_effect=build_output) as execute:
+                status = MODULE.main([
+                    "--target", "owned-target", "--target-class", "emulator",
+                    "--target-description", "owner supplied target",
+                    "--app-hap", str(packages["app"]), "--test-hap", str(unrelated),
+                    "--output", str(root / "evidence"),
+                ])
+            self.assertEqual(status, 1)
+            self.assertFalse(any("install" in call.args[0] for call in execute.call_args_list))
+            metadata = json.loads((root / "evidence/metadata.json").read_text(encoding="utf-8"))
+            self.assertIn("selected test HAP differs", metadata["blocker"])
+            self.assertFalse(metadata["imeVerified"])
 
     def test_missing_tool_or_settings_result_still_writes_a_failed_report(self) -> None:
         for native_output in ("", self.result(cases=self.case(name="wrong_case"))):

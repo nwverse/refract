@@ -9,6 +9,7 @@ examples/harmony/verification/README.md for the exact command contract.
 from __future__ import annotations
 
 import argparse
+import contextlib
 from datetime import datetime, timezone
 import importlib.util
 import hashlib
@@ -19,6 +20,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Mapping, Sequence
 
 # Python -I removes the script directory; load the sibling by its explicit path.
@@ -53,6 +55,10 @@ SUITE_DONE = re.compile(r"(?m)^OHOS_REPORT_STATUS: suiteconsuming=(\d+)$")
 TASK_DONE = re.compile(r"(?m)^OHOS_REPORT_STATUS: taskconsuming=(\d+)$")
 TERMINAL = re.compile(r"(?m)^OHOS_REPORT_CODE: (-?\d+)$")
 ARGUMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$")
+PACKAGE_OUTPUTS = {
+    "app": EXAMPLE / "entry/build/default/outputs/default/entry-default-signed.hap",
+    "test": EXAMPLE / "entry/build/default/outputs/default/entry-ohosTest-signed.hap",
+}
 
 
 class VerificationError(RuntimeError):
@@ -283,15 +289,141 @@ def tool_version(tools: Mapping[str, Path], log_path: Path) -> str:
     return version
 
 
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def regular_file(path: Path, description: str) -> Path:
+    """Resolve an artifact only after rejecting links and non-regular files."""
+    if path.is_symlink() or not path.is_file():
+        if not path.exists() and not path.is_symlink():
+            raise FileNotFoundError(path)
+        raise VerificationError(f"{description} is not a regular file; refusing installation")
+    resolved = path.resolve(strict=True)
+    if not resolved.is_file():
+        raise VerificationError(f"{description} is not a regular file; refusing installation")
+    return resolved
+
+
+def native_packages(tools: Mapping[str, Path], log_path: Path,
+                    snapshot_root: Path | None = None) -> dict[str, object]:
+    """Build with old canonical files quarantined, retaining restorable copies."""
+    if snapshot_root is None:
+        with package_snapshots() as snapshots:
+            return native_packages(tools, log_path, snapshots["app"].parent)
+    snapshot_root.mkdir(mode=0o700, exist_ok=True)
+    if snapshot_root.is_symlink() or not snapshot_root.is_dir() \
+            or snapshot_root.stat().st_mode & 0o777 != 0o700:
+        raise VerificationError("package snapshot path is not a private directory")
+    for command in (["build"], ["build", "--modules", "entry@ohosTest"]):
+        execute([str(tools["devecocli"]), *command], log_path, cwd=EXAMPLE, environment=os.environ)
+    built: dict[str, Path] = {}
+    for role, path in PACKAGE_OUTPUTS.items():
+        source = regular_file(path, f"newly built canonical {role} HAP")
+        destination = snapshot_root / f"snapshot-{role}.hap"
+        with source.open("rb") as source_file, destination.open("xb") as destination_file:
+            shutil.copyfileobj(source_file, destination_file)
+        built[role] = destination
+    return package_provenance(PACKAGE_OUTPUTS, built)
+
+
+@contextlib.contextmanager
+def package_snapshots() -> object:
+    """Own snapshot lifetime and never delete a pre-existing canonical HAP."""
+    with tempfile.TemporaryDirectory(prefix="refract-harmony-install-snapshots.") as temporary:
+        root = Path(temporary)
+        build = root / "build"
+        build.mkdir(mode=0o700)
+        saved: dict[str, tuple[Path, Path]] = {}
+        failed = True
+        try:
+            for role, path in PACKAGE_OUTPUTS.items():
+                if path.is_symlink() or (path.exists() and not path.is_file()):
+                    raise VerificationError(f"canonical {role} HAP path is not a regular file")
+                if path.exists():
+                    destination = build / f"previous-{role}.hap"
+                    path.rename(destination)
+                    saved[role] = (path, destination)
+            try:
+                yield {role: build / f"snapshot-{role}.hap" for role in PACKAGE_OUTPUTS}
+                failed = False
+            except BaseException:
+                # A partial output from a failed build is not the verified
+                # package. Retain it separately and restore the old canonical.
+                for role, path in PACKAGE_OUTPUTS.items():
+                    if role in saved and not path.is_symlink() and path.is_file():
+                        path.replace(build / f"snapshot-{role}.hap")
+                    elif role in saved and path.is_symlink():
+                        path.unlink()
+                raise
+        finally:
+            conflict = False
+
+            def preserve() -> Path:
+                preserved = Path(tempfile.mkdtemp(prefix="refract-harmony-preserved-packages."))
+                preserved.rmdir()
+                try:
+                    root.rename(preserved)
+                except OSError:
+                    preserved.rmdir()
+                    raise
+                return preserved
+
+            try:
+                for role, (path, destination) in saved.items():
+                    if path.exists() or path.is_symlink():
+                        conflict = True
+                    else:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        destination.rename(path)
+                if conflict:
+                    preserved = preserve()
+                    print(f"harmony-render: previous canonical HAPs preserved at {preserved}", file=sys.stderr)
+                elif failed:
+                    preserved = preserve()
+                    print(f"harmony-render: failed-run package snapshots preserved at {preserved}", file=sys.stderr)
+            except OSError:
+                # TemporaryDirectory cleanup must not delete unrecovered packages.
+                preserved = preserve()
+                print(f"harmony-render: unrecovered canonical HAPs preserved at {preserved}", file=sys.stderr)
+                raise
+
+
+def package_provenance(selected: Mapping[str, Path], built: Mapping[str, Path]) -> dict[str, object]:
+    """Recheck selected bytes immediately before each installation."""
+    if set(selected) != {"app", "test"} or set(built) != {"app", "test"}:
+        raise VerificationError("app and test HAP build-output identities are both required")
+    artifacts: dict[str, object] = {}
+    for role in ("app", "test"):
+        selected_path = regular_file(selected[role], f"selected {role} HAP")
+        built_path = regular_file(built[role], f"snapshot of this run's {role} HAP")
+        selected_hash = sha256(selected_path)
+        built_hash = sha256(built_path)
+        if selected_hash != built_hash:
+            raise VerificationError(
+                f"selected {role} HAP differs from the native build output snapshot; refusing installation"
+            )
+        artifacts[role] = {
+            "buildOutputPath": str(PACKAGE_OUTPUTS[role].resolve()),
+            "buildOutputSha256": built_hash,
+            "selectedPath": str(selected_path),
+            "selectedSha256": selected_hash,
+            "installSnapshotPath": str(built_path),
+            "matchesBuildOutput": True,
+        }
+    return {"sourceBinding": "byte-identical-to-current-build-snapshots", "artifacts": artifacts}
+
+
 def parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True, help="explicitly allocated target serial")
     parser.add_argument("--target-class", choices=("emulator", "device"), required=True)
     parser.add_argument("--target-description", required=True, help="target OS/build/model supplied by its owner")
-    parser.add_argument("--app-hap", required=True)
-    parser.add_argument("--test-hap", required=True)
+    parser.add_argument("--app-hap", type=Path,
+                        help="app HAP path; must match the canonical output of this run's native build")
+    parser.add_argument("--test-hap", type=Path,
+                        help="test HAP path; must match the canonical output of this run's native build")
     parser.add_argument("--output", required=True, help="new private evidence directory")
-    parser.add_argument("--skip-build", action="store_true", help="only for an already compiled exact source revision")
     return parser.parse_args(argv)
 
 
@@ -301,8 +433,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("target must be a serial without whitespace or shell metacharacters", file=sys.stderr)
         return 2
     args.output = Path(args.output)
-    args.app_hap = Path(args.app_hap)
-    args.test_hap = Path(args.test_hap)
     if args.output.exists():
         print("verification output must be a new directory; refusing to mix evidence", file=sys.stderr)
         return 2
@@ -315,22 +445,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     try:
         metadata["sourceRevision"] = source_revision()
-        metadata["appHapSha256"] = hashlib.sha256(args.app_hap.read_bytes()).hexdigest()
-        metadata["testHapSha256"] = hashlib.sha256(args.test_hap.read_bytes()).hexdigest()
         tools, errors = PREFLIGHT.preflight(os.environ)
         if errors:
             raise VerificationError("; ".join(errors))
         if not shutil.which("hdc"):
             raise VerificationError("authorized hdc executable was not found on PATH")
         metadata["toolchainVersion"] = tool_version(tools, log_path)
-        if not args.skip_build:
-            for command in (["build"], ["build", "--modules", "entry@ohosTest"]):
-                execute([str(tools["devecocli"]), *command], log_path, cwd=EXAMPLE, environment=os.environ)
-        hdc = ["hdc", "-t", args.target]
-        execute([*hdc, "install", str(args.app_hap.resolve())], log_path)
-        execute([*hdc, "install", str(args.test_hap.resolve())], log_path)
-        command = selected_suite_command(hdc, "GeneratedSettingsRender")
-        all_output = execute(command, log_path, timeout=180).stdout
+        with package_snapshots() as snapshot_paths:
+            metadata["nativePackages"] = native_packages(tools, log_path, snapshot_paths["app"].parent)
+            selected = {
+                role: args.app_hap if role == "app" and args.app_hap is not None else built
+                for role, built in PACKAGE_OUTPUTS.items()
+            }
+            if args.test_hap is not None:
+                selected["test"] = args.test_hap
+            hdc = ["hdc", "-t", args.target]
+            for role in selected:
+                # Reject replacement before every install; then open only the
+                # immutable run snapshot, never the mutable selected path again.
+                metadata["nativePackages"] = package_provenance(selected, snapshot_paths)
+                install = package_provenance(selected, snapshot_paths)["artifacts"][role]["installSnapshotPath"]
+                execute([*hdc, "install", str(install)], log_path)
+            command = selected_suite_command(hdc, "GeneratedSettingsRender")
+            all_output = execute(command, log_path, timeout=180).stdout
         for name in CAPTURES:
             destination = args.output / name
             execute([*hdc, "file", "recv", f"/data/storage/el2/base/cache/{name}", str(destination)], log_path)

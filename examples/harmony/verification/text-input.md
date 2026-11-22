@@ -38,14 +38,14 @@ matching generated host; an unsupported selection throws instead of silently run
 
 ## Authorized native checks still required
 
-Follow the toolchain guide to build the application and `entry@ohosTest` in separate invocations. The checked-in
-`ComposerTestAbility.ets` registers `GeneratedComposer.test.ets` and loads `GeneratedComposerHost.ets` through
-`test_pages.json`; `module.json5` registers that separate ability. Do not replace it with the settings ability.
+Follow the toolchain guide to prepare the application and `entry@ohosTest` build targets in separate invocations. The
+checked-in `ComposerTestAbility.ets` registers `GeneratedComposer.test.ets` and loads `GeneratedComposerHost.ets`
+through `test_pages.json`; `module.json5` registers that separate ability. Do not replace it with the settings ability.
 Keep every native build and its execution under `CPUQuota=200% MemoryHigh=5G MemoryMax=6G TasksMax=512`, for example
 through `systemd-run --user --scope` on the allocated Linux host. Do not run a concurrent Gradle build.
 
-On an explicitly allocated, signed target, compile the two HAPs, then run the bounded committed-draft execution entry
-from a clean repository root with both HAPs from that exact source revision:
+On an explicitly allocated, signed target, run the bounded committed-draft execution entry from a clean repository
+root. It builds both HAPs itself and installs private snapshots of those exact outputs:
 
 ```sh
 systemd-run --user --scope \
@@ -60,8 +60,6 @@ systemd-run --user --scope \
   --target '<allocated target serial>' \
   --target-class emulator \
   --target-description '<target model, OS build and allocation identifier>' \
-  --app-hap '<signed app HAP>' \
-  --test-hap '<signed entry_test HAP>' \
   --output '<new private evidence directory>'
 ```
 
