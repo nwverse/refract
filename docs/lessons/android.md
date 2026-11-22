@@ -72,7 +72,11 @@ its blocker and provision a stable target instead. Keep raw AndroidX JSON and al
 directory immediately after each test; later tests can clean the shared additional-output directory. A complete macro
 report must reject any missing scenario/variant, missing memory/frame samples, or missing trace even if another test
 passed. Checksums tie the report inputs to the retained files. Instrumentation failure and absence of JSON are errors,
-not empty passing reports. A headless emulator is always labelled as an emulator, never as a device.
+not empty passing reports. Preserve the complete instrumentation log and available AndroidX JSON/Perfetto artifacts on
+that path, but under a separate explicitly failed, incomplete diagnostic manifest with checksums. Do not feed those
+artifacts to the complete-evidence collector, synthesize missing iterations, or publish a partial performance report.
+Move historical additional-output aside before instrumentation so failed-run retention cannot relabel an older run.
+A headless emulator is always labelled as an emulator, never as a device.
 
 Macrobenchmark startup needs an actual first frame within the platform deadline. Software rendering can exceed it
 (`lastFrameNs=null`) even if the activity is resumable and later draws successfully. A `reportFullyDrawn()` marker

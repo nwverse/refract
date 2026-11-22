@@ -81,7 +81,14 @@ benchmark name, retained JSON path and unique iteration, not merely have the rig
 traces fail closed. Collection copies and validates artifacts in a unique staging directory before publishing any
 manifest; a rejected recollection cannot overwrite a previously valid run, and a failed first collection publishes no
 manifest or raw directory. Missing
-pairs, JSON, traces, mismatched checksums or incomplete traces fail rather than becoming a partial PASS. AOSP images
+pairs, JSON, traces, mismatched checksums or incomplete traces fail rather than becoming a partial PASS. If
+instrumentation itself is nonzero or reaches its deadline, the runner instead saves the complete instrumentation
+log and every available AndroidX JSON/Perfetto file under a separate `failed-evidence-manifest.json`, with SHA-256
+checksums, the target environment, source revision and `status: failed`, `complete: false`. These are quarantined
+diagnostic artifacts, not a report or a timing result: a JSON `lastFrameNs=null`, a missing trace or an empty
+additional-output directory remains a failed run. Historical output was already moved aside before instrumentation;
+only the current run's regular JSON/trace files are copied, and artifacts changing during a deadline snapshot are not
+published under a coherent manifest. The passing collector and report are never invoked on this failure path. AOSP images
 without Google services need the same startup/rendering stability checks; slow first frames are not accepted as
 passing startup measurements. The existing frame deadline and 5% AND 0.1 ms latency gate are unchanged.
 
