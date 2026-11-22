@@ -1,0 +1,180 @@
+package com.example.refract.ime
+
+import android.text.Editable
+import android.text.Spanned
+import android.view.KeyEvent
+import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.EditorInfo
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * Instrumentation coverage for the native View/InputConnection dispatch path.
+ * Deterministic editor operations below are not Chinese-IME evidence.
+ */
+@RunWith(AndroidJUnit4::class)
+class NativeEnterDispatchInstrumentedTest {
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val device = UiDevice.getInstance(instrumentation)
+    private lateinit var scenario: ActivityScenario<RealImeHostActivity>
+    private var previousModel: RecordingComposerModel? = null
+    private var previousHostVisible = true
+    private var previousRevision = 0
+
+    private fun launchFreshGeneratedHost() {
+        scenario = ActivityScenario.launch(RealImeHostActivity::class.java)
+        assertTrue("The exact generated host must be visible", device.wait(
+            Until.hasObject(By.res("com.example.refract.ime", "generatedHost")), 5_000,
+        ))
+        val initialView = attachedEditor().value
+        instrumentation.runOnMainSync {
+            previousModel = RealImeHostState.model
+            previousHostVisible = RealImeHostState.hostVisible
+            previousRevision = RealImeHostState.unrelatedRevision
+            RealImeHostState.model = RecordingComposerModel()
+            RealImeHostState.hostVisible = false
+            RealImeHostState.unrelatedRevision = 0
+        }
+        assertTrue("The old host must actually leave the window", device.wait(
+            Until.gone(By.res("com.example.refract.ime", "generatedHost")), 5_000,
+        ))
+        instrumentation.runOnMainSync {
+            RealImeHostState.hostVisible = true
+        }
+        assertTrue("A fresh host must enter the window", device.wait(
+            Until.hasObject(By.res("com.example.refract.ime", "generatedHost")), 5_000,
+        ))
+        assertNotSame("The reset must actually recreate the native View", initialView, attachedEditor().value)
+        device.findObject(By.res("com.example.refract.ime", "generatedHost")).click()
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            assertTrue(requireAttachedEditor().value.isFocused)
+        }
+    }
+
+    @After
+    fun closeHost() {
+        if (!::scenario.isInitialized) return
+        scenario.close()
+        // The test activity keeps this harness state across scenarios. Restore
+        // its baseline so this test cannot leak state into the real-IME suite.
+        instrumentation.runOnMainSync {
+            previousModel?.let { RealImeHostState.model = it }
+            RealImeHostState.hostVisible = previousHostVisible
+            RealImeHostState.unrelatedRevision = previousRevision
+        }
+    }
+
+    @Test
+    fun hostConnectionEnterDownAndUpFinishCompositionAndSubmitOnce() {
+        launchFreshGeneratedHost()
+
+        instrumentation.runOnMainSync {
+            val editor = requireAttachedEditor()
+            val connection = editor.value.onCreateInputConnection(EditorInfo())
+
+            // Synthetic editor state isolates Enter dispatch from an IME. Do
+            // not claim that this creates a candidate or tests a keyboard.
+            connection.setComposingText("ni hao", 1)
+            assertTrue(editor.hasComposition)
+            assertTrue(hasComposingSpan(editor.value.text))
+            assertEquals("", RealImeHostState.model.draft)
+
+            // A parent recomposition cannot overwrite the native preedit.
+            RealImeHostState.unrelatedRevision += 1
+        }
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            val editor = requireAttachedEditor()
+            assertEquals("ni hao", editor.value.text.toString())
+            assertTrue(hasComposingSpan(editor.value.text))
+            assertEquals("", RealImeHostState.model.draft)
+            editor.value.onCreateInputConnection(EditorInfo()).commitText("你好", 1)
+        }
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            val editor = requireAttachedEditor()
+            assertFalse(editor.hasComposition)
+            assertEquals("你好", RealImeHostState.model.draft)
+            assertEquals(emptyList<String>(), RealImeHostState.model.events)
+
+            // The host connection inherits BaseInputConnection's dispatch of
+            // an IME hardware event back to the View. Calling only
+            // Instrumentation.sendKeyDownUpSync would bypass this override.
+            // No IME action is invoked. The connection hands both events to
+            // DraftEditText; its onKeyDown owns the only submission. Send the
+            // matching up even if down returns false: discarding it on false
+            // would hide the duplicate-submission regression.
+            val connection = editor.value.onCreateInputConnection(EditorInfo())
+            assertTrue(connection is BaseInputConnection)
+            // BaseInputConnection may return false after dispatching, so the
+            // drained callback state below is the success criterion.
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        }
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            // Read after draining native dispatch, including any key event
+            // delivered through the attached View's Handler. Idle waits must
+            // remain on the instrumentation thread, never inside runOnMainSync.
+            assertEquals(listOf("draft:你好", "commit"), RealImeHostState.model.events)
+            assertFalse(requireAttachedEditor().value.isFocused)
+        }
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            // A second drained pass must not reveal another key-up callback.
+            // The unpatched host submits once on down and again on up.
+            assertEquals(listOf("draft:你好", "commit"), RealImeHostState.model.events)
+            assertEquals("你好", RealImeHostState.model.draft)
+            assertEquals("你好", requireAttachedEditor().value.text.toString())
+        }
+    }
+
+    @Test
+    fun instrumentationEnterDownAndUpSubmitFocusedGeneratedHostOnce() {
+        launchFreshGeneratedHost()
+        instrumentation.runOnMainSync {
+            val connection = requireAttachedEditor().value.onCreateInputConnection(EditorInfo())
+            // A literal committed draft isolates the injected Enter path from
+            // candidate selection. It is not an IME-produced Chinese string.
+            connection.commitText("你好", 1)
+            assertEquals("你好", RealImeHostState.model.draft)
+            assertEquals(emptyList<String>(), RealImeHostState.model.events)
+        }
+        instrumentation.waitForIdleSync()
+
+        // Unlike direct connection.sendKeyEvent, this sends the key through
+        // UiAutomation into the focused View hierarchy's real dispatch path.
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_ENTER)
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            assertEquals(listOf("draft:你好", "commit"), RealImeHostState.model.events)
+            assertFalse(requireAttachedEditor().value.isFocused)
+        }
+    }
+
+    private fun requireAttachedEditor() =
+        RealImeHostState.editor?.takeIf { it.value.isAttachedToWindow }
+            ?: throw AssertionError("The exact generated host is not attached")
+
+    private fun attachedEditor(): com.example.refract.input.NativeDraftEditor {
+        lateinit var editor: com.example.refract.input.NativeDraftEditor
+        instrumentation.runOnMainSync { editor = requireAttachedEditor() }
+        return editor
+    }
+
+    private fun hasComposingSpan(text: Editable): Boolean = text
+        .getSpans(0, text.length, Any::class.java)
+        .any { text.getSpanFlags(it) and Spanned.SPAN_COMPOSING != 0 }
+}

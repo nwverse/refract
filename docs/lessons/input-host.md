@@ -30,7 +30,12 @@ label Robolectric as Native JVM rather than an emulator/device or third-party IM
 `BaseInputConnection.sendKeyEvent` dispatches an IME's hardware event back through the target View. If the custom
 `EditText.onKeyDown` owns Enter submission, do not submit again from the connection's matching key-up. Cover both
 boundaries and drain the native dispatcher in the regression test; a direct View-only call cannot expose duplicate
-`onDraftCommit`/`onCommit` callbacks.
+`onDraftCommit`/`onCommit` callbacks. An instrumentation regression must send down/up through the host's real
+connection: `Instrumentation.sendKeyDownUpSync` alone bypasses that override. Synthetic composition setup in such a
+dispatch test remains separate from a UIAutomator test that clicks a real Chinese keyboard and candidate. Never call
+`Instrumentation.waitForIdleSync` inside `runOnMainSync`: return from the application main thread first, then drain
+native dispatch before reading committed-draft and overall-commit callbacks. Helpers that call `runOnMainSync` must
+also stay outside another main-thread block; use the direct attached-state accessor there.
 
 ## ArkUI preview and submit are not Android InputConnection operations
 
