@@ -70,7 +70,9 @@ output = sys.argv[sys.argv.index("--output") + 1]
 control = pathlib.Path(sys.argv[sys.argv.index("--control-directory") + 1])
 def finish(status):
     print("Output saved: " + ({saved_path!r} or output), flush=True)
-    sys.exit(status)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(status)
 signal.signal(signal.SIGINT, lambda *_: finish(0))
 signal.signal(signal.SIGTERM, lambda *_: finish(143))
 time.sleep({ready_delay!r})
@@ -286,7 +288,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
 
     def test_recorder_exit_before_completion_preserves_specific_failure(self):
-        self.recorder.start(recorder_after_ready_exit=7, completion_delay=0.2)
+        self.recorder.start(recorder_after_ready_exit=7, ready_delay=0.02, completion_delay=0.2)
         with self.assertRaisesRegex(HandshakeError,
                                     "exited before native completion with status 7"):
             self.capture(self.session())
