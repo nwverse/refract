@@ -116,6 +116,10 @@ private let measurementMapping = Mapping(
         func setEnabled(_ id: Int, value: Bool)
     }
     struct ListRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct UnusedChild: View {
+        let row: ListRow
+        var body: some View { Text(row.title) }
+    }
     struct ListScreen: View {
         let model: ListModel
         var body: some View {
@@ -135,7 +139,8 @@ private let measurementMapping = Mapping(
     let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
     #expect(ark.contains("isOn: row.enabled"), Comment(rawValue: ark))
     #expect(ark.contains("this.model.setEnabled(row.id, enabled);"))
-    #expect(!ark.contains("this.row"))
+    #expect(!ark.contains("isOn: this.row.enabled"))
+    #expect(!ark.contains("setEnabled(this.row.id"))
 }
 
 @Test func retainedItemToggleUsesMergedTypedAction() throws {

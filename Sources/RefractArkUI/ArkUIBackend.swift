@@ -23,6 +23,7 @@ struct Generation {
     let itemTypes: [ItemType]
     let enums: [EnumDeclaration]
     var screenItemTypes: [String: String] = [:]
+    var declaredItemInputs: Set<String> = []
     var listItemTypes: [String: String] = [:]
     var currentModals: [ModalPresentation] = []
 
@@ -133,7 +134,7 @@ struct Generation {
             writer.open("build()")
             currentModals = screen.modals
             let previousItemParameters = screenItemTypes
-            let declaredItemInputs = Set(screen.parameters.compactMap { $0.itemType == nil ? nil : $0.name })
+            declaredItemInputs = Set(screen.parameters.compactMap { $0.itemType == nil ? nil : $0.name })
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
                 input.itemType.map { (input.name, $0) }
             })
@@ -168,7 +169,6 @@ struct Generation {
               itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil,
               localAliases: Set<String> = []) throws {
         var localAliases = localAliases
-        let itemInputs = Set(module.screens.flatMap(\.parameters).compactMap { $0.itemType == nil ? nil : $0.name })
         if let item { localAliases.insert(item) }
         switch node {
         case let .stack(axis, children, modifiers, _):
@@ -358,7 +358,7 @@ struct Generation {
                                      labelsHidden: labelsHidden, location: location),
                              into: &writer, item: item, mapping: mapping, resolver: resolver,
                              itemParameters: screenItemTypes, itemTypeName: itemTypeName, traversal: traversal,
-                             localAliases: localAliases, itemInputs: itemInputs)
+                             localAliases: localAliases, itemInputs: declaredItemInputs)
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
                 try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
