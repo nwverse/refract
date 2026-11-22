@@ -20,6 +20,7 @@ CANONICAL_HOST = Path("Fixtures/interop-text-input-host/NativeTextInputHost.ets"
 GENERATED = Path("examples/harmony/entry/src/main/ets/generated/InteropTextInputHost.ets")
 PARENT = Path("examples/harmony/entry/src/ohosTest/ets/testability/GeneratedComposerHost.ets")
 NATIVE_TEST = Path("examples/harmony/entry/src/ohosTest/ets/test/GeneratedComposer.test.ets")
+DRAFT_MODEL = Path("examples/harmony/entry/src/ohosTest/ets/testability/ComposerDraftModel.ets")
 REQUIRED_PATHS = (
     CANONICAL_HOST,
     HOST,
@@ -29,7 +30,7 @@ REQUIRED_PATHS = (
     Path("Fixtures/interop-text-input-host/Input.swift"),
     Path("Fixtures/interop-text-input-host/Expected.ets"),
     Path("examples/shared/InteropTextInputHost.swift"),
-    Path("examples/harmony/entry/src/ohosTest/ets/testability/ComposerDraftModel.ets"),
+    DRAFT_MODEL,
     Path("examples/harmony/entry/src/ohosTest/ets/testability/ComposerTestAbility.ets"),
     Path("examples/harmony/entry/src/ohosTest/module.json5"),
     Path("examples/harmony/entry/src/ohosTest/resources/base/profile/test_pages.json"),
@@ -268,7 +269,27 @@ def validate_source_contract(root: Path = ROOT) -> None:
     require("getFocusController().requestFocus('native_other_focus')" in parent,
             "the focus-loss control must actually transfer native focus")
     require("focusId: string" not in parent, "host identity must not depend on a duplicated parent literal")
-    require("@Trace lastSubmittedDraft: string" in (root / "examples/harmony/entry/src/ohosTest/ets/testability/ComposerDraftModel.ets").read_text(encoding="utf-8"), "submitted drafts must be retained by the application model")
+    require("@Local private draftEventCount: number = 0;" in parent
+            and "Text(`Native draft events: ${this.draftEventCount}`)" in parent
+            and "this.draftEventCount += 1;" in parent,
+            "published draft events must update the parent-local scalar rendered by the count Text")
+    require("this.model.drafts.push(value);" in parent,
+            "the native parent must retain the existing published-draft history")
+    require("Text(`Native events: ${this.model.committedEventLog}`)" in parent,
+            "the committed-event Text must read a directly observable scalar snapshot")
+    require("this.model.events.join(',')" not in parent,
+            "a non-observed model property must not depend on nested event-array mutations")
+    model = strip_comments((root / DRAFT_MODEL).read_text(encoding="utf-8"))
+    require("@Trace lastSubmittedDraft: string" in model,
+            "submitted drafts must be retained by the application model")
+    require("@Trace committedEventLog: string = '';" in model,
+            "the committed event log must have a directly observable scalar property")
+    for method in ("commitDraft(value: string): void", "commit(): void"):
+        require("this.recordCommittedEvent(" in body(model, method),
+                f"committed events must update their scalar snapshot in {method}")
+    ordered(body(model, "private recordCommittedEvent("), (
+        "this.events.push(value);", "this.committedEventLog = this.events.join(',');",
+    ))
 
     ability = (root / "examples/harmony/entry/src/ohosTest/ets/testability/ComposerTestAbility.ets").read_text(encoding="utf-8")
     require("generatedComposerTests();" in ability, "the separate native test ability must register its checks")
