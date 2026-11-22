@@ -22,7 +22,7 @@ if [ -n "$(git -C "$here" status --porcelain --untracked-files=normal)" ]; then
     printf 'Commit benchmark/generator changes before measuring an exact source revision.\n' >&2
     exit 2
 fi
-mkdir -p "$out/raw"
+mkdir -p "$out"
 python3 -I "$here/probe_target.py" --adb "$adb" --source-revision "$revision" \
     --timeout "${TARGET_PROBE_TIMEOUT_SECONDS:-15}" --output "$out/environment.json"
 
@@ -59,13 +59,30 @@ set +e
         -Pandroid.testInstrumentationRunnerArguments.class=dev.refract.bench.test.SettingsMacrobenchmark \
         -Pandroid.test.devices="$ANDROID_SERIAL" \
         -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.refract.sourceRevision="$revision"
-)
+) > "$out/instrumentation.log" 2>&1
 instrumentation_status=$?
 set -e
+cat -- "$out/instrumentation.log"
 python3 -I -c 'import json,sys; json.dump({"status":"completed" if sys.argv[1]=="0" else "failed","exit_code":int(sys.argv[1])},open(sys.argv[2],"w"),indent=2)' \
     "$instrumentation_status" "$out/instrumentation-status.json"
 if [ "$instrumentation_status" -ne 0 ]; then
-    printf 'Instrumentation failed or timed out; no benchmark pass is claimed: %s\n' "$out" >&2
+    printf 'Instrumentation failed or timed out; available raw artifacts are quarantined, not passing evidence: %s\n' "$out" >&2
+    if [ "$instrumentation_status" -eq 124 ]; then
+        printf 'Instrumentation reached its deadline. Its partial traces and JSON must not be interpreted as complete.\n' >&2
+    fi
+    set +e
+    python3 -I "$here/preserve_failed_evidence.py" \
+        --input-directory "$additional_output" --output "$out" \
+        --environment "$out/environment.json" \
+        --instrumentation-status "$out/instrumentation-status.json" \
+        --instrumentation-log "$out/instrumentation.log" \
+        --instrumentation-exit-code "$instrumentation_status"
+    preservation_status=$?
+    set -e
+    if [ "$preservation_status" -ne 0 ]; then
+        printf 'Failed-run preservation was also incomplete; the unpublished staging remains diagnostic only: %s\n' "$out" >&2
+        exit 2
+    fi
     exit 1
 fi
 if [ -n "$(git -C "$here" status --porcelain --untracked-files=normal)" ] || \
