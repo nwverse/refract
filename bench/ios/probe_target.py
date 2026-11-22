@@ -6,6 +6,30 @@ import json
 from pathlib import Path
 
 
+def find_simulator_targets(targets, udid):
+    """Find complete, connected simulator devices, not nested hardware records."""
+    target_matches = []
+
+    def visit(value):
+        if isinstance(value, dict):
+            properties = value.get("deviceProperties")
+            hardware = value.get("hardwareProperties", {})
+            if (value.get("identifier") == udid
+                    and isinstance(properties, dict)
+                    and hardware.get("udid") == udid
+                    and hardware.get("reality") == "simulated"
+                    and properties.get("bootState") == "booted"):
+                target_matches.append(value)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(targets)
+    return target_matches
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--udid", required=True)
@@ -26,18 +50,7 @@ def main():
     if metadata["model"] is None:
         raise SystemExit("Simulator metadata lacks its explicit model identifier.")
     targets = json.loads(args.targets.read_text(encoding="utf-8"))
-    target_matches = []
-    def visit(value):
-        if isinstance(value, dict):
-            properties = value.get("deviceProperties", value)
-            if properties.get("udid") == args.udid:
-                target_matches.append(value)
-            for child in value.values():
-                visit(child)
-        elif isinstance(value, list):
-            for child in value:
-                visit(child)
-    visit(targets)
+    target_matches = find_simulator_targets(targets, args.udid)
     if len(target_matches) != 1:
         raise SystemExit("The explicit simulator UDID is not confirmed by devicectl; refusing an ambiguous target.")
     args.output.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
