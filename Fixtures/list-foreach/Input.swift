@@ -11,12 +11,20 @@ protocol SettingsListModel: RefractModel {
 
 struct ForEachList: View {
     let model: SettingsListModel
+    let title: String?
 
     var body: some View {
-        List {
-            ForEach(model.items) { item in
-                Text(item.title)
+        if let value = title {
+            List {
+                ForEach(model.items) { item in
+                    VStack {
+                        Text(value)
+                        Text(item.title)
+                    }
+                }
             }
+        } else {
+            Text(verbatim: "Empty")
         }
     }
 }

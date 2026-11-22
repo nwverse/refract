@@ -18,14 +18,23 @@ export interface SettingsListModel {
 
 @ComponentV2
 export struct ForEachList {
+  @Param @Require public var title: string | null | undefined
   @Require @Param model: SettingsListModel;
   build() {
-    List() {
-      LazyForEach(this.model.items, (item: SettingItem) => {
-        ListItem() {
-          Text(item.title)
-        }
-      }, (item: SettingItem): string => item.id)
+    if (this.title !== null && this.title !== undefined) {
+      const value = this.title;
+      List() {
+        LazyForEach(this.model.items, (item: SettingItem) => {
+          ListItem() {
+            Column() {
+              Text(value)
+              Text(item.title)
+            }
+          }
+        }, (item: SettingItem): string => item.id)
+      }
+    } else {
+      Text('Empty')
     }
   }
 }

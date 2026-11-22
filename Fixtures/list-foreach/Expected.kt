@@ -4,6 +4,8 @@
 
 package refract.generated
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -24,16 +26,27 @@ public interface SettingsListModel {
 
 @Composable
 public fun ForEachList(
+    title: String?,
     model: SettingsListModel,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(modifier = modifier) {
-        items(
-            items = model.items.value,
-            key = { item -> item.id },
-            contentType = { "SettingItem" },
-        ) { item ->
-            Text(text = item.title)
+    Box(modifier = modifier) {
+        if (title != null) {
+            val value = title
+            LazyColumn(modifier = Modifier) {
+                items(
+                    items = model.items.value,
+                    key = { item -> item.id },
+                    contentType = { "SettingItem" },
+                ) { item ->
+                    Column(modifier = Modifier) {
+                        Text(text = value)
+                        Text(text = item.title)
+                    }
+                }
+            }
+        } else {
+            Text(text = "Empty")
         }
     }
 }
