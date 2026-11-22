@@ -122,12 +122,12 @@ class NativeEnterDispatchInstrumentedTest {
             // drained callback state below is the success criterion.
             connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
-            instrumentation.waitForIdleSync()
         }
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync {
             // Read after draining native dispatch, including any key event
-            // delivered through the attached View's Handler.
+            // delivered through the attached View's Handler. Idle waits must
+            // remain on the instrumentation thread, never inside runOnMainSync.
             assertEquals(listOf("draft:你好", "commit"), RealImeHostState.model.events)
             assertFalse(requireAttachedEditor().value.isFocused)
         }

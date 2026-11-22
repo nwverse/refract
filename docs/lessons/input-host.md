@@ -32,7 +32,9 @@ label Robolectric as Native JVM rather than an emulator/device or third-party IM
 boundaries and drain the native dispatcher in the regression test; a direct View-only call cannot expose duplicate
 `onDraftCommit`/`onCommit` callbacks. An instrumentation regression must send down/up through the host's real
 connection: `Instrumentation.sendKeyDownUpSync` alone bypasses that override. Synthetic composition setup in such a
-dispatch test remains separate from a UIAutomator test that clicks a real Chinese keyboard and candidate.
+dispatch test remains separate from a UIAutomator test that clicks a real Chinese keyboard and candidate. Never call
+`Instrumentation.waitForIdleSync` inside `runOnMainSync`: return from the application main thread first, then drain
+native dispatch before reading committed-draft and overall-commit callbacks.
 
 ## ArkUI preview and submit are not Android InputConnection operations
 
