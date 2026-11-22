@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import TARGET_PROBE_FILENAMES, HandshakeError, Session
+from iteration_trace_runner import TARGET_PROBE_FILENAMES, HandshakeError, Session, traced_test_name
 import iteration_trace_runner as runner
 
 
@@ -396,6 +396,16 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
+
+    def test_exact_existing_xctest_selectors(self):
+        for variant in ("generated", "reference"):
+            for scenario in ("scroll", "stateUpdate"):
+                with self.subTest(variant=variant, scenario=scenario):
+                    expected = (f"RefractBenchUITests/RefractBenchUITests/"
+                                f"test{variant.capitalize()}{scenario[0].upper()}{scenario[1:]}Trace")
+                    self.assertEqual(traced_test_name(variant, scenario), expected)
+                    self.assertIn(f"func {expected.rsplit('/', 1)[-1]}",
+                                  (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"

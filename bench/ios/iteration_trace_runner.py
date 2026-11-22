@@ -308,6 +308,12 @@ class Session:
             raise HandshakeError(f"Instruments recorder exited before native completion with status {process.returncode}")
 
 
+def traced_test_name(variant: str, scenario: str) -> str:
+    """Return the existing Swift XCTest selector without changing its camel case."""
+    selector = {"scroll": "Scroll", "stateUpdate": "StateUpdate"}[scenario]
+    return f"RefractBenchUITests/RefractBenchUITests/test{variant.capitalize()}{selector}Trace"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-directory", required=True, type=Path, help="A new directory for one iteration")
@@ -357,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         control.mkdir()
         # XCTest is the only app launcher. It remains blocked until the recorder
         # acknowledgement is durable. This test command never manages a target.
-        test = f"RefractBenchUITests/RefractBenchUITests/test{args.variant.capitalize()}{args.scenario}Trace"
+        test = traced_test_name(args.variant, args.scenario)
         environment = dict(os.environ, REFRACT_BENCH_REVISION=args.source_revision,
                            REFRACT_BENCH_TRACE_CONTROL=str(control),
                            REFRACT_BENCH_TRACE_ITERATION=str(args.iteration))
