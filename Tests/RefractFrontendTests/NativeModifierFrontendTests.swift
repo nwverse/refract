@@ -143,6 +143,59 @@ private let measurementMapping = Mapping(
     #expect(!ark.contains("setEnabled(this.row.id"))
 }
 
+@Test func interopInputDoesNotShadowSameNamedListRowToggle() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct RemoteImage: RefractNativeView {
+        let url: String
+        let placeholder: Image
+        let failure: Image
+        let contentDescription: LocalizedStringKey
+        let loader: RemoteImageLoader
+        var body: some View { placeholder }
+    }
+    struct ToggleItem: Identifiable {
+        let id: Int
+        let title: String
+        let enabled: Bool
+    }
+    protocol ToggleModel: RefractModel {
+        var rows: [ToggleItem] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct ShadowScreen: View {
+        let model: ToggleModel
+        let row: RemoteImageLoader
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("settings.item\\(row.id)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                ))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/interop-native-measurement/refract.json"))
+    var android = mapping.android
+    var harmony = mapping.harmonyOS
+    android.imports = [NativeImport(module: "example.app", symbols: ["RemoteImage", "RemoteImageLoader"])]
+    harmony.imports = [NativeImport(module: "example.app", symbols: ["RemoteImage", "RemoteImageLoader"])]
+    let interopMapping = Mapping(android: android, harmonyOS: harmony, resourceBaseURL: mapping.resourceBaseURL)
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: interopMapping)
+    let ark = try ArkUIBackend().generate(module: unit.module, mapping: interopMapping)
+    #expect(kotlin.contains("checked = row.enabled"))
+    #expect(kotlin.contains("model.setEnabled(row.id, enabled)"))
+    #expect(ark.contains("@Param @Require public var row: RemoteImageLoader"))
+    #expect(ark.contains("LazyForEach(this.model.rows, (row: ToggleItem) =>"))
+    #expect(ark.contains("isOn: row.enabled"), Comment(rawValue: ark))
+    #expect(ark.contains("this.model.setEnabled(row.id, enabled);"), Comment(rawValue: ark))
+    #expect(!ark.contains("isOn: this.row.enabled"))
+    #expect(!ark.contains("setEnabled(this.row.id"))
+}
+
 @Test func retainedItemToggleUsesMergedTypedAction() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol Model: RefractModel {

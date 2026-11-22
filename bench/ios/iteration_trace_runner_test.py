@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import plistlib
@@ -12,6 +13,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -19,15 +21,16 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import (HandshakeError, Session, main, original_test_run, prepare_test_run,
-                                    record_build_provenance, test_command, traced_test_name,
+from iteration_trace_runner import (TARGET_PROBE_FILENAMES, HandshakeError, Session, main, original_test_run,
+                                    prepare_test_run, record_build_provenance, test_command, traced_test_name,
                                     validate_build_provenance, validate_trace_configuration)
+import iteration_trace_runner as runner
 
 
 class RecorderFixture:
     """Separate fake XCTest and xctrace processes with observable commands."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, create_run_directory: bool = True):
         self.root = root
         self.work = root.parent / f"{root.name}-synthetic-tools"
         self.work.mkdir(exist_ok=True)
@@ -36,17 +39,22 @@ class RecorderFixture:
         self.recorder = None
         self.cleanup = lambda: None
         self.output = root / "xcodebuild.log"
-        root.mkdir(exist_ok=True)
-        (root / "control").mkdir()
+        if create_run_directory:
+            root.mkdir(exist_ok=True)
+            (root / "control").mkdir(exist_ok=True)
 
-    def start(self, ready: str | None = "Starting recording with the Animation Hitches template. Attach to stop.",
-              completion: str = "generated scroll complete 1", pid: int | None = 4242,
-              session: int = 1, duplicate_completion: bool = False, duplicate_request: bool = False,
-              recorder_after_ready_exit: int = 0, ready_delay: float = 0,
-              write_trace: bool = True, process_state: str = "running",
-              missing_completion: bool = False, app_iteration: int = 0,
-              saved_path: str | None = None, recorder_stop_status: int = 0,
-              completion_delay: float = 0):
+    def start(self, **kwargs):
+        self.prepare(**kwargs)
+        self.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n", encoding="utf-8")
+
+    def prepare(self, ready: str | None = "Starting recording with the Animation Hitches template. Attach to stop.",
+                completion: str = "generated scroll complete 1", pid: int | None = 4242,
+                session: int = 1, duplicate_completion: bool = False, duplicate_request: bool = False,
+                recorder_after_ready_exit: int = 0, ready_delay: float = 0,
+                write_trace: bool = True, process_state: str = "running",
+                missing_completion: bool = False, app_iteration: int = 0,
+                saved_path: str | None = None, recorder_stop_status: int = 0,
+                completion_delay: float = 0):
         app_script = self.work / "fake_xcodebuild.py"
         app_script.write_text(f'''import json, pathlib, sys, time
 control = pathlib.Path(sys.argv[1])
@@ -104,7 +112,6 @@ if {write_trace!r}:
 while not (control / "recorder-stop").exists():
     time.sleep(0.01)
 ''')
-        self.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n", encoding="utf-8")
         self.process = subprocess.Popen(
             ["python3", "-I", str(app_script), str(self.root / "control")],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -220,6 +227,129 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertTrue((self.root / "xcodebuild.log").is_file())
         self.assertTrue((self.root / "raw/recorder-finished.json").is_file())
         self.assertEqual(result["archived_package_name"], "generated-scroll-0.trace")
+
+    def test_current_target_probe_files_require_explicit_current_run_admission(self):
+        for name in TARGET_PROBE_FILENAMES:
+            (self.root / name).write_text('{"current_probe": true}\n')
+        self.recorder.start()
+        with self.assertRaisesRegex(HandshakeError, "unexpected or stale"):
+            self.capture(self.session())
+        self.assertFalse((self.root / "raw").exists())
+        self.assertFalse(self.recorder.commands.exists())
+
+        probes = tuple(self.root / name for name in TARGET_PROBE_FILENAMES)
+        result = self.capture(self.session(target_probe_files=probes))
+        self.assertEqual(result["status"], "complete")
+        self.recorder.process.wait(timeout=5)
+
+    def test_unexpected_files_are_rejected_with_current_target_probes(self):
+        probes = tuple(self.root / name for name in TARGET_PROBE_FILENAMES)
+        for path in probes:
+            path.write_text('{"current_probe": true}\n')
+        unexpected = self.root / "unexpected.json"
+        unexpected.write_text("stale evidence\n")
+        self.recorder.start()
+        with self.assertRaisesRegex(HandshakeError, "unexpected or stale"):
+            self.capture(self.session(target_probe_files=probes))
+        self.assertEqual(unexpected.read_text(), "stale evidence\n")
+        self.assertFalse((self.root / "raw").exists())
+        self.assertFalse(self.recorder.commands.exists())
+
+    def test_ordinary_cli_admits_only_the_probes_it_generated(self):
+        self.recorder.stop()
+        self.root = self.root / "current-cli-run"
+        self.recorder = RecorderFixture(self.root, create_run_directory=False)
+        self.addCleanup(self.recorder.stop)
+        self.recorder.prepare()
+        derived_data = self.root.parent / "DerivedData"
+        products = derived_data / "Build/Products/Release-iphonesimulator"
+        test_bundle = products / "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest"
+        test_bundle.mkdir(parents=True)
+        for bundle, executable in ((products / "RefractBench.app", "RefractBench"),
+                                   (products / "RefractBenchUITests-Runner.app", "RefractBenchUITests-Runner"),
+                                   (test_bundle, "RefractBenchUITests")):
+            bundle.mkdir(exist_ok=True)
+            (bundle / executable).write_bytes(b"synthetic build product")
+            (bundle / "Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": executable}))
+        original = derived_data / "Build/Products/RefractBench.xctestrun"
+        original_bytes = plistlib.dumps({"RefractBenchUITests": {"TestingEnvironmentVariables": {
+            "PRODUCT_MODULE_NAME": "RefractBenchUITests", "XCODE_SCHEME_NAME": "RefractBench",
+            "DYLD_LIBRARY_PATH": "__TESTROOT__/Release-iphonesimulator",
+        }}})
+        original.write_bytes(original_bytes)
+        runner.record_build_provenance(derived_data, "a" * 40)
+        configured = {}
+
+        def run(command, **kwargs):
+            self.assertTrue(kwargs.get("check", False))
+            if command[0] == "plutil":
+                if command[1:3] == ["-convert", "binary1"]:
+                    Path(command[4]).write_bytes(plistlib.dumps(
+                        plistlib.loads(Path(command[6]).read_bytes()), fmt=plistlib.FMT_BINARY))
+                elif command[1] == "-extract":
+                    environment = plistlib.loads(Path(command[-1]).read_bytes())[
+                        "RefractBenchUITests"]["TestingEnvironmentVariables"]
+                    configured.update(environment)
+                    return subprocess.CompletedProcess(command, 0, json.dumps(environment), "")
+                else:
+                    prefix = "RefractBenchUITests.TestingEnvironmentVariables."
+                    self.assertTrue(command[2].startswith(prefix))
+                    destination = Path(command[-1])
+                    value = plistlib.loads(destination.read_bytes())
+                    value["RefractBenchUITests"]["TestingEnvironmentVariables"][
+                        command[2][len(prefix):]] = command[4]
+                    destination.write_bytes(plistlib.dumps(value, fmt=plistlib.FMT_BINARY))
+            elif "devicectl" in command:
+                (self.root / "targets.json").write_text('{"devices": []}\n')
+            elif "simctl" in command:
+                kwargs["stdout"].write('{"devices": {}}\n')
+            elif command[1:3] == ["-I", str(HERE / "probe_target.py")]:
+                (self.root / "target.json").write_text(json.dumps({
+                    "target_label": "SIMULATOR", "device_result": False, "udid": "synthetic-target",
+                }) + "\n")
+            return subprocess.CompletedProcess(command, 0)
+
+        original_popen = subprocess.Popen
+
+        def popen(command, **kwargs):
+            if command[0] == "xcodebuild":
+                return self.recorder.process
+            return original_popen(command, **kwargs)
+
+        original_capture = Session.capture
+
+        def capture(session, process):
+            self.assertEqual(session.target_probe_files,
+                             tuple(self.root / name for name in TARGET_PROBE_FILENAMES))
+            return original_capture(session, process, self.recorder.recorder_factory)
+
+        with mock.patch.object(runner.subprocess, "check_output", side_effect=["a" * 40 + "\n", ""]), \
+                mock.patch.object(runner.subprocess, "run", side_effect=run), \
+                mock.patch.object(runner.subprocess, "Popen", side_effect=popen), \
+                mock.patch.object(Session, "capture", capture):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                status = runner.main([
+                    "--run-directory", str(self.root), "--derived-data", str(derived_data),
+                    "--target-udid", "synthetic-target", "--variant", "generated", "--scenario", "scroll",
+                    "--iteration", "0", "--source-revision", "a" * 40,
+                    "--readiness-timeout", "0.5", "--completion-timeout", "0.5",
+                ])
+        _, process_stderr = self.recorder.process.communicate(timeout=5)
+        self.assertEqual(status, 0, process_stderr)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "complete")
+        self.assertEqual(original.read_bytes(), original_bytes)
+        self.assertEqual(configured, {
+            "PRODUCT_MODULE_NAME": "RefractBenchUITests", "XCODE_SCHEME_NAME": "RefractBench",
+            "DYLD_LIBRARY_PATH": "__TESTROOT__/Release-iphonesimulator",
+            "REFRACT_BENCH_REVISION": "a" * 40,
+            "REFRACT_BENCH_TRACE_CONTROL": str(self.root / "control"),
+            "REFRACT_BENCH_TRACE_ITERATION": "0",
+        })
+        self.assertEqual(self.recorder.process.returncode, 0)
+        self.assertTrue(all((self.root / name).is_file() for name in TARGET_PROBE_FILENAMES))
+        self.assertEqual(json.loads((self.root / "iteration-trace-config.json").read_text())["iteration"], 0)
+        self.assertTrue((self.root / "refract-build-provenance.json").is_file())
 
     def test_reused_run_directory_or_trace_is_never_replaced(self):
         self.run_success()
@@ -517,6 +647,15 @@ class TraceBuildProvenanceTest(unittest.TestCase):
             prepare_test_run(self.derived_data, self.root / "run-0/control", "a" * 40, 0,
                              self.root / "run-0", validate_build_provenance(self.derived_data, "a" * 40))
         self.assertEqual(first.read_bytes(), first_bytes)
+
+    def test_ambiguous_original_xctestrun_is_rejected_after_provenance_validation(self):
+        self.source.with_name("second.xctestrun").write_bytes(b"second")
+        run = self.root / "ambiguous-run"
+        self.make_run(run)
+        with mock.patch("iteration_trace_runner.subprocess.run") as plutil:
+            with self.assertRaisesRegex(HandshakeError, "Exactly one.*generated xctestrun"):
+                self.prepare_run(run, 0)
+        plutil.assert_not_called()
 
     def test_build_products_from_a_are_rejected_at_b_head_before_launch(self):
         manifest = validate_build_provenance(self.derived_data, "a" * 40)

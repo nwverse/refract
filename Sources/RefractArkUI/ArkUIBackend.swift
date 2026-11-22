@@ -134,7 +134,10 @@ struct Generation {
             writer.open("build()")
             currentModals = screen.modals
             let previousItemParameters = screenItemTypes
-            declaredItemInputs = Set(screen.parameters.compactMap { $0.itemType == nil ? nil : $0.name })
+            declaredItemInputs = Set(screen.parameters.compactMap { input in
+                guard let itemType = input.itemType, itemTypes.contains(where: { $0.name == itemType }) else { return nil }
+                return input.name
+            })
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
                 input.itemType.map { (input.name, $0) }
             })

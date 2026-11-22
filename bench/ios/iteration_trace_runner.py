@@ -33,6 +33,7 @@ class HandshakeError(ValueError):
 
 VARIANTS = ("generated", "reference")
 SCENARIOS = ("scroll", "stateUpdate")
+TARGET_PROBE_FILENAMES = ("targets.json", "simulators.json", "target.json")
 READY_OUTPUT = re.compile(r"(?:^|\n)Starting recording with the (.+?) template\.[^\n]*(?:\n|$)")
 SAVED_OUTPUT = re.compile(r"(?:^|\n)Output saved: (.+?)\s*(?:\n|$)")
 
@@ -117,7 +118,8 @@ class Session:
                  control_directory: Path, readiness_timeout: float = 60,
                  completion_timeout: float = 180, window: str = "5s",
                  template: str = "Animation Hitches", session_id: int = 1,
-                 target_label: str = "SIMULATOR", derived_data: Path | None = None):
+                 target_label: str = "SIMULATOR", derived_data: Path | None = None,
+                 target_probe_files: tuple[Path, ...] = ()):
         if variant not in VARIANTS or scenario not in SCENARIOS:
             raise HandshakeError("Unsupported variant or scenario")
         if iteration not in range(30):
@@ -128,6 +130,10 @@ class Session:
             raise HandshakeError("The Instruments window must be a positive explicit duration")
         if target_label != "SIMULATOR":
             raise HandshakeError("This driver currently supports only a probed simulator; it is not device evidence")
+        expected_probes = tuple(run_directory / name for name in TARGET_PROBE_FILENAMES)
+        if target_probe_files and (target_probe_files != expected_probes or any(
+                not path.is_file() or path.is_symlink() for path in target_probe_files)):
+            raise HandshakeError("Current target probes must be ordinary files generated in this run directory")
         self.target = target
         self.variant = variant
         self.scenario = scenario
@@ -143,6 +149,7 @@ class Session:
         self.session_id = session_id
         self.target_label = target_label
         self.derived_data = derived_data
+        self.target_probe_files = target_probe_files
         self.raw = run_directory / "raw"
         self.identity = f"{variant}-{scenario}-{iteration}"
         self.trace = run_directory / f"{self.identity}.trace"
@@ -151,13 +158,13 @@ class Session:
     def capture(self, test_process: subprocess.Popen, recorder_factory=None) -> dict:
         if self.run_directory.exists() and any(self.run_directory.iterdir()):
             # The caller creates a new run directory for the test log and empty
-            # control directory before capture; nothing else may already exist.
+            # control directory before capture. The ordinary CLI explicitly admits
+            # its current target probes; preparation retains this run's configuration
+            # and build provenance. No other pre-existing content is accepted.
             allowed = {self.xcodebuild_log, self.control_directory,
                        self.run_directory / "iteration-trace-config.json",
                        self.run_directory / "iteration-trace-config.xctestrun",
-                       self.run_directory / BUILD_PROVENANCE_NAME,
-                       *(self.run_directory / name for name in
-                         ("targets.json", "simulators.json", "target.json"))}
+                       self.run_directory / BUILD_PROVENANCE_NAME, *self.target_probe_files}
             unexpected = [p for p in self.run_directory.iterdir() if p not in allowed]
             if unexpected or not self.xcodebuild_log.is_file():
                 raise HandshakeError("A new run directory contains unexpected or stale files")
@@ -504,7 +511,8 @@ def derived_from_receipt(receipt: dict, derived_data: Path | None) -> Path:
 
 
 def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration: int,
-                     run_directory: Path | None = None, build_provenance: dict | None = None) -> Path:
+                     run_directory: Path | None = None, build_provenance: dict | None = None,
+                     target_probe_files: tuple[Path, ...] = ()):
     if run_directory is None or build_provenance is None:
         raise HandshakeError("Each trace configuration requires a new run directory and validated build provenance")
     if not re.fullmatch(r"[0-9a-f]{40}", revision) or iteration not in range(30):
@@ -514,7 +522,12 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
         raise HandshakeError("Validated build provenance must match this exact revision and DerivedData")
     if not control.is_dir() or control.is_symlink() or control.parent != run_directory:
         raise HandshakeError("Trace control must be a real directory inside its own run directory")
-    unexpected = [path for path in run_directory.iterdir() if path != control]
+    if target_probe_files:
+        expected_probes = tuple(run_directory / name for name in TARGET_PROBE_FILENAMES)
+        if (target_probe_files != expected_probes
+                or any(not path.is_file() or path.is_symlink() for path in target_probe_files)):
+            raise HandshakeError("Current target probes must be ordinary files generated in this run directory")
+    unexpected = [path for path in run_directory.iterdir() if path not in {control, *target_probe_files}]
     if (not run_directory.is_dir() or run_directory.is_symlink() or unexpected
             or any(control.iterdir()) or (run_directory / "iteration-trace-config.xctestrun").exists()):
         raise HandshakeError("Trace configuration requires a new run directory containing only an empty control")
@@ -583,7 +596,9 @@ def main(argv: list[str] | None = None) -> int:
             raise HandshakeError("Timing requires a clean committed source revision")
         run.mkdir(parents=True, exist_ok=False)
         target_path = args.target_metadata
+        target_probe_files: tuple[Path, ...] = ()
         if args.target_metadata is None:
+            target_probe_files = tuple(run / name for name in TARGET_PROBE_FILENAMES)
             target_path = run / "target.json"
             # Both probes are read-only. They never create, boot, restart, erase,
             # pair or choose a target; the caller owns its exclusive lifecycle.
@@ -610,7 +625,7 @@ def main(argv: list[str] | None = None) -> int:
                            REFRACT_BENCH_TRACE_ITERATION=str(args.iteration))
         build_provenance = validate_build_provenance(args.derived_data, args.source_revision)
         test_run = prepare_test_run(args.derived_data, control, args.source_revision, args.iteration,
-                                    run, build_provenance)
+                                    run, build_provenance, target_probe_files)
         validate_trace_configuration(run, args.source_revision, control, args.iteration, args.derived_data)
         with log.open("x", encoding="utf-8") as stream:
             process = subprocess.Popen(
@@ -620,7 +635,8 @@ def main(argv: list[str] | None = None) -> int:
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
                               xcodebuild_log=log, control_directory=control,
                               readiness_timeout=args.readiness_timeout,
-                              completion_timeout=args.completion_timeout, derived_data=args.derived_data)
+                              completion_timeout=args.completion_timeout, derived_data=args.derived_data,
+                              target_probe_files=target_probe_files)
             result = session.capture(process)
             status = process.wait(timeout=args.completion_timeout)
             if status != 0:
