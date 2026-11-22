@@ -59,7 +59,7 @@ class NativeEnterDispatchInstrumentedTest {
         device.findObject(By.res("com.example.refract.ime", "generatedHost")).click()
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync {
-            assertTrue(attachedEditor().value.isFocused)
+            assertTrue(requireAttachedEditor().value.isFocused)
         }
     }
 

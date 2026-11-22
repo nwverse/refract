@@ -34,7 +34,8 @@ boundaries and drain the native dispatcher in the regression test; a direct View
 connection: `Instrumentation.sendKeyDownUpSync` alone bypasses that override. Synthetic composition setup in such a
 dispatch test remains separate from a UIAutomator test that clicks a real Chinese keyboard and candidate. Never call
 `Instrumentation.waitForIdleSync` inside `runOnMainSync`: return from the application main thread first, then drain
-native dispatch before reading committed-draft and overall-commit callbacks.
+native dispatch before reading committed-draft and overall-commit callbacks. Helpers that call `runOnMainSync` must
+also stay outside another main-thread block; use the direct attached-state accessor there.
 
 ## ArkUI preview and submit are not Android InputConnection operations
 
