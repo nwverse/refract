@@ -1,6 +1,10 @@
 import Testing
+import Foundation
 @testable import RefractFrontend
 import RefractIR
+import RefractArkUI
+import RefractCompose
+import RefractMapping
 
 @Test(arguments: [
     ("@State private var isEnabled: Bool = false", ValueProperty.state("isEnabled")),
@@ -57,6 +61,45 @@ func frontendParsesOnlyDeclaredBoolToggleProjection(_ declaration: String, _ exp
     #expect(localized.arguments.map(\.value) == [.reference("row.id")])
     #expect(localized.arguments.map(\.type) == [.int])
     #expect(binding == ItemBinding(model: "model", item: "row", property: "enabled", key: "id", action: "setEnabled"))
+}
+
+@Test func conditionalListRowRetainsTypedItemToggleScope() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SettingsModel: RefractModel {
+        var rows: [SettingRow] { get }
+        var visible: Bool { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct SettingRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct ItemToggle: View {
+        let model: SettingsModel
+        var body: some View {
+            List(model.rows) { row in
+                if model.visible {
+                    Toggle("settings.item\\(row.id)", isOn: Binding(
+                        get: { row.enabled },
+                        set: { value in model.setEnabled(row.id, value: value) }
+                    ))
+                } else {
+                    Text("settings.item\\(row.id)")
+                }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/interop-native-measurement/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("if (model.visible.value)"))
+    #expect(kotlin.contains("checked = row.enabled"))
+    #expect(kotlin.contains("model.setEnabled(row.id, enabled)"))
+    let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    #expect(ark.contains("if (this.model.visible)"))
+    #expect(ark.contains("isOn: row.enabled"), Comment(rawValue: ark))
+    #expect(ark.contains("this.model.setEnabled(row.id, enabled);"), Comment(rawValue: ark))
+    #expect(ark.contains("(row: SettingRow): string => String(row.id)"))
 }
 
 @Test(arguments: [

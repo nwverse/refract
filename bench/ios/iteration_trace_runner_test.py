@@ -599,6 +599,16 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(source[prepare:].count("prepare_test_run("), 1)
         self.assertLess(prepare, source.index('test_command(test_run', prepare))
 
+    def test_exact_existing_xctest_selectors(self):
+        for variant in ("generated", "reference"):
+            for scenario in ("scroll", "stateUpdate"):
+                with self.subTest(variant=variant, scenario=scenario):
+                    expected = (f"RefractBenchUITests/RefractBenchUITests/"
+                                f"test{variant.capitalize()}{scenario[0].upper()}{scenario[1:]}Trace")
+                    self.assertEqual(traced_test_name(variant, scenario), expected)
+                    self.assertIn(f"func {expected.rsplit('/', 1)[-1]}",
+                                  (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
+
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"
         result = subprocess.run([sys.executable, "-I", str(script), "--help"],
