@@ -20,6 +20,9 @@ struct ForEachList: View {
                     VStack {
                         Text(value)
                         Text(item.title)
+                            .accessibilityLabel(Text(value))
+                        Button(value) { }
+                            .accessibilityLabel(Text(value))
                     }
                 }
             }
