@@ -141,10 +141,12 @@ class Session:
         if self.run_directory.exists() and any(self.run_directory.iterdir()):
             # The caller creates a new run directory for the test log and empty
             # control directory before capture; nothing else may already exist.
-            allowed = {self.xcodebuild_log, self.control_directory}
+            allowed = {self.xcodebuild_log, self.control_directory,
+                       *(self.run_directory / name for name in
+                         ("targets.json", "simulators.json", "target.json"))}
             unexpected = [p for p in self.run_directory.iterdir() if p not in allowed]
             if unexpected or not self.xcodebuild_log.is_file():
-                raise HandshakeError("A new run directory containing only the current xcodebuild log is required")
+                raise HandshakeError("A new run directory contains unexpected or stale files")
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
@@ -301,6 +303,38 @@ class Session:
             raise HandshakeError(f"Instruments recorder exited before native completion with status {process.returncode}")
 
 
+def traced_test_name(variant: str, scenario: str) -> str:
+    """Return the existing Swift XCTest selector without changing its camel case."""
+    selector = {"scroll": "Scroll", "stateUpdate": "StateUpdate"}[scenario]
+    return f"RefractBenchUITests/RefractBenchUITests/test{variant.capitalize()}{selector}Trace"
+
+
+def test_command(test_run: Path, target_udid: str, test: str, revision: str,
+                 results: Path) -> list[str]:
+    return ["xcodebuild", "test-without-building", "-xctestrun", str(test_run),
+            "-resultBundlePath", str(results), "-destination", f"platform=iOS Simulator,id={target_udid}",
+            f"-only-testing:{test}", "CODE_SIGNING_ALLOWED=NO", f"REFRACT_BENCH_REVISION={revision}"]
+
+
+def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration: int) -> Path:
+    # An xctestrun resolves __TESTROOT__ from its containing Build/Products
+    # directory; copying it elsewhere changes the native test product paths.
+    sources = sorted(path for path in (derived_data / "Build/Products").glob("*.xctestrun")
+                     if path.name != "iteration-trace-config.xctestrun")
+    if len(sources) != 1:
+        raise HandshakeError("Exactly one generated xctestrun file is required")
+    destination = sources[0].with_name("iteration-trace-config.xctestrun")
+    subprocess.run(["plutil", "-convert", "binary1", "-o", str(destination), "--", str(sources[0])], check=True)
+    values = {"REFRACT_BENCH_REVISION": revision,
+              "REFRACT_BENCH_TRACE_CONTROL": str(control),
+              "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
+    for name, value in values.items():
+        subprocess.run(["plutil", "-replace",
+                        f"RefractBenchUITests.TestingEnvironmentVariables.{name}",
+                        "-string", value, str(destination)], check=True)
+    return destination
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-directory", required=True, type=Path, help="A new directory for one iteration")
@@ -348,20 +382,14 @@ def main(argv: list[str] | None = None) -> int:
         control.mkdir()
         # XCTest is the only app launcher. It remains blocked until the recorder
         # acknowledgement is durable. This test command never manages a target.
-        test = f"RefractBenchUITests/RefractBenchUITests/test{args.variant.capitalize()}{args.scenario}Trace"
+        test = traced_test_name(args.variant, args.scenario)
         environment = dict(os.environ, REFRACT_BENCH_REVISION=args.source_revision,
                            REFRACT_BENCH_TRACE_CONTROL=str(control),
                            REFRACT_BENCH_TRACE_ITERATION=str(args.iteration))
+        test_run = prepare_test_run(args.derived_data, control, args.source_revision, args.iteration)
         with log.open("x", encoding="utf-8") as stream:
             process = subprocess.Popen(
-                ["xcodebuild", "test-without-building",
-                 "-resultBundlePath", str(run / "results.xcresult"),
-                 "-project", str(Path(__file__).resolve().parent / "RefractBench.xcodeproj"),
-                 "-scheme", "RefractBench", "-configuration", "Release",
-                 "-destination", f"platform=iOS Simulator,id={args.target_udid}",
-                 "-derivedDataPath", str(args.derived_data),
-                 f"-only-testing:{test}", "CODE_SIGNING_ALLOWED=NO",
-                 f"REFRACT_BENCH_REVISION={args.source_revision}"],
+                test_command(test_run, args.target_udid, test, args.source_revision, run / "results.xcresult"),
                 env=environment, stdout=stream, stderr=subprocess.STDOUT)
             session = Session(target=args.target_udid, variant=args.variant, scenario=args.scenario,
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,

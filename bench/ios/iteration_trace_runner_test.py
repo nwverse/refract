@@ -16,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import HandshakeError, Session
+from iteration_trace_runner import HandshakeError, Session, test_command, traced_test_name
 
 
 class RecorderFixture:
@@ -28,6 +28,7 @@ class RecorderFixture:
         self.work.mkdir(exist_ok=True)
         self.commands = self.work / "commands.jsonl"
         self.process = None
+        self.recorder = None
         self.cleanup = lambda: None
         self.output = root / "xcodebuild.log"
         root.mkdir(exist_ok=True)
@@ -69,15 +70,22 @@ with open(os.environ["REFRACT_SYNTHETIC_XCRUN"], "a") as stream:
 output = sys.argv[sys.argv.index("--output") + 1]
 control = pathlib.Path(sys.argv[sys.argv.index("--control-directory") + 1])
 def finish(status):
+    if {write_trace!r}:
+        trace = pathlib.Path(output)
+        (trace / "Data").mkdir(parents=True, exist_ok=True)
+        (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
     print("Output saved: " + ({saved_path!r} or output), flush=True)
-    sys.exit(status)
+    os._exit(status)
 signal.signal(signal.SIGINT, lambda *_: finish(0))
 signal.signal(signal.SIGTERM, lambda *_: finish(143))
-time.sleep({ready_delay!r})
+import json, os, pathlib, time
+
 if {ready!r} is None:
     sys.exit(7)
 print({ready!r}.format(trace=output), flush=True)
 if {recorder_after_ready_exit!r}:
+    while not (control / "recorder-ready.json").exists():
+        time.sleep(0.001)
     sys.exit({recorder_after_ready_exit!r})
 time.sleep({completion_delay!r})
 if {recorder_stop_status!r}:
@@ -98,21 +106,24 @@ while not (control / "recorder-stop").exists():
 
         def factory(command, log):
             environment = dict(os.environ, REFRACT_SYNTHETIC_XCRUN=str(self.commands))
-            return subprocess.Popen(
+            self.recorder = subprocess.Popen(
                 ["python3", "-I", str(recorder_script), *command,
                  "--control-directory", str(self.root / "control")],
                 env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            return self.recorder
         self.recorder_factory = factory
 
         def stop():
-            if self.process is not None:
-                if self.process.poll() is None:
-                    self.process.terminate()
+            for process in (self.process, self.recorder):
+                if process is None:
+                    continue
+                if process.poll() is None:
+                    process.terminate()
                 try:
-                    self.process.communicate(timeout=5)
+                    process.communicate(timeout=5)
                 except subprocess.TimeoutExpired:
-                    self.process.kill()
-                    self.process.communicate(timeout=5)
+                    process.kill()
+                    process.communicate(timeout=5)
         self.cleanup = stop
 
     def stop(self):
@@ -303,6 +314,30 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
+
+    def test_exact_existing_xctest_selectors_and_xctestrun_command(self):
+        for variant in ("generated", "reference"):
+            for scenario in ("scroll", "stateUpdate"):
+                with self.subTest(variant=variant, scenario=scenario):
+                    selector = f"test{variant.capitalize()}{scenario[0].upper()}{scenario[1:]}Trace"
+                    test = traced_test_name(variant, scenario)
+                    self.assertEqual(test.rsplit("/", 1)[-1], selector)
+                    self.assertIn(f"func {selector}",
+                                  (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
+        command = test_command(Path("iteration.xctestrun"), "owned-target",
+                               "RefractBenchUITests/RefractBenchUITests/testGeneratedScrollTrace",
+                               "a" * 40, Path("results.xcresult"))
+        self.assertEqual(command[:3], ["xcodebuild", "test-without-building", "-xctestrun"])
+        self.assertNotIn("-project", command)
+        self.assertNotIn("simctl", command)
+
+    def test_main_prepares_only_the_trace_xctestrun(self):
+        source = (HERE / "iteration_trace_runner.py").read_text()
+        prepare = source.index("test_run = prepare_test_run(")
+        self.assertGreater(prepare, source.index('parser.add_argument("--variant"'))
+        self.assertEqual(source[:prepare].count("\n        test_run = prepare_test_run("), 0)
+        self.assertEqual(source[prepare:].count("prepare_test_run("), 1)
+        self.assertLess(prepare, source.index('test_command(test_run', prepare))
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"
