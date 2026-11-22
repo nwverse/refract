@@ -301,6 +301,23 @@ class Session:
             raise HandshakeError(f"Instruments recorder exited before native completion with status {process.returncode}")
 
 
+def prepare_test_run(derived_data: Path, run_directory: Path, control: Path,
+                     revision: str, iteration: int) -> Path:
+    sources = sorted((derived_data / "Build/Products").glob("*.xctestrun"))
+    if len(sources) != 1:
+        raise HandshakeError("Exactly one generated xctestrun file is required")
+    destination = run_directory / "iteration.xctestrun"
+    subprocess.run(["plutil", "-convert", "binary1", "-o", str(destination), "--", str(sources[0])], check=True)
+    values = {"REFRACT_BENCH_REVISION": revision,
+              "REFRACT_BENCH_TRACE_CONTROL": str(control),
+              "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
+    for name, value in values.items():
+        subprocess.run(["plutil", "-replace",
+                        f"RefractBenchUITests.TestingEnvironmentVariables.{name}",
+                        "-string", value, str(destination)], check=True)
+    return destination
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-directory", required=True, type=Path, help="A new directory for one iteration")
@@ -352,14 +369,13 @@ def main(argv: list[str] | None = None) -> int:
         environment = dict(os.environ, REFRACT_BENCH_REVISION=args.source_revision,
                            REFRACT_BENCH_TRACE_CONTROL=str(control),
                            REFRACT_BENCH_TRACE_ITERATION=str(args.iteration))
+        test_run = prepare_test_run(args.derived_data, run, control,
+                                    args.source_revision, args.iteration)
         with log.open("x", encoding="utf-8") as stream:
             process = subprocess.Popen(
-                ["xcodebuild", "test-without-building",
+                ["xcodebuild", "test-without-building", "-xctestrun", str(test_run),
                  "-resultBundlePath", str(run / "results.xcresult"),
-                 "-project", str(Path(__file__).resolve().parent / "RefractBench.xcodeproj"),
-                 "-scheme", "RefractBench", "-configuration", "Release",
                  "-destination", f"platform=iOS Simulator,id={args.target_udid}",
-                 "-derivedDataPath", str(args.derived_data),
                  f"-only-testing:{test}", "CODE_SIGNING_ALLOWED=NO",
                  f"REFRACT_BENCH_REVISION={args.source_revision}"],
                 env=environment, stdout=stream, stderr=subprocess.STDOUT)
