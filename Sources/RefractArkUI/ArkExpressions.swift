@@ -72,7 +72,7 @@ enum ArkExpression {
                              suggestion: "Pass the binding to a supported binding-aware view.",
                              location: expression.location)
         case let .platformValue(alternatives):
-            return try emit(alternatives.harmonyOS, item: item, mapping: mapping)
+            return try emit(alternatives.harmonyOS, item: item, mapping: mapping, localAliases: localAliases)
         case .accessibilityAction, .accessibilityTraversal:
             throw Diagnostic(code: "RFACCESS004", message: "An accessibility operation cannot be rendered as an ArkTS value.",
                              suggestion: "Keep the typed accessibility operation in its dedicated modifier lowering.",
