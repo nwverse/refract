@@ -27,6 +27,11 @@ draft, translate it to Chinese, or replace an active composing span during recom
 actual native editor content after finishing composition. Test that behavior directly with `InputConnection`, and
 label Robolectric as Native JVM rather than an emulator/device or third-party IME result.
 
+`BaseInputConnection.sendKeyEvent` dispatches an IME's hardware event back through the target View. If the custom
+`EditText.onKeyDown` owns Enter submission, do not submit again from the connection's matching key-up. Cover both
+boundaries and drain the native dispatcher in the regression test; a direct View-only call cannot expose duplicate
+`onDraftCommit`/`onCommit` callbacks.
+
 ## ArkUI preview and submit are not Android InputConnection operations
 
 ArkUI `TextInput` reports native preview through the optional `PreviewText` argument of `onChange`; do not publish its
