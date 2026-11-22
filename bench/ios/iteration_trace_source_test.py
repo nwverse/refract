@@ -42,10 +42,32 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertLess(start, ready)
         self.assertLess(ready, tap)
         self.assertLess(tap, complete)
-        self.assertIn("Int(application.processIdentifier)", TESTS)
+        self.assertNotIn("application.processIdentifier", TESTS)
         self.assertIn('named: "completion.json"', TESTS)
         self.assertIn('name: "recorder-finished.json"', TESTS)
         self.assertIn("recorder-finished.json", TESTS)
+
+    def test_native_process_identity_binds_the_same_pid_to_completion(self):
+        identity = APP.index('publishTracePacket(named: "native-process.json"')
+        ready = APP.index("while !recorderIsReady", identity)
+        scenario = APP.index("switch (variant, scenario)", ready)
+        completion = APP.index('publishTracePacket(named: "native-completion.json"', scenario)
+        self.assertLess(identity, ready)
+        self.assertLess(ready, scenario)
+        self.assertLess(scenario, completion)
+        for field in ('"revision": revision', '"variant": variant', '"scenario": scenario',
+                      '"iteration": iteration', '"pid": Int(ProcessInfo.processInfo.processIdentifier)',
+                      '"process": "running"'):
+            self.assertIn(field, APP)
+        for name in ("native-process.json", "native-completion.json"):
+            if name == "native-process.json":
+                self.assertIn('TraceHandshake.ready(in: control, expected: expectedIdentity,\n'
+                              '                                     name: "native-process.json")', TESTS)
+            else:
+                self.assertIn('in: control, expected: expectedIdentity, name: "native-completion.json")', TESTS)
+        self.assertIn('expectedIdentity["state"] = "complete"', TESTS)
+        self.assertIn('expectedIdentity["completion"] = completionText', TESTS)
+        self.assertIn('"pid": pid', TESTS)
 
 
 if __name__ == "__main__":

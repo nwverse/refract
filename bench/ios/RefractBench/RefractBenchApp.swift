@@ -8,6 +8,7 @@ struct RefractBenchApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var beginSelectedIteration = false
     @State private var recorderIsReady = false
+    @State private var traceIdentityError = ""
 
     private var selectedIteration: Int? {
         guard let value = ProcessInfo.processInfo.environment["REFRACT_BENCH_ITERATION"] else { return nil }
@@ -20,6 +21,10 @@ struct RefractBenchApp: App {
 
     private var scenario: String {
         ProcessInfo.processInfo.environment["REFRACT_BENCH_SCENARIO"] ?? "idle"
+    }
+
+    private var revision: String {
+        ProcessInfo.processInfo.environment["REFRACT_BENCH_REVISION"] ?? ""
     }
 
     init() {
@@ -46,6 +51,8 @@ struct RefractBenchApp: App {
             }
             .overlay(alignment: .bottom) {
                 if selectedIteration != nil {
+                    Text(traceIdentityError)
+                        .accessibilityIdentifier("refract_benchmark_trace_identity_error")
                     Button("BeginIteration") {
                         beginSelectedIteration = true
                     }
@@ -68,14 +75,27 @@ struct RefractBenchApp: App {
                 }
             }
             .task {
-                if selectedIteration != nil, let directory = traceControlDirectory() {
-                    while !recorderIsReady {
-                        recorderIsReady = recorderReady(in: directory)
-                        try? await Task.sleep(for: .milliseconds(10))
+                if let iteration = selectedIteration, let directory = traceControlDirectory(),
+                   (0..<30).contains(iteration), traceIdentityError.isEmpty {
+                    do {
+                        try publishTracePacket(named: "native-process.json", in: directory,
+                                               revision: revision, variant: variant, scenario: scenario,
+                                               iteration: iteration, state: "ready")
+                        while !recorderIsReady {
+                            recorderIsReady = recorderReady(in: directory)
+                            try await Task.sleep(for: .milliseconds(10))
+                        }
+                        while !beginSelectedIteration {
+                            try await Task.sleep(for: .milliseconds(10))
+                        }
+                    } catch {
+                        traceIdentityError = "Native trace identity failed: \(error.localizedDescription)"
+                        return
                     }
-                    while !beginSelectedIteration {
-                        try? await Task.sleep(for: .milliseconds(10))
-                    }
+                    guard !Task.isCancelled else { return }
+                } else if selectedIteration != nil {
+                    traceIdentityError = "An exact selected iteration and control directory are required"
+                    return
                 }
                 switch (variant, scenario) {
                 case ("generated", "scroll"), ("reference", "scroll"):
@@ -84,6 +104,16 @@ struct RefractBenchApp: App {
                     await runUpdates(variant: variant, model: model)
                 default:
                     break
+                }
+                if let iteration = selectedIteration, let directory = traceControlDirectory() {
+                    do {
+                        try publishTracePacket(named: "native-completion.json", in: directory,
+                                               revision: revision, variant: variant, scenario: scenario,
+                                               iteration: iteration, state: "complete",
+                                               completion: "\(variant) \(scenario) complete 1")
+                    } catch {
+                        traceIdentityError = "Native completion identity failed: \(error.localizedDescription)"
+                    }
                 }
             }
         }
@@ -137,6 +167,33 @@ private func traceControlDirectory() -> URL? {
 }
 
 @MainActor
+private func publishTracePacket(named name: String, in directory: URL, revision: String,
+                                variant: String, scenario: String, iteration: Int,
+                                state: String, completion: String? = nil) throws {
+    var packet: [String: Any] = [
+        "schema": 1,
+        "session": 1,
+        "revision": revision,
+        "variant": variant,
+        "scenario": scenario,
+        "iteration": iteration,
+        "pid": Int(ProcessInfo.processInfo.processIdentifier),
+        "process": "running",
+        "state": state,
+    ]
+    if let completion {
+        packet["completion"] = completion
+    }
+    let data = try JSONSerialization.data(withJSONObject: packet, options: [.sortedKeys])
+    let destination = directory.appendingPathComponent(name)
+    guard !FileManager.default.fileExists(atPath: destination.path) else {
+        throw NSError(domain: "RefractBench.TraceIdentity", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: "Refusing to replace \(name)"])
+    }
+    try data.write(to: destination, options: .withoutOverwriting)
+}
+
+@MainActor
 private func recorderReady(in directory: URL) -> Bool {
     guard let iteration = selectedIteration(), let data = try? Data(contentsOf:
             directory.appendingPathComponent("recorder-ready.json")),
@@ -145,6 +202,7 @@ private func recorderReady(in directory: URL) -> Bool {
           packet["variant"] as? String == ProcessInfo.processInfo.environment["REFRACT_BENCH_VARIANT"],
           packet["scenario"] as? String == ProcessInfo.processInfo.environment["REFRACT_BENCH_SCENARIO"],
           packet["iteration"] as? Int == iteration,
+          packet["revision"] as? String == ProcessInfo.processInfo.environment["REFRACT_BENCH_REVISION"],
           let pid = packet["pid"] as? Int32, pid == ProcessInfo.processInfo.processIdentifier else { return false }
     return true
 }
