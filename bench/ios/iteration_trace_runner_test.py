@@ -69,6 +69,10 @@ with open(os.environ["REFRACT_SYNTHETIC_XCRUN"], "a") as stream:
 output = sys.argv[sys.argv.index("--output") + 1]
 control = pathlib.Path(sys.argv[sys.argv.index("--control-directory") + 1])
 def finish(status):
+    if {write_trace!r}:
+        trace = pathlib.Path(output)
+        (trace / "Data").mkdir(parents=True, exist_ok=True)
+        (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
     print("Output saved: " + ({saved_path!r} or output), flush=True)
     sys.stdout.flush()
     sys.stderr.flush()
@@ -80,6 +84,8 @@ if {ready!r} is None:
     sys.exit(7)
 print({ready!r}.format(trace=output), flush=True)
 if {recorder_after_ready_exit!r}:
+    while not (control / "recorder-ready.json").exists():
+        time.sleep(0.001)
     sys.exit({recorder_after_ready_exit!r})
 time.sleep({completion_delay!r})
 if {recorder_stop_status!r}:
@@ -288,7 +294,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
 
     def test_recorder_exit_before_completion_preserves_specific_failure(self):
-        self.recorder.start(recorder_after_ready_exit=7, ready_delay=0.02, completion_delay=0.2)
+        self.recorder.start(recorder_after_ready_exit=7, completion_delay=0.2)
         with self.assertRaisesRegex(HandshakeError,
                                     "exited before native completion with status 7"):
             self.capture(self.session())
