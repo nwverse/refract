@@ -114,6 +114,48 @@ import RefractArkUI
     #expect(kotlin.contains("@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)"))
 }
 
+// An outer optional scalar stays local when a lazy row's drag event reads its payload.
+@Test func dragPayloadKeepsOptionalAliasInsideForEachRow() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct OptionalDragItem: Identifiable {
+        let id: String
+        let title: String
+    }
+
+    protocol OptionalDragModel: RefractModel {
+        var items: [OptionalDragItem] { get }
+        func receiveDrop(kind: String, payload: String)
+    }
+
+    struct OptionalNativeList: View {
+        let model: OptionalDragModel
+        let title: String?
+
+        var body: some View {
+            if let value = title {
+                List {
+                    ForEach(model.items) { item in
+                        Text(value)
+                            .refractNativeModifier(.dragPayload(kind: "note", value: value))
+                    }
+                }
+            } else {
+                Text(verbatim: "Empty")
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let ark = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("ClipData.newPlainText(\"note\", value)"))
+    #expect(ark.contains("const value = this.title;"))
+    #expect(ark.contains("Text(value)"))
+    #expect(ark.contains("event.setData({ 'note': value } as Record<string, string>);"), Comment(rawValue: ark))
+    #expect(!ark.contains("'note': this.value"))
+    #expect(ark.contains("(item: OptionalDragItem): string => item.id"))
+}
+
 // Drop target invokes the model action with the matching kind and a non-empty payload.
 @Test func dropTargetInvokesModelActionOnNonEmptyPayload() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """

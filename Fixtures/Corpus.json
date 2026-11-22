@@ -526,6 +526,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "selection-dragdrop-optional-alias",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "selection-link-context",
       "implementationStatus": "ready"
     },
