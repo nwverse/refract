@@ -113,16 +113,17 @@ extension Builder {
         for declaration in currentStates {
             switch declaration {
             case let .state(name, _, _, _) where name == reference.baseName.text:
-                return Expression(.valueProperty(.state(name)), location: location(of: expression))
+                return Expression(.valueProperty(.state(name)), type: .bool, location: location(of: expression))
             case let .binding(name, _, _) where name == reference.baseName.text:
-                return Expression(.valueProperty(.binding(name)), location: location(of: expression))
+                return Expression(.valueProperty(.binding(name)), type: .bool, location: location(of: expression))
             default: continue
             }
         }
-        return nil
+        return Expression(.reference(reference.baseName.text), type: .bool, location: location(of: expression))
     }
 
     private func scalarType(named name: String) -> ValueType? {
+        if let type = currentBindings[name] { return type }
         for declaration in currentStates {
             switch declaration {
             case let .state(declared, type, _, _) where declared == name:

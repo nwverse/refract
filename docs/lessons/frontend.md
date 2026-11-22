@@ -1,5 +1,9 @@
 # SwiftSyntax frontend
 
+- Boolean conditions must use the same scalar scope as other typed expressions. Optional and enum-payload aliases are
+  already recorded in `currentBindings`; a state/binding-only lookup wrongly rejects a non-null `Bool` alias used by a
+  nested `if`. Resolve local aliases first, then emit a direct native branch, with paired golden and compiler coverage.
+
 - SwiftParser leaves unparenthesized comparison/boolean chains as a flat `SequenceExprSyntax`, not an
   `InfixOperatorExprSyntax`. A bounded filter/sort grammar must check the exact element count and every operator/member
   position. Do not broaden it to arbitrary expressions; print the real AST once, then preserve the negative cases.

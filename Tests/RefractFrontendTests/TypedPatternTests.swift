@@ -86,6 +86,8 @@ struct ContentView: View {
     let arkTS = try ArkUIBackend().generate(module: unit.module)
     #expect(kotlin.contains("if (enabled)"))
     #expect(arkTS.contains("if (enabled)"))
+    #expect(!kotlin.contains("this.enabled"))
+    #expect(!arkTS.contains("if (this.enabled)"))
 }
 
 @Test func scalarPayloadSwitchUsesTypedLazyBranches() throws {
@@ -114,6 +116,7 @@ struct ContentView: View {
         ("struct Bad: View { let title: String?; var body: some View { if let title = title { Text(title) } else { Text(verbatim: \"Empty\") } } }", "RFCTRL002"),
         ("struct Bad: View { let title: String?; var body: some View { if let value = title { Text(value) } } }", "RFCTRL002"),
         ("struct Bad: View { let title: String; var body: some View { if let value = title { Text(value) } else { Text(verbatim: \"Empty\") } } }", "RFCTRL002"),
+        ("struct Bad: View { let title: String?; var body: some View { if let titleValue = title { if titleValue { Text(verbatim: \"Present\") } else { Text(verbatim: \"Invalid\") } } else { Text(verbatim: \"Empty\") } } }", "RFCTRL001"),
         ("enum Content { case text(String); case empty }; struct Bad: View { let content: Content; var body: some View { switch content { case .text(let text): Text(text); case .empty: Text(verbatim: \"Empty\") } } }", "RFCTRL006"),
         ("enum Content { case pair(String, Int) }; struct Bad: View { let content: Content; var body: some View { Text(verbatim: \"Bad\") } }", "RFCTRL006"),
         ("enum Content { case text(String) }; struct Bad: View { let content: Content; var body: some View { switch content { case .text(let text): Text(text); default: Text(verbatim: \"Other\") } } }", "RFCTRL005"),
