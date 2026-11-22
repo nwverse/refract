@@ -56,9 +56,9 @@ export struct GeneratedSettingRow {
         Text(this.row.title).font(AppTypography.rowTitle)
         Text(this.row.subtitle).font(AppTypography.rowSubtitle)
       }.layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: row.enabled })
+      Toggle({ type: ToggleType.Switch, isOn: this.row.enabled })
         .onChange((enabled: boolean) => {
-          this.model.setEnabled(row.id, enabled);
+          this.model.setEnabled(this.row.id, enabled);
         })
         .id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)
     }
