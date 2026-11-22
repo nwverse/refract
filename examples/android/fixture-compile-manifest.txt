@@ -22,6 +22,7 @@ list-foreach
 list-foreach-explicit-id
 list-paged-search
 list-typed-projection
+list-row-layout-toggle
 v0-item-toggle
 v0-item-toggle-value
 interop-native-measurement
