@@ -31,6 +31,7 @@ class HandshakeError(ValueError):
 
 VARIANTS = ("generated", "reference")
 SCENARIOS = ("scroll", "stateUpdate")
+TARGET_PROBE_FILENAMES = ("targets.json", "simulators.json", "target.json")
 READY_OUTPUT = re.compile(r"(?:^|\n)Starting recording with the (.+?) template\.[^\n]*(?:\n|$)")
 SAVED_OUTPUT = re.compile(r"(?:^|\n)Output saved: (.+?)\s*(?:\n|$)")
 
@@ -107,7 +108,7 @@ class Session:
                  control_directory: Path, readiness_timeout: float = 60,
                  completion_timeout: float = 180, window: str = "5s",
                  template: str = "Animation Hitches", session_id: int = 1,
-                 target_label: str = "SIMULATOR"):
+                 target_label: str = "SIMULATOR", target_probe_files: tuple[Path, ...] = ()):
         if variant not in VARIANTS or scenario not in SCENARIOS:
             raise HandshakeError("Unsupported variant or scenario")
         if iteration not in range(30):
@@ -118,6 +119,10 @@ class Session:
             raise HandshakeError("The Instruments window must be a positive explicit duration")
         if target_label != "SIMULATOR":
             raise HandshakeError("This driver currently supports only a probed simulator; it is not device evidence")
+        expected_probes = tuple(run_directory / name for name in TARGET_PROBE_FILENAMES)
+        if target_probe_files and (target_probe_files != expected_probes or any(
+                not path.is_file() or path.is_symlink() for path in target_probe_files)):
+            raise HandshakeError("Current target probes must be ordinary files generated in this run directory")
         self.target = target
         self.variant = variant
         self.scenario = scenario
@@ -132,6 +137,7 @@ class Session:
         self.template = template
         self.session_id = session_id
         self.target_label = target_label
+        self.target_probe_files = target_probe_files
         self.raw = run_directory / "raw"
         self.identity = f"{variant}-{scenario}-{iteration}"
         self.trace = run_directory / f"{self.identity}.trace"
@@ -140,11 +146,12 @@ class Session:
     def capture(self, test_process: subprocess.Popen, recorder_factory=None) -> dict:
         if self.run_directory.exists() and any(self.run_directory.iterdir()):
             # The caller creates a new run directory for the test log and empty
-            # control directory before capture; nothing else may already exist.
-            allowed = {self.xcodebuild_log, self.control_directory}
+            # control directory before capture. Only the probes explicitly passed
+            # by the ordinary CLI's exclusive new-directory path are also allowed.
+            allowed = {self.xcodebuild_log, self.control_directory, *self.target_probe_files}
             unexpected = [p for p in self.run_directory.iterdir() if p not in allowed]
             if unexpected or not self.xcodebuild_log.is_file():
-                raise HandshakeError("A new run directory containing only the current xcodebuild log is required")
+                raise HandshakeError("A new run directory contains unexpected or stale files")
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
@@ -327,7 +334,9 @@ def main(argv: list[str] | None = None) -> int:
             raise HandshakeError("Timing requires a clean committed source revision")
         run.mkdir(parents=True, exist_ok=False)
         target_path = args.target_metadata
+        target_probe_files: tuple[Path, ...] = ()
         if args.target_metadata is None:
+            target_probe_files = tuple(run / name for name in TARGET_PROBE_FILENAMES)
             target_path = run / "target.json"
             # Both probes are read-only. They never create, boot, restart, erase,
             # pair or choose a target; the caller owns its exclusive lifecycle.
@@ -367,7 +376,8 @@ def main(argv: list[str] | None = None) -> int:
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
                               xcodebuild_log=log, control_directory=control,
                               readiness_timeout=args.readiness_timeout,
-                              completion_timeout=args.completion_timeout)
+                              completion_timeout=args.completion_timeout,
+                              target_probe_files=target_probe_files)
             result = session.capture(process)
             status = process.wait(timeout=args.completion_timeout)
             if status != 0:
