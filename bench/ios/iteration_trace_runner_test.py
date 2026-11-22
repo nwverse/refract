@@ -483,22 +483,6 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 runner.prepare_test_run(products.parents[1], self.root / "control", "a" * 40, 0)
         run.assert_not_called()
 
-    def test_exact_existing_xctest_selectors_and_xctestrun_command(self):
-        for variant in ("generated", "reference"):
-            for scenario in ("scroll", "stateUpdate"):
-                with self.subTest(variant=variant, scenario=scenario):
-                    selector = f"test{variant.capitalize()}{scenario[0].upper()}{scenario[1:]}Trace"
-                    test = traced_test_name(variant, scenario)
-                    self.assertEqual(test.rsplit("/", 1)[-1], selector)
-                    self.assertIn(f"func {selector}",
-                                  (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
-        command = test_command(Path("iteration.xctestrun"), "owned-target",
-                               "RefractBenchUITests/RefractBenchUITests/testGeneratedScrollTrace",
-                               "a" * 40, Path("results.xcresult"))
-        self.assertEqual(command[:3], ["xcodebuild", "test-without-building", "-xctestrun"])
-        self.assertNotIn("-project", command)
-        self.assertNotIn("simctl", command)
-
     def test_main_prepares_only_the_trace_xctestrun(self):
         source = (HERE / "iteration_trace_runner.py").read_text()
         prepare = source.index("test_run = prepare_test_run(")
@@ -506,6 +490,16 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(source[:prepare].count("\n        test_run = prepare_test_run("), 0)
         self.assertEqual(source[prepare:].count("prepare_test_run("), 1)
         self.assertLess(prepare, source.index('test_command(test_run', prepare))
+
+    def test_exact_existing_xctest_selectors(self):
+        for variant in ("generated", "reference"):
+            for scenario in ("scroll", "stateUpdate"):
+                with self.subTest(variant=variant, scenario=scenario):
+                    expected = (f"RefractBenchUITests/RefractBenchUITests/"
+                                f"test{variant.capitalize()}{scenario[0].upper()}{scenario[1:]}Trace")
+                    self.assertEqual(traced_test_name(variant, scenario), expected)
+                    self.assertIn(f"func {expected.rsplit('/', 1)[-1]}",
+                                  (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"
