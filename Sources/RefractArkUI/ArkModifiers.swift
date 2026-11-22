@@ -3,13 +3,15 @@ import RefractMapping
 
 enum ArkModifiers {
     static func emit(_ modifiers: [Modifier], item: String? = nil, mapping: Mapping = .empty,
-                     isText: Bool = false, traversal: AccessibilityTraversal? = nil) throws -> String {
+                     isText: Bool = false, traversal: AccessibilityTraversal? = nil,
+                     localAliases: Set<String> = []) throws -> String {
         let measurement = modifiers.filter { Self.accessibilityNames.contains($0.name) }
         let layout = modifiers.filter {
             !Self.accessibilityNames.contains($0.name) && $0.name != "disabled"
         }
         if !measurement.isEmpty {
-            let native = try Self.emitAccessibility(measurement, item: item, mapping: mapping, traversal: traversal)
+            let native = try Self.emitAccessibility(measurement, item: item, mapping: mapping, traversal: traversal,
+                                                     localAliases: localAliases)
             if native.isEmpty { return try emit(layout, item: item, mapping: mapping, isText: isText) }
             guard !layout.isEmpty else {
                 return native.hasPrefix("\n") ? String(native.dropFirst()) : native

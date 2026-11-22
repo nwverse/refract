@@ -28,7 +28,11 @@ export struct ForEachList {
           ListItem() {
             Column() {
               Text(value)
-              Text(item.title)
+              Text(item.title).accessibilityText(value)
+              Button() {
+                Text(value)
+              }
+              .accessibilityText(value)
             }
           }
         }, (item: SettingItem): string => item.id)
