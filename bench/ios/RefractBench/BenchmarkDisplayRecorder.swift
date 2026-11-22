@@ -3,7 +3,7 @@ import QuartzCore
 /// App-owned native sampling only; it does not measure wall-clock UI gestures
 /// and does not pretend that display-link callbacks are CPU frame times.
 @MainActor
-final class BenchmarkDisplayRecorder {
+final class BenchmarkDisplayRecorder: ObservableObject {
     static let shared = BenchmarkDisplayRecorder()
 
     private let framesKey = "refract.bench.frames.v1"
@@ -13,7 +13,12 @@ final class BenchmarkDisplayRecorder {
     private var frames: [CFTimeInterval] = []
     private var iterations: [Int] = []
     private var completedIterations = 0
-    private(set) var completion: (variant: String, scenario: String, count: Int)?
+    private var recordedIteration = 0
+    @Published private(set) var completion: (variant: String, scenario: String, count: Int)?
+    private var selectedIteration: Int? {
+        guard let value = ProcessInfo.processInfo.environment["REFRACT_BENCH_ITERATION"] else { return nil }
+        return Int(value)
+    }
     var revision: String { ProcessInfo.processInfo.environment["REFRACT_BENCH_REVISION"] ?? "" }
     private var variant: String { ProcessInfo.processInfo.environment["REFRACT_BENCH_VARIANT"] ?? "" }
     private var scenario: String { ProcessInfo.processInfo.environment["REFRACT_BENCH_SCENARIO"] ?? "" }
@@ -23,6 +28,7 @@ final class BenchmarkDisplayRecorder {
         firstDisplay = nil
         frames = []
         completedIterations = 0
+        recordedIteration = 0
         completion = nil
         iterations = []
         startLinkIfNeeded()
@@ -39,6 +45,7 @@ final class BenchmarkDisplayRecorder {
         active = true
         frames = []
         completedIterations = 0
+        recordedIteration = 0
         completion = nil
         iterations = []
         startLinkIfNeeded()
@@ -46,11 +53,17 @@ final class BenchmarkDisplayRecorder {
     }
 
     func completeIteration(_ scenario: String, iteration: Int) {
-        guard active, scenario == self.scenario, iteration == completedIterations,
-              (0..<30).contains(iteration), frames.count > 1 else { return }
-        completedIterations += 1
+        guard active, scenario == self.scenario else { return }
+        if let selectedIteration {
+            guard iteration == selectedIteration, (0..<30).contains(iteration) else { return }
+            completedIterations = 1
+        } else {
+            guard iteration == completedIterations, (0..<30).contains(iteration), frames.count > 1 else { return }
+            completedIterations += 1
+        }
+        recordedIteration = iteration
         persist()
-        if completedIterations == 30 {
+        if selectedIteration != nil || completedIterations == 30 {
             active = false
             link?.isPaused = true
             completion = (variant, scenario, completedIterations)
@@ -70,7 +83,7 @@ final class BenchmarkDisplayRecorder {
         guard active, !revision.isEmpty, !variant.isEmpty, !scenario.isEmpty else { return }
         // This is the display-link target interval, not a CPU frame duration.
         frames.append(max(0, link.targetTimestamp - link.timestamp) * 1000)
-        iterations.append(completedIterations)
+        iterations.append(selectedIteration ?? completedIterations)
         if frames.count > 4096 {
             frames.removeFirst()
             iterations.removeFirst()
@@ -89,6 +102,7 @@ final class BenchmarkDisplayRecorder {
             "iterationByFrame": iterations,
             "frameIntervalMs": frames,
             "completedIterations": completedIterations,
+            "recordedIteration": recordedIteration,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
             return
