@@ -90,6 +90,91 @@ struct ContentView: View {
     #expect(!arkTS.contains("if (this.enabled)"))
 }
 
+@Test func outerOptionalBooleanAliasRemainsLocalInsideNestedBinding() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct OptionalEnabled: View {
+        let maybeEnabled: Bool?
+        let maybeReady: Bool?
+        var body: some View {
+            if let enabled = maybeEnabled {
+                if let ready = maybeReady {
+                    if enabled {
+                        Text(verbatim: "Enabled")
+                    } else {
+                        Text(verbatim: "Disabled")
+                    }
+                } else {
+                    Text(verbatim: "Not ready")
+                }
+            } else {
+                Text(verbatim: "Unknown")
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let arkTS = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("if (enabled)"))
+    #expect(arkTS.contains("if (enabled)"), Comment(rawValue: arkTS))
+    #expect(!arkTS.contains("if (this.enabled)"))
+}
+
+@Test func booleanPayloadConditionUsesLocalAliasInsideOptionalBinding() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum Content { case enabled(Bool) }
+    struct ContentView: View {
+        let content: Content
+        let maybeReady: Bool?
+        var body: some View {
+            switch content {
+            case .enabled(let enabled):
+                if let ready = maybeReady {
+                    if enabled {
+                        Text(verbatim: "Enabled")
+                    } else {
+                        Text(verbatim: "Disabled")
+                    }
+                } else {
+                    Text(verbatim: "Not ready")
+                }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let arkTS = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("if (enabled)"))
+    #expect(arkTS.contains("if (enabled)"), Comment(rawValue: arkTS))
+    #expect(!arkTS.contains("if (this.enabled)"))
+}
+
+@Test func booleanPayloadConditionUsesLocalAlias() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum Content { case enabled(Bool) }
+    struct ContentView: View {
+        let content: Content
+        var body: some View {
+            switch content {
+            case .enabled(let enabled):
+                if enabled {
+                    Text(verbatim: "Enabled")
+                } else {
+                    Text(verbatim: "Disabled")
+                }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let arkTS = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("if (enabled)"))
+    #expect(arkTS.contains("if (enabled)"), Comment(rawValue: arkTS))
+    #expect(!arkTS.contains("if (this.enabled)"))
+}
+
 @Test func scalarPayloadSwitchUsesTypedLazyBranches() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: payloadSource))
     #expect(unit.diagnostics.map(\.rendered) == [])
