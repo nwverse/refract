@@ -18,8 +18,8 @@ xcodebuild -project bench/ios/RefractBench.xcodeproj -scheme RefractBench \
   -derivedDataPath <new-output-directory> CODE_SIGNING_ALLOWED=NO build-for-testing
 ```
 
-This is native compiler evidence only. No simulator was created, started, restarted, used or stopped. No application
-was installed. There are no timing, rendering, memory or physical-device results in this change.
+This is native compiler evidence only. The physical-SDK destination does not attach, sign or measure a device.
+Per-iteration simulator execution, when separately coordinated, is documented below and is not a device result.
 
 ## Scenario construction
 
@@ -38,8 +38,8 @@ is not part of the app runtime, and the helper adds no Refract library.
 ## Running without touching shared targets
 
 The run driver accepts only an explicitly owned, already-booted target. It never creates, boots, reboots, erases,
-pairs or selects `booted`. The current available physical target was not usable, and no owned timing simulator was
-available to this issue, so these execution commands were **not run**:
+pairs or selects `booted`. The current physical target was unavailable. Execution remains conditional on a
+maintainer-coordinated simulator; no generic SDK compile or source inspection supplies target ownership:
 
 ```sh
 # First coordinate exclusive ownership. Pass that owner's already-booted UDID;
@@ -52,17 +52,23 @@ xcrun xcresulttool get test-results summary --path <run>/results.xcresult --form
 xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --format json > <run>/metrics.json
 
 # Record exactly one profiler package per variant/scenario/iteration.
-# This driver obtains the actual PID from XCUIApplication, waits for explicit
-# Instruments readiness before releasing the native script, checks native
-# completion, gracefully stops xctrace, and preserves its package. Repeat this
-# command for every variant, scroll/stateUpdate scenario, and iteration 0...29;
-# use a new run directory each time. It never creates, boots or reboots a target.
-# --window bounds deferred work, not the measured iteration window.
+# The app supplies its actual ProcessInfo PID through the existing control
+# handshake; XCUIApplication has no supported processIdentifier member.
+# The runner configures a fresh xctestrun beside Xcode's original test-run,
+# waits for explicit Instruments readiness before XCTest taps the native Begin
+# control, checks identity-matched native completion, gracefully stops xctrace
+# and preserves its package. Repeat for each iteration 0...29 with a new run
+# directory. --window bounds deferred work, not the measured iteration window.
 python3 -I bench/ios/iteration_trace_runner.py \
   --target-udid <owned-udid> --derived-data <build-output-directory> \
   --variant <generated-or-reference> --scenario <scroll-or-stateUpdate> \
   --iteration <0-through-29> --source-revision <clean-committed-revision> \
-  --run-directory <new-iteration-run-directory>
+  --template 'Time Profiler' --run-directory <new-iteration-run-directory>
+
+# Select a template supported by the exact target. Animation Hitches and the
+# SwiftUI template can include an unsupported Hitches instrument on a simulator.
+# A nonzero recorder exit is never accepted merely because a package exists.
+# Time Profiler is profiler context, not a replacement CADisplayLink metric.
 
 # Equivalent lower-level recorder command used by the driver after the app
 # publishes its PID. Do not use a filename as a substitute for the handshake:
@@ -90,14 +96,16 @@ probe rejects unavailable or not-booted targets. Before any physical measurement
 availability/identity probe and the `platform=iOS,id=<udid>` destination; do not infer physical availability from a
 `generic/platform=iOS` compile. A generic device compile is not a device result.
 
-The per-iteration driver uses a new control directory for each app launch. The UI test publishes the actual
-`XCUIApplication.processIdentifier` and exact variant/scenario/iteration, then waits for the app to observe the
-runner's recorder-ready file. Only then does it tap the start boundary. The native script executes the same single
-scroll destination or eight state updates as its corresponding iteration in the original 30-iteration task. It
-publishes `complete 1` through the existing accessibility boundary while raw samples retain the original iteration
-number. The runner rejects missing, stale, duplicate or mismatched PID/readiness/completion packets, sends SIGINT
-only to its own `xctrace` child, waits for successful package completion, and archives before releasing the UI test.
-No shell duration is substituted for a native metric.
+The per-iteration driver uses a new control directory for each app launch. The app publishes its actual
+`ProcessInfo.processInfo.processIdentifier` with the exact source revision, variant/scenario/iteration. The UI test
+checks that native packet, then waits for the app to observe the runner's identity-matched recorder-ready file. Only
+then does it tap the native Begin control inside the safe area; an overlay covered by the List can look hittable to
+XCTest without delivering the action. The explicit native Begin writes its own identity-bound acknowledgement before
+starting the unchanged single scroll destination or eight state updates. The app and UI test both validate the
+resulting native completion, including PID, before the runner stops recording. The runner rejects missing, stale,
+duplicate or mismatched identity/readiness/completion packets, sends SIGINT only to its own `xctrace` child, waits for
+successful package completion, and archives before releasing the UI test. No shell duration substitutes for a native
+metric.
 
 Run the control-plane and source-wiring tests with:
 
@@ -107,15 +115,20 @@ python3 -I bench/ios/iteration_trace_source_test.py -v
 python3 -I bench/ios/archive_trace_test.py -v
 ```
 
-These use synthetic processes and packages, not Instruments or timing evidence. In this change they were executed on
-Linux; no Xcode/SwiftUI compile, XCTest execution, Instruments readiness behavior or trace acquisition was verified
-on macOS. The native driver requires an authorized macOS toolchain and an explicitly owned, already-running target.
-The original cold-start test still uses 30 `XCTApplicationLaunchMetric` iterations. The original non-traced scenario
-entry points remain available but the complete 30-iteration traced collection must use the new per-launch driver.
-Simulator results, if collected later, must remain explicitly labelled and cannot close the physical-device gate.
-The app helper persists raw display samples in its own defaults store. Retrieval must still use `devicectl` or the
-explicit simulator's data container and preserve the raw JSON before report generation. Until native collection is
-run and inspected, this is a **synthetically tested capture protocol**, not a completed paired measurement.
+These use synthetic processes and packages, not Instruments or timing evidence. The native driver requires an
+authorized macOS toolchain, a supported Python version and an explicitly owned, already-running target. Real Xcode
+compilation, XCTest and Instruments acquisition must be recorded separately from these tests. The original cold-start
+test still uses 30 `XCTApplicationLaunchMetric` iterations. The original non-traced scenario entry points remain
+available but the complete 30-iteration traced collection must use the new per-launch driver. Simulator results must
+remain explicitly labelled and cannot close the physical-device gate.
+
+One generated/reference scroll iteration was executed on an explicitly labelled iPhone 17 Pro iOS 27.0 simulator to
+validate this capture protocol; the raw xcresult, identity packets, native display samples and archived Instruments
+packages are retained privately with exact revision/checksums. This is **1 of the required 30 pairs for one scenario**,
+not a completed paired benchmark or report PASS. The app helper persists raw display samples in its own defaults
+store. Export `refract.bench.frames.v1` from the explicit simulator's app data container with `plutil`/property-list
+decoding immediately after each iteration and retain the raw JSON with its source revision. Complete native sample
+collection, memory/binary pairing and fail-closed report validation remain required.
 
 ## Regression and evidence policy
 
