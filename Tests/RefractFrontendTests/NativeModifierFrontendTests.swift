@@ -92,6 +92,23 @@ private let measurementMapping = Mapping(
     #expect(writer.text.contains("Button(onClick = onClick"))
 }
 
+@Test func childItemToggleUsesDeclaredInputReceiver() throws {
+    let fixture = FixtureCase(name: "child-view-layout-priority", status: .ready,
+        input: try String(contentsOfFile: "Fixtures/child-view-layout-priority/Input.swift", encoding: .utf8),
+        mapping: try String(contentsOfFile: "Fixtures/child-view-layout-priority/refract.json", encoding: .utf8),
+        expectedKotlin: nil, expectedArkTS: nil, expectedDiagnostics: nil)
+    let result = try GoldenRunner.generate(fixture)
+    #expect(result.diagnostics.isEmpty)
+    let kotlin = try #require(result.kotlin)
+    #expect(kotlin.contains("checked = row.enabled"))
+    #expect(kotlin.contains("settings.setEnabled(row.id, enabled)"))
+    let ark = try #require(result.arkTS)
+    #expect(ark.contains("isOn: this.row.enabled"), Comment(rawValue: ark))
+    #expect(ark.contains("this.settings.setEnabled(this.row.id, enabled);"), Comment(rawValue: ark))
+    #expect(ark.contains(".id(`setting_toggle_${this.row.id}`)"))
+    #expect(ark.contains("LazyForEach(this.model.rows, (row: ChildSettingItem) =>"))
+}
+
 @Test func retainedItemToggleUsesMergedTypedAction() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol Model: RefractModel {
