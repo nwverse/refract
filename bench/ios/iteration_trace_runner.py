@@ -32,7 +32,7 @@ class HandshakeError(ValueError):
 VARIANTS = ("generated", "reference")
 SCENARIOS = ("scroll", "stateUpdate")
 READY_OUTPUT = re.compile(r"(?:^|\n)Starting recording with the (.+?) template\.[^\n]*(?:\n|$)")
-SAVED_OUTPUT = re.compile(r"(?:^|\n)Output saved: (.+?)\s*(?:\n|$)")
+SAVED_OUTPUT = re.compile(r"(?:^|\n)Output (?:file saved as|saved): (.+?)\s*(?:\n|$)")
 
 
 def atomic_json(path: Path, payload: dict) -> None:
@@ -347,6 +347,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenario", required=True, choices=SCENARIOS)
     parser.add_argument("--iteration", required=True, type=int)
     parser.add_argument("--source-revision", required=True)
+    parser.add_argument("--template", default="Animation Hitches",
+                        help="Explicit Instruments template supported by the selected target")
     parser.add_argument("--readiness-timeout", type=float, default=60)
     parser.add_argument("--completion-timeout", type=float, default=180)
     args = parser.parse_args(argv)
@@ -396,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
                               xcodebuild_log=log, control_directory=control,
                               readiness_timeout=args.readiness_timeout,
-                              completion_timeout=args.completion_timeout)
+                              completion_timeout=args.completion_timeout, template=args.template)
             result = session.capture(process)
             status = process.wait(timeout=args.completion_timeout)
             if status != 0:
