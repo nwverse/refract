@@ -155,6 +155,57 @@ struct ContentView: View {
     #expect(arkTS.contains("Text('Empty')"))
 }
 
+@Test func optionalBindingKeepsOuterNativeArgumentAliasInsideForEachRow() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct SettingItem: Identifiable {
+        let id: String
+        let title: String
+    }
+
+    protocol OptionalNativeModel: RefractModel {
+        var items: [SettingItem] { get }
+    }
+
+    struct RoutePreview: RefractNativeView {
+        let zoom: Double
+        let showsTraffic: Bool
+        let title: String
+        var body: some View { Text(title) }
+    }
+
+    struct OptionalNativeList: View {
+        let model: OptionalNativeModel
+        let title: String?
+
+        var body: some View {
+            if let value = title {
+                List {
+                    ForEach(model.items) { item in
+                        VStack {
+                            RoutePreview(zoom: 12.0, showsTraffic: true, title: value)
+                            RoutePreview(zoom: 12.0, showsTraffic: true, title: item.title)
+                        }
+                    }
+                }
+            } else {
+                Text(verbatim: "Empty")
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: repository.appendingPathComponent("Fixtures/interop-native-component/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    let arkTS = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("RoutePreview(cameraZoom = 12.0, showsTraffic = true, title = value)"))
+    #expect(kotlin.contains("RoutePreview(cameraZoom = 12.0, showsTraffic = true, title = item.title)"))
+    #expect(arkTS.contains("const value = this.title;"))
+    #expect(arkTS.contains("RoutePreview({ cameraZoom: 12.0, showsTraffic: true, title: value })"), Comment(rawValue: arkTS))
+    #expect(arkTS.contains("RoutePreview({ cameraZoom: 12.0, showsTraffic: true, title: item.title })"))
+    #expect(!arkTS.contains("title: this.value"))
+    #expect(arkTS.contains("Text('Empty')"))
+}
+
 @Test func optionalBooleanBindingSupportsNestedCondition() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct OptionalEnabled: View {

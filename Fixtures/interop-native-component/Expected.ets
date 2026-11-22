@@ -2,12 +2,40 @@
 // Source: Input.swift
 import { RoutePreview } from 'example.maps';
 
+@ObservedV2
+export class SettingItem {
+  @Trace id: string;
+  @Trace title: string;
+
+  constructor(id: string, title: string) {
+    this.id = id;
+    this.title = title;
+  }
+}
+
+export interface OptionalNativeModel {
+  items: BasicDataSource<SettingItem>;
+}
+
 @ComponentV2
 export struct RouteScreen {
+  @Param @Require public var title: string | null | undefined
+  @Require @Param model: OptionalNativeModel;
   build() {
     Column() {
       Text('Route')
-      RoutePreview({ cameraZoom: 12.0, showsTraffic: true })
+      if (this.title !== null && this.title !== undefined) {
+        const value = this.title;
+        List() {
+          LazyForEach(this.model.items, (item: SettingItem) => {
+            ListItem() {
+              RoutePreview({ cameraZoom: 12.0, showsTraffic: true, title: this.value })
+            }
+          }, (item: SettingItem): string => item.id)
+        }
+      } else {
+        Text('Empty')
+      }
     }
   }
 }
