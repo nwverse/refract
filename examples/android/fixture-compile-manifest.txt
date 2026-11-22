@@ -68,3 +68,4 @@ chat-message-cross-file
 resource-typed-assets
 horizontal-sections
 control-optional-bool-condition
+interop-list-row-input-shadow
