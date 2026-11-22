@@ -316,7 +316,7 @@ def prepare_test_run(derived_data: Path, run_directory: Path, control: Path,
     sources = sorted((derived_data / "Build/Products").glob("*.xctestrun"))
     if len(sources) != 1:
         raise HandshakeError("Exactly one generated xctestrun file is required")
-    destination = run_directory / "iteration.xctestrun"
+    destination = derived_data / "iteration-trace-config.xctestrun"
     subprocess.run(["plutil", "-convert", "binary1", "-o", str(destination), "--", str(sources[0])], check=True)
     values = {"REFRACT_BENCH_REVISION": revision,
               "REFRACT_BENCH_TRACE_CONTROL": str(control),
@@ -379,8 +379,8 @@ def main(argv: list[str] | None = None) -> int:
         environment = dict(os.environ, REFRACT_BENCH_REVISION=args.source_revision,
                            REFRACT_BENCH_TRACE_CONTROL=str(control),
                            REFRACT_BENCH_TRACE_ITERATION=str(args.iteration))
-        test_run = prepare_test_run(args.derived_data, run, control,
-                                    args.source_revision, args.iteration)
+    test_run = prepare_test_run(args.derived_data, run, control,
+                                args.source_revision, args.iteration)
         with log.open("x", encoding="utf-8") as stream:
             process = subprocess.Popen(
                 ["xcodebuild", "test-without-building", "-xctestrun", str(test_run),
