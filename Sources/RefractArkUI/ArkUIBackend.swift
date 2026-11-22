@@ -599,7 +599,8 @@ struct Generation {
         // Stack modifiers attach after the closing brace.
         writer.depth += 1
         if let drag {
-            let value = try emitLocalExpression(drag.value, item: item, mapping: mapping)
+            let value = try emitLocalExpression(drag.value, item: item, mapping: mapping,
+                                               localAliases: localAliases)
             writer.line(".draggable(true)")
             writer.open(".onDragStart((event: DragEvent) =>")
             writer.line("event.setData({ '\(drag.kind)': \(value) } as Record<string, string>);")

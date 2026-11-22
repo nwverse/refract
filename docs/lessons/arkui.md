@@ -17,6 +17,8 @@ emit `this.alias` instead of `alias`. Keep lexical aliases cumulative through re
 in a nested container. Removing an inner alias at its native `else` boundary must not remove an outer one. Pass the cumulative
 set through Text expression lowering too: `LazyForEach` must add its row item without hiding an outer optional alias.
 A Text leaf that ignores this set emits `this.alias` even though recursive container and condition paths are correct.
+Event payload lowering needs the same set: retaining it only for the wrapped Text is insufficient when `onDragStart`
+reads an optional scalar, because that separate expression would incorrectly emit `this.alias` for a local binding.
 
 ## LazyForEach needs a native data source and stable identity
 

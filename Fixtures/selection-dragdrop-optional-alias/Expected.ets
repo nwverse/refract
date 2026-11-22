@@ -32,7 +32,7 @@ export struct OptionalNativeList {
             }
               .draggable(true)
               .onDragStart((event: DragEvent) => {
-                event.setData({ 'note': this.value } as Record<string, string>);
+                event.setData({ 'note': value } as Record<string, string>);
               })
           }
         }, (item: SettingItem): string => item.id)
