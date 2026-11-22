@@ -32,6 +32,23 @@ struct RefractBenchApp: App {
         _traceReadiness = StateObject(wrappedValue: TraceReadiness())
     }
 
+    @MainActor
+    private func beginTrace() {
+        guard let iteration = selectedIteration, let directory = traceControlDirectory() else {
+            traceIdentityError = "The selected iteration has no control directory"
+            return
+        }
+        do {
+            try publishTracePacket(named: "begin.json", in: directory,
+                                   revision: revision, variant: variant, scenario: scenario,
+                                   iteration: iteration, state: "begin")
+            beginSelectedIteration = true
+            Task { await runTracedIteration(variant: variant, model: model) }
+        } catch {
+            traceIdentityError = "Native Begin identity failed: \(error.localizedDescription)"
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -55,19 +72,7 @@ struct RefractBenchApp: App {
                     Text(traceIdentityError)
                         .accessibilityIdentifier("refract_benchmark_trace_identity_error")
                     if !beginSelectedIteration {
-                        Button("BeginIteration") {
-                            do {
-                                if let iteration = selectedIteration, let directory = traceControlDirectory() {
-                                    try publishTracePacket(named: "begin.json", in: directory,
-                                                           revision: revision, variant: variant, scenario: scenario,
-                                                           iteration: iteration, state: "begin")
-                                }
-                                beginSelectedIteration = true
-                                Task { await runTracedIteration(variant: variant, model: model) }
-                            } catch {
-                                traceIdentityError = "Native Begin identity failed: \(error.localizedDescription)"
-                            }
-                        }
+                        Button("BeginIteration", action: beginTrace)
                         .disabled(!traceReadiness.isReady)
                         .accessibilityIdentifier("refract_benchmark_begin_iteration")
                         Text("\(variant) \(scenario) \(traceReadiness.isReady ? "ready" : "waiting")")
