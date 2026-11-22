@@ -8,7 +8,7 @@ extension ArkModifiers {
     ]
 
     static func emitAccessibility(_ modifiers: [Modifier], item: String?, mapping: Mapping,
-                                  traversal: AccessibilityTraversal?) throws -> String {
+                                  traversal: AccessibilityTraversal?, localAliases: Set<String> = []) throws -> String {
         var attributes: [String] = []
         var actions: [AccessibilityCustomAction] = []
         for modifier in modifiers {
@@ -28,7 +28,7 @@ extension ArkModifiers {
                     }
                 }
             case "accessibilityLabel", "iosAccessibilityLabel":
-                attributes.append(".accessibilityText(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))")
+                attributes.append(".accessibilityText(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping, localAliases: localAliases)))")
             case "accessibilityHint":
                 attributes.append(".accessibilityDescription(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))")
             case "accessibilityValue":

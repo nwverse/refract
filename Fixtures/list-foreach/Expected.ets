@@ -28,11 +28,11 @@ export struct OptionalButtonList {
           ListItem() {
             Column() {
               Text(value)
-              Text(item.title).accessibilityText(this.value)
+              Text(item.title).accessibilityText(value)
               Button() {
                 Text(value)
               }
-              .accessibilityText(this.value)
+              .accessibilityText(value)
             }
           }
         }, (item: SettingItem): string => item.id)
