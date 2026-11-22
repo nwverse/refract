@@ -312,7 +312,8 @@ def native_packages(tools: Mapping[str, Path], log_path: Path,
         with package_snapshots() as snapshots:
             return native_packages(tools, log_path, snapshots["app"].parent)
     snapshot_root.mkdir(mode=0o700, exist_ok=True)
-    if snapshot_root.is_symlink() or not snapshot_root.is_dir():
+    if snapshot_root.is_symlink() or not snapshot_root.is_dir() \
+            or snapshot_root.stat().st_mode & 0o777 != 0o700:
         raise VerificationError("package snapshot path is not a private directory")
     for command in (["build"], ["build", "--modules", "entry@ohosTest"]):
         execute([str(tools["devecocli"]), *command], log_path, cwd=EXAMPLE, environment=os.environ)
@@ -320,7 +321,8 @@ def native_packages(tools: Mapping[str, Path], log_path: Path,
     for role, path in PACKAGE_OUTPUTS.items():
         source = regular_file(path, f"newly built canonical {role} HAP")
         destination = snapshot_root / f"snapshot-{role}.hap"
-        destination.write_bytes(source.read_bytes())
+        with source.open("rb") as source_file, destination.open("xb") as destination_file:
+            shutil.copyfileobj(source_file, destination_file)
         built[role] = destination
     return package_provenance(PACKAGE_OUTPUTS, built)
 
@@ -333,6 +335,7 @@ def package_snapshots() -> object:
         build = root / "build"
         build.mkdir(mode=0o700)
         saved: dict[str, tuple[Path, Path]] = {}
+        failed = True
         try:
             for role, path in PACKAGE_OUTPUTS.items():
                 if path.is_symlink() or (path.exists() and not path.is_file()):
@@ -341,19 +344,49 @@ def package_snapshots() -> object:
                     destination = build / f"previous-{role}.hap"
                     path.rename(destination)
                     saved[role] = (path, destination)
-            yield {role: build / f"snapshot-{role}.hap" for role in PACKAGE_OUTPUTS}
+            try:
+                yield {role: build / f"snapshot-{role}.hap" for role in PACKAGE_OUTPUTS}
+                failed = False
+            except BaseException:
+                # A partial output from a failed build is not the verified
+                # package. Retain it separately and restore the old canonical.
+                for role, path in PACKAGE_OUTPUTS.items():
+                    if role in saved and not path.is_symlink() and path.is_file():
+                        path.replace(build / f"snapshot-{role}.hap")
+                    elif role in saved and path.is_symlink():
+                        path.unlink()
+                raise
         finally:
             conflict = False
-            for role, (path, destination) in saved.items():
-                if path.exists() or path.is_symlink():
-                    conflict = True
-                else:
-                    destination.rename(path)
-            if conflict:
+
+            def preserve() -> Path:
                 preserved = Path(tempfile.mkdtemp(prefix="refract-harmony-preserved-packages."))
                 preserved.rmdir()
-                root.rename(preserved)
-                print(f"harmony-render: previous canonical HAPs preserved at {preserved}", file=sys.stderr)
+                try:
+                    root.rename(preserved)
+                except OSError:
+                    preserved.rmdir()
+                    raise
+                return preserved
+
+            try:
+                for role, (path, destination) in saved.items():
+                    if path.exists() or path.is_symlink():
+                        conflict = True
+                    else:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        destination.rename(path)
+                if conflict:
+                    preserved = preserve()
+                    print(f"harmony-render: previous canonical HAPs preserved at {preserved}", file=sys.stderr)
+                elif failed:
+                    preserved = preserve()
+                    print(f"harmony-render: failed-run package snapshots preserved at {preserved}", file=sys.stderr)
+            except OSError:
+                # TemporaryDirectory cleanup must not delete unrecovered packages.
+                preserved = preserve()
+                print(f"harmony-render: unrecovered canonical HAPs preserved at {preserved}", file=sys.stderr)
+                raise
 
 
 def package_provenance(selected: Mapping[str, Path], built: Mapping[str, Path]) -> dict[str, object]:

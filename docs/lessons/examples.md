@@ -113,7 +113,8 @@ terminal codes. Parse suite/case/task records distinctly and atomically, retain 
 and require exactly one successful terminal record.
 
 A HAP hash recorded before compilation identifies only an old caller-selected file, not the package produced by that
-build. Quarantine old canonical outputs before building, restore them on failure, and snapshot the newly produced
-packages into a caller-owned private directory. Require every selected installation input to match its snapshot
-immediately before installation, then install the snapshot rather than reopening the mutable input. A skip-build flag
+build. Quarantine old canonical outputs before building and recreate missing output parents before restoring them. On
+failure, retain partial new outputs separately from restored old packages; on any restoration error, preserve rather
+than clean the quarantine. Snapshot the newly produced packages into a caller-owned private directory. Require every
+selected installation input to match its snapshot immediately before installation, then install the snapshot rather than reopening the mutable input. A skip-build flag
 without independently verifiable build provenance is an evidence bypass, not a portability shortcut.

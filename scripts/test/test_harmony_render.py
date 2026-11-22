@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -371,6 +372,80 @@ class RenderingEvidenceTests(unittest.TestCase):
             self.assertFalse(any("install" in call.args[0] for call in execute.call_args_list))
             self.assertIn("differs from the native build output", str(
                 (root / "private-evidence/metadata.json").read_text(encoding="utf-8")))
+
+    def test_failed_build_after_removing_output_directory_restores_previous_packages(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-recovery-test.") as temporary:
+            root = Path(temporary)
+            packages = self.write_packages(root)
+            original_bytes = {role: path.read_bytes() for role, path in packages.items()}
+            build_root = root / "entry/build"
+
+            def failed_build(*args: object, **kwargs: object) -> mock.Mock:
+                shutil.rmtree(build_root)
+                raise MODULE.VerificationError("build failed after removing the output directory")
+
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE, "execute", side_effect=failed_build):
+                with self.assertRaises(MODULE.VerificationError):
+                    MODULE.native_packages({"devecocli": SCRIPT}, root / "commands.log")
+            for role, path in packages.items():
+                self.assertEqual(path.read_bytes(), original_bytes[role])
+
+    def test_failed_build_preserves_partial_output_and_restores_previous_packages(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-recovery-test.") as temporary:
+            root = Path(temporary)
+            packages = self.write_packages(root)
+            original_bytes = {role: path.read_bytes() for role, path in packages.items()}
+            preserved_roots: list[Path] = []
+            original_mkdtemp = MODULE.tempfile.mkdtemp
+
+            def record_preservation(*args: object, **kwargs: object) -> str:
+                created = Path(original_mkdtemp(*args, **kwargs))
+                if created.name.startswith("refract-harmony-preserved-packages."):
+                    preserved_roots.append(created)
+                return str(created)
+
+            def failed_build(*args: object, **kwargs: object) -> mock.Mock:
+                packages["app"].write_bytes(b"partial-new-app")
+                raise MODULE.VerificationError("build failed after writing a partial app package")
+
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(MODULE, "execute", side_effect=failed_build), \
+                 mock.patch.object(MODULE.tempfile, "mkdtemp", side_effect=record_preservation):
+                with self.assertRaises(MODULE.VerificationError):
+                    MODULE.native_packages({"devecocli": SCRIPT}, root / "commands.log")
+            self.assertEqual(len(preserved_roots), 1)
+            for role, path in packages.items():
+                self.assertEqual(path.read_bytes(), original_bytes[role])
+            self.assertEqual((preserved_roots[0] / "build/snapshot-app.hap").read_bytes(), b"partial-new-app")
+            shutil.rmtree(preserved_roots[0])
+
+    def test_restoration_failure_preserves_the_quarantine(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refract-harmony-recovery-test.") as temporary:
+            root = Path(temporary)
+            packages = self.write_packages(root)
+            original_bytes = {role: path.read_bytes() for role, path in packages.items()}
+            preserved_roots: list[Path] = []
+            original_rename = Path.rename
+
+            def fail_restore_then_record_preservation(path: Path, destination: Path) -> Path:
+                if path.name == "previous-test.hap":
+                    raise OSError("simulated restoration failure")
+                original_rename(path, destination)
+                if path.name.startswith("refract-harmony-install-snapshots."):
+                    preserved_roots.append(destination)
+                return destination
+
+            with mock.patch.dict(MODULE.PACKAGE_OUTPUTS, packages), \
+                 mock.patch.object(Path, "rename", fail_restore_then_record_preservation):
+                with self.assertRaises(OSError):
+                    with MODULE.package_snapshots():
+                        pass
+            self.assertEqual(len(preserved_roots), 1)
+            self.assertTrue(preserved_roots[0].is_dir())
+            self.assertEqual(packages["app"].read_bytes(), original_bytes["app"])
+            self.assertEqual((preserved_roots[0] / "build/previous-test.hap").read_bytes(), original_bytes["test"])
+            shutil.rmtree(preserved_roots[0])
 
     def test_previous_canonical_packages_survive_failure_and_restore_conflict(self) -> None:
         with tempfile.TemporaryDirectory(prefix="refract-harmony-recovery-test.") as temporary:
