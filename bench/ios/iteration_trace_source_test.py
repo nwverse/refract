@@ -27,6 +27,13 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('guard active, scenario == self.scenario else { return }', RECORDER)
         self.assertIn('if selectedIteration != nil || completedIterations == 30', RECORDER)
 
+    def test_selected_iteration_consumes_begin_before_native_input(self):
+        ready = APP.index("while !recorderIsReady")
+        begin = APP.index("while !beginSelectedIteration", ready)
+        scenario = APP.index("switch (variant, scenario)", begin)
+        self.assertLess(ready, begin)
+        self.assertLess(begin, scenario)
+
     def test_recorder_ready_precedes_button_and_native_completion(self):
         start = TESTS.index('try TraceHandshake.write(packet, named: "request.json"')
         ready = TESTS.index('The distinct Instruments recorder did not become ready', start)
