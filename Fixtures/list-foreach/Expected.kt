@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 @Immutable
 public data class SettingItem(
@@ -20,14 +23,14 @@ public data class SettingItem(
     public val title: String,
 )
 
-public interface SettingsListModel {
+public interface OptionalButtonListModel {
     public val items: State<List<SettingItem>>
 }
 
 @Composable
-public fun ForEachList(
+public fun OptionalButtonList(
     title: String?,
-    model: SettingsListModel,
+    model: OptionalButtonListModel,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -41,7 +44,13 @@ public fun ForEachList(
                 ) { item ->
                     Column(modifier = Modifier) {
                         Text(text = value)
-                        Text(text = item.title)
+                        Text(
+                            text = item.title,
+                            modifier = Modifier.semantics { contentDescription = value },
+                        )
+                        Button(onClick = { }, modifier = Modifier.semantics { contentDescription = value }) {
+                            Text(text = value)
+                        }
                     }
                 }
             }

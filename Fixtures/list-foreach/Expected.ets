@@ -12,14 +12,14 @@ export class SettingItem {
   }
 }
 
-export interface SettingsListModel {
+export interface OptionalButtonListModel {
   items: BasicDataSource<SettingItem>;
 }
 
 @ComponentV2
-export struct ForEachList {
+export struct OptionalButtonList {
   @Param @Require public var title: string | null | undefined
-  @Require @Param model: SettingsListModel;
+  @Require @Param model: OptionalButtonListModel;
   build() {
     if (this.title !== null && this.title !== undefined) {
       const value = this.title;
@@ -28,7 +28,11 @@ export struct ForEachList {
           ListItem() {
             Column() {
               Text(value)
-              Text(item.title)
+              Text(item.title).accessibilityText(this.value)
+              Button() {
+                Text(value)
+              }
+              .accessibilityText(this.value)
             }
           }
         }, (item: SettingItem): string => item.id)

@@ -107,6 +107,54 @@ struct ContentView: View {
     #expect(arkTS.contains("Text('Empty')"))
 }
 
+@Test func optionalBindingKeepsOuterAccessibilityAliasInsideForEachRow() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct SettingItem: Identifiable {
+        let id: String
+        let title: String
+    }
+
+    protocol OptionalButtonListModel: RefractModel {
+        var items: [SettingItem] { get }
+    }
+
+    struct OptionalButtonList: View {
+        let model: OptionalButtonListModel
+        let title: String?
+
+        var body: some View {
+            if let value = title {
+                List {
+                    ForEach(model.items) { item in
+                        VStack {
+                            Text(value)
+                            Text(item.title)
+                                .accessibilityLabel(Text(value))
+                            Button(value) { }
+                                .accessibilityLabel(Text(value))
+                        }
+                    }
+                }
+            } else {
+                Text(verbatim: "Empty")
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let arkTS = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("contentDescription = value"))
+    #expect(kotlin.contains("text = item.title"))
+    #expect(kotlin.contains("Text(text = value)"))
+    #expect(arkTS.contains("const value = this.title;"))
+    #expect(arkTS.contains("Text(value)"))
+    #expect(arkTS.contains("Text(item.title)"))
+    #expect(arkTS.contains(".accessibilityText(value)"), Comment(rawValue: arkTS))
+    #expect(!arkTS.contains(".accessibilityText(this.value)"))
+    #expect(arkTS.contains("Text('Empty')"))
+}
+
 @Test func optionalBooleanBindingSupportsNestedCondition() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     struct OptionalEnabled: View {

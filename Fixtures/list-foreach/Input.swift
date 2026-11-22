@@ -5,12 +5,12 @@ struct SettingItem: Identifiable {
     let title: String
 }
 
-protocol SettingsListModel: RefractModel {
+protocol OptionalButtonListModel: RefractModel {
     var items: [SettingItem] { get }
 }
 
-struct ForEachList: View {
-    let model: SettingsListModel
+struct OptionalButtonList: View {
+    let model: OptionalButtonListModel
     let title: String?
 
     var body: some View {
@@ -20,6 +20,9 @@ struct ForEachList: View {
                     VStack {
                         Text(value)
                         Text(item.title)
+                            .accessibilityLabel(Text(value))
+                        Button(value) { }
+                            .accessibilityLabel(Text(value))
                     }
                 }
             }
