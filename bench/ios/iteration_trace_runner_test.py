@@ -16,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import HandshakeError, Session
+from iteration_trace_runner import HandshakeError, Session, test_command, traced_test_name
 
 
 class RecorderFixture:
@@ -303,6 +303,30 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
+
+    def test_exact_existing_xctest_selectors_and_xctestrun_command(self):
+        for variant in ("generated", "reference"):
+            for scenario in ("scroll", "stateUpdate"):
+                with self.subTest(variant=variant, scenario=scenario):
+                    selector = f"test{variant.capitalize()}{scenario[0].upper()}{scenario[1:]}Trace"
+                    test = traced_test_name(variant, scenario)
+                    self.assertEqual(test.rsplit("/", 1)[-1], selector)
+                    self.assertIn(f"func {selector}",
+                                  (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
+        command = test_command(Path("iteration.xctestrun"), "owned-target",
+                               "RefractBenchUITests/RefractBenchUITests/testGeneratedScrollTrace",
+                               "a" * 40, Path("results.xcresult"))
+        self.assertEqual(command[:3], ["xcodebuild", "test-without-building", "-xctestrun"])
+        self.assertNotIn("-project", command)
+        self.assertNotIn("simctl", command)
+
+    def test_main_prepares_only_the_trace_xctestrun(self):
+        source = (HERE / "iteration_trace_runner.py").read_text()
+        prepare = source.index("test_run = prepare_test_run(")
+        self.assertGreater(prepare, source.index('parser.add_argument("--variant"'))
+        self.assertEqual(source[:prepare].count("\n        test_run = prepare_test_run("), 0)
+        self.assertEqual(source[prepare:].count("prepare_test_run("), 1)
+        self.assertLess(prepare, source.index('test_command(test_run', prepare))
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"
