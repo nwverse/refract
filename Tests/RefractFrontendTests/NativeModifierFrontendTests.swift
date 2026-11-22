@@ -92,6 +92,57 @@ private let measurementMapping = Mapping(
     #expect(writer.text.contains("Button(onClick = onClick"))
 }
 
+@Test func childItemToggleUsesDeclaredInputReceiver() throws {
+    let fixture = FixtureCase(name: "child-view-layout-priority", status: .ready,
+        input: try String(contentsOfFile: "Fixtures/child-view-layout-priority/Input.swift", encoding: .utf8),
+        mapping: try String(contentsOfFile: "Fixtures/child-view-layout-priority/refract.json", encoding: .utf8),
+        expectedKotlin: nil, expectedArkTS: nil, expectedDiagnostics: nil)
+    let result = try GoldenRunner.generate(fixture)
+    #expect(result.diagnostics.isEmpty)
+    let kotlin = try #require(result.kotlin)
+    #expect(kotlin.contains("checked = row.enabled"))
+    #expect(kotlin.contains("settings.setEnabled(row.id, enabled)"))
+    let ark = try #require(result.arkTS)
+    #expect(ark.contains("isOn: this.row.enabled"), Comment(rawValue: ark))
+    #expect(ark.contains("this.settings.setEnabled(this.row.id, enabled);"), Comment(rawValue: ark))
+    #expect(ark.contains(".id(`setting_toggle_${this.row.id}`)"))
+    #expect(ark.contains("LazyForEach(this.model.rows, (row: ChildSettingItem) =>"))
+}
+
+@Test func ordinaryListItemToggleRetainsLocalReceiver() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol ListModel: RefractModel {
+        var rows: [ListRow] { get }
+        func setEnabled(_ id: Int, value: Bool)
+    }
+    struct ListRow: Identifiable { let id: Int; let title: String; let enabled: Bool }
+    struct UnusedChild: View {
+        let row: ListRow
+        var body: some View { Text(row.title) }
+    }
+    struct ListScreen: View {
+        let model: ListModel
+        var body: some View {
+            List(model.rows) { row in
+                Toggle("settings.item\\(row.id)", isOn: Binding(
+                    get: { row.enabled },
+                    set: { value in model.setEnabled(row.id, value: value) }
+                ))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/interop-native-measurement/refract.json"))
+    let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    #expect(ark.contains("isOn: row.enabled"), Comment(rawValue: ark))
+    #expect(ark.contains("this.model.setEnabled(row.id, enabled);"))
+    #expect(!ark.contains("isOn: this.row.enabled"))
+    #expect(!ark.contains("setEnabled(this.row.id"))
+}
+
 @Test func retainedItemToggleUsesMergedTypedAction() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol Model: RefractModel {
@@ -222,7 +273,7 @@ func rowContentTypeDoesNotFallThroughToToggleOrWrapper(_ receiver: String) {
     #expect(result.kotlin?.contains("Column(modifier = Modifier.weight(1f))") == true)
     #expect(result.kotlin?.contains("Modifier.testTag(\"setting_toggle_${row.id}\")") == true)
     #expect(result.arkTS?.contains(".id(`setting_toggle_${this.row.id}`).accessibilityText(this.row.title)") == true)
-    #expect(result.arkTS?.contains("Toggle({ type: ToggleType.Switch, isOn: row.enabled })") == true)
+    #expect(result.arkTS?.contains("Toggle({ type: ToggleType.Switch, isOn: this.row.enabled })") == true)
     #expect(result.arkTS?.contains("ChildSettingRow({ settings: this.model, row: row })\n          .reuse({ reuseId: () => 'setting' })") == true)
     #expect(result.kotlin?.contains("contentType = { \"setting\" }") == true)
     #expect(result.kotlin?.contains("Arrangement.SpaceBetween") == false)

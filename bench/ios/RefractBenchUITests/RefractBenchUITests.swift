@@ -1,6 +1,41 @@
 import XCTest
 
 @MainActor
+private enum TraceHandshake {
+    static let iterationCount = 30
+
+    static func write(_ payload: [String: Any], named name: String, in directory: URL) throws {
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        let destination = directory.appendingPathComponent(name)
+        guard !FileManager.default.fileExists(atPath: destination.path) else {
+            throw NSError(domain: "RefractBench.TraceHandshake", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Refusing to replace \(name)"])
+        }
+        try data.write(to: destination, options: .withoutOverwriting)
+    }
+
+    static func ready(in directory: URL, expected: [String: Any],
+                      name: String = "recorder-ready.json") -> [String: Any]? {
+        let path = directory.appendingPathComponent(name)
+        guard let data = try? Data(contentsOf: path),
+              let packet = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        for (key, value) in expected where !isEqual(packet[key], value) {
+            XCTFail("Stale or mismatched recorder \(key)")
+            return nil
+        }
+        return packet
+    }
+
+    private static func isEqual(_ lhs: Any?, _ rhs: Any) -> Bool {
+        switch rhs {
+        case let value as String: return lhs as? String == value
+        case let value as Int: return lhs as? Int == value
+        default: return false
+        }
+    }
+}
+
+@MainActor
 final class RefractBenchUITests: XCTestCase {
     func testGeneratedColdStart() {
         launchMetric("generated")
@@ -24,6 +59,22 @@ final class RefractBenchUITests: XCTestCase {
 
     func testReferenceStateUpdate() {
         runScenario("stateUpdate", variant: "reference")
+    }
+
+    func testGeneratedScrollTrace() throws {
+        try runTracedIteration("scroll", variant: "generated")
+    }
+
+    func testReferenceScrollTrace() throws {
+        try runTracedIteration("scroll", variant: "reference")
+    }
+
+    func testGeneratedStateUpdateTrace() throws {
+        try runTracedIteration("stateUpdate", variant: "generated")
+    }
+
+    func testReferenceStateUpdateTrace() throws {
+        try runTracedIteration("stateUpdate", variant: "reference")
     }
 
     private func launchMetric(_ variant: String) {
@@ -57,5 +108,78 @@ final class RefractBenchUITests: XCTestCase {
         let completion = application.staticTexts["\(variant) \(scenario) complete 30"]
         XCTAssertTrue(completion.waitForExistence(timeout: 180))
         application.terminate()
+    }
+
+    private func runTracedIteration(_ scenario: String, variant: String) throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["REFRACT_BENCH_TRACE_CONTROL"] != nil else {
+            throw XCTSkip("Per-iteration capture requires the explicit Instruments runner")
+        }
+        guard let iterationValue = environment["REFRACT_BENCH_TRACE_ITERATION"],
+              let iteration = Int(iterationValue), (0..<TraceHandshake.iterationCount).contains(iteration),
+              let controlValue = environment["REFRACT_BENCH_TRACE_CONTROL"] else {
+            XCTFail("An exact iteration and new control directory are required")
+            return
+        }
+        let control = URL(fileURLWithPath: controlValue, isDirectory: true)
+        let application = XCUIApplication()
+        application.launchEnvironment = [
+            "REFRACT_BENCH_REVISION": environment["REFRACT_BENCH_REVISION"] ?? "",
+            "REFRACT_BENCH_VARIANT": variant,
+            "REFRACT_BENCH_SCENARIO": scenario,
+            "REFRACT_BENCH_ITERATION": iterationValue,
+            "REFRACT_BENCH_TRACE_CONTROL": controlValue,
+        ]
+        application.launch()
+        defer { application.terminate() }
+        guard application.staticTexts["Setting 0"].waitForExistence(timeout: 20),
+              application.staticTexts["\(variant) \(scenario) waiting"]
+                  .waitForExistence(timeout: 20) else {
+            XCTFail("The exact app iteration did not become ready")
+            application.terminate()
+            return
+        }
+        var packet: [String: Any] = [
+            "schema": 1, "session": 1, "variant": variant, "scenario": scenario,
+            "iteration": iteration, "pid": Int(application.processIdentifier),
+            "process": application.state == .runningForeground ? "running" : "not-running",
+            "state": "ready",
+        ]
+        do {
+            try TraceHandshake.write(packet, named: "request.json", in: control)
+            let readyText = application.staticTexts["\(variant) \(scenario) ready"]
+            guard readyText.waitForExistence(timeout: 65) else {
+                XCTFail("The distinct Instruments recorder did not become ready")
+                return
+            }
+            let begin = application.buttons["refract_benchmark_begin_iteration"]
+            guard begin.waitForExistence(timeout: 5), begin.isHittable else {
+                XCTFail("The exact app iteration has no start boundary")
+                return
+            }
+            begin.tap()
+            let completionText = "\(variant) \(scenario) complete 1"
+            let completion = application.staticTexts[completionText]
+            guard completion.waitForExistence(timeout: 180), application.state == .runningForeground,
+                  Int(application.processIdentifier) == packet["pid"] as? Int else {
+                XCTFail("The exact native iteration did not complete on the attached PID")
+                application.terminate()
+                return
+            }
+            packet["state"] = "complete"
+            packet["completion"] = completionText
+            try TraceHandshake.write(packet, named: "completion.json", in: control)
+            let finished = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    TraceHandshake.ready(in: control, expected: packet,
+                                         name: "recorder-finished.json") != nil
+                }, object: nil)
+            guard XCTWaiter.wait(for: [finished], timeout: 30) == .completed else {
+                XCTFail("Instruments did not finish and preserve this exact iteration")
+                return
+            }
+        } catch {
+            XCTFail("Trace handshake failed: \(error.localizedDescription)")
+        }
     }
 }

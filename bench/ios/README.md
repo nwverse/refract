@@ -52,11 +52,26 @@ xcrun xcresulttool get test-results summary --path <run>/results.xcresult --form
 xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --format json > <run>/metrics.json
 
 # Record exactly one profiler package per variant/scenario/iteration.
-# The --attach PID and time window must be captured from that exact iteration.
-xcrun xctrace record --device <owned-udid> --template 'Animation Hitches' \
-  --attach <iteration-pid> --time-limit <iteration-window> \
-  --output <new-run>/raw/<variant>-<scenario>-<iteration>.trace
+# This driver obtains the actual PID from XCUIApplication, waits for explicit
+# Instruments readiness before releasing the native script, checks native
+# completion, gracefully stops xctrace, and preserves its package. Repeat this
+# command for every variant, scroll/stateUpdate scenario, and iteration 0...29;
+# use a new run directory each time. It never creates, boots or reboots a target.
+# --window bounds deferred work, not the measured iteration window.
+python3 -I bench/ios/iteration_trace_runner.py \
+  --target-udid <owned-udid> --derived-data <build-output-directory> \
+  --variant <generated-or-reference> --scenario <scroll-or-stateUpdate> \
+  --iteration <0-through-29> --source-revision <clean-committed-revision> \
+  --run-directory <new-iteration-run-directory>
 
+# Equivalent lower-level recorder command used by the driver after the app
+# publishes its PID. Do not use a filename as a substitute for the handshake:
+xcrun xctrace record --device <owned-udid> --template 'Animation Hitches' \
+  --attach <observed-running-app-pid> --window <bounded-deferred-work-window> \
+  --output <new-iteration-run>/<variant>-<scenario>-<iteration>.trace
+
+# The driver archives only after xctrace exits successfully, emits exact raw
+# identity, bytes and SHA-256, and retains the handshake and recorder logs.
 # xctrace writes a package directory; the reporter requires an ordinary raw file.
 # Archive only after recording finishes. Repeat for every exact iteration and do
 # not infer identity from the filename. This emits byte count and SHA-256 for the
@@ -75,12 +90,32 @@ probe rejects unavailable or not-booted targets. Before any physical measurement
 availability/identity probe and the `platform=iOS,id=<udid>` destination; do not infer physical availability from a
 `generic/platform=iOS` compile. A generic device compile is not a device result.
 
-The app helper currently persists raw display samples in its own defaults store. Retrieval must use `devicectl` or the
-explicit simulator's data container and preserve the raw JSON before report generation. XCUITest metrics and native
-profiler recordings must be correlated by the test's actual iteration identifiers, not by filename guessing. A
-repeated per-iteration capture workflow is still required before claiming that the complete harness is executable.
-Until those collection and correlation steps are run and inspected, this remains a **compiled reference scenario and
-measurement contract**, not a completed measurement harness or a paired result.
+The per-iteration driver uses a new control directory for each app launch. The UI test publishes the actual
+`XCUIApplication.processIdentifier` and exact variant/scenario/iteration, then waits for the app to observe the
+runner's recorder-ready file. Only then does it tap the start boundary. The native script executes the same single
+scroll destination or eight state updates as its corresponding iteration in the original 30-iteration task. It
+publishes `complete 1` through the existing accessibility boundary while raw samples retain the original iteration
+number. The runner rejects missing, stale, duplicate or mismatched PID/readiness/completion packets, sends SIGINT
+only to its own `xctrace` child, waits for successful package completion, and archives before releasing the UI test.
+No shell duration is substituted for a native metric.
+
+Run the control-plane and source-wiring tests with:
+
+```sh
+python3 -I bench/ios/iteration_trace_runner_test.py -v
+python3 -I bench/ios/iteration_trace_source_test.py -v
+python3 -I bench/ios/archive_trace_test.py -v
+```
+
+These use synthetic processes and packages, not Instruments or timing evidence. In this change they were executed on
+Linux; no Xcode/SwiftUI compile, XCTest execution, Instruments readiness behavior or trace acquisition was verified
+on macOS. The native driver requires an authorized macOS toolchain and an explicitly owned, already-running target.
+The original cold-start test still uses 30 `XCTApplicationLaunchMetric` iterations. The original non-traced scenario
+entry points remain available but the complete 30-iteration traced collection must use the new per-launch driver.
+Simulator results, if collected later, must remain explicitly labelled and cannot close the physical-device gate.
+The app helper persists raw display samples in its own defaults store. Retrieval must still use `devicectl` or the
+explicit simulator's data container and preserve the raw JSON before report generation. Until native collection is
+run and inspected, this is a **synthetically tested capture protocol**, not a completed paired measurement.
 
 ## Regression and evidence policy
 
