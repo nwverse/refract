@@ -21,6 +21,14 @@ Apply the same set to modifier expression lowering: a `LazyForEach` row's `acces
 replace the outer optional alias with the row item. Test the modifier on both Text and Button while retaining the
 Text leaf's local reference; rejected dynamic stack arguments are not alias-scope coverage.
 
+## A declared item input is not a lazy-row local
+
+A generated child View can receive an `Identifiable` item as a stored input. ArkUI declares that input as `@Param`,
+so its Toggle value and model-action identity must read `this.row.enabled` and `this.row.id`, just as its ordinary
+Text and measurement expressions read `this.row`. Only a current `LazyForEach` closure owns the unqualified local
+`row`. Distinguish the two scopes explicitly; a type match or identical property name does not make a component
+parameter a builder-local value.
+
 ## LazyForEach needs a native data source and stable identity
 
 A Swift `ForEach` over identified data must not lower to the ordinary ArkUI `ForEach` when lazy rendering is part
