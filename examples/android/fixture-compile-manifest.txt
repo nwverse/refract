@@ -56,6 +56,7 @@ model-interface
 markdown-conversation
 v0-stack-layout
 selection-dragdrop
+selection-dragdrop-optional-alias
 selection-link-context
 mapping/model-scalars
 adaptive-window-size

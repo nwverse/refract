@@ -20,6 +20,8 @@ A Text leaf that ignores this set emits `this.alias` even though recursive conta
 Apply the same set to modifier expression lowering: a `LazyForEach` row's `accessibilityLabel(Text(alias))` must not
 replace the outer optional alias with the row item. Test the modifier on both Text and Button while retaining the
 Text leaf's local reference; rejected dynamic stack arguments are not alias-scope coverage.
+Event payload lowering needs the same set: retaining it only for the wrapped Text is insufficient when `onDragStart`
+reads an optional scalar, because that separate expression would incorrectly emit `this.alias` for a local binding.
 
 ## LazyForEach needs a native data source and stable identity
 
