@@ -55,7 +55,16 @@ struct RefractBenchApp: App {
                         .accessibilityIdentifier("refract_benchmark_trace_identity_error")
                     if !beginSelectedIteration {
                         Button("BeginIteration") {
-                            beginSelectedIteration = true
+                            do {
+                                if let iteration = selectedIteration, let directory = traceControlDirectory() {
+                                    try publishTracePacket(named: "begin.json", in: directory,
+                                                           revision: revision, variant: variant, scenario: scenario,
+                                                           iteration: iteration, state: "begin")
+                                }
+                                beginSelectedIteration = true
+                            } catch {
+                                traceIdentityError = "Native Begin identity failed: \(error.localizedDescription)"
+                            }
                         }
                         .disabled(!recorderIsReady)
                         .accessibilityIdentifier("refract_benchmark_begin_iteration")
