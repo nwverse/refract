@@ -15,6 +15,7 @@ final class BenchmarkDisplayRecorder: ObservableObject {
     private var completedIterations = 0
     private var recordedIteration = 0
     @Published private(set) var completion: (variant: String, scenario: String, count: Int)?
+    @Published var beginSelectedIteration = false
     private var selectedIteration: Int? {
         guard let value = ProcessInfo.processInfo.environment["REFRACT_BENCH_ITERATION"] else { return nil }
         return Int(value)
@@ -30,6 +31,7 @@ final class BenchmarkDisplayRecorder: ObservableObject {
         completedIterations = 0
         recordedIteration = 0
         completion = nil
+        beginSelectedIteration = false
         iterations = []
         startLinkIfNeeded()
     }

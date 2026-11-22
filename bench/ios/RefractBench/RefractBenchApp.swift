@@ -7,7 +7,6 @@ struct RefractBenchApp: App {
     @StateObject private var recorder = BenchmarkDisplayRecorder.shared
     @StateObject private var traceReadiness: TraceReadiness
     @Environment(\.scenePhase) private var scenePhase
-    @State private var beginSelectedIteration = false
     @State private var traceIdentityError = ""
 
     private var selectedIteration: Int? {
@@ -42,7 +41,7 @@ struct RefractBenchApp: App {
             try publishTracePacket(named: "begin.json", in: directory,
                                    revision: revision, variant: variant, scenario: scenario,
                                    iteration: iteration, state: "begin")
-            beginSelectedIteration = true
+            recorder.beginSelectedIteration = true
             Task { await runTracedIteration(variant: variant, model: model) }
         } catch {
             traceIdentityError = "Native Begin identity failed: \(error.localizedDescription)"
@@ -71,7 +70,7 @@ struct RefractBenchApp: App {
                 if selectedIteration != nil {
                     Text(traceIdentityError)
                         .accessibilityIdentifier("refract_benchmark_trace_identity_error")
-                    if !beginSelectedIteration {
+                    if !recorder.beginSelectedIteration {
                         Button("BeginIteration", action: beginTrace)
                         .disabled(!traceReadiness.isReady)
                         .accessibilityIdentifier("refract_benchmark_begin_iteration")
