@@ -28,11 +28,17 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('if selectedIteration != nil || completedIterations == 30', RECORDER)
 
     def test_selected_iteration_consumes_begin_before_native_input(self):
-        ready = APP.index("while !recorderIsReady")
-        begin = APP.index("while !beginSelectedIteration", ready)
-        scenario = APP.index("switch (variant, scenario)", begin)
-        self.assertLess(ready, begin)
-        self.assertLess(begin, scenario)
+        ready = TESTS.index('readyText.waitForExistence')
+        tap = TESTS.index("begin.tap()", ready)
+        expected = TESTS.index('expectedBegin["state"] = "begin"', tap)
+        acknowledgement = TESTS.index('name: "begin.json"', expected)
+        scenario = APP.index("Task { await runTracedIteration")
+        self.assertLess(ready, tap)
+        self.assertLess(tap, expected)
+        self.assertLess(expected, acknowledgement)
+        self.assertIn('publishTracePacket(named: "begin.json"', APP[:scenario])
+        self.assertLess(APP.index(".safeAreaInset(edge: .bottom)"), APP.index("Button(\"BeginIteration\", action: beginTrace)"))
+        self.assertNotIn("native-button-action", APP)
 
     def test_recorder_ready_precedes_button_and_native_completion(self):
         start = TESTS.index('try TraceHandshake.write(packet, named: "request.json"')
@@ -48,8 +54,8 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn("recorder-finished.json", TESTS)
 
     def test_native_process_identity_binds_the_same_pid_to_completion(self):
-        identity = APP.index('publishTracePacket(named: "native-process.json"')
-        ready = APP.index("while !recorderIsReady", identity)
+        identity = APP.index('appendingPathComponent("native-process.json")')
+        ready = APP.index("while !recorderReady", identity)
         scenario = APP.index("switch (variant, scenario)", ready)
         completion = APP.index('publishTracePacket(named: "native-completion.json"', scenario)
         self.assertLess(identity, ready)

@@ -186,9 +186,11 @@ final class RefractBenchUITests: XCTestCase {
                 return
             }
             begin.tap()
+            var expectedBegin = packet
+            expectedBegin["state"] = "begin"
             let nativeBegin = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
-                    TraceHandshake.ready(in: control, expected: packet, name: "begin.json") != nil
+                    TraceHandshake.ready(in: control, expected: expectedBegin, name: "begin.json") != nil
                 }, object: nil)
             guard XCTWaiter.wait(for: [nativeBegin], timeout: 10) == .completed else {
                 XCTFail("The app did not acknowledge its native Begin boundary: \(identityError.label)")
