@@ -28,6 +28,7 @@ class RecorderFixture:
         self.work.mkdir(exist_ok=True)
         self.commands = self.work / "commands.jsonl"
         self.process = None
+        self.recorder = None
         self.cleanup = lambda: None
         self.output = root / "xcodebuild.log"
         root.mkdir(exist_ok=True)
@@ -105,21 +106,24 @@ while not (control / "recorder-stop").exists():
 
         def factory(command, log):
             environment = dict(os.environ, REFRACT_SYNTHETIC_XCRUN=str(self.commands))
-            return subprocess.Popen(
+            self.recorder = subprocess.Popen(
                 ["python3", "-I", str(recorder_script), *command,
                  "--control-directory", str(self.root / "control")],
                 env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            return self.recorder
         self.recorder_factory = factory
 
         def stop():
-            if self.process is not None:
-                if self.process.poll() is None:
-                    self.process.terminate()
+            for process in (self.process, self.recorder):
+                if process is None:
+                    continue
+                if process.poll() is None:
+                    process.terminate()
                 try:
-                    self.process.communicate(timeout=5)
+                    process.communicate(timeout=5)
                 except subprocess.TimeoutExpired:
-                    self.process.kill()
-                    self.process.communicate(timeout=5)
+                    process.kill()
+                    process.communicate(timeout=5)
         self.cleanup = stop
 
     def stop(self):
