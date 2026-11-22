@@ -22,6 +22,10 @@ replace the outer optional alias with the row item. Test the modifier on both Te
 Text leaf's local reference; rejected dynamic stack arguments are not alias-scope coverage.
 Event payload lowering needs the same set: retaining it only for the wrapped Text is insufficient when `onDragStart`
 reads an optional scalar, because that separate expression would incorrectly emit `this.alias` for a local binding.
+Platform selection is recursive expression lowering too: selecting the HarmonyOS branch of `refractValue` must retain
+the aliases received by a native argument. Dropping them at that recursion turns a List row's valid local alias into
+`this.alias`, even when the same argument works without platform selection. Test the selected scalar inside the lazy
+row, not only an unwrapped argument or a row-free screen.
 
 ## A declared item input is not a lazy-row local
 
@@ -58,6 +62,15 @@ verification.
 A `Scroll` needs a single direct container, so a multi-child Swift `ScrollView` becomes `Scroll { Column { ... } }`.
 Only the application owns its `@Entry` page. Generated reusable screens use `@ComponentV2` and are callable from
 ordinary native navigation without a host or global initialization.
+
+## A typed layout must retain the row type, not only its local name
+
+A `LazyForEach` row has both a local name and an item type. ArkUI's typed-layout recursion must retain both when a
+`VStack(spacing:)` contains an item Toggle. Passing only the local name leaves the model-action projection guard
+without its row type and rejects an accepted input with `state.invalid_projection`. Keep this context propagation
+separate from conditional recursion and receiver selection, and cover the exact path with paired output. When that
+golden joins the shared Android fixture compile set, give it a unique package if another case declares the same model
+type; independent CLI regeneration cannot detect a cross-fixture Kotlin `CLASSIFIER_REDECLARATION`.
 
 ## Declarative builders are not ordinary closures
 
