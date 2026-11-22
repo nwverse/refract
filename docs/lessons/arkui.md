@@ -30,7 +30,9 @@ so its Toggle value and model-action identity must read `this.row.enabled` and `
 Text and measurement expressions read `this.row`. Only a current `LazyForEach` closure owns the unqualified local
 `row`. Distinguish the two scopes explicitly; a type match or identical property name does not make a component
 parameter a builder-local value. Regenerate every committed artifact derived from the changed lowering: the Fixtures
-goldens and the separate `bench/harmony/generate.py` output, whose `--check` must also remain byte-exact.
+goldens and the separate `bench/harmony/generate.py` output, whose `--check` must also remain byte-exact. Conditional
+emission must retain the current row's `itemTypeName`, just as stack recursion does; passing only its name makes a
+valid item Toggle's model-action write fail the receiver guard.
 
 ## LazyForEach needs a native data source and stable identity
 
