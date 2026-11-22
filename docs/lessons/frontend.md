@@ -3,6 +3,8 @@
 - Boolean conditions must use the same scalar scope as other typed expressions. Optional and enum-payload aliases are
   already recorded in `currentBindings`; a state/binding-only lookup wrongly rejects a non-null `Bool` alias used by a
   nested `if`. Resolve local aliases first, then emit a direct native branch, with paired golden and compiler coverage.
+  Remove the alias before parsing the optional binding's `else` branch: keeping it registered until after the fallback
+  lets an out-of-scope `Bool` alias pass condition type checking and produce a native reference that cannot compile.
 
 - SwiftParser leaves unparenthesized comparison/boolean chains as a flat `SequenceExprSyntax`, not an
   `InfixOperatorExprSyntax`. A bounded filter/sort grammar must check the exact element count and every operator/member

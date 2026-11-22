@@ -164,7 +164,10 @@ struct Generation {
     func emit(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
               lazyOwner: Bool = false, mapping: Mapping = .empty,
               resolver: InteropResolver? = nil, parentAxis: ViewNode.StackAxis? = nil,
-              itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil) throws {
+              itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil,
+              localAliases: Set<String> = []) throws {
+        var localAliases = localAliases
+        if let item { localAliases.insert(item) }
         switch node {
         case let .stack(axis, children, modifiers, _):
             let children = try stackChildren(children, parentAxis: axis)
@@ -172,7 +175,8 @@ struct Generation {
             writer.open("\(containerName(axis))()")
             for child in children {
                 try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
-                         parentAxis: axis, itemTypeName: itemTypeName, traversal: traversal)
+                         parentAxis: axis, itemTypeName: itemTypeName, traversal: traversal,
+                         localAliases: localAliases)
             }
             writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
         case let .markdown(document, linkAction, modifiers, _):
@@ -185,7 +189,8 @@ struct Generation {
                 writer.line("Button($r('\(resource.namespace ?? "app").\(resource.table ?? "string").\(resource.nativeName)'))")
             } else {
                 writer.open("Button()")
-                try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver)
+                try emit(label, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                         localAliases: localAliases)
                 writer.close()
             }
             if let action {
@@ -210,7 +215,9 @@ struct Generation {
                                  location: location)
             }
             for (index, branch) in branches.enumerated() {
-                let condition = try branch.condition.map { try emitLocalExpression($0, item: item, mapping: mapping) }
+                let condition = try branch.condition.map {
+                    try emitLocalExpression($0, item: item, mapping: mapping, localAliases: localAliases)
+                }
                 if index == 0 {
                     guard let condition else {
                         throw Diagnostic(code: "arkui.invalid_conditional", message: "A conditional needs a first condition.", location: location)
@@ -219,15 +226,18 @@ struct Generation {
                 } else {
                     writer.closeBranch(condition.map { "else if (\($0))" } ?? "else")
                 }
-                for child in branch.children { try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
+                for child in branch.children {
+                    try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                             localAliases: localAliases)
+                }
             }
             writer.close()
         case let .switchExpression(subject, enumName, cases, _):
             try emitEnumSwitch(subject: subject, enumName: enumName, cases: cases,
-                               into: &writer, mapping: mapping, resolver: resolver)
+                               into: &writer, mapping: mapping, resolver: resolver, localAliases: localAliases)
         case let .navigationStack(stack, _):
             for child in stack.content {
-                try emit(child, into: &writer, mapping: mapping, resolver: resolver)
+                try emit(child, into: &writer, mapping: mapping, resolver: resolver, localAliases: localAliases)
             }
         case let .navigationLink(title, pathName, enumName, destination, _):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
@@ -246,7 +256,8 @@ struct Generation {
             let drop = operations.first { if case .dropTarget = $0.operation { true } else { false } }
             if drag != nil || drop != nil {
                 try emitArkDragDrop(child, operations: operations,
-                                    into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+                                    into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
+                                    localAliases: localAliases)
                 return
             }
             var modifiers: [Modifier] = []
@@ -279,10 +290,12 @@ struct Generation {
                 throw Diagnostic(code: "RFNATIVE004", message: "The native test id cannot be attached to this ArkUI receiver.",
                                  suggestion: "Apply testTag to a concrete view or container.", location: location)
             }
-            try emit(modified, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+            try emit(modified, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
+                     localAliases: localAliases)
         case let .optionalBinding(subject, binding, children, otherwise, location):
             try emitOptionalBinding(subject: subject, binding: binding, children: children, otherwise: otherwise,
-                                    location: location, into: &writer, mapping: mapping, resolver: resolver)
+                                    location: location, into: &writer, mapping: mapping, resolver: resolver,
+                                    localAliases: localAliases)
         case let .native(component, location):
             guard let resolver else {
                 throw Diagnostic(code: "arkui.unresolved_native_component",
@@ -341,13 +354,16 @@ struct Generation {
             try emitExtended(.toggle(title: title, value: value, modifiers: modifiers, nativeModifiers: nativeModifiers,
                                      labelsHidden: labelsHidden, location: location),
                              into: &writer, item: item, mapping: mapping, resolver: resolver,
-                             itemParameters: screenItemTypes, itemTypeName: itemTypeName, traversal: traversal)
+                             itemParameters: screenItemTypes, itemTypeName: itemTypeName, traversal: traversal,
+                             localAliases: localAliases)
         case let .platformView(alternatives, _):
             for child in alternatives.harmonyOS {
-                try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+                try emit(child, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
+                         localAliases: localAliases)
             }
         default:
-            try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+            try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
+                             localAliases: localAliases)
         }
     }
 
@@ -539,7 +555,7 @@ struct Generation {
     /// `.allowDrop` plus `onDrop` for the target, both wrapped around the original node.
     func emitArkDragDrop(_ node: ViewNode, operations: [NativeModifier],
                          into writer: inout ArkWriter, item: String?, lazyOwner: Bool,
-                         mapping: Mapping, resolver: InteropResolver?) throws {
+                         mapping: Mapping, resolver: InteropResolver?, localAliases: Set<String> = []) throws {
         var drag: (kind: String, value: Expression)?
         var drop: (kind: String, action: String)?
         for op in operations {
@@ -572,10 +588,12 @@ struct Generation {
             }
         }
         if remaining.isEmpty {
-            try emit(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+            try emit(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
+                     localAliases: localAliases)
         } else {
             try emit(.nativeModifier(child: node, operations: remaining, location: node.sourceLocation),
-                     into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver)
+                     into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
+                     localAliases: localAliases)
         }
         writer.close()
         // Stack modifiers attach after the closing brace.

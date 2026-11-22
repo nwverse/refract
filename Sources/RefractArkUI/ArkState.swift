@@ -75,7 +75,8 @@ private func stateType(_ type: ValueType) throws -> String {
 }
 
 func emitLocalExpression(_ expression: Expression, item: String? = nil,
-                         mapping: Mapping = .empty, itemParameters: Set<String> = []) throws -> String {
+                         mapping: Mapping = .empty, itemParameters: Set<String> = [],
+                         localAliases: Set<String> = []) throws -> String {
     switch expression.value {
     case let .nativeValueProperty(value):
         return "this.\(value.value).\(value.field.rawValue)"
@@ -116,7 +117,7 @@ func emitLocalExpression(_ expression: Expression, item: String? = nil,
         }
         return result + "`"
     default:
-        return try ArkExpression.emit(expression, item: item, mapping: mapping)
+        return try ArkExpression.emit(expression, item: item, mapping: mapping, localAliases: localAliases)
     }
 }
 

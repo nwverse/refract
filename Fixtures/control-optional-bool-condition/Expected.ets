@@ -4,14 +4,24 @@
 @ComponentV2
 export struct OptionalEnabled {
   @Param @Require public var maybeEnabled: boolean | null | undefined
+  @Param @Require public var maybeReady: boolean | null | undefined
 
   build() {
     if (this.maybeEnabled !== null && this.maybeEnabled !== undefined) {
       const enabled = this.maybeEnabled;
-      if (enabled) {
-        Text($r('app.string.content_enabled'))
+      if (this.maybeReady !== null && this.maybeReady !== undefined) {
+        const ready = this.maybeReady;
+        Column() {
+          if (enabled) {
+            Text($r('app.string.content_enabled'))
+          } else if (ready) {
+            Text($r('app.string.content_disabled'))
+          } else {
+            Text($r('app.string.content_unavailable'))
+          }
+        }
       } else {
-        Text($r('app.string.content_disabled'))
+        Text($r('app.string.content_pending'))
       }
     } else {
       Text($r('app.string.content_unknown'))

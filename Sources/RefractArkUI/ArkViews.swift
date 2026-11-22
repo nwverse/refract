@@ -5,37 +5,45 @@ extension Generation {
     func emitExtended(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
                       lazyOwner: Bool = false, mapping: Mapping = .empty,
                       resolver: InteropResolver? = nil, itemParameters: [String: String] = [:],
-                      itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil) throws {
+                      itemTypeName: String? = nil, traversal: AccessibilityTraversal? = nil,
+                      localAliases: Set<String> = []) throws {
         switch node {
         case let .layout(layout, children, modifiers, _):
             try emitLayout(layout, children: children, modifiers: modifiers,
-                           into: &writer, item: item, mapping: mapping, resolver: resolver)
+                           into: &writer, item: item, mapping: mapping, resolver: resolver, localAliases: localAliases)
         case let .scroll(axis, child, modifiers, _):
             writer.open("Scroll()")
-            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
+            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                     localAliases: localAliases)
             writer.close()
             writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .list(children, modifiers, _):
             writer.open("List()")
             for child in children {
-                try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver)
+                try emit(child, into: &writer, item: item, lazyOwner: true, mapping: mapping, resolver: resolver,
+                         localAliases: localAliases)
             }
             writer.close()
             writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
         case let .section(header, children, _):
             writer.open("ListItemGroup(\(try header.map { "{ header: Text(\(try ArkExpression.emit($0, mapping: mapping))) }" } ?? ""))")
-            for child in children { try emitListItem(child, into: &writer, item: item, mapping: mapping, resolver: resolver) }
+            for child in children {
+                try emitListItem(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                                 localAliases: localAliases)
+            }
             writer.close()
         case let .listItem(child, _):
-            try emitListItem(child, into: &writer, item: item, mapping: mapping, resolver: resolver)
+            try emitListItem(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                             localAliases: localAliases)
         case let .horizontalSections(sections, location):
             guard lazyOwner else {
                 throw Diagnostic(code: "RFLIST004",
                     message: "Horizontal sections must be a direct List child, not an eager nested container.",
                     suggestion: "Use the bounded Section + horizontal LazyHStack form inside one outer List", location: location)
             }
-            try emitHorizontalSections(sections, into: &writer, mapping: mapping, resolver: resolver)
+            try emitHorizontalSections(sections, into: &writer, mapping: mapping, resolver: resolver,
+                                       localAliases: localAliases)
         case let .forEach(items, location):
             guard lazyOwner else {
                 throw Diagnostic(code: "arkui.lazy_list_owner",
@@ -52,7 +60,7 @@ extension Generation {
             writer.open("LazyForEach(\(source), (\(items.itemName): \(items.itemType)) =>")
             writer.open("ListItem()")
             try emit(items.content, into: &writer, item: items.itemName, mapping: mapping, resolver: resolver,
-                     itemTypeName: items.itemType)
+                     itemTypeName: items.itemType, localAliases: localAliases)
             writer.close()
             let key = "\(items.itemName).\(items.key)"
             writer.close(suffix: ", (\(items.itemName): \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
@@ -222,14 +230,17 @@ extension Generation {
     }
 
     private func emitListItem(_ node: ViewNode, into writer: inout ArkWriter, item: String? = nil,
-                              mapping: Mapping = .empty, resolver: InteropResolver? = nil) throws {
+                              mapping: Mapping = .empty, resolver: InteropResolver? = nil,
+                              localAliases: Set<String> = []) throws {
         writer.open("ListItem()")
         if case let .layout(layout, children, modifiers, location) = node {
             // A static List row is a single item; its content stays one native subtree.
             try emitExtended(.layout(layout, children: children, modifiers: modifiers, location: location),
-                             into: &writer, item: item, mapping: mapping, resolver: resolver)
+                             into: &writer, item: item, mapping: mapping, resolver: resolver,
+                             localAliases: localAliases)
         } else {
-            try emit(node, into: &writer, item: item, mapping: mapping, resolver: resolver)
+            try emit(node, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                     localAliases: localAliases)
         }
         writer.close()
     }

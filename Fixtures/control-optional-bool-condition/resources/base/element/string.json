@@ -2,6 +2,8 @@
   "string": [
     { "name": "content_enabled", "value": "Enabled" },
     { "name": "content_disabled", "value": "Disabled" },
+    { "name": "content_unavailable", "value": "Unavailable" },
+    { "name": "content_pending", "value": "Not ready" },
     { "name": "content_unknown", "value": "Unknown" }
   ]
 }
