@@ -29,7 +29,7 @@ export struct RouteScreen {
         List() {
           LazyForEach(this.model.items, (item: SettingItem) => {
             ListItem() {
-              RoutePreview({ cameraZoom: 12.0, showsTraffic: true, title: this.value })
+              RoutePreview({ cameraZoom: 12.0, showsTraffic: true, title: value })
             }
           }, (item: SettingItem): string => item.id)
         }

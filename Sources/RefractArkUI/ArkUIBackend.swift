@@ -311,7 +311,7 @@ struct Generation {
             } else {
                 let target = try resolver.target(for: component, platform: .harmonyOS, location: location)
                 let arguments = try InteropEmission.arguments(for: component, target: target) {
-                    try ArkExpression.emit($0, item: item, mapping: mapping)
+                    try ArkExpression.emit($0, item: item, mapping: mapping, localAliases: localAliases)
                 } renderAction: { action in
                     guard case let .modelMethod(model, name, arguments) = action else {
                         throw Diagnostic(code: "RFNATIVE002", message: "Native actions require a model method.", location: location)
