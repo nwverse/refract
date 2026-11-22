@@ -4,7 +4,7 @@ import RefractMapping
 extension Generation {
     func emitLayout(_ layout: LayoutContainer, children: [ViewNode], modifiers: [Modifier],
                     into writer: inout ArkWriter, item: String?, mapping: Mapping, resolver: InteropResolver?,
-                    localAliases: Set<String> = []) throws {
+                    itemTypeName: String? = nil, localAliases: Set<String> = []) throws {
         var arguments: [String] = []
         if let spacing = layout.spacing {
             arguments.append("space: \(try ArkExpression.emit(spacing, item: item, mapping: mapping))")
@@ -21,8 +21,8 @@ extension Generation {
         let traversal = try ArkModifiers.validateAccessibilityTraversal(modifiers, children: children, mapping: mapping)
         writer.open("\(container)(\(arguments.isEmpty ? "" : "{ \(arguments.joined(separator: ", ")) }"))")
         for child in children {
-            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver, traversal: traversal,
-                     localAliases: localAliases)
+            try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
+                     itemTypeName: itemTypeName, traversal: traversal, localAliases: localAliases)
         }
         writer.close()
         if layout.axis != .depth, let alignment = layout.alignment {

@@ -63,6 +63,15 @@ A `Scroll` needs a single direct container, so a multi-child Swift `ScrollView` 
 Only the application owns its `@Entry` page. Generated reusable screens use `@ComponentV2` and are callable from
 ordinary native navigation without a host or global initialization.
 
+## A typed layout must retain the row type, not only its local name
+
+A `LazyForEach` row has both a local name and an item type. ArkUI's typed-layout recursion must retain both when a
+`VStack(spacing:)` contains an item Toggle. Passing only the local name leaves the model-action projection guard
+without its row type and rejects an accepted input with `state.invalid_projection`. Keep this context propagation
+separate from conditional recursion and receiver selection, and cover the exact path with paired output. When that
+golden joins the shared Android fixture compile set, give it a unique package if another case declares the same model
+type; independent CLI regeneration cannot detect a cross-fixture Kotlin `CLASSIFIER_REDECLARATION`.
+
 ## Declarative builders are not ordinary closures
 
 Do not add an ordinary `: void` return annotation to a trailing UI-builder closure merely to satisfy a textual ArkTS
