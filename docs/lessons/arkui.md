@@ -25,7 +25,12 @@ reads an optional scalar, because that separate expression would incorrectly emi
 Platform selection is recursive expression lowering too: selecting the HarmonyOS branch of `refractValue` must retain
 the aliases received by a native argument. Dropping them at that recursion turns a List row's valid local alias into
 `this.alias`, even when the same argument works without platform selection. Test the selected scalar inside the lazy
-row, not only an unwrapped argument or a row-free screen.
+row, not only an unwrapped argument or a row-free screen. Dedicated view lowering also owns expression paths outside
+the ordinary Text leaf: Image `.accessibilityText` must receive the same set, or an optional alias becomes `this.alias`
+inside `LazyForEach` while Compose correctly retains the local. When a receiver has both accessibility and ordinary
+layout modifiers, keep that set while recursively lowering the remaining layout modifiers too; otherwise the earlier
+accessibility parameter is silently dropped before Image is emitted. Check the accepted SwiftUI form before diagnosing
+a missing alias; a dynamic TextField title is currently rejected for a localized key, not a placeholder-scope regression.
 
 ## A declared item input is not a lazy-row local
 

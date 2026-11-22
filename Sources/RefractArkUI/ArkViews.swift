@@ -67,13 +67,13 @@ extension Generation {
             writer.close(suffix: ", (\(items.itemName): \(items.itemType)): string => \(items.keyType == .int ? "String(\(key))" : key))")
         case let .image(source, modifiers, _):
             guard let description = source.contentDescription else {
-                writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
+                writer.line("Image(\(try image(source, mapping: mapping)))\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases))")
                 return
             }
             writer.line("Image(\(try image(source, mapping: mapping)))")
             writer.depth += 1
-            writer.line(".accessibilityText(\(try ArkExpression.emit(description, item: item, mapping: mapping)))")
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(".accessibilityText(\(try ArkExpression.emit(description, item: item, mapping: mapping, localAliases: localAliases)))")
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases), unlessEmpty: true)
             writer.depth -= 1
         case let .toggle(title, value, modifiers, nativeModifiers, labelsHidden, _):
             var rowModifiers: [Modifier] = []
