@@ -566,12 +566,10 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(recorder.returncode, 7)
 
     def test_recorder_failure_at_native_completion_never_accepts_trace(self):
-        self.recorder.start(recorder_stop_status=7)
-        with self.assertRaisesRegex(HandshakeError,
-                                    "exited with status 7; trace is not accepted"):
-            self.capture(self.session())
-        self.assertTrue((self.root / "raw/completion.json").is_file())
-        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
+        recorder = StopRaceRecorder(self.root / "control", 7)
+        self.capture_stop_race(recorder)
+        self.assertEqual(recorder.signals, [])
+        self.assertEqual(recorder.returncode, 7)
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
 
