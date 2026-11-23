@@ -57,7 +57,8 @@ def atomic_json(path: Path, payload: dict) -> None:
 
 def bounded_file_bytes(path: Path) -> bytes:
     bounded_regular_file(path)
-    data = path.read_bytes()
+    with path.open("rb") as stream:
+        data = stream.read(MAX_EVIDENCE_FILE_BYTES + 1)
     if len(data) > MAX_EVIDENCE_FILE_BYTES:
         raise HandshakeError(f"Evidence file exceeds the {MAX_EVIDENCE_FILE_BYTES}-byte bound: {path.name}")
     return data
