@@ -84,9 +84,9 @@ runner reads back the final hosted-test environment and refuses to replace an ex
 
 # Equivalent lower-level recorder command used by the driver after the app
 # publishes its PID. Do not use a filename as a substitute for the handshake:
-xcrun xctrace record --device <owned-udid> --template 'Animation Hitches' \
+xcrun xctrace record --device <owned-udid> --template 'Time Profiler' \
   --attach <observed-running-app-pid> --window <bounded-deferred-work-window> \
-  --output <new-iteration-run>/<variant>-<scenario>-<iteration>.trace
+  --output <run>/<variant>-<scenario>-<iteration>.trace
 
 # The driver archives only after xctrace exits successfully, emits exact raw
 # identity, bytes and SHA-256, and retains the handshake and recorder logs.
@@ -95,8 +95,8 @@ xcrun xctrace record --device <owned-udid> --template 'Animation Hitches' \
 # not infer identity from the filename. This emits byte count and SHA-256 for the
 # manifest, rejects links and never replaces an existing archive.
 python3 -I bench/ios/archive_trace.py \
-  <new-run>/raw/<variant>-<scenario>-<iteration>.trace \
-  --output <new-run>/raw/<variant>-<scenario>-<iteration>.trace.zip
+  <run>/<variant>-<scenario>-<iteration>.trace \
+  --output <run>/raw/<variant>-<scenario>-<iteration>.trace.zip
 
 # Preserve the native result bundle as an ordinary ZIP for independent review.
 ditto -c -k --keepParent <run>/results.xcresult <run>/raw/results.xcresult.zip
