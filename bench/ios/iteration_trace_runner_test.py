@@ -56,7 +56,8 @@ class RecorderFixture:
                 write_trace: bool = True, process_state: str = "running",
                 missing_completion: bool = False, app_iteration: int = 0,
                 saved_path: str | None = None, recorder_stop_status: int = 0,
-                completion_delay: float = 0, app_revision: str | None = None):
+                completion_delay: float = 0, app_revision: str | None = None,
+                saved_spelling: str = "Output saved", saved_lines: int = 1):
         app_script = self.work / "fake_xcodebuild.py"
         app_script.write_text(f'''import json, pathlib, sys, time
 control = pathlib.Path(sys.argv[1])
@@ -90,7 +91,8 @@ def finish(status):
         trace = pathlib.Path(output)
         (trace / "Data").mkdir(parents=True, exist_ok=True)
         (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
-        print("Output saved: " + ({saved_path!r} or output), flush=True)
+        for _ in range({saved_lines!r}):
+            print({saved_spelling!r} + ": " + ({saved_path!r} or output), flush=True)
     os._exit(status)
 signal.signal(signal.SIGINT, lambda *_: finish(0))
 signal.signal(signal.SIGTERM, lambda *_: finish(143))
@@ -146,12 +148,13 @@ while not (control / "recorder-stop").exists():
 
 
 class StopRaceRecorder:
-    def __init__(self, control, stop_poll, send_error=None):
+    def __init__(self, control, stop_poll, send_error=None,
+                 stdout="Starting recording with the Animation Hitches template. Attach to stop.\n"):
         self.pid = 4243
         self.control = control
         self.stop_poll = stop_poll
         self.returncode = None
-        self.stdout = io.StringIO("Starting recording with the Animation Hitches template. Attach to stop.\n")
+        self.stdout = io.StringIO(stdout)
         self.send_error = send_error
         self.signals = []
 
@@ -615,11 +618,90 @@ class IterationTraceRunnerTest(unittest.TestCase):
             "Output file saved as: generated-scroll-0.trace\n"), ["generated-scroll-0.trace"])
         self.assertEqual(SAVED_OUTPUT.findall("Output saved: generated-scroll-0.trace\n"),
                          ["generated-scroll-0.trace"])
+        self.assertEqual(SAVED_OUTPUT.findall(
+            "Output file saved as: generated-scroll-0.trace\n"
+            "Output file saved as: generated-scroll-0.trace\n"),
+            ["generated-scroll-0.trace", "generated-scroll-0.trace"])
 
         self.assertTrue(saved_trace_matches("generated-scroll-0.trace", self.trace))
         self.assertTrue(saved_trace_matches(str(self.trace), self.trace))
         self.assertFalse(saved_trace_matches("another.trace", self.trace))
         self.assertFalse(saved_trace_matches("subdir/generated-scroll-0.trace", self.trace))
+
+    def test_actual_output_spelling_and_bare_package_are_archived(self):
+        self.recorder.start(saved_path=self.trace.name, saved_spelling="Output file saved as")
+        result = self.capture(self.session())
+        self.recorder.process.wait(timeout=5)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["archived_package_name"], self.trace.name)
+        self.assertTrue((self.root / result["trace"]).is_file())
+        self.assertIn("Output file saved as: generated-scroll-0.trace\n",
+                      (self.root / "raw/recorder.log").read_text())
+
+    def test_actual_output_spelling_keeps_path_and_uniqueness_gates(self):
+        cases = (
+            {"saved_path": "/tmp/another.trace"},
+            {"saved_path": f"another/{self.trace.name}"},
+            {"write_trace": False},
+            {"saved_lines": 2},
+        )
+        for index, arguments in enumerate(cases):
+            with self.subTest(arguments=arguments):
+                root = self.root / f"saved-output-gate-{index}"
+                recorder = RecorderFixture(root)
+                self.addCleanup(recorder.stop)
+                recorder.start(saved_spelling="Output file saved as", **arguments)
+                with self.assertRaisesRegex(HandshakeError, "exact requested trace"):
+                    self.capture(self.session(run_directory=root,
+                                              xcodebuild_log=recorder.output,
+                                              control_directory=root / "control"), recorder)
+                self.assertFalse((root / "raw/iteration-trace.json").exists())
+                self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
+
+    def test_actual_output_spelling_never_accepts_failed_recorder(self):
+        self.recorder.start()
+        recorder = StopRaceRecorder(
+            self.root / "control", 7,
+            stdout="Starting recording with the Animation Hitches template. Attach to stop.\n"
+                   "Output file saved as: generated-scroll-0.trace\n")
+        self.recorder.recorder = recorder
+        self.recorder.recorder_factory = lambda command, stream: recorder
+        with self.assertRaisesRegex(HandshakeError, "exited with status 7"):
+            self.capture(self.session())
+        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+
+    def test_swiftui_template_is_recorded_in_command_and_result_metadata(self):
+        self.recorder.start(ready="Starting recording with the SwiftUI template. Attach to stop.",
+                            saved_path=self.trace.name, saved_spelling="Output file saved as")
+        result = self.capture(self.session(template="SwiftUI"))
+        self.recorder.process.wait(timeout=5)
+        self.assertEqual(result["template"], "SwiftUI")
+        receipt = json.loads((self.root / "raw/iteration-trace.json").read_text())
+        self.assertEqual(receipt["template"], "SwiftUI")
+        arguments = json.loads(self.recorder.commands.read_text().splitlines()[0])
+        self.assertEqual(arguments[arguments.index("--template") + 1], "SwiftUI")
+        self.assertEqual(arguments[arguments.index("--attach") + 1], "4242")
+        self.assertEqual(arguments[arguments.index("--output") + 1], str(self.trace))
+        self.assertEqual(receipt["recorder"], "xctrace")
+        self.assertEqual(receipt["target_label"], "SIMULATOR")
+        self.assertFalse(receipt["device_result"])
+
+    def test_default_and_mismatched_templates_remain_explicit_and_fail_closed(self):
+        result = self.run_success()
+        self.assertEqual(result["template"], "Animation Hitches")
+        arguments = json.loads(self.recorder.commands.read_text().splitlines()[0])
+        self.assertEqual(arguments[arguments.index("--template") + 1], "Animation Hitches")
+        self.recorder.stop()
+        self.root = self.root / "mismatched-template"
+        self.trace = self.root / "generated-scroll-0.trace"
+        self.recorder = RecorderFixture(self.root)
+        self.addCleanup(self.recorder.stop)
+        self.recorder.start(ready="Starting recording with the Time Profiler template. Attach to stop.")
+        with self.assertRaisesRegex(HandshakeError, "different template: Time Profiler"):
+            self.capture(self.session(template="SwiftUI"))
+        self.assertFalse((self.root / "control/recorder-ready.json").exists())
+        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"

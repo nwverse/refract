@@ -65,16 +65,19 @@ xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --form
 # control, checks identity-matched native completion, gracefully stops xctrace
 # and preserves its package. Repeat for each iteration 0...29 with a new run
 # directory. --window bounds deferred work, not the measured iteration window.
+# --template defaults to Animation Hitches. Select SwiftUI explicitly for the
+# currently supported simulator target; an unsupported template remains an error.
 python3 -I bench/ios/iteration_trace_runner.py \
   --target-udid <owned-udid> --derived-data <build-output-directory> \
   --variant <generated-or-reference> --scenario <scroll-or-stateUpdate-or-startup> \
   --iteration <0-through-29> --source-revision <clean-committed-revision> \
-  --template 'Time Profiler' --run-directory <new-iteration-run-directory>
+  --template 'SwiftUI' --run-directory <new-iteration-run-directory>
 
 # Select a template supported by the exact target. Animation Hitches and the
-# SwiftUI template can include an unsupported Hitches instrument on a simulator.
-# A nonzero recorder exit is never accepted merely because a package exists.
-# Time Profiler is profiler context, not a replacement CADisplayLink metric.
+# SwiftUI template can include an unsupported Hitches instrument on another
+# simulator. A nonzero recorder exit is never accepted merely because a package
+# exists. The chosen template is retained in the result metadata and acquisition
+# command; no profiler output substitutes for the native CADisplayLink metric.
 
 Each iteration writes a uniquely named final xctestrun beside the original in `Build/Products`, preserving
 `__TESTROOT__` resolution without modifying that original. The run directory retains an identical
