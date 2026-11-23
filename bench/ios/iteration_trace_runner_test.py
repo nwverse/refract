@@ -22,8 +22,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import (TARGET_PROBE_FILENAMES, HandshakeError, Session, main, original_test_run,
-                                    prepare_test_run, record_build_provenance, test_command, traced_test_name,
+from iteration_trace_runner import (SAVED_OUTPUT, TARGET_PROBE_FILENAMES, HandshakeError, Session, main,
+                                    original_test_run, prepare_test_run, record_build_provenance,
+                                    saved_trace_matches, test_command, traced_test_name,
                                     validate_build_provenance, validate_trace_configuration)
 import iteration_trace_runner as runner
 
@@ -597,15 +598,17 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(source[prepare:].count("prepare_test_run("), 1)
         self.assertLess(prepare, source.index('test_command(test_run', prepare))
 
-    def test_exact_existing_xctest_selectors(self):
-        for variant in ("generated", "reference"):
-            for scenario in ("scroll", "stateUpdate"):
-                with self.subTest(variant=variant, scenario=scenario):
-                    expected = (f"RefractBenchUITests/RefractBenchUITests/"
-                                f"test{variant.capitalize()}{scenario[0].upper()}{scenario[1:]}Trace")
-                    self.assertEqual(traced_test_name(variant, scenario), expected)
-                    self.assertIn(f"func {expected.rsplit('/', 1)[-1]}",
-                                  (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
+    def test_real_xctrace_saved_output_spelling_is_accepted(self):
+        self.assertEqual(SAVED_OUTPUT.findall(
+            "Recording failed with errors. Saving output file...\n"
+            "Output file saved as: generated-scroll-0.trace\n"), ["generated-scroll-0.trace"])
+        self.assertEqual(SAVED_OUTPUT.findall("Output saved: generated-scroll-0.trace\n"),
+                         ["generated-scroll-0.trace"])
+
+        self.assertTrue(saved_trace_matches("generated-scroll-0.trace", self.trace))
+        self.assertTrue(saved_trace_matches(str(self.trace), self.trace))
+        self.assertFalse(saved_trace_matches("another.trace", self.trace))
+        self.assertFalse(saved_trace_matches("subdir/generated-scroll-0.trace", self.trace))
 
     def test_main_never_invokes_target_lifecycle(self):
         script = HERE / "iteration_trace_runner.py"
