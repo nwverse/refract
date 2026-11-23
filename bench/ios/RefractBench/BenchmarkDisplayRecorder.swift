@@ -86,6 +86,22 @@ final class BenchmarkDisplayRecorder: ObservableObject {
         }
     }
 
+    /// The selected iteration's immutable completion evidence, independent of
+    /// the asynchronously persisted diagnostic preferences snapshot.
+    func finalSamples(iteration: Int) -> [String: Any]? {
+        guard selectedIteration == iteration, completedIterations == 1,
+              recordedIteration == iteration, !frames.isEmpty,
+              frames.count <= 4096, frames.allSatisfy({ $0.isFinite && $0 > 0 }),
+              iterations.count == frames.count, iterations.allSatisfy({ $0 == iteration }),
+              !revision.isEmpty, !variant.isEmpty, !scenario.isEmpty,
+              completion?.count == 1 else { return nil }
+        var payload = samplePayload()
+        payload["session"] = 1
+        payload["iteration"] = iteration
+        payload["pid"] = Int(ProcessInfo.processInfo.processIdentifier)
+        return payload
+    }
+
     private func startLinkIfNeeded() {
         if link == nil {
             link = CADisplayLink(target: DisplayLinkTarget(recorder: self), selector: #selector(DisplayLinkTarget.tick(_:)))
@@ -109,7 +125,17 @@ final class BenchmarkDisplayRecorder: ObservableObject {
     }
 
     private func persist() {
-        let payload: [String: Any] = [
+        // Defaults are diagnostic only. Asynchronous cfprefsd persistence is
+        // never the final sample or completion channel.
+        let payload = samplePayload()
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: framesKey)
+    }
+
+    private func samplePayload() -> [String: Any] {
+        [
             "schema": 1,
             "sourceRevision": revision,
             "variant": variant,
@@ -119,10 +145,6 @@ final class BenchmarkDisplayRecorder: ObservableObject {
             "completedIterations": completedIterations,
             "recordedIteration": recordedIteration,
         ]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
-            return
-        }
-        UserDefaults.standard.set(data, forKey: framesKey)
     }
 }
 
