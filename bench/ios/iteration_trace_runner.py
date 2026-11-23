@@ -37,7 +37,7 @@ VARIANTS = ("generated", "reference")
 SCENARIOS = ("scroll", "stateUpdate", "startup")
 TARGET_PROBE_FILENAMES = ("targets.json", "simulators.json", "target.json")
 READY_OUTPUT = re.compile(r"(?:^|\n)Starting recording with the (.+?) template\.[^\n]*(?:\n|$)")
-SAVED_OUTPUT = re.compile(r"(?:^|\n)Output (?:file saved as|saved): (.+?)\s*(?:\n|$)")
+SAVED_OUTPUT = re.compile(r"(?:^|\n)Output (?:file saved as|saved):[ \t]*(.+?)[ \t]*(?=\n|$)")
 
 
 def atomic_json(path: Path, payload: dict) -> None:

@@ -35,8 +35,11 @@ handshake. Python's environment does not automatically reach hosted XCTest, so c
 button action when a List covers the overlay; place the native Begin control in a safe-area inset and require an
 identity-bound Begin acknowledgement before scenario execution. Also check the actual recorder template and output:
 a simulator can reject Hitches, and `xctrace` can print `Output file saved as: <bare-package-name>` instead of an
-absolute path. None of these control-plane corrections permits a skipped test, incomplete scenario or failed
-recorder to become a passing trace.
+absolute path. Match saved-output lines without consuming their terminating newline: consuming it prevents the next
+immediately adjacent output line from matching and can hide a duplicate path from the exactly-one-output gate. A
+newline-delimited synthetic fixture is not enough; include an end-to-end duplicate-output archive rejection. None of
+these control-plane corrections permits a skipped test, incomplete scenario or failed recorder to become a passing
+trace.
 
 ## Equal inputs need equal native behavior
 
