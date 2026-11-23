@@ -68,7 +68,7 @@ def bounded_file_bytes(path: Path) -> bytes:
 def read_json(path: Path) -> dict:
     try:
         payload = json.loads(bounded_file_bytes(path))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
         raise HandshakeError(f"Cannot read handshake {path.name}: {error}") from error
     if not isinstance(payload, dict):
         raise HandshakeError(f"Handshake {path.name} must be a JSON object")

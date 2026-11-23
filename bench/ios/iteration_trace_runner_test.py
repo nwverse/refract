@@ -885,6 +885,11 @@ class BoundedEvidenceReadTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.evidence = self.root / "evidence.json"
 
+    def test_oversized_json_integer_is_a_controlled_handshake_error(self):
+        self.evidence.write_text('{"frameIntervalMs": [' + "1" * 4301 + ']}')
+        with self.assertRaisesRegex(HandshakeError, "Cannot read handshake evidence.json"):
+            runner.read_json(self.evidence)
+
     def test_oversized_file_is_rejected_without_an_unbounded_read(self):
         limit = 4096
         payload = b"x" * (limit + 1)
