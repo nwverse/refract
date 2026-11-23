@@ -17,6 +17,14 @@ private enum TraceHandshake {
     static func ready(in directory: URL, expected: [String: Any],
                       name: String = "recorder-ready.json") -> [String: Any]? {
         let path = directory.appendingPathComponent(name)
+        if name == "native-process.json" || name == "native-completion.json" || name == "begin.json" {
+            let stem = name.dropLast(".json".count)
+            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: directory.path),
+                  entries.filter({ $0.hasPrefix(stem) && $0.hasSuffix(".json") }).sorted() == [name] else {
+                XCTFail("Missing or ambiguous \(name) native packet")
+                return nil
+            }
+        }
         guard let data = try? Data(contentsOf: path),
               let packet = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         for (key, value) in expected where !isEqual(packet[key], value) {
@@ -75,6 +83,14 @@ final class RefractBenchUITests: XCTestCase {
 
     func testReferenceStateUpdateTrace() throws {
         try runTracedIteration("stateUpdate", variant: "reference")
+    }
+
+    func testGeneratedStartupTrace() throws {
+        try runTracedIteration("startup", variant: "generated")
+    }
+
+    func testReferenceStartupTrace() throws {
+        try runTracedIteration("startup", variant: "reference")
     }
 
     private func launchMetric(_ variant: String) {
@@ -221,6 +237,16 @@ final class RefractBenchUITests: XCTestCase {
                   let completionPID = completionPacket["pid"] as? Int, completionPID == pid else {
                 XCTFail("The native completion identity or PID does not match the attached process")
                 return
+            }
+            if scenario == "startup" {
+                guard let firstDisplay = completionPacket["firstDisplay"] as? [String: Any],
+                      Set(firstDisplay.keys) == ["clock", "timestamp"],
+                      firstDisplay["clock"] as? String == "CACurrentMediaTime",
+                      let timestamp = firstDisplay["timestamp"] as? Double,
+                      timestamp.isFinite, timestamp > 0 else {
+                    XCTFail("Startup requires finite first-display evidence from the attached native process")
+                    return
+                }
             }
             try TraceHandshake.write(completionPacket, named: "completion.json", in: control)
             var expectedFinished = completionPacket

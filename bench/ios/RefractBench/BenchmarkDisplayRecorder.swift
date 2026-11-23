@@ -42,6 +42,19 @@ final class BenchmarkDisplayRecorder: ObservableObject {
         persist()
     }
 
+    func completeStartup(iteration: Int) -> CFTimeInterval? {
+        guard active, scenario == "startup", selectedIteration == iteration,
+              (0..<30).contains(iteration), let firstDisplay, firstDisplay.isFinite, firstDisplay > 0,
+              !revision.isEmpty, !variant.isEmpty else { return nil }
+        completedIterations = 1
+        recordedIteration = iteration
+        active = false
+        link?.isPaused = true
+        completion = (variant, scenario, 1)
+        persist()
+        return firstDisplay
+    }
+
     func beginScenario(_ scenario: String) {
         guard scenario == "scroll" || scenario == "stateUpdate" else { return }
         active = true

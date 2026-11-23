@@ -67,7 +67,7 @@ xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --form
 # directory. --window bounds deferred work, not the measured iteration window.
 python3 -I bench/ios/iteration_trace_runner.py \
   --target-udid <owned-udid> --derived-data <build-output-directory> \
-  --variant <generated-or-reference> --scenario <scroll-or-stateUpdate> \
+  --variant <generated-or-reference> --scenario <scroll-or-stateUpdate-or-startup> \
   --iteration <0-through-29> --source-revision <clean-committed-revision> \
   --template 'Time Profiler' --run-directory <new-iteration-run-directory>
 
@@ -119,11 +119,19 @@ duplicate or mismatched identity/readiness/completion packets, sends SIGINT only
 successful package completion, and archives before releasing the UI test. No shell duration substitutes for a native
 metric.
 
+For a traced `startup` iteration, recorder readiness still precedes Begin. The app then completes only from the
+`CACurrentMediaTime` first-display timestamp that `BenchmarkDisplayRecorder` captured at scene activation. The
+native completion packet includes that timestamp and clock name with the same revision, variant, scenario, iteration
+and PID; the UI test and runner both reject missing, malformed or mismatched evidence. The receipt retains the
+monotonic `native_first_display` evidence, not a shell stopwatch duration or an inferred startup time. The separate
+30-iteration `XCTApplicationLaunchMetric` suite remains unchanged and supplies distinct platform launch samples.
+
 Run the control-plane and source-wiring tests with:
 
 ```sh
 python3 -I bench/ios/iteration_trace_runner_test.py -v
 python3 -I bench/ios/iteration_trace_source_test.py -v
+python3 -I bench/ios/iteration_startup_trace_test.py -v
 python3 -I bench/ios/archive_trace_test.py -v
 ```
 
