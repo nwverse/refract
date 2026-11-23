@@ -28,7 +28,7 @@ extension Generation {
         if layout.axis != .depth, let alignment = layout.alignment {
             writer.line(".alignItems(\(try arkAlignment(alignment, axis: layout.axis)))")
         }
-        writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+        writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases), unlessEmpty: true)
     }
 
     private func arkAlignment(_ alignment: LayoutAlignment, axis: ViewNode.StackAxis) throws -> String {

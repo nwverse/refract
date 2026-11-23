@@ -32,7 +32,11 @@ layout modifiers, keep that set while recursively lowering the remaining layout 
 accessibility parameter is silently dropped before Image is emitted. The supplementary hint and value attributes have
 their own expression calls: forwarding aliases only to `.accessibilityText` leaves `.accessibilityDescription(this.alias)`
 and `.accessibilityStateDescription(this.alias)` invalid beside a correctly emitted local label. Cover all three Image
-attributes together so their dedicated paths cannot drift. Check the accepted SwiftUI form before diagnosing
+attributes together so their dedicated paths cannot drift. The same outer optional alias remains live when a
+`LazyForEach` row becomes the current `item`; modifiers on Toggle, Scroll, List, typed stacks, Label and Divider must
+therefore receive the cumulative `localAliases` explicitly. A row-free optional-binding smoke test can hide this
+omission because its binding also occupies `item`, so cover these receivers inside a dynamic row. Check the accepted
+SwiftUI form before diagnosing
 a missing alias; a dynamic TextField title is currently rejected for a localized key, not a placeholder-scope regression.
 
 ## A declared item input is not a lazy-row local

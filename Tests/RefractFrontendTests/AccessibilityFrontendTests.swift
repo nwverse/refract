@@ -48,6 +48,28 @@ import RefractMapping
     #expect(!ark.contains("Description(this.value)"), Comment(rawValue: ark))
 }
 
+@Test func concreteViewsRetainOptionalAccessibilityAliasesInListRows() throws {
+    let fixture = FixtureCase(name: "list-accessibility-local-aliases", status: .ready,
+        input: try String(contentsOfFile: "Fixtures/list-accessibility-local-aliases/Input.swift", encoding: .utf8),
+        mapping: try String(contentsOfFile: "Fixtures/list-accessibility-local-aliases/refract.json", encoding: .utf8),
+        expectedKotlin: nil, expectedArkTS: nil, expectedDiagnostics: nil)
+    let result = try GoldenRunner.generate(fixture)
+    #expect(result.diagnostics.isEmpty)
+    let kotlin = try #require(result.kotlin)
+    #expect(kotlin.contains("contentDescription = value + \" \" + value"))
+    #expect(kotlin.contains("stateDescription = value"))
+    #expect(kotlin.contains("checked = row.enabled"))
+    let ark = try #require(result.arkTS)
+    #expect(ark.components(separatedBy: ".accessibilityText(value)").count == 6, Comment(rawValue: ark))
+    #expect(ark.components(separatedBy: ".accessibilityDescription(value)").count == 6, Comment(rawValue: ark))
+    #expect(ark.components(separatedBy: ".accessibilityStateDescription(value)").count == 6, Comment(rawValue: ark))
+    #expect(ark.contains("Toggle({ type: ToggleType.Switch, isOn: row.enabled })"), Comment(rawValue: ark))
+    #expect(ark.contains("this.model.setEnabled(row.id, enabled);"), Comment(rawValue: ark))
+    #expect(ark.contains("Scroll()"), Comment(rawValue: ark))
+    #expect(ark.contains("const value = this.description;"), Comment(rawValue: ark))
+    #expect(!ark.contains("this.value"), Comment(rawValue: ark))
+}
+
 @Test(arguments: [
     ".accessibilityHint(Text(verbatim: \"Not localized\"))",
     ".accessibilityHint(\"not.text\")",

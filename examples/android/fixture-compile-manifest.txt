@@ -51,6 +51,7 @@ modal-sheet-state
 navigation-tabs-menu
 accessibility-dynamic-type
 accessibility-actions-traversal
+list-accessibility-local-aliases
 state-counter
 parent-binding
 model-interface
