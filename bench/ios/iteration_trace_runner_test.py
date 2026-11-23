@@ -630,6 +630,81 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertNotIn("simctl boot", result.stdout)
 
 
+class BoundedEvidenceReadTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.evidence = self.root / "evidence.json"
+
+    def test_oversized_file_is_rejected_without_an_unbounded_read(self):
+        limit = 4096
+        payload = b"x" * (limit + 1)
+        self.evidence.write_bytes(payload)
+        with mock.patch.object(runner, "MAX_EVIDENCE_FILE_BYTES", limit), \
+                mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")) as full_read, \
+                self.assertRaisesRegex(HandshakeError, f"{limit}-byte bound"):
+            runner.bounded_file_bytes(self.evidence)
+        full_read.assert_not_called()
+        self.assertEqual(self.evidence.read_bytes(), payload)
+
+    def test_exact_limit_file_is_returned_complete(self):
+        limit = 4096
+        payload = bytes(range(256)) * (limit // 256)
+        self.evidence.write_bytes(payload)
+        with mock.patch.object(runner, "MAX_EVIDENCE_FILE_BYTES", limit), \
+                mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")):
+            self.assertEqual(runner.bounded_file_bytes(self.evidence), payload)
+
+    def test_concurrent_growth_is_rejected_without_accepting_a_prefix(self):
+        limit = 4096
+        initial = b"x" * (limit // 2)
+        appended = b"y" * (limit // 2 + 1)
+        self.evidence.write_bytes(initial)
+        original_bounded_regular_file = runner.bounded_regular_file
+        growth_allowed = threading.Event()
+        writer_finished = threading.Event()
+        writer_errors = []
+
+        def grow_file():
+            try:
+                if not growth_allowed.wait(timeout=5):
+                    raise AssertionError("reader did not complete initial validation")
+                with self.evidence.open("ab", buffering=0) as stream:
+                    stream.write(appended)
+                writer_finished.set()
+            except BaseException as error:
+                writer_errors.append(error)
+                writer_finished.set()
+
+        writer = threading.Thread(target=grow_file)
+        writer.start()
+
+        def grow_after_initial_validation(path):
+            metadata = original_bounded_regular_file(path)
+            if path == self.evidence:
+                growth_allowed.set()
+                writer.join(timeout=5)
+                if not writer_finished.wait(timeout=5):
+                    raise AssertionError("writer did not finish concurrent growth")
+            return metadata
+
+        try:
+            with mock.patch.object(runner, "MAX_EVIDENCE_FILE_BYTES", limit), \
+                    mock.patch.object(runner, "bounded_regular_file", side_effect=grow_after_initial_validation), \
+                    mock.patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")) as full_read, \
+                    self.assertRaisesRegex(HandshakeError, f"{limit}-byte bound"):
+                runner.bounded_file_bytes(self.evidence)
+            full_read.assert_not_called()
+        finally:
+            growth_allowed.set()
+            writer_finished.set()
+            writer.join(timeout=5)
+        self.assertFalse(writer.is_alive())
+        self.assertEqual(writer_errors, [])
+        self.assertEqual(self.evidence.read_bytes(), initial + appended)
+
+
 class TraceBuildProvenanceTest(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
