@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated.imagedescriptions" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.imagedescriptions.R",
+      "catalog": "values/strings.xml",
+      "strings": {}
+    }
+  },
+  "harmonyOS": {
+    "minimumAPI": 26,
+    "output": { "directory": "generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": {}
+    }
+  }
+}

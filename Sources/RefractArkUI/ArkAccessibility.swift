@@ -30,10 +30,10 @@ extension ArkModifiers {
             case "accessibilityLabel", "iosAccessibilityLabel":
                 attributes.append(".accessibilityText(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping, localAliases: localAliases)))")
             case "accessibilityHint":
-                attributes.append(".accessibilityDescription(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))")
+                attributes.append(".accessibilityDescription(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping, localAliases: localAliases)))")
             case "accessibilityValue":
                 try requireMinimumAPI(mapping: mapping, minimum: 23, feature: "accessibilityStateDescription", location: modifier.location)
-                attributes.append(".accessibilityStateDescription(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping)))")
+                attributes.append(".accessibilityStateDescription(\(try emitLocalExpression(try ModifierArguments(modifier: modifier).one(), item: item, mapping: mapping, localAliases: localAliases)))")
             case "accessibilityAction":
                 guard modifier.arguments.count == 1, modifier.argumentLabels == ["named"],
                       case let .accessibilityAction(action) = modifier.arguments[0].value else {
