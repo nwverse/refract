@@ -30,6 +30,24 @@ import RefractMapping
     #expect(!ark.contains("hintText"))
 }
 
+@Test func imageAccessibilityDescriptionsRetainOptionalAliasesInListRows() throws {
+    let fixture = FixtureCase(name: "list-image-accessibility-descriptions", status: .ready,
+        input: try String(contentsOfFile: "Fixtures/list-image-accessibility-descriptions/Input.swift", encoding: .utf8),
+        mapping: try String(contentsOfFile: "Fixtures/list-image-accessibility-descriptions/refract.json", encoding: .utf8),
+        expectedKotlin: nil, expectedArkTS: nil, expectedDiagnostics: nil)
+    let result = try GoldenRunner.generate(fixture)
+    #expect(result.diagnostics.isEmpty)
+    let kotlin = try #require(result.kotlin)
+    #expect(kotlin.contains("contentDescription = value + \" \" + value"))
+    #expect(kotlin.contains("stateDescription = value"))
+    let ark = try #require(result.arkTS)
+    #expect(ark.contains(".accessibilityText(value)"), Comment(rawValue: ark))
+    #expect(ark.contains(".accessibilityDescription(value)"), Comment(rawValue: ark))
+    #expect(ark.contains(".accessibilityStateDescription(value)"), Comment(rawValue: ark))
+    #expect(ark.contains(".width(44)"), Comment(rawValue: ark))
+    #expect(!ark.contains("Description(this.value)"), Comment(rawValue: ark))
+}
+
 @Test(arguments: [
     ".accessibilityHint(Text(verbatim: \"Not localized\"))",
     ".accessibilityHint(\"not.text\")",

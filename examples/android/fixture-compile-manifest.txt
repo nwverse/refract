@@ -72,3 +72,4 @@ control-optional-bool-condition
 v0-item-toggle-conditional
 interop-list-row-input-shadow
 list-image-accessibility-alias
+list-image-accessibility-descriptions

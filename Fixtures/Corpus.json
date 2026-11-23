@@ -310,6 +310,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "list-image-accessibility-descriptions",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-paged-search",
       "implementationStatus": "ready"
     },

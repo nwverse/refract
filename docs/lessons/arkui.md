@@ -29,7 +29,10 @@ row, not only an unwrapped argument or a row-free screen. Dedicated view lowerin
 the ordinary Text leaf: Image `.accessibilityText` must receive the same set, or an optional alias becomes `this.alias`
 inside `LazyForEach` while Compose correctly retains the local. When a receiver has both accessibility and ordinary
 layout modifiers, keep that set while recursively lowering the remaining layout modifiers too; otherwise the earlier
-accessibility parameter is silently dropped before Image is emitted. Check the accepted SwiftUI form before diagnosing
+accessibility parameter is silently dropped before Image is emitted. The supplementary hint and value attributes have
+their own expression calls: forwarding aliases only to `.accessibilityText` leaves `.accessibilityDescription(this.alias)`
+and `.accessibilityStateDescription(this.alias)` invalid beside a correctly emitted local label. Cover all three Image
+attributes together so their dedicated paths cannot drift. Check the accepted SwiftUI form before diagnosing
 a missing alias; a dynamic TextField title is currently rejected for a localized key, not a placeholder-scope regression.
 
 ## A declared item input is not a lazy-row local
