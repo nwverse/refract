@@ -139,11 +139,39 @@ final class RefractBenchUITests: XCTestCase {
             application.terminate()
             return
         }
-        var packet: [String: Any] = [
-            "schema": 1, "session": 1, "variant": variant, "scenario": scenario,
-            "iteration": iteration, "pid": Int(application.processIdentifier),
-            "process": application.state == .runningForeground ? "running" : "not-running",
-            "state": "ready",
+        guard application.state == .runningForeground else {
+            XCTFail("The selected native app is not running in the foreground")
+            return
+        }
+        let revision = environment["REFRACT_BENCH_REVISION"] ?? ""
+        guard !revision.isEmpty else {
+            XCTFail("The exact committed source revision is required")
+            return
+        }
+        let identityError = application.staticTexts[
+            "refract_benchmark_trace_identity_error"]
+        let expectedIdentity: [String: Any] = [
+            "schema": 1, "session": 1, "revision": revision, "variant": variant, "scenario": scenario,
+            "iteration": iteration, "process": "running", "state": "ready",
+        ]
+        let processReady = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                TraceHandshake.ready(in: control, expected: expectedIdentity,
+                                     name: "native-process.json") != nil
+            }, object: nil)
+        guard XCTWaiter.wait(for: [processReady], timeout: 20) == .completed else {
+            XCTFail("The app did not publish supported native process identity: \(identityError.label)")
+            return
+        }
+        guard let processPacket = TraceHandshake.ready(in: control, expected: expectedIdentity,
+                                                       name: "native-process.json"),
+              let pid = processPacket["pid"] as? Int, pid > 0 else {
+            XCTFail("The native process identity must contain one positive PID")
+            return
+        }
+        let packet: [String: Any] = [
+            "schema": 1, "session": 1, "revision": revision, "variant": variant, "scenario": scenario,
+            "iteration": iteration, "pid": pid, "process": "running", "state": "ready",
         ]
         do {
             try TraceHandshake.write(packet, named: "request.json", in: control)
@@ -158,20 +186,48 @@ final class RefractBenchUITests: XCTestCase {
                 return
             }
             begin.tap()
+            var expectedBegin = packet
+            expectedBegin["state"] = "begin"
+            let nativeBegin = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    TraceHandshake.ready(in: control, expected: expectedBegin, name: "begin.json") != nil
+                }, object: nil)
+            guard XCTWaiter.wait(for: [nativeBegin], timeout: 10) == .completed else {
+                XCTFail("The app did not acknowledge its native Begin boundary: \(identityError.label)")
+                return
+            }
             let completionText = "\(variant) \(scenario) complete 1"
             let completion = application.staticTexts[completionText]
-            guard completion.waitForExistence(timeout: 180), application.state == .runningForeground,
-                  Int(application.processIdentifier) == packet["pid"] as? Int else {
-                XCTFail("The exact native iteration did not complete on the attached PID")
+            guard completion.waitForExistence(timeout: 180), application.state == .runningForeground else {
+                XCTFail("The exact native iteration did not complete on the attached process")
                 application.terminate()
                 return
             }
-            packet["state"] = "complete"
-            packet["completion"] = completionText
-            try TraceHandshake.write(packet, named: "completion.json", in: control)
+            var expectedIdentity = packet
+            expectedIdentity["state"] = "complete"
+            expectedIdentity["completion"] = completionText
+            expectedIdentity["pid"] = pid
+            let nativeCompletion = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    TraceHandshake.ready(in: control, expected: expectedIdentity,
+                                         name: "native-completion.json") != nil
+                }, object: nil)
+            guard XCTWaiter.wait(for: [nativeCompletion], timeout: 30) == .completed else {
+                XCTFail("The native completion identity or PID did not become ready: \(identityError.label)")
+                return
+            }
+            guard let completionPacket = TraceHandshake.ready(
+                    in: control, expected: expectedIdentity, name: "native-completion.json"),
+                  let completionPID = completionPacket["pid"] as? Int, completionPID == pid else {
+                XCTFail("The native completion identity or PID does not match the attached process")
+                return
+            }
+            try TraceHandshake.write(completionPacket, named: "completion.json", in: control)
+            var expectedFinished = completionPacket
+            expectedFinished["state"] = "recorder-finished"
             let finished = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
-                    TraceHandshake.ready(in: control, expected: packet,
+                    TraceHandshake.ready(in: control, expected: expectedFinished,
                                          name: "recorder-finished.json") != nil
                 }, object: nil)
             guard XCTWaiter.wait(for: [finished], timeout: 30) == .completed else {
