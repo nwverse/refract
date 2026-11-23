@@ -163,7 +163,9 @@ private func runTracedIteration(variant: String, model: BenchmarkSettingsModel) 
         case ("generated", "startup"), ("reference", "startup"):
             guard let timestamp = BenchmarkDisplayRecorder.shared.completeStartup(iteration: iteration),
                   timestamp > 0 else { return }
-            firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": timestamp]
+            // A decimal JSON string survives every writer unchanged and round-trips
+            // to the captured Double without cross-language numeric equality.
+            firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": String(timestamp)]
         default:
             return
         }
