@@ -621,55 +621,110 @@ class IterationTraceRunnerTest(unittest.TestCase):
 
     def test_current_test_publishes_begin_and_completion_before_capture(self):
         # Deterministic regression for #374: a fast current test publishes a
-        # valid Begin, native completion and forwarded completion immediately
-        # after preflight, before capture even calls into its request wait.
-        # With the frozen epoch those packets must be admitted through the
-        # normal identity-checked request/readiness/Begin/native-completion
-        # sequence, not rejected as stale merely because they arrived before
-        # capture.
+        # valid Begin, native completion and forwarded completion before
+        # Session.capture is invoked. The packets are written by the
+        # replacement fake XCTest process itself, never by the fixture.
+        # A deterministic two-phase gate drives the ordering: the fake
+        # publishes request.json on launch, waits for the launch gate, then
+        # writes Begin, native completion and forwarded completion and
+        # signals the published gate. Only after that gate is durable does
+        # the test call Session.capture, so every current-run packet is
+        # already in place and capture must admit it through the normal
+        # identity-checked request/readiness/Begin/native-completion
+        # sequence rather than reject it as a reused control directory.
         control = self.root / "control"
-        # Use prepare() only to install the recorder factory; do not let it
-        # spawn the default fake XCTest. We replace the test process below.
-        self.recorder.prepare()
-        self.recorder.process.terminate()
-        self.recorder.process.communicate(timeout=5)
-        # Drop the request.json that the default fake XCTest already wrote so
-        # the preflight below sees a fresh empty control directory.
-        for path in control.iterdir():
-            path.unlink()
         session = self.session()
         session.record_capture_start_epoch()
 
-        # Publish every current-run packet before session.capture is invoked.
-        # The packet identities match this iteration exactly.
         packet = {"schema": 1, "session": 1, "revision": "a" * 40,
                   "variant": "generated", "scenario": "scroll", "iteration": 0,
                   "pid": 4242, "process": "running", "state": "ready"}
         complete = dict(packet, state="complete", completion="generated scroll complete 1")
         begin = dict(packet, state="begin")
-        (control / "request.json").write_text(json.dumps(packet))
-        (control / "begin.json").write_text(json.dumps(begin))
-        (control / "native-completion.json").write_text(json.dumps(complete))
-        (control / "completion.json").write_text(json.dumps(complete))
-
-        # A trivial fake XCTest process keeps running until capture publishes
-        # recorder-finished. It does not write any packet itself: the packets
-        # above were already in place before capture.
+        launch_gate = self.recorder.work / "launch-gate"
+        published_gate = self.recorder.work / "published-gate"
         script = self.recorder.work / "fast_xcodebuild.py"
-        script.write_text(f"""import pathlib, sys, time
+        script.write_text(f"""import json, pathlib, sys, time
 control = pathlib.Path(sys.argv[1])
+launch_gate = pathlib.Path({str(launch_gate)!r})
+published_gate = pathlib.Path({str(published_gate)!r})
+# The fake XCTest itself publishes request.json on launch, then blocks on a
+# deterministic gate. The fixture never writes any control packet.
+(control / 'request.json').write_text(json.dumps({packet!r}))
+while not launch_gate.exists():
+    time.sleep(0.005)
+# The gate is open: publish Begin, native completion and forwarded
+# completion in this same process, then signal that they are durable.
+(control / 'begin.json').write_text(json.dumps({begin!r}))
+(control / 'native-completion.json').write_text(json.dumps({complete!r}))
+(control / 'completion.json').write_text(json.dumps({complete!r}))
+published_gate.write_text('published')
 while not (control / 'recorder-finished.json').exists():
     time.sleep(0.01)
 """)
+        # Do not call RecorderFixture.prepare(): it would spawn the default
+        # fake XCTest and write its request.json. Install only a recorder
+        # factory and the synthetic xcodebuild log so capture can run.
+        self.recorder.recorder_factory = self._make_recorder_factory()
+        self.recorder.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n",
+                                        encoding="utf-8")
         self.recorder.process = subprocess.Popen(
             ["python3", "-I", str(script), str(control)],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        self.recorder.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n",
-                                        encoding="utf-8")
+        # Wait for request.json to be durable: the fake XCTest is running
+        # and has crossed its launch boundary.
+        deadline = time.monotonic() + 5
+        while not (control / "request.json").exists() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        self.assertTrue((control / "request.json").is_file(),
+                        "fake XCTest did not publish its identity packet on launch")
+        # Open the launch gate: the fake XCTest now writes Begin, native
+        # completion and forwarded completion in its own process.
+        launch_gate.write_text("launch")
+        # Block until the published gate confirms every current-run packet
+        # is durable. Only then is Session.capture invoked.
+        deadline = time.monotonic() + 5
+        while not published_gate.exists() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        self.assertTrue(published_gate.is_file(),
+                        "fake XCTest did not publish Begin/native-completion/completion before capture")
+        for name in ("begin.json", "native-completion.json", "completion.json"):
+            self.assertTrue((control / name).is_file(), f"missing {name} before capture")
         result = self.capture(session)
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["native_iteration_completion"], "generated scroll complete 1")
         self.assertTrue((self.root / "raw/iteration-trace.json").is_file())
+
+    def _make_recorder_factory(self):
+        # A minimal xctrace replacement that writes the trace package on
+        # SIGINT, mirroring RecorderFixture.prepare's recorder without
+        # launching any fake XCTest process.
+        recorder_script = self.recorder.work / "fast_xcrun.py"
+        recorder_script.write_text(f"""import json, os, pathlib, signal, sys
+with open(os.environ["REFRACT_SYNTHETIC_XCRUN"], "a") as stream:
+    stream.write(json.dumps(sys.argv[1:]) + "\\n")
+output = sys.argv[sys.argv.index("--output") + 1]
+def finish(status):
+    trace = pathlib.Path(output)
+    (trace / "Data").mkdir(parents=True, exist_ok=True)
+    (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
+    print("Output saved: " + output, flush=True)
+    os._exit(status)
+signal.signal(signal.SIGINT, lambda *_: finish(0))
+signal.signal(signal.SIGTERM, lambda *_: finish(143))
+print("Starting recording with the Animation Hitches template. Attach to stop.", flush=True)
+while True:
+    signal.pause()
+""")
+
+        def factory(command, log):
+            environment = dict(os.environ, REFRACT_SYNTHETIC_XCRUN=str(self.recorder.commands))
+            self.recorder.recorder = subprocess.Popen(
+                ["python3", "-I", str(recorder_script), *command,
+                 "--control-directory", str(self.root / "control")],
+                env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            return self.recorder.recorder
+        return factory
 
     def test_completion_injected_before_recorder_ready_is_rejected(self):
         session = self.launch(missing_begin=True)
