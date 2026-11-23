@@ -147,6 +147,10 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
 
             func validate(_ decoded: [String: Any]) throws {
                 let scenario = "startup"
+                let revision = "revision"
+                let variant = "generated"
+                let iteration = 0
+                let pid = 4242
                 let completionPacket = decoded
             @STARTUP@
                 var finished = decoded

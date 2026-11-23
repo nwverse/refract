@@ -23,11 +23,23 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
-from iteration_trace_runner import (SAVED_OUTPUT, TARGET_PROBE_FILENAMES, HandshakeError, Session, main,
-                                    original_test_run, prepare_test_run, record_build_provenance,
-                                    saved_trace_matches, test_command, traced_test_name,
+from iteration_trace_runner import (SAVED_OUTPUT, TARGET_PROBE_FILENAMES, HandshakeError, Session,
+                                    checked_final_samples, main, original_test_run, prepare_test_run,
+                                    record_build_provenance, saved_trace_matches, test_command, traced_test_name,
                                     validate_build_provenance, validate_trace_configuration)
 import iteration_trace_runner as runner
+
+
+def synthetic_final_samples(**changes):
+    samples = {
+        "schema": 1, "session": 1, "sourceRevision": "a" * 40,
+        "variant": "generated", "scenario": "scroll", "iteration": 0, "pid": 4242,
+        "completedIterations": 1, "recordedIteration": 0,
+        "frameIntervalMs": [16.666666666666668, 16.5, 16.75],
+        "iterationByFrame": [0, 0, 0],
+    }
+    samples.update(changes)
+    return samples
 
 
 class RecorderFixture:
@@ -58,9 +70,20 @@ class RecorderFixture:
                 missing_completion: bool = False, app_iteration: int = 0,
                 saved_path: str | None = None, recorder_stop_status: int = 0,
                 completion_delay: float = 0, app_revision: str | None = None,
-                saved_spelling: str = "Output saved", saved_lines: int = 1, missing_begin: bool = False):
+                saved_spelling: str = "Output saved", saved_lines: int = 1, missing_begin: bool = False,
+                final_samples: dict | None | str = "default",
+                stale_periodic_plist: bool = False, duplicate_native_completion: bool = False,
+                native_samples: dict | None | str = "default"):
+        if final_samples == "default":
+            final_samples = synthetic_final_samples(iteration=app_iteration, recordedIteration=app_iteration,
+                                                    scenario="scroll", iterationByFrame=[app_iteration] * 3,
+                                                    sourceRevision=app_revision or "a" * 40)
+        if native_samples == "default":
+            native_samples = final_samples
+        stale_plist = {"completedIterations": 0, "recordedIteration": 0,
+                       "frameIntervalMs": [16.5] * 60, "iterationByFrame": [app_iteration] * 60}
         app_script = self.work / "fake_xcodebuild.py"
-        app_script.write_text(f'''import json, pathlib, sys, time
+        app_script.write_text(f'''import json, pathlib, plistlib, sys, time
 control = pathlib.Path(sys.argv[1])
 packet = {{"schema": 1, "session": {session}, "revision": {app_revision or ("a" * 40)!r},
           "variant": "generated", "scenario": "scroll", "iteration": {app_iteration},
@@ -74,10 +97,16 @@ while not (control / "recorder-ready.json").exists():
 time.sleep({completion_delay!r})
 packet["state"] = "complete"
 packet["completion"] = {completion!r}
+packet["finalSamples"] = json.loads({json.dumps(final_samples)!r})
 begin = dict(packet, state="begin")
 if not {missing_begin!r}:
     (control / "begin.json").write_text(json.dumps(begin))
-    (control / "native-completion.json").write_text(json.dumps(packet))
+    native = dict(packet, finalSamples=json.loads({json.dumps(native_samples)!r}))
+    (control / "native-completion.json").write_text(json.dumps(native))
+if {duplicate_native_completion!r}:
+    (control / "native-completion-2.json").write_text(json.dumps(packet))
+if {stale_periodic_plist!r}:
+    (control / "diagnostic.plist").write_bytes(plistlib.dumps({{**packet, **{stale_plist!r}}}))
 if not {missing_completion!r}:
     (control / "completion.json").write_text(json.dumps(packet))
 if {duplicate_completion!r}:
@@ -284,6 +313,86 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertTrue((self.root / "xcodebuild.log").is_file())
         self.assertTrue((self.root / "raw/recorder-finished.json").is_file())
         self.assertEqual(result["archived_package_name"], "generated-scroll-0.trace")
+        self.assertEqual(result["native_samples"]["path"], "raw/native-samples.json")
+        archived_samples = json.loads((self.root / result["native_samples"]["path"]).read_text())
+        self.assertEqual(archived_samples, synthetic_final_samples())
+        self.assertEqual(result["native_samples"]["sha256"], hashlib.sha256(
+            (self.root / "raw/native-samples.json").read_bytes()).hexdigest())
+
+    def test_stale_periodic_plist_cannot_override_the_valid_final_packet(self):
+        self.recorder.start(stale_periodic_plist=True)
+        result = self.capture(self.session())
+        self.recorder.process.wait(timeout=5)
+        plist = plistlib.loads((self.root / "control/diagnostic.plist").read_bytes())
+        self.assertEqual(plist["completedIterations"], 0)
+        self.assertEqual(plist["recordedIteration"], 0)
+        self.assertEqual(len(plist["frameIntervalMs"]), 60)
+        samples = json.loads((self.root / result["native_samples"]["path"]).read_text())
+        self.assertEqual(samples["completedIterations"], 1)
+        self.assertEqual(samples["recordedIteration"], 0)
+        self.assertEqual(len(samples["frameIntervalMs"]), 3)
+        self.assertEqual(result["status"], "complete")
+
+    def test_final_sample_identity_and_finite_intervals_fail_closed(self):
+        session = mock.Mock(session_id=1, revision="a" * 40, variant="generated", scenario="scroll", iteration=0)
+        valid = synthetic_final_samples()
+        self.assertEqual(checked_final_samples({"finalSamples": valid}, session, 4242), valid)
+        invalid = [
+            synthetic_final_samples(sourceRevision="b" * 40),
+            synthetic_final_samples(session=2), synthetic_final_samples(pid=4243),
+            synthetic_final_samples(variant="reference"), synthetic_final_samples(scenario="stateUpdate"),
+            synthetic_final_samples(iteration=1), synthetic_final_samples(recordedIteration=1),
+            synthetic_final_samples(completedIterations=0), synthetic_final_samples(completedIterations=2),
+            synthetic_final_samples(frameIntervalMs=[]),
+            synthetic_final_samples(frameIntervalMs=[16.5, float("nan")]),
+            synthetic_final_samples(frameIntervalMs=[16.5, float("inf")]),
+            synthetic_final_samples(frameIntervalMs=[16.5, -1]),
+            synthetic_final_samples(frameIntervalMs=[16.5, True]),
+            synthetic_final_samples(iterationByFrame=[0, 1, 0]),
+            synthetic_final_samples(iterationByFrame=[0, 0]),
+            synthetic_final_samples(iterationByFrame=[0, False, 0]),
+        ]
+        for samples in invalid:
+            with self.subTest(samples=samples):
+                with self.assertRaisesRegex(HandshakeError, "sample|frame|display|interval"):
+                    checked_final_samples({"finalSamples": samples}, session, 4242)
+
+    def test_native_packet_and_forwarded_samples_must_be_identical(self):
+        self.recorder.start(native_samples=synthetic_final_samples(frameIntervalMs=[16.5, 16.5, 16.5]))
+        with self.assertRaisesRegex(HandshakeError, "exact native final sample"):
+            self.capture(self.session())
+        self.assertFalse((self.root / "raw/native-samples.json").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+
+    def test_missing_partial_stale_and_ambiguous_final_packets_reject_before_archive(self):
+        missing_keys = tuple(synthetic_final_samples())
+        cases = [("missing", None), ("duplicate", "duplicate")]
+        cases.extend((f"partial-{key}", {key: None}) for key in missing_keys)
+        cases.extend([
+            ("stale-revision", {"sourceRevision": "b" * 40}),
+            ("stale-completion", {"completedIterations": 0}),
+            ("wrong-iteration", {"recordedIteration": 1}),
+            ("wrong-frame-tag", {"iterationByFrame": [0, 1, 0]}),
+            ("nonfinite", {"frameIntervalMs": [16.5, float("inf"), 16.5]}),
+        ])
+        for name, change in cases:
+            with self.subTest(name=name):
+                root = self.root / f"final-samples-{name}"
+                root.mkdir()
+                recorder = RecorderFixture(root)
+                self.addCleanup(recorder.stop)
+                if change == "duplicate":
+                    recorder.start(duplicate_native_completion=True)
+                elif change is None:
+                    recorder.start(final_samples=None)
+                else:
+                    recorder.start(final_samples=synthetic_final_samples(**change))
+                with self.assertRaisesRegex(HandshakeError, "sample|frame|display|interval|Ambiguous"):
+                    self.capture(self.session(run_directory=root, xcodebuild_log=recorder.output,
+                                              control_directory=root / "control"), recorder)
+                self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
+                self.assertFalse((root / "raw/native-samples.json").exists())
+                self.assertFalse((root / "raw/iteration-trace.json").exists())
 
     def test_current_target_probe_files_require_explicit_current_run_admission(self):
         for name in TARGET_PROBE_FILENAMES:

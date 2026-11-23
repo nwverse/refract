@@ -2,6 +2,10 @@
 """Source wiring checks, not Swift compilation or native performance evidence."""
 
 from pathlib import Path
+import os
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -108,7 +112,7 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('guard active, scenario == "startup", selectedIteration == iteration', RECORDER)
         self.assertIn("let firstDisplay, firstDisplay.isFinite, firstDisplay > 0", RECORDER)
         self.assertIn('firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": String(timestamp)]', APP)
-        self.assertIn("firstDisplay: firstDisplay)", APP)
+        self.assertIn("firstDisplay: firstDisplay, finalSamples: finalSamples)", APP)
         self.assertIn('let firstDisplay = scenario == "startup" ? try TraceHandshake.firstDisplay(in: completionPacket) : nil',
                       TESTS)
         self.assertIn('if let firstDisplay {', TESTS)
@@ -129,6 +133,47 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('type(text) is not str', RUNNER)
         self.assertIn("repr(timestamp) != text", RUNNER)
 
+    def test_final_samples_are_published_after_native_input_and_before_completion(self):
+        completion_call = APP.index('BenchmarkDisplayRecorder.shared.finalSamples(iteration: iteration)')
+        publish = APP.index('publishTracePacket(named: "native-completion.json"', completion_call)
+        self.assertLess(APP.index("await runUpdates(variant: variant, model: model)"), completion_call)
+        self.assertLess(APP.index("await runScroll(variant: variant, model: model)"), completion_call)
+        self.assertLess(completion_call, publish)
+        self.assertIn("firstDisplay: firstDisplay, finalSamples: finalSamples)", APP)
+        self.assertIn('packet["finalSamples"] = finalSamples', APP)
+        self.assertIn("func finalSamples(iteration: Int) -> [String: Any]?", RECORDER)
+        for condition in (
+            "selectedIteration == iteration", "completedIterations == 1", "recordedIteration == iteration",
+            "frames.allSatisfy({ $0.isFinite && $0 > 0 })", "iterations.count == frames.count",
+            "iterations.allSatisfy({ $0 == iteration })", "completion?.count == 1",
+        ):
+            self.assertIn(condition, RECORDER)
+        self.assertIn("UserDefaults.standard.set(data, forKey: framesKey)", RECORDER)
+        self.assertNotIn("synchronize()", APP + RECORDER + TESTS)
+
+    def test_ui_test_validates_final_samples_before_forwarding_completion(self):
+        guard = TESTS.index("guard let samples = completionPacket[\"finalSamples\"]")
+        for field in ('samples["sourceRevision"] as? String == revision',
+                      'samples["pid"] as? Int == pid', 'samples["completedIterations"] as? Int == 1',
+                      'samples["recordedIteration"] as? Int == iteration',
+                      'intervals.allSatisfy({ $0.isFinite && $0 > 0 })',
+                      'tags.allSatisfy({ $0 == iteration })'):
+            self.assertIn(field, TESTS[guard:TESTS.index("private static func isEqual", guard)])
+        validation = TESTS.index("try TraceHandshake.finalSamples(")
+        forwarded = TESTS.index('try TraceHandshake.write(completionPacket, named: "completion.json"', validation)
+        self.assertLess(validation, forwarded)
+
+    def test_runner_archives_only_validated_final_samples_not_preferences(self):
+        validation = RUNNER.index("checked_final_samples(native_completion, self, pid)")
+        forwarded = RUNNER.index("checked_final_samples(completion, self, pid)", validation)
+        archive = RUNNER.index("archive_trace(self.trace, self.archive)", forwarded)
+        self.assertLess(validation, forwarded)
+        self.assertLess(forwarded, archive)
+        self.assertIn("final_samples != native_final_samples", RUNNER)
+        self.assertIn('atomic_json(self.raw / "native-samples.json", final_samples)', RUNNER)
+        self.assertNotIn("refract.bench.frames", RUNNER)
+        self.assertNotIn("UserDefaults", RUNNER)
+
     def test_build_and_trace_provenance_precedes_unchanged_capture_contract(self):
         build = BUILD.index("build-for-testing")
         source_check = BUILD.index('git -C "$root" rev-parse HEAD', build)
@@ -142,6 +187,77 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('parser.add_argument("--readiness-timeout", type=float, default=60)', RUNNER)
         self.assertIn('parser.add_argument("--completion-timeout", type=float, default=180)', RUNNER)
         self.assertIn('"-only-testing:{test}"', RUNNER)
+
+
+class SwiftFinalSamplesContractTest(unittest.TestCase):
+    def test_extracted_native_ui_validation_round_trips_and_rejects_corruption(self):
+        swift = os.environ.get("REFRACT_SWIFTC") or shutil.which("swiftc")
+        if swift is None:
+            self.fail("The focused Swift source regression requires a Swift toolchain")
+        start = TESTS.index("    static func finalSamples(")
+        end = TESTS.index("    private static func isEqual", start)
+        validation = TESTS[start:end]
+        script = '''import Foundation
+
+enum ContractFailure: Error { case mismatch }
+enum TraceHandshake {
+@VALIDATION@
+}
+func XCTFail(_ message: String) {}
+func XCTUnwrap<T>(_ value: T?) throws -> T {
+    guard let value else { throw ContractFailure.mismatch }
+    return value
+}
+func check(_ samples: [String: Any], valid: Bool) {
+    do {
+        _ = try TraceHandshake.finalSamples(in: ["finalSamples": samples], revision: "revision",
+                                           variant: "generated", scenario: "scroll", iteration: 2, pid: 42)
+        precondition(valid, "accepted invalid final native samples")
+    } catch {
+        precondition(!valid, "rejected valid final native samples: \\(error)")
+    }
+}
+let original: [String: Any] = [
+    "schema": 1, "session": 1, "sourceRevision": "revision", "variant": "generated",
+    "scenario": "scroll", "iteration": 2, "pid": 42, "completedIterations": 1,
+    "recordedIteration": 2, "frameIntervalMs": [16.666666666666668, 16.5],
+    "iterationByFrame": [2, 2],
+]
+let encoded = try JSONSerialization.data(withJSONObject: ["finalSamples": original], options: [.sortedKeys])
+let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+let samples = try XCTUnwrap(decoded["finalSamples"] as? [String: Any])
+check(samples, valid: true)
+for key in original.keys {
+    var partial = samples
+    partial.removeValue(forKey: key)
+    check(partial, valid: false)
+}
+for (key, value) in [("sourceRevision", "stale"), ("session", 2), ("iteration", 1),
+                     ("pid", 43), ("completedIterations", 0), ("recordedIteration", 1)] as [(String, Any)] {
+    var changed = samples
+    changed[key] = value
+    check(changed, valid: false)
+}
+for intervals in [[], [Double.nan], [Double.infinity], [0.0], [-1.0], [16.5, 16.5, 16.5]] {
+    var changed = samples
+    changed["frameIntervalMs"] = intervals
+    check(changed, valid: false)
+}
+var tags = samples
+tags["iterationByFrame"] = [2, 1]
+check(tags, valid: false)
+print("exact Swift final sample validation passed")
+'''.replace("@VALIDATION@", validation)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "main.swift"
+            path.write_text(script)
+            result = subprocess.run([swift, str(path), "-o", str(Path(temporary) / "samples-check")],
+                                    capture_output=True, text=True, timeout=60, check=False)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(Path(temporary) / "samples-check")],
+                                    capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("exact Swift final sample validation passed", result.stdout)
 
 
 if __name__ == "__main__":

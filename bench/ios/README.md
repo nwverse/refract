@@ -38,8 +38,20 @@ per iteration through the same model. Thirty iterations are required for each of
 `CADisplayLink` helper records the native `targetTimestamp - timestamp` interval during the two other scenarios.
 It is **not** CPU frame duration and must not be relabelled as such. The completion marker is hidden native text that
 reports the actual number of completed iterations; the UI test cannot pass by waiting on the initial screen alone.
-The helper stores source revision, variant, scenario and per-frame iteration with its raw samples. The XCUITest target
-is not part of the app runtime, and the helper adds no Refract library.
+The helper stores source revision, variant, scenario and per-frame iteration with its raw samples. For a traced scroll
+or state-update iteration, `completeIteration` establishes the final recorder state before the app embeds one immutable
+`finalSamples` packet in `native-completion.json`. The packet carries the exact revision, variant, scenario, selected
+iteration and native PID, `completedIterations == 1`, `recordedIteration == selectedIteration`, and equally sized frame
+interval/tag arrays whose every tag names the selected iteration. Both XCTest and the runner reject missing, partial,
+duplicate, stale or mismatched packets, empty or unbounded arrays, and non-finite or non-positive display intervals
+before completion or archive acceptance. The runner persists this packet directly as `raw/native-samples.json` and
+binds its path and SHA-256 in `raw/iteration-trace.json`; finalizers consume that durable file, not preferences.
+
+`UserDefaults` is diagnostic only. Its asynchronous plist can still contain a periodic snapshot with
+`completedIterations == 0` after native completion; no sleep, polling or `UserDefaults.synchronize()` can turn it into
+the completion channel. A stale diagnostic plist never overrides a valid final completion packet. The separate startup
+packet retains its exact `firstDisplay` timestamp, and the 30-iteration cold-start metric remains unchanged.
+The XCUITest target is not part of the app runtime, and the helper adds no Refract library.
 
 ## Running without touching shared targets
 
@@ -148,13 +160,16 @@ test still uses 30 `XCTApplicationLaunchMetric` iterations. The original non-tra
 available but the complete 30-iteration traced collection must use the new per-launch driver. Simulator results must
 remain explicitly labelled and cannot close the physical-device gate.
 
-Partial generated/reference simulator traces have exercised this capture protocol on an earlier integrated revision;
-#219 retains their exact revisions, target/toolchain labels and private-artifact checksums. Those artifacts do not
-belong to a later merge or PR head, and they are not a completed paired benchmark or report PASS. The app helper
-persists raw display samples in its own defaults store. Export `refract.bench.frames.v1` from the explicit
-simulator's app data container with `plutil`/property-list decoding immediately after each iteration and retain the
-raw JSON with its source revision. Complete native sample collection, memory/binary pairing and fail-closed report
-validation remain required.
+Partial generated/reference simulator traces have exercised the earlier capture protocol on an earlier integrated
+revision; #219 retains their exact revisions, target/toolchain labels and private-artifact checksums. Those artifacts
+do not belong to a later merge or PR head, and they are not a completed paired benchmark or report PASS.
+
+For scroll and state update, the runner's retained `raw/native-samples.json` is the durable final sample artifact.
+Its immutable identity and SHA-256 are in `raw/iteration-trace.json`; finalizers must use this packet rather than export
+`refract.bench.frames.v1` from `UserDefaults`. The app may still persist that key for diagnostics, but a periodic plist
+snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup continues
+to use its exact native first-display packet and the unchanged cold-start launch metric. Complete native sample
+collection, memory/binary pairing and fail-closed report validation remain required.
 
 ## Regression and evidence policy
 

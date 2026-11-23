@@ -134,6 +134,34 @@ def checked_first_display(packet: dict) -> dict:
     return evidence
 
 
+def checked_final_samples(packet: dict, session: "Session", pid: int) -> dict:
+    """Validate the immutable completion snapshot, never an asynchronous plist."""
+    samples = packet.get("finalSamples")
+    expected_keys = {"schema", "session", "sourceRevision", "variant", "scenario", "iteration", "pid",
+                     "completedIterations", "recordedIteration", "frameIntervalMs", "iterationByFrame"}
+    if not isinstance(samples, dict) or set(samples) != expected_keys:
+        raise HandshakeError("Frame completion requires one complete final native sample packet")
+    expected_identity = {
+        "schema": 1, "session": session.session_id, "sourceRevision": session.revision,
+        "variant": session.variant, "scenario": session.scenario, "iteration": session.iteration,
+        "pid": pid, "completedIterations": 1, "recordedIteration": session.iteration,
+    }
+    for field, value in expected_identity.items():
+        if type(samples.get(field)) is not type(value) or samples.get(field) != value:
+            raise HandshakeError(
+                f"Final native sample {field} is stale or mismatched: expected {value!r}, got {samples.get(field)!r}")
+    intervals = samples.get("frameIntervalMs")
+    tags = samples.get("iterationByFrame")
+    if (not isinstance(intervals, list) or not 0 < len(intervals) <= 4096
+            or any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
+                   for value in intervals)):
+        raise HandshakeError("Final native display intervals must be nonempty, finite, positive and bounded")
+    if (not isinstance(tags, list) or len(tags) != len(intervals)
+            or any(type(tag) is not int or tag != session.iteration for tag in tags)):
+        raise HandshakeError("Every final native frame tag must match the selected iteration")
+    return samples
+
+
 class Session:
     """One non-reusable variant/scenario/iteration/recorder binding."""
 
@@ -267,6 +295,12 @@ class Session:
             if completion.get("state") != "complete":
                 raise HandshakeError("The application completion state is not complete")
             first_display = checked_first_display(completion) if self.scenario == "startup" else None
+            native_final_samples = (checked_final_samples(native_completion, self, pid)
+                                    if self.scenario in ("scroll", "stateUpdate") else None)
+            final_samples = (checked_final_samples(completion, self, pid)
+                             if self.scenario in ("scroll", "stateUpdate") else None)
+            if final_samples != native_final_samples:
+                raise HandshakeError("Forwarded completion must retain the exact native final sample packet")
             # Accessibility reports this launch's native completion count (one),
             # not a cumulative count from the retired single-launch task.
             expected_completion = f"{self.variant} {self.scenario} complete 1"
@@ -276,6 +310,8 @@ class Session:
             # XCTest may return as soon as the app terminates. Its final exit
             # status is checked by main after this recorder is fully stopped.
             atomic_json(self.raw / "completion.json", completion)
+            if final_samples is not None:
+                atomic_json(self.raw / "native-samples.json", final_samples)
 
             # Ask only our xctrace child to stop gracefully (SIGINT is the
             # Instruments interrupt path), flush its package, then release XCTest.
@@ -322,6 +358,11 @@ class Session:
                 validate_build_provenance(self.derived_data, self.revision)
             if first_display is not None:
                 result["native_first_display"] = first_display
+            if final_samples is not None:
+                result["native_samples"] = {
+                    "path": "raw/native-samples.json",
+                    "sha256": file_sha256(self.raw / "native-samples.json"),
+                }
             atomic_json(self.raw / "iteration-trace.json", result)
             return result
         finally:
