@@ -195,12 +195,16 @@ class Session:
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
+        # XCTest may publish its identity while the build is being verified.
+        # Reject reused control state before this slow validation, then let the
+        # ordinary request/ready/completion waits admit only this run's packets.
+        # No completion is valid before this capture publishes recorder-ready.
+        if any(self.control_directory.iterdir()):
+            raise HandshakeError("Refusing a reused or stale control directory")
         if self.derived_data is not None:
             validate_build_provenance(self.derived_data, self.revision)
         validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
-        if any(self.control_directory.iterdir()):
-            raise HandshakeError("Refusing a reused or stale control directory")
         self.raw.mkdir(exist_ok=False)
         recorder = None
         reader = None
