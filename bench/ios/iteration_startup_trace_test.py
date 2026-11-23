@@ -232,6 +232,9 @@ class SyntheticStartupSession:
                                revision="a" * 40, run_directory=self.run, xcodebuild_log=self.log,
                                control_directory=self.control, readiness_timeout=0.5,
                                completion_timeout=0.2, derived_data=self.derived_data)
+        # Freeze the fresh control epoch now, before any synthetic writer
+        # publishes packets. This mirrors main(): preflight precedes Popen.
+        self.session.record_capture_start_epoch()
         self.processes = []
         test.addCleanup(self.stop)
 

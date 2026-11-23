@@ -46,7 +46,14 @@ class RecorderFixture:
             root.mkdir(exist_ok=True)
             (root / "control").mkdir(exist_ok=True)
 
-    def start(self, **kwargs):
+    def start(self, preflight=None, **kwargs):
+        # Mirror the real launch order: freeze the fresh control epoch before
+        # the synthetic XCTest process is spawned. Callers that exercise the
+        # runner protocol pass a preflight callback (typically
+        # session.record_capture_start_epoch); negative fixtures that inject
+        # pre-existing packets skip preflight on purpose.
+        if preflight is not None:
+            preflight()
         self.prepare(**kwargs)
         self.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n", encoding="utf-8")
 
@@ -247,9 +254,18 @@ class IterationTraceRunnerTest(unittest.TestCase):
         with mock.patch("iteration_trace_runner.subprocess.run", side_effect=self.read_synthetic_environment):
             return session.capture(fixture.process, fixture.recorder_factory)
 
+    def launch(self, session=None, fixture=None, session_kwargs=None, **recorder_kwargs):
+        """Mirror main(): preflight the fresh control epoch before launching
+        the synthetic XCTest process. Callers may pass an explicit Session
+        (e.g. to inject variant/scenario overrides) or session_kwargs for the
+        default Session factory. Returns the Session for self.capture."""
+        fixture = fixture or self.recorder
+        session = session or self.session(**(session_kwargs or {}))
+        fixture.start(preflight=session.record_capture_start_epoch, **recorder_kwargs)
+        return session
+
     def run_success(self):
-        self.recorder.start()
-        session = self.session()
+        session = self.launch()
         result = self.capture(session)
         self.recorder.process.wait(timeout=5)
         return result
@@ -288,14 +304,19 @@ class IterationTraceRunnerTest(unittest.TestCase):
     def test_current_target_probe_files_require_explicit_current_run_admission(self):
         for name in TARGET_PROBE_FILENAMES:
             (self.root / name).write_text('{"current_probe": true}\n')
-        self.recorder.start()
+        # First call: probes present but not admitted by the Session -> the
+        # run-directory preflight rejects them before any packet arrives.
+        session = self.launch()
         with self.assertRaisesRegex(HandshakeError, "unexpected or stale"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "raw").exists())
         self.assertFalse(self.recorder.commands.exists())
 
+        # Second call: probes are explicitly admitted for this run.
         probes = tuple(self.root / name for name in TARGET_PROBE_FILENAMES)
-        result = self.capture(self.session(target_probe_files=probes))
+        admitted = self.session(target_probe_files=probes)
+        admitted.record_capture_start_epoch()
+        result = self.capture(admitted)
         self.assertEqual(result["status"], "complete")
         self.recorder.process.wait(timeout=5)
 
@@ -305,9 +326,9 @@ class IterationTraceRunnerTest(unittest.TestCase):
             path.write_text('{"current_probe": true}\n')
         unexpected = self.root / "unexpected.json"
         unexpected.write_text("stale evidence\n")
-        self.recorder.start()
+        session = self.launch(session_kwargs={"target_probe_files": probes})
         with self.assertRaisesRegex(HandshakeError, "unexpected or stale"):
-            self.capture(self.session(target_probe_files=probes))
+            self.capture(session)
         self.assertEqual(unexpected.read_text(), "stale evidence\n")
         self.assertFalse((self.root / "raw").exists())
         self.assertFalse(self.recorder.commands.exists())
@@ -412,6 +433,8 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.run_success()
         self.recorder.stop()
         original = (self.root / "raw/generated-scroll-0.trace.zip").read_bytes()
+        # No preflight here: the previous run left packets behind, and capture
+        # must fail closed rather than treat them as a fresh epoch.
         self.recorder.start()
         with self.assertRaisesRegex(HandshakeError, "new run directory|Refusing"):
             self.capture(self.session())
@@ -422,10 +445,10 @@ class IterationTraceRunnerTest(unittest.TestCase):
             with self.subTest(target=target):
                 root = self.root / f"drift-{target}"
                 recorder = RecorderFixture(root)
-                recorder.start()
-                self.addCleanup(recorder.stop)
                 session = self.session(run_directory=root, xcodebuild_log=recorder.output,
                                        control_directory=root / "control")
+                self.launch(session=session, fixture=recorder)
+                self.addCleanup(recorder.stop)
                 path = (session.derived_data / "Build/Products/iteration-trace-config-0123456789abcdef01234567.xctestrun"
                         if target == "executed" else root / "iteration-trace-config.xctestrun")
                 path.write_bytes(b"changed after preparation")
@@ -435,8 +458,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 self.assertIsNone(recorder.recorder)
 
     def test_final_configuration_drift_cannot_leave_a_complete_receipt(self):
-        self.recorder.start()
-        session = self.session()
+        session = self.launch()
         original = validate_trace_configuration
         def drift_after_native_capture(*args, **kwargs):
             receipt = original(*args, **kwargs)
@@ -452,23 +474,25 @@ class IterationTraceRunnerTest(unittest.TestCase):
             with self.subTest(pid=pid):
                 root = self.root / f"pid-{pid}"
                 recorder = RecorderFixture(root)
-                recorder.start(pid=pid)
                 self.addCleanup(recorder.stop)
+                session = self.launch(fixture=recorder,
+                                      session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                                      "control_directory": root / "control"}, pid=pid)
                 with self.assertRaisesRegex(HandshakeError, "PID|pid|process"):
-                    self.capture(self.session(run_directory=root, xcodebuild_log=recorder.output,
-                                              control_directory=root / "control"), recorder)
+                    self.capture(session, recorder)
                 self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
         root = self.root / "ambiguous-pid"
         recorder = RecorderFixture(root)
-        recorder.start(duplicate_request=True)
         self.addCleanup(recorder.stop)
+        session = self.launch(fixture=recorder,
+                              session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                              "control_directory": root / "control"},
+                              duplicate_request=True)
         with self.assertRaisesRegex(HandshakeError, "Ambiguous.*request"):
-            self.capture(self.session(run_directory=root, xcodebuild_log=recorder.output,
-                                      control_directory=root / "control"), recorder)
+            self.capture(session, recorder)
 
     def test_later_iteration_has_one_completion_and_original_identity(self):
-        self.recorder.start(app_iteration=29)
-        session = self.session(iteration=29)
+        session = self.launch(session_kwargs={"iteration": 29}, app_iteration=29)
         result = self.capture(session)
         self.assertEqual(result["iteration"], 29)
         self.assertEqual(result["native_iteration_completion"], "generated scroll complete 1")
@@ -476,18 +500,22 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertTrue((self.root / "raw/generated-scroll-29.trace.zip").is_file())
 
     def test_stale_session_is_rejected_before_recorder_start(self):
-        self.recorder.start()
+        # A stale session_id is rejected when the first identity packet arrives
+        # from the synthetic test; the fresh control epoch is still valid.
+        session = self.launch(session_kwargs={"session_id": 2})
         with self.assertRaisesRegex(HandshakeError, "session|stale"):
-            self.capture(self.session(session_id=2))
+            self.capture(session)
 
     def test_stale_revision_is_rejected_before_recorder_start(self):
         root = self.root / "stale-revision"
         recorder = RecorderFixture(root)
-        recorder.start(app_revision="b" * 40)
         self.addCleanup(recorder.stop)
+        session = self.launch(fixture=recorder,
+                              session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                              "control_directory": root / "control"},
+                              app_revision="b" * 40)
         with self.assertRaisesRegex(HandshakeError, "revision|stale"):
-            self.capture(self.session(run_directory=root, xcodebuild_log=recorder.output,
-                                      control_directory=root / "control"), recorder)
+            self.capture(session, recorder)
         self.assertIsNone(recorder.recorder)
 
     def test_wrong_identity_and_unexpected_completion_fail_closed(self):
@@ -500,33 +528,41 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 root = self.root / f"identity-{field}"
                 root.mkdir()
                 recorder = RecorderFixture(root)
-                recorder.start(completion=completion)
                 self.addCleanup(recorder.stop)
                 values = {field: value}
+                session = self.launch(fixture=recorder,
+                                      session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                                      "control_directory": root / "control", **values},
+                                      completion=completion)
                 with self.assertRaisesRegex(HandshakeError, "identity|iteration|completion|variant|scenario"):
-                    self.capture(self.session(run_directory=root, xcodebuild_log=recorder.output,
-                                              control_directory=root / "control", **values), recorder)
+                    self.capture(session, recorder)
                 self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
 
     def test_ambiguous_completion_is_not_selected(self):
-        self.recorder.start(duplicate_completion=True)
+        session = self.launch(duplicate_completion=True)
         with self.assertRaisesRegex(HandshakeError, "Ambiguous.*completion"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
 
     def test_recorder_exit_before_ready_cannot_be_hidden(self):
-        self.recorder.start(ready=None, ready_delay=0.02)
+        session = self.launch(ready=None, ready_delay=0.02)
         with self.assertRaisesRegex(HandshakeError, "recorder.*exit|exited"):
-            self.capture(self.session())
+            self.capture(session)
 
     def test_recorder_without_readiness_marker_is_rejected(self):
-        self.recorder.start(ready="xctrace: recording started, output will be somewhere")
+        session = self.launch(ready="xctrace: recording started, output will be somewhere")
         with self.assertRaisesRegex(HandshakeError, "readiness|Starting recording"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "control/recorder-ready.json").exists())
 
     def test_current_test_packets_may_arrive_during_provenance_checks(self):
-        self.recorder.start(completion="generated scroll complete 0")
+        # The synthetic XCTest writes its identity packet immediately on launch
+        # and then waits for recorder-ready. A slow build-provenance validation
+        # forces the race: by the time provenance completes, the current test's
+        # request.json (and possibly begin/completion) already exist. With the
+        # frozen epoch, capture must reach the completion-payload assertion
+        # rather than reclassify the current-run packets as pre-existing state.
+        session = self.launch(completion="generated scroll complete 0")
         original = runner.validate_build_provenance
         validated = threading.Event()
 
@@ -537,12 +573,14 @@ class IterationTraceRunnerTest(unittest.TestCase):
 
         with mock.patch("iteration_trace_runner.validate_build_provenance", side_effect=slow_provenance):
             with self.assertRaisesRegex(HandshakeError, "completion|PID"):
-                self.capture(self.session())
+                self.capture(session)
         self.assertTrue(validated.is_set())
         self.assertTrue((self.root / "raw/request.json").is_file())
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
     def test_stale_or_premature_packets_are_rejected_before_provenance(self):
+        # No fresh control epoch is recorded: pre-existing packets before the
+        # synthetic XCTest is launched must still fail closed.
         self.recorder.prepare()
         self.recorder.output.write_text("current synthetic test\n")
         self.recorder.process.terminate()
@@ -570,56 +608,119 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     self.capture(self.session())
                 (self.root / "control" / name).unlink()
 
+    def test_pre_existing_completion_before_launch_is_rejected(self):
+        # Explicit regression: a stale completion published before preflight
+        # must be rejected by record_capture_start_epoch itself.
+        stale = {"schema": 1, "session": 1, "revision": "a" * 40, "variant": "generated",
+                 "scenario": "scroll", "iteration": 0, "pid": 4242, "process": "running",
+                 "state": "complete", "completion": "generated scroll complete 1"}
+        (self.root / "control" / "completion.json").write_text(json.dumps(stale))
+        session = self.session()
+        with self.assertRaisesRegex(HandshakeError, "stale control directory"):
+            session.record_capture_start_epoch()
+
+    def test_current_test_publishes_begin_and_completion_before_capture(self):
+        # Deterministic regression for #374: a fast current test publishes a
+        # valid Begin, native completion and forwarded completion immediately
+        # after preflight, before capture even calls into its request wait.
+        # With the frozen epoch those packets must be admitted through the
+        # normal identity-checked request/readiness/Begin/native-completion
+        # sequence, not rejected as stale merely because they arrived before
+        # capture.
+        control = self.root / "control"
+        # Use prepare() only to install the recorder factory; do not let it
+        # spawn the default fake XCTest. We replace the test process below.
+        self.recorder.prepare()
+        self.recorder.process.terminate()
+        self.recorder.process.communicate(timeout=5)
+        # Drop the request.json that the default fake XCTest already wrote so
+        # the preflight below sees a fresh empty control directory.
+        for path in control.iterdir():
+            path.unlink()
+        session = self.session()
+        session.record_capture_start_epoch()
+
+        # Publish every current-run packet before session.capture is invoked.
+        # The packet identities match this iteration exactly.
+        packet = {"schema": 1, "session": 1, "revision": "a" * 40,
+                  "variant": "generated", "scenario": "scroll", "iteration": 0,
+                  "pid": 4242, "process": "running", "state": "ready"}
+        complete = dict(packet, state="complete", completion="generated scroll complete 1")
+        begin = dict(packet, state="begin")
+        (control / "request.json").write_text(json.dumps(packet))
+        (control / "begin.json").write_text(json.dumps(begin))
+        (control / "native-completion.json").write_text(json.dumps(complete))
+        (control / "completion.json").write_text(json.dumps(complete))
+
+        # A trivial fake XCTest process keeps running until capture publishes
+        # recorder-finished. It does not write any packet itself: the packets
+        # above were already in place before capture.
+        script = self.recorder.work / "fast_xcodebuild.py"
+        script.write_text(f"""import pathlib, sys, time
+control = pathlib.Path(sys.argv[1])
+while not (control / 'recorder-finished.json').exists():
+    time.sleep(0.01)
+""")
+        self.recorder.process = subprocess.Popen(
+            ["python3", "-I", str(script), str(control)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.recorder.output.write_text("native XCTApplicationLaunchMetric remains unchanged\n",
+                                        encoding="utf-8")
+        result = self.capture(session)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["native_iteration_completion"], "generated scroll complete 1")
+        self.assertTrue((self.root / "raw/iteration-trace.json").is_file())
+
     def test_completion_injected_before_recorder_ready_is_rejected(self):
-        self.recorder.start(missing_begin=True)
+        session = self.launch(missing_begin=True)
         with self.assertRaisesRegex(HandshakeError, "begin|native-completion"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
     def test_wrong_completion_is_rejected_before_archiving(self):
-        self.recorder.start(completion="generated scroll complete 0")
+        session = self.launch(completion="generated scroll complete 0")
         with self.assertRaisesRegex(HandshakeError, "completion|PID"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertTrue((self.root / "raw/request.json").is_file())
         self.assertTrue((self.root / "raw/recorder.log").is_file())
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
     def test_missing_completion_preserves_diagnostics(self):
-        self.recorder.start(missing_completion=True)
+        session = self.launch(missing_completion=True)
         with self.assertRaisesRegex(HandshakeError, "timed out|Timed out"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertTrue((self.root / "raw/request.json").is_file())
         self.assertTrue((self.root / "raw/recorder.log").is_file())
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
     def test_archiver_is_called_only_after_exact_completion(self):
-        self.recorder.start(write_trace=False)
+        session = self.launch(write_trace=False)
         with self.assertRaisesRegex(HandshakeError, "did not save the exact requested trace package"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertTrue((self.root / "raw/completion.json").is_file())
 
     def test_saved_path_for_another_package_is_rejected(self):
-        self.recorder.start(saved_path="/tmp/another.trace")
+        session = self.launch(saved_path="/tmp/another.trace")
         with self.assertRaisesRegex(HandshakeError, "exact requested trace"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
 
     def test_recorder_exit_before_completion_preserves_specific_failure(self):
-        self.recorder.start(recorder_after_ready_exit=7, completion_delay=0.2)
+        session = self.launch(recorder_after_ready_exit=7, completion_delay=0.2)
         with self.assertRaisesRegex(HandshakeError,
                                     "exited before native completion with status 7"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
 
     def capture_stop_race(self, recorder):
-        self.recorder.start()
+        session = self.launch()
         self.recorder.recorder = recorder
         self.recorder.recorder_factory = lambda command, stream: recorder
         with self.assertRaisesRegex(HandshakeError, "exited with status 7"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertTrue((self.root / "raw/completion.json").is_file())
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
@@ -685,8 +786,8 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertFalse(saved_trace_matches("subdir/generated-scroll-0.trace", self.trace))
 
     def test_actual_output_spelling_and_bare_package_are_archived(self):
-        self.recorder.start(saved_path=self.trace.name, saved_spelling="Output file saved as")
-        result = self.capture(self.session())
+        session = self.launch(saved_path=self.trace.name, saved_spelling="Output file saved as")
+        result = self.capture(session)
         self.recorder.process.wait(timeout=5)
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["archived_package_name"], self.trace.name)
@@ -706,16 +807,18 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 root = self.root / f"saved-output-gate-{index}"
                 recorder = RecorderFixture(root)
                 self.addCleanup(recorder.stop)
-                recorder.start(saved_spelling="Output file saved as", **arguments)
+                session = self.launch(fixture=recorder,
+                                      session_kwargs={"run_directory": root,
+                                                      "xcodebuild_log": recorder.output,
+                                                      "control_directory": root / "control"},
+                                      saved_spelling="Output file saved as", **arguments)
                 with self.assertRaisesRegex(HandshakeError, "exact requested trace"):
-                    self.capture(self.session(run_directory=root,
-                                              xcodebuild_log=recorder.output,
-                                              control_directory=root / "control"), recorder)
+                    self.capture(session, recorder)
                 self.assertFalse((root / "raw/iteration-trace.json").exists())
                 self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
 
     def test_actual_output_spelling_never_accepts_failed_recorder(self):
-        self.recorder.start()
+        session = self.launch()
         recorder = StopRaceRecorder(
             self.root / "control", 7,
             stdout="Starting recording with the Animation Hitches template. Attach to stop.\n"
@@ -723,14 +826,15 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.recorder.recorder = recorder
         self.recorder.recorder_factory = lambda command, stream: recorder
         with self.assertRaisesRegex(HandshakeError, "exited with status 7"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
 
     def test_swiftui_template_is_recorded_in_command_and_result_metadata(self):
-        self.recorder.start(ready="Starting recording with the SwiftUI template. Attach to stop.",
-                            saved_path=self.trace.name, saved_spelling="Output file saved as")
-        result = self.capture(self.session(template="SwiftUI"))
+        session = self.launch(session_kwargs={"template": "SwiftUI"},
+                              ready="Starting recording with the SwiftUI template. Attach to stop.",
+                              saved_path=self.trace.name, saved_spelling="Output file saved as")
+        result = self.capture(session)
         self.recorder.process.wait(timeout=5)
         self.assertEqual(result["template"], "SwiftUI")
         receipt = json.loads((self.root / "raw/iteration-trace.json").read_text())
@@ -753,9 +857,10 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.trace = self.root / "generated-scroll-0.trace"
         self.recorder = RecorderFixture(self.root)
         self.addCleanup(self.recorder.stop)
-        self.recorder.start(ready="Starting recording with the Time Profiler template. Attach to stop.")
+        session = self.launch(session_kwargs={"template": "SwiftUI"},
+                              ready="Starting recording with the Time Profiler template. Attach to stop.")
         with self.assertRaisesRegex(HandshakeError, "different template: Time Profiler"):
-            self.capture(self.session(template="SwiftUI"))
+            self.capture(session)
         self.assertFalse((self.root / "control/recorder-ready.json").exists())
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
@@ -1048,6 +1153,10 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                                   revision="a" * 40, run_directory=run,
                                   xcodebuild_log=run / "xcodebuild.log",
                                   control_directory=run / "control", derived_data=self.derived_data)
+                # No XCTest is launched in this fixture; recording the epoch on
+                # an empty directory keeps the build-provenance failure on the
+                # path under test.
+                session.record_capture_start_epoch()
                 session.capture(mock.Mock())
         plutil.assert_not_called()
 
@@ -1086,11 +1195,12 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         self.addCleanup(recorder.stop)
         self.make_run(run)
         self.prepare_run(run, 0)
-        recorder.start()
         session = Session(target="synthetic-target", variant="generated", scenario="scroll", iteration=0,
                           revision="a" * 40, run_directory=run, xcodebuild_log=recorder.output,
                           control_directory=run / "control", readiness_timeout=0.5, completion_timeout=0.5,
                           derived_data=self.derived_data)
+        # Freeze the epoch before the synthetic XCTest publishes any packets.
+        recorder.start(preflight=session.record_capture_start_epoch)
         original_validation = validate_trace_configuration
 
         def replace_products_after_final_configuration_check(*args, **kwargs):

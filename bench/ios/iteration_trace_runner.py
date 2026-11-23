@@ -178,6 +178,28 @@ class Session:
         self.identity = f"{variant}-{scenario}-{iteration}"
         self.trace = run_directory / f"{self.identity}.trace"
         self.archive = self.raw / f"{self.identity}.trace.zip"
+        self._capture_epoch: int | None = None
+
+    def record_capture_start_epoch(self) -> None:
+        """Freeze the fresh control state before the test process is launched.
+
+        The caller (``main`` or a synthetic fixture) invokes this exactly once,
+        immediately before starting XCTest. The control directory must already
+        exist and be empty: any pre-existing packet is from a prior run and is
+        rejected. The epoch is recorded so ``capture`` does not re-scan the
+        directory after the test process has begun publishing current-run
+        packets during build/configuration provenance checks.
+        """
+        if self._capture_epoch is not None:
+            raise HandshakeError("Capture start epoch has already been recorded")
+        if not self.control_directory.is_dir() or self.control_directory.is_symlink():
+            raise HandshakeError("Control directory must be a real directory")
+        for path in self.control_directory.iterdir():
+            raise HandshakeError(
+                f"Refusing a reused or stale control directory: pre-existing {path.name}")
+        # Monotonic clock is local-only and not mtime; the value is opaque.
+        # Its only role is to prove record_capture_start_epoch ran before capture.
+        self._capture_epoch = time.monotonic_ns()
 
     def capture(self, test_process: subprocess.Popen, recorder_factory=None) -> dict:
         if self.run_directory.exists() and any(self.run_directory.iterdir()):
@@ -195,27 +217,30 @@ class Session:
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
-        # XCTest may publish its identity while the build is being verified.
-        # Reject reused control state before this slow validation, then let the
-        # ordinary request/ready/completion waits admit only this run's packets.
-        # No completion is valid before this capture publishes recorder-ready.
-        if any(self.control_directory.iterdir()):
-            raise HandshakeError("Refusing a reused or stale control directory")
+        # The fresh control epoch must be recorded by record_capture_start_epoch
+        # before the test process was launched. Without that preflight, a
+        # non-empty control directory cannot be distinguished from a reused
+        # one, so fail closed. With a recorded epoch, packets published by the
+        # current test during build/configuration provenance are validated by
+        # identity below rather than reclassified as pre-existing state.
+        if self._capture_epoch is None:
+            if any(self.control_directory.iterdir()):
+                raise HandshakeError(
+                    "Refusing a reused or stale control directory: "
+                    "capture start epoch was not recorded before launch")
         if self.derived_data is not None:
             validate_build_provenance(self.derived_data, self.revision)
         validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
-        # A fresh run starts with no accepted packets. The test process begins
-        # before this method, so only the identity packet it may publish before
-        # this point is valid. Begin and completion cannot precede our recorder.
-        self._admitted_packets = set()
-        for path in self.control_directory.iterdir():
-            if path.name not in ("request.json", "native-process.json"):
-                raise HandshakeError("Refusing a reused or stale control directory")
-            # A known filename is not admission: validate its complete identity
-            # now, while keeping the normal request wait as the sole reader.
-            unique_packet(self.control_directory, path.stem, self)
-            self._admitted_packets.add(path.name)
+        # With a frozen epoch, the current test may have published identity,
+        # Begin, native completion or completion packets during the slow
+        # provenance work above. They are not pre-existing state: their identity
+        # is validated by the normal request/readiness/Begin/native-completion
+        # sequence below, which still requires a unique valid Begin and native
+        # completion before accepting the forwarded completion. No second
+        # directory scan rejects packets merely because they arrived before
+        # capture. Without a frozen epoch, the empty-directory check above has
+        # already rejected anything that could have been here.
         self.raw.mkdir(exist_ok=False)
         recorder = None
         reader = None
@@ -710,15 +735,20 @@ def main(argv: list[str] | None = None) -> int:
         validate_trace_configuration(run, args.source_revision, control, args.iteration, args.derived_data)
         with log.open("x", encoding="utf-8") as stream:
             validate_build_provenance(args.derived_data, args.source_revision)
-            process = subprocess.Popen(
-                test_command(test_run, args.target_udid, test, args.source_revision, run / "results.xcresult"),
-                env=environment, stdout=stream, stderr=subprocess.STDOUT)
+            # Construct the Session and freeze the fresh control epoch before
+            # XCTest is launched. capture() then admits current-run packets
+            # through identity validation rather than reclassifying them as
+            # pre-existing state when they arrive during slow provenance work.
             session = Session(target=args.target_udid, variant=args.variant, scenario=args.scenario,
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
                               xcodebuild_log=log, control_directory=control,
                               readiness_timeout=args.readiness_timeout,
                               completion_timeout=args.completion_timeout, template=args.template,
                               derived_data=args.derived_data, target_probe_files=target_probe_files)
+            session.record_capture_start_epoch()
+            process = subprocess.Popen(
+                test_command(test_run, args.target_udid, test, args.source_revision, run / "results.xcresult"),
+                env=environment, stdout=stream, stderr=subprocess.STDOUT)
             result = session.capture(process)
             status = process.wait(timeout=args.completion_timeout)
             if status != 0:
