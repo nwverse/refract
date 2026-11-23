@@ -174,17 +174,17 @@ signal.pause()
     def capture(self):
         packet = json.dumps(self.packet)
         script = self.root / "native.py"
-        script.write_text(f"""import json, pathlib
+        script.write_text(f"""import json, pathlib, time
 control = pathlib.Path({str(self.control)!r})
 (control / 'request.json').write_text(json.dumps({{
     'schema': 1, 'session': 1, 'revision': {'a' * 40!r}, 'variant': 'generated', 'scenario': 'startup',
     'iteration': 0, 'pid': 4242, 'process': 'running', 'state': 'ready'}}))
 while not (control / 'recorder-ready.json').exists():
-    pass
+    time.sleep(0.01)
 if {self.completion!r}:
     (control / 'completion.json').write_text({packet!r})
 while not (control / 'recorder-finished.json').exists():
-    pass
+    time.sleep(0.01)
 """)
         native = self.start_process(script)
         with mock.patch("iteration_trace_runner.subprocess.run", side_effect=self.read_environment):
