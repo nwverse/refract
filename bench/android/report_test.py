@@ -66,6 +66,13 @@ def complete_metadata():
                        "build_id": "test-build", "sdk": 35}}
 
 
+def faithful_trace_filename(variant, scenario, iteration):
+    method = {"startup": "Startup", "scroll": "Macrobenchmark[scroll]", "stateUpdate": "StateUpdate"}[scenario]
+    # AndroidX 1.4.1 MacrobenchmarkRule uses the simple class name and
+    # PerfettoCaptureWrapper appends this exact timestamp format.
+    return f"SettingsMacrobenchmark_{variant}{method}_iter{iteration:03d}_2026-01-02-03-04-{iteration:02d}.perfetto-trace"
+
+
 class ReportTest(unittest.TestCase):
     def test_percentile_is_nearest_rank(self):
         self.assertEqual(report.percentile([3.0, 1.0, 2.0], 0.5), 2)
@@ -227,8 +234,12 @@ class ReportTest(unittest.TestCase):
                                  "memoryRssAnonLastKb": {"runs": [100.0] * 10}}),
             ):
                 value = benchmark(variant, scenario, metrics)
+                value["name"] = f"EMULATOR_{value['name']}"
                 value["repeatIterations"] = 10
-                value["profilerOutputs"] = [{"type": "PerfettoTrace", "filename": "synthetic.perfetto-trace"}]
+                value["profilerOutputs"] = [{
+                    "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
+                    "filename": faithful_trace_filename(variant.lower(), scenario, iteration),
+                } for iteration in range(10)]
                 values.append(value)
                 traces.extend({
                     "variant": variant.lower(), "scenario": scenario, "iteration": iteration,
@@ -252,6 +263,55 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(frames["sample_count"], 30)
         self.assertEqual(frames["repeat_iterations"], 10)
         self.assertEqual(memory["sample_count"], 10)
+        self.assertEqual(startup["raw_unit"], "ms")
+        self.assertEqual(frames["raw_unit"], "ms")
+        self.assertEqual(memory["raw_unit"], "Kb")
+        for value in values:
+            self.assertTrue(value["name"].startswith("EMULATOR_"))
+            for iteration, output in enumerate(value["profilerOutputs"]):
+                self.assertEqual(output["label"], f"Trace Iteration {iteration}")
+                self.assertRegex(output["filename"], r"_iter\d{3}_2026-01-02-03-04-\d{2}\.perfetto-trace$")
+
+    def test_complete_macro_rejects_missing_required_startup_metric(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        for value in values:
+            if value["name"].endswith("Startup"):
+                value["metrics"] = {"startupMs": {"runs": [1.0] * 10}}
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "missing timeToInitialDisplayMs"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence=complete_evidence(traces))
+
+    def test_complete_macro_rejects_incompatible_startup_units(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        path.write_text(json.dumps(values))
+        result = report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                                    evidence=complete_evidence(traces))
+        startup = {row["variant"]: row for row in result["measurements"]
+                   if row["benchmark"] == "startup" and row["metric"] == "timeToInitialDisplayMs"}
+        self.assertEqual({variant: row["raw_unit"] for variant, row in startup.items()},
+                         {"generated": "ms", "reference": "ms"})
+
+        # Preserve the required AndroidX metric and macro identity, but present
+        # an incompatible raw unit at the actual comparison boundary.
+        mismatched = [{**startup["generated"], "raw_unit": "s"}, startup["reference"]]
+        with self.assertRaisesRegex(report.ReportError,
+                                    "Incompatible units for startup.timeToInitialDisplayMs"):
+            report.compare_pairs(mismatched, 5.0, 0.1)
+
+    def test_complete_macro_rejects_missing_macro_prefix(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        for value in values:
+            value["name"] = value["name"].removeprefix("EMULATOR_")
+        for trace in traces:
+            trace["androidx_benchmark"] = trace["androidx_benchmark"].removeprefix("EMULATOR_")
+        path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(report.ReportError, "missing AndroidX EMULATOR_ prefix"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True,
+                               evidence=complete_evidence(traces))
 
     def test_complete_macro_requires_all_scenarios_raw_metrics_and_traces(self):
         path = Path(self.directory.name) / "input.json"

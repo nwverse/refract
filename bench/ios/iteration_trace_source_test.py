@@ -8,6 +8,8 @@ HERE = Path(__file__).resolve().parent
 APP = (HERE / "RefractBench/RefractBenchApp.swift").read_text()
 RECORDER = (HERE / "RefractBench/BenchmarkDisplayRecorder.swift").read_text()
 TESTS = (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text()
+BUILD = (HERE / "build.sh").read_text()
+RUNNER = (HERE / "iteration_trace_runner.py").read_text()
 
 
 class TraceSourceContractTest(unittest.TestCase):
@@ -28,11 +30,17 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('if selectedIteration != nil || completedIterations == 30', RECORDER)
 
     def test_selected_iteration_consumes_begin_before_native_input(self):
-        ready = APP.index("while !recorderIsReady")
-        begin = APP.index("while !beginSelectedIteration", ready)
-        scenario = APP.index("switch (variant, scenario)", begin)
-        self.assertLess(ready, begin)
-        self.assertLess(begin, scenario)
+        ready = TESTS.index('readyText.waitForExistence')
+        tap = TESTS.index("begin.tap()", ready)
+        expected = TESTS.index('expectedBegin["state"] = "begin"', tap)
+        acknowledgement = TESTS.index('name: "begin.json"', expected)
+        scenario = APP.index("Task { await runTracedIteration")
+        self.assertLess(ready, tap)
+        self.assertLess(tap, expected)
+        self.assertLess(expected, acknowledgement)
+        self.assertIn('publishTracePacket(named: "begin.json"', APP[:scenario])
+        self.assertLess(APP.index(".safeAreaInset(edge: .bottom)"), APP.index("Button(\"BeginIteration\", action: beginTrace)"))
+        self.assertNotIn("native-button-action", APP)
 
     def test_recorder_ready_precedes_button_and_native_completion(self):
         start = TESTS.index('try TraceHandshake.write(packet, named: "request.json"')
@@ -42,10 +50,56 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertLess(start, ready)
         self.assertLess(ready, tap)
         self.assertLess(tap, complete)
-        self.assertIn("Int(application.processIdentifier)", TESTS)
+        self.assertNotIn("application.processIdentifier", TESTS)
         self.assertIn('named: "completion.json"', TESTS)
         self.assertIn('name: "recorder-finished.json"', TESTS)
         self.assertIn("recorder-finished.json", TESTS)
+
+    def test_native_process_identity_binds_the_same_pid_to_completion(self):
+        identity = APP.index('appendingPathComponent("native-process.json")')
+        ready = APP.index("while !recorderReady", identity)
+        scenario = APP.index("switch (variant, scenario)", ready)
+        completion = APP.index('publishTracePacket(named: "native-completion.json"', scenario)
+        self.assertLess(identity, ready)
+        self.assertLess(ready, scenario)
+        self.assertLess(scenario, completion)
+        for field in ('"revision": revision', '"variant": variant', '"scenario": scenario',
+                      '"iteration": iteration', '"pid": Int(ProcessInfo.processInfo.processIdentifier)',
+                      '"process": "running"'):
+            self.assertIn(field, APP)
+        for name in ("native-process.json", "native-completion.json"):
+            if name == "native-process.json":
+                self.assertIn('TraceHandshake.ready(in: control, expected: expectedIdentity,\n'
+                              '                                     name: "native-process.json")', TESTS)
+            else:
+                native_completion = TESTS.index('name: "native-completion.json")')
+        completion_wait = TESTS.index("nativeCompletion", native_completion)
+        write_completion = TESTS.index('try TraceHandshake.write(completionPacket, named: "completion.json"', completion_wait)
+        self.assertLess(native_completion, completion_wait)
+        self.assertLess(completion_wait, write_completion)
+        self.assertIn('XCTWaiter.wait(for: [nativeCompletion], timeout: 30)', TESTS)
+        self.assertIn('expectedIdentity["state"] = "complete"', TESTS)
+        self.assertIn('expectedIdentity["completion"] = completionText', TESTS)
+        self.assertIn('expectedIdentity["pid"] = pid', TESTS)
+        self.assertIn('completionPID == pid', TESTS)
+        self.assertIn('expectedFinished["state"] = "recorder-finished"', TESTS)
+        self.assertIn('TraceHandshake.ready(in: control, expected: expectedFinished,', TESTS)
+        self.assertIn('"pid": pid', TESTS)
+
+
+    def test_build_and_trace_provenance_precedes_unchanged_capture_contract(self):
+        build = BUILD.index("build-for-testing")
+        source_check = BUILD.index('git -C "$root" rev-parse HEAD', build)
+        record = BUILD.index("record_build_provenance.py", build)
+        self.assertLess(build, source_check)
+        self.assertLess(source_check, record)
+        validate = RUNNER.index("validate_build_provenance(args.derived_data")
+        prepare = RUNNER.index("test_run = prepare_test_run(", validate)
+        self.assertLess(validate, prepare)
+        self.assertLess(prepare, RUNNER.index("test_command(test_run", prepare))
+        self.assertIn('parser.add_argument("--readiness-timeout", type=float, default=60)', RUNNER)
+        self.assertIn('parser.add_argument("--completion-timeout", type=float, default=180)', RUNNER)
+        self.assertIn('"-only-testing:{test}"', RUNNER)
 
 
 if __name__ == "__main__":

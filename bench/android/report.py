@@ -172,7 +172,10 @@ def normalize(measurement: Measurement) -> dict[str, Any]:
     if metric in ("timeNs", "cpuTimeNs"):
         metric = "timeMs"
         values = [value / 1_000_000 for value in values]
+    if metric in HIGHER_IS_WORSE:
         unit = "ms"
+    elif metric in MEMORY_METRICS:
+        unit = "Kb"
     return {
         "benchmark": measurement.key[2],
         "benchmark_kind": measurement.key[0],
@@ -296,6 +299,8 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
         if measurement.key[0] != "Macro":
             continue
         name = measurement.key[3]
+        if not name.startswith("EMULATOR_"):
+            raise ReportError(f"Complete macro evidence is missing AndroidX EMULATOR_ prefix: {name}")
         benchmark_identities[name] = (measurement.key[1], measurement.key[2])
         expected_iterations[name] = measurement.repeat_iterations
     for measurement in measurements:

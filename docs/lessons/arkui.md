@@ -22,6 +22,15 @@ replace the outer optional alias with the row item. Test the modifier on both Te
 Text leaf's local reference; rejected dynamic stack arguments are not alias-scope coverage.
 Event payload lowering needs the same set: retaining it only for the wrapped Text is insufficient when `onDragStart`
 reads an optional scalar, because that separate expression would incorrectly emit `this.alias` for a local binding.
+Platform selection is recursive expression lowering too: selecting the HarmonyOS branch of `refractValue` must retain
+the aliases received by a native argument. Dropping them at that recursion turns a List row's valid local alias into
+`this.alias`, even when the same argument works without platform selection. Test the selected scalar inside the lazy
+row, not only an unwrapped argument or a row-free screen. Dedicated view lowering also owns expression paths outside
+the ordinary Text leaf: Image `.accessibilityText` must receive the same set, or an optional alias becomes `this.alias`
+inside `LazyForEach` while Compose correctly retains the local. When a receiver has both accessibility and ordinary
+layout modifiers, keep that set while recursively lowering the remaining layout modifiers too; otherwise the earlier
+accessibility parameter is silently dropped before Image is emitted. Check the accepted SwiftUI form before diagnosing
+a missing alias; a dynamic TextField title is currently rejected for a localized key, not a placeholder-scope regression.
 
 ## A declared item input is not a lazy-row local
 
@@ -29,10 +38,14 @@ A generated child View can receive an `Identifiable` item as a stored input. Ark
 so its Toggle value and model-action identity must read `this.row.enabled` and `this.row.id`, just as its ordinary
 Text and measurement expressions read `this.row`. Only a current `LazyForEach` closure owns the unqualified local
 `row`. Distinguish the two scopes explicitly; a type match or identical property name does not make a component
-parameter a builder-local value. A current horizontal `ForEach` row with the same name shadows that parameter: both
-the Toggle value and model-action identity must use the active local, so apply `this.` only when no local alias owns
-the name. Regenerate every committed artifact derived from the changed lowering: the Fixtures
-goldens and the separate `bench/harmony/generate.py` output, whose `--check` must also remain byte-exact.
+parameter a builder-local value. Only declared `Identifiable` types belong to that input set: an interop parameter
+such as `RemoteImageLoader` also carries an `itemType` discriminator but is not an item input. A current lazy or
+horizontal `ForEach` row with the same name shadows either kind of parameter: both the Toggle value and model-action
+identity must use the active local, so apply `this.` only when no local alias owns the name. Regenerate every
+committed artifact derived from the changed lowering: the Fixtures goldens and the separate
+`bench/harmony/generate.py` output, whose `--check` must also remain byte-exact. Conditional emission must retain the
+current row's `itemTypeName`, just as stack recursion does; passing only its name makes a valid item Toggle's
+model-action write fail the receiver guard.
 
 ## LazyForEach needs a native data source and stable identity
 
@@ -58,6 +71,15 @@ verification.
 A `Scroll` needs a single direct container, so a multi-child Swift `ScrollView` becomes `Scroll { Column { ... } }`.
 Only the application owns its `@Entry` page. Generated reusable screens use `@ComponentV2` and are callable from
 ordinary native navigation without a host or global initialization.
+
+## A typed layout must retain the row type, not only its local name
+
+A `LazyForEach` row has both a local name and an item type. ArkUI's typed-layout recursion must retain both when a
+`VStack(spacing:)` contains an item Toggle. Passing only the local name leaves the model-action projection guard
+without its row type and rejects an accepted input with `state.invalid_projection`. Keep this context propagation
+separate from conditional recursion and receiver selection, and cover the exact path with paired output. When that
+golden joins the shared Android fixture compile set, give it a unique package if another case declares the same model
+type; independent CLI regeneration cannot detect a cross-fixture Kotlin `CLASSIFIER_REDECLARATION`.
 
 ## Declarative builders are not ordinary closures
 

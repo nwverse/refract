@@ -134,7 +134,10 @@ struct Generation {
             writer.open("build()")
             currentModals = screen.modals
             let previousItemParameters = screenItemTypes
-            declaredItemInputs = Set(screen.parameters.compactMap { $0.itemType == nil ? nil : $0.name })
+            declaredItemInputs = Set(screen.parameters.compactMap { input in
+                guard let itemType = input.itemType, itemTypes.contains(where: { $0.name == itemType }) else { return nil }
+                return input.name
+            })
             screenItemTypes = Dictionary(uniqueKeysWithValues: screen.parameters.compactMap { input in
                 input.itemType.map { (input.name, $0) }
             })
@@ -231,7 +234,7 @@ struct Generation {
                 }
                 for child in branch.children {
                     try emit(child, into: &writer, item: item, mapping: mapping, resolver: resolver,
-                             localAliases: localAliases)
+                             itemTypeName: itemTypeName, localAliases: localAliases)
                 }
             }
             writer.close()
@@ -366,7 +369,7 @@ struct Generation {
             }
         default:
             try emitExtended(node, into: &writer, item: item, lazyOwner: lazyOwner, mapping: mapping, resolver: resolver,
-                             localAliases: localAliases)
+                             itemTypeName: itemTypeName, localAliases: localAliases)
         }
     }
 

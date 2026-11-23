@@ -198,6 +198,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "interop-list-row-input-shadow",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "interop-media-capabilities",
       "implementationStatus": "ready"
     },
@@ -302,6 +306,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "list-image-accessibility-alias",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "list-paged-search",
       "implementationStatus": "ready"
     },
@@ -331,6 +339,10 @@
     },
     {
       "path": "list-reject-projection-sort",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "list-row-layout-toggle",
       "implementationStatus": "ready"
     },
     {
@@ -587,6 +599,10 @@
     },
     {
       "path": "v0-item-toggle",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "v0-item-toggle-conditional",
       "implementationStatus": "ready"
     },
     {

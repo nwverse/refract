@@ -28,6 +28,16 @@ On iOS, also require exactly one identity-matched `xcode-metric-json` per timing
 supporting evidence, not a substitute for the native launch or display-interval export. Do not infer ownership from a
 similar filename, duplicate a trace to fill missing iterations, or accept a median as a p99 sample.
 
+Native trace execution needs native API and lifecycle verification, not source-wiring tests alone. `XCUIApplication`
+has no supported `processIdentifier` member; obtain the app's own `ProcessInfo` PID through an identity-checked
+handshake. Python's environment does not automatically reach hosted XCTest, so configure an iteration-specific
+`.xctestrun` beside the original Build/Products test-run. An XCTest tap can appear hittable without delivering the
+button action when a List covers the overlay; place the native Begin control in a safe-area inset and require an
+identity-bound Begin acknowledgement before scenario execution. Also check the actual recorder template and output:
+a simulator can reject Hitches, and `xctrace` can print `Output file saved as: <bare-package-name>` instead of an
+absolute path. None of these control-plane corrections permits a skipped test, incomplete scenario or failed
+recorder to become a passing trace.
+
 ## Equal inputs need equal native behavior
 
 Both variants should use the same model, data, lazy-list identity, controls, accessibility and input script, but the
