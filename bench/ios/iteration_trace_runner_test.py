@@ -345,6 +345,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
             synthetic_final_samples(completedIterations=0), synthetic_final_samples(completedIterations=2),
             synthetic_final_samples(frameIntervalMs=[]),
             synthetic_final_samples(frameIntervalMs=[16.5, float("nan")]),
+            synthetic_final_samples(frameIntervalMs=[16.5, 10**400]),
             synthetic_final_samples(frameIntervalMs=[16.5, float("inf")]),
             synthetic_final_samples(frameIntervalMs=[16.5, -1]),
             synthetic_final_samples(frameIntervalMs=[16.5, True]),

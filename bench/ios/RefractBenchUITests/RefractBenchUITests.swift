@@ -27,9 +27,20 @@ private enum TraceHandshake {
         }
         guard let data = try? Data(contentsOf: path),
               let packet = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        for (key, value) in expected where !isEqual(packet[key], value) {
-            XCTFail("Stale or mismatched recorder \(key)")
-            return nil
+        for (key, value) in expected {
+            if key == "finalSamples" {
+                // JSON round-trips produce nested Any dictionaries. Compare their
+                // canonical bytes instead of weakening the scalar comparator.
+                guard let actual = packet[key] as? [String: Any],
+                      let expectedSamples = value as? [String: Any],
+                      canonicalSamples(actual) == canonicalSamples(expectedSamples) else {
+                    XCTFail("Stale or mismatched recorder finalSamples")
+                    return nil
+                }
+            } else if !isEqual(packet[key], value) {
+                XCTFail("Stale or mismatched recorder \(key)")
+                return nil
+            }
         }
         return packet
     }
@@ -70,6 +81,14 @@ private enum TraceHandshake {
             throw NSError(domain: "RefractBench.TraceHandshake", code: 3)
         }
         return samples
+    }
+
+    private static func canonicalSamples(_ samples: [String: Any]) -> Data? {
+        guard JSONSerialization.isValidJSONObject(samples),
+              let data = try? JSONSerialization.data(withJSONObject: samples, options: [.sortedKeys]) else {
+            return nil
+        }
+        return data
     }
 
     private static func isEqual(_ lhs: Any?, _ rhs: Any) -> Bool {

@@ -136,6 +136,14 @@ def checked_first_display(packet: dict) -> dict:
 
 def checked_final_samples(packet: dict, session: "Session", pid: int) -> dict:
     """Validate the immutable completion snapshot, never an asynchronous plist."""
+    def finite_positive_interval(value) -> bool:
+        if type(value) not in (int, float):
+            return False
+        try:
+            return math.isfinite(value) and value > 0
+        except OverflowError:
+            return False
+
     samples = packet.get("finalSamples")
     expected_keys = {"schema", "session", "sourceRevision", "variant", "scenario", "iteration", "pid",
                      "completedIterations", "recordedIteration", "frameIntervalMs", "iterationByFrame"}
@@ -153,8 +161,7 @@ def checked_final_samples(packet: dict, session: "Session", pid: int) -> dict:
     intervals = samples.get("frameIntervalMs")
     tags = samples.get("iterationByFrame")
     if (not isinstance(intervals, list) or not 0 < len(intervals) <= 4096
-            or any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
-                   for value in intervals)):
+            or any(not finite_positive_interval(value) for value in intervals)):
         raise HandshakeError("Final native display intervals must be nonempty, finite, positive and bounded")
     if (not isinstance(tags, list) or len(tags) != len(intervals)
             or any(type(tag) is not int or tag != session.iteration for tag in tags)):
@@ -295,6 +302,10 @@ class Session:
             if completion.get("state") != "complete":
                 raise HandshakeError("The application completion state is not complete")
             first_display = checked_first_display(completion) if self.scenario == "startup" else None
+            native_first_display = (checked_first_display(native_completion)
+                                    if self.scenario == "startup" else None)
+            if first_display != native_first_display:
+                raise HandshakeError("Forwarded completion must retain the exact native first-display evidence")
             native_final_samples = (checked_final_samples(native_completion, self, pid)
                                     if self.scenario in ("scroll", "stateUpdate") else None)
             final_samples = (checked_final_samples(completion, self, pid)

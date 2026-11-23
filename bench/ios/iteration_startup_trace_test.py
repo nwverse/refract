@@ -218,7 +218,8 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
 
 
 class SyntheticStartupSession:
-    def __init__(self, test: unittest.TestCase, packet: dict | None, completion: bool = True):
+    def __init__(self, test: unittest.TestCase, packet: dict | None, completion: bool = True,
+                 native_first_display: dict | None = None):
         temporary = tempfile.TemporaryDirectory()
         test.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -230,6 +231,7 @@ class SyntheticStartupSession:
         self.log.write_text("synthetic native test\n")
         self.packet = packet
         self.completion = completion
+        self.native_first_display = native_first_display
         self.test = test
         self.prepare_provenance()
         self.session = Session(target="synthetic-target", variant="generated", scenario="startup", iteration=0,
@@ -305,10 +307,13 @@ control = pathlib.Path({str(self.control)!r})
 while not (control / 'recorder-ready.json').exists():
     time.sleep(0.01)
 if {self.completion!r}:
-    native = json.loads({packet!r})
+    forwarded = json.loads({packet!r})
+    native = forwarded
+    if {self.native_first_display!r} is not None:
+        native = dict(forwarded, firstDisplay={self.native_first_display!r})
     (control / 'begin.json').write_text(json.dumps(dict(native, state='begin')))
     (control / 'native-completion.json').write_text(json.dumps(native))
-    (control / 'completion.json').write_text(json.dumps(native))
+    (control / 'completion.json').write_text(json.dumps(forwarded))
 while not (control / 'recorder-finished.json').exists():
     time.sleep(0.01)
 """)
@@ -356,6 +361,17 @@ class StartupTraceSessionTest(unittest.TestCase):
                 self.assertIs(type(evidence["timestamp"]), str)
         receipt_text = (capture.run / "raw/iteration-trace.json").read_text()
         self.assertIn('"timestamp": "600795.5970010418"', receipt_text)
+
+    def test_startup_capture_rejects_native_forwarded_timestamp_mismatch(self):
+        capture = SyntheticStartupSession(self, self.startup_completion(firstDisplay={
+            "clock": "CACurrentMediaTime", "timestamp": "600795.5970010418",
+        }), native_first_display={
+            "clock": "CACurrentMediaTime", "timestamp": "12345.25",
+        })
+        with self.assertRaisesRegex(HandshakeError, "exact native first-display"):
+            capture.capture()
+        self.assertFalse((capture.run / "raw/iteration-trace.json").exists())
+        self.assertFalse((capture.run / "raw/generated-startup-0.trace.zip").exists())
 
     def test_startup_capture_rejects_invalid_timestamp_strings_without_a_receipt(self):
         for timestamp in ("0", "-1", "nan", "inf", "600795.5970010419x", 600795.5970010418):

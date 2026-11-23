@@ -170,6 +170,7 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertLess(validation, forwarded)
         self.assertLess(forwarded, archive)
         self.assertIn("final_samples != native_final_samples", RUNNER)
+        self.assertIn("first_display != native_first_display", RUNNER)
         self.assertIn('atomic_json(self.raw / "native-samples.json", final_samples)', RUNNER)
         self.assertNotIn("refract.bench.frames", RUNNER)
         self.assertNotIn("UserDefaults", RUNNER)
@@ -194,13 +195,16 @@ class SwiftFinalSamplesContractTest(unittest.TestCase):
         swift = os.environ.get("REFRACT_SWIFTC") or shutil.which("swiftc")
         if swift is None:
             self.fail("The focused Swift source regression requires a Swift toolchain")
+        start = TESTS.index("    static func ready(")
+        ready = TESTS[start:TESTS.index("    static func firstDisplay", start)]
         start = TESTS.index("    static func finalSamples(")
-        end = TESTS.index("    private static func isEqual", start)
+        end = TESTS.index("\n}\n\n@MainActor\nfinal class", start)
         validation = TESTS[start:end]
         script = '''import Foundation
 
 enum ContractFailure: Error { case mismatch }
 enum TraceHandshake {
+@READY@
 @VALIDATION@
 }
 func XCTFail(_ message: String) {}
@@ -246,8 +250,28 @@ for intervals in [[], [Double.nan], [Double.infinity], [0.0], [-1.0], [16.5, 16.
 var tags = samples
 tags["iterationByFrame"] = [2, 1]
 check(tags, valid: false)
+let control = FileManager.default.temporaryDirectory
+    .appendingPathComponent("refract-final-samples-\\(UUID().uuidString)", isDirectory: true)
+try FileManager.default.createDirectory(at: control, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: control) }
+func writeFinished(_ packet: [String: Any]) throws {
+    try JSONSerialization.data(withJSONObject: packet, options: [.sortedKeys])
+        .write(to: control.appendingPathComponent("recorder-finished.json"))
+}
+try writeFinished(decoded)
+precondition(TraceHandshake.ready(in: control, expected: decoded,
+                                 name: "recorder-finished.json") != nil,
+             "valid finalSamples must survive the complete forwarding comparison")
+var mismatched = decoded
+mismatched["finalSamples"] = tags
+try writeFinished(tags)
+precondition(TraceHandshake.ready(in: control, expected: mismatched,
+                                 name: "recorder-finished.json") == nil,
+             "forwarding must reject mismatched finalSamples")
+precondition(TraceHandshake.ready(in: control, expected: ["state": "recorder-finished"],
+                                 name: "recorder-finished.json") == nil)
 print("exact Swift final sample validation passed")
-'''.replace("@VALIDATION@", validation)
+'''.replace("@READY@", ready).replace("@VALIDATION@", validation)
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "main.swift"
             path.write_text(script)
