@@ -241,17 +241,21 @@ class Session:
             # exists. PID and iteration identity are repeated to prevent reuse.
             acknowledgement = dict(request, state="recorder-ready", recorder_pid=recorder.pid,
                                    trace=str(self.trace))
-            self._reject_premature_packets()
+            # There is no second post-ready directory scan: Begin may become
+            # durable immediately after the acknowledgement link is published.
+            # Validate its actual state/PID below instead of racing its arrival.
             atomic_json(self.control_directory / "recorder-ready.json", acknowledgement)
-            self._reject_premature_packets()
             atomic_json(self.raw / "recorder-ready.json", acknowledgement)
 
             completion = wait_for(lambda: self._completion_if_present(), self.completion_timeout,
                                   "the exact native iteration completion",
                                   lambda: self._recorder_exit_after_ready(recorder))
-            unique_packet(self.control_directory, "begin", self)
+            begin = unique_packet(self.control_directory, "begin", self)
             native_completion = unique_packet(self.control_directory, "native-completion", self)
+            if begin.get("state") != "begin" or begin.get("pid") != pid or begin.get("process") != "running":
+                raise HandshakeError("The native Begin identity or process state does not match this iteration")
             if (native_completion.get("pid") != pid or native_completion.get("state") != "complete"
+                    or native_completion.get("process") != "running"
                     or native_completion.get("completion") != f"{self.variant} {self.scenario} complete 1"):
                 raise HandshakeError("The native completion identity does not match this iteration")
             if completion.get("state") != "complete":
@@ -325,18 +329,6 @@ class Session:
             if reader is not None:
                 reader.join(timeout=5)
             stream.close()
-
-    def _reject_premature_packets(self) -> None:
-        admitted = getattr(self, "_admitted_packets", set())
-        for path in self.control_directory.iterdir():
-            if path.name in admitted or path.name == "recorder-ready.json":
-                continue
-            if path.name in ("request.json", "native-process.json"):
-                # Duplicate identity packets are still invalid, not an alias
-                # for the packet admitted before capture started.
-                unique_packet(self.control_directory, path.stem, self)
-                continue
-            raise HandshakeError("Begin or completion arrived before recorder readiness")
 
     def _request_if_present(self):
         path = self.control_directory / "request.json"

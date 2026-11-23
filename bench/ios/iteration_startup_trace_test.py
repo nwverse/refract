@@ -301,7 +301,10 @@ control = pathlib.Path({str(self.control)!r})
 while not (control / 'recorder-ready.json').exists():
     time.sleep(0.01)
 if {self.completion!r}:
-    (control / 'completion.json').write_text({packet!r})
+    native = json.loads({packet!r})
+    (control / 'begin.json').write_text(json.dumps(dict(native, state='begin')))
+    (control / 'native-completion.json').write_text(json.dumps(native))
+    (control / 'completion.json').write_text(json.dumps(native))
 while not (control / 'recorder-finished.json').exists():
     time.sleep(0.01)
 """)
