@@ -87,6 +87,22 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('"pid": pid', TESTS)
 
 
+    def test_startup_uses_recorded_first_display_in_the_same_native_completion(self):
+        ready = APP.index('case ("generated", "startup"), ("reference", "startup"):')
+        completion = APP.index("completeStartup(iteration: iteration)", ready)
+        publish = APP.index('publishTracePacket(named: "native-completion.json"', completion)
+        self.assertLess(ready, completion)
+        self.assertLess(completion, publish)
+        self.assertIn('guard active, scenario == "startup", selectedIteration == iteration', RECORDER)
+        self.assertIn("let firstDisplay, firstDisplay.isFinite, firstDisplay > 0", RECORDER)
+        self.assertIn('firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": timestamp]', APP)
+        self.assertIn("firstDisplay: firstDisplay)", APP)
+        self.assertIn('Set(firstDisplay.keys) == ["clock", "timestamp"]', TESTS)
+        self.assertIn('firstDisplay["clock"] as? String == "CACurrentMediaTime"', TESTS)
+        self.assertIn("timestamp.isFinite, timestamp > 0", TESTS)
+        self.assertIn('if scenario == "startup"', TESTS)
+        self.assertNotIn("CACurrentMediaTime()", TESTS)
+
     def test_build_and_trace_provenance_precedes_unchanged_capture_contract(self):
         build = BUILD.index("build-for-testing")
         source_check = BUILD.index('git -C "$root" rev-parse HEAD', build)

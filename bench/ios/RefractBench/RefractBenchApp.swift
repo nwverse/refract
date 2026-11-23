@@ -154,18 +154,24 @@ private func runTracedIteration(variant: String, model: BenchmarkSettingsModel) 
             try await Task.sleep(for: .milliseconds(10))
         }
         try await Task.yield()
+        var firstDisplay: [String: Any]?
         switch (variant, scenario) {
         case ("generated", "scroll"), ("reference", "scroll"):
             await runScroll(variant: variant, model: model)
         case ("generated", "stateUpdate"), ("reference", "stateUpdate"):
             await runUpdates(variant: variant, model: model)
+        case ("generated", "startup"), ("reference", "startup"):
+            guard let timestamp = BenchmarkDisplayRecorder.shared.completeStartup(iteration: iteration),
+                  timestamp > 0 else { return }
+            firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": timestamp]
         default:
             return
         }
         try publishTracePacket(named: "native-completion.json", in: directory,
                                revision: revision, variant: variant, scenario: scenario,
                                iteration: iteration, state: "complete",
-                               completion: "\(variant) \(scenario) complete 1")
+                               completion: "\(variant) \(scenario) complete 1",
+                               firstDisplay: firstDisplay)
     } catch {
         // XCTest observes the absence of native completion and fails closed.
     }
@@ -220,7 +226,8 @@ private func traceControlDirectory() -> URL? {
 @MainActor
 private func publishTracePacket(named name: String, in directory: URL, revision: String,
                                 variant: String, scenario: String, iteration: Int,
-                                state: String, completion: String? = nil) throws {
+                                state: String, completion: String? = nil,
+                                firstDisplay: [String: Any]? = nil) throws {
     var packet: [String: Any] = [
         "schema": 1,
         "session": 1,
@@ -234,6 +241,9 @@ private func publishTracePacket(named name: String, in directory: URL, revision:
     ]
     if let completion {
         packet["completion"] = completion
+    }
+    if let firstDisplay {
+        packet["firstDisplay"] = firstDisplay
     }
     let data = try JSONSerialization.data(withJSONObject: packet, options: [.sortedKeys])
     let destination = directory.appendingPathComponent(name)

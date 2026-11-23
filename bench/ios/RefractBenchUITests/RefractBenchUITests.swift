@@ -77,6 +77,14 @@ final class RefractBenchUITests: XCTestCase {
         try runTracedIteration("stateUpdate", variant: "reference")
     }
 
+    func testGeneratedStartupTrace() throws {
+        try runTracedIteration("startup", variant: "generated")
+    }
+
+    func testReferenceStartupTrace() throws {
+        try runTracedIteration("startup", variant: "reference")
+    }
+
     private func launchMetric(_ variant: String) {
         let options = XCTMeasureOptions()
         options.iterationCount = 30
@@ -221,6 +229,16 @@ final class RefractBenchUITests: XCTestCase {
                   let completionPID = completionPacket["pid"] as? Int, completionPID == pid else {
                 XCTFail("The native completion identity or PID does not match the attached process")
                 return
+            }
+            if scenario == "startup" {
+                guard let firstDisplay = completionPacket["firstDisplay"] as? [String: Any],
+                      Set(firstDisplay.keys) == ["clock", "timestamp"],
+                      firstDisplay["clock"] as? String == "CACurrentMediaTime",
+                      let timestamp = firstDisplay["timestamp"] as? Double,
+                      timestamp.isFinite, timestamp > 0 else {
+                    XCTFail("Startup requires finite first-display evidence from the attached native process")
+                    return
+                }
             }
             try TraceHandshake.write(completionPacket, named: "completion.json", in: control)
             var expectedFinished = completionPacket
