@@ -195,16 +195,21 @@ class Session:
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
-        # XCTest may publish its identity while the build is being verified.
-        # Reject reused control state before this slow validation, then let the
-        # ordinary request/ready/completion waits admit only this run's packets.
-        # No completion is valid before this capture publishes recorder-ready.
-        if any(self.control_directory.iterdir()):
-            raise HandshakeError("Refusing a reused or stale control directory")
         if self.derived_data is not None:
             validate_build_provenance(self.derived_data, self.revision)
         validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
+        # A fresh run starts with no accepted packets. The test process begins
+        # before this method, so only the identity packet it may publish before
+        # this point is valid. Begin and completion cannot precede our recorder.
+        self._admitted_packets = set()
+        for path in self.control_directory.iterdir():
+            if path.name not in ("request.json", "native-process.json"):
+                raise HandshakeError("Refusing a reused or stale control directory")
+            # A known filename is not admission: validate its complete identity
+            # now, while keeping the normal request wait as the sole reader.
+            unique_packet(self.control_directory, path.stem, self)
+            self._admitted_packets.add(path.name)
         self.raw.mkdir(exist_ok=False)
         recorder = None
         reader = None
@@ -236,12 +241,19 @@ class Session:
             # exists. PID and iteration identity are repeated to prevent reuse.
             acknowledgement = dict(request, state="recorder-ready", recorder_pid=recorder.pid,
                                    trace=str(self.trace))
+            self._reject_premature_packets()
             atomic_json(self.control_directory / "recorder-ready.json", acknowledgement)
+            self._reject_premature_packets()
             atomic_json(self.raw / "recorder-ready.json", acknowledgement)
 
             completion = wait_for(lambda: self._completion_if_present(), self.completion_timeout,
                                   "the exact native iteration completion",
                                   lambda: self._recorder_exit_after_ready(recorder))
+            unique_packet(self.control_directory, "begin", self)
+            native_completion = unique_packet(self.control_directory, "native-completion", self)
+            if (native_completion.get("pid") != pid or native_completion.get("state") != "complete"
+                    or native_completion.get("completion") != f"{self.variant} {self.scenario} complete 1"):
+                raise HandshakeError("The native completion identity does not match this iteration")
             if completion.get("state") != "complete":
                 raise HandshakeError("The application completion state is not complete")
             first_display = checked_first_display(completion) if self.scenario == "startup" else None
@@ -313,6 +325,18 @@ class Session:
             if reader is not None:
                 reader.join(timeout=5)
             stream.close()
+
+    def _reject_premature_packets(self) -> None:
+        admitted = getattr(self, "_admitted_packets", set())
+        for path in self.control_directory.iterdir():
+            if path.name in admitted or path.name == "recorder-ready.json":
+                continue
+            if path.name in ("request.json", "native-process.json"):
+                # Duplicate identity packets are still invalid, not an alias
+                # for the packet admitted before capture started.
+                unique_packet(self.control_directory, path.stem, self)
+                continue
+            raise HandshakeError("Begin or completion arrived before recorder readiness")
 
     def _request_if_present(self):
         path = self.control_directory / "request.json"
