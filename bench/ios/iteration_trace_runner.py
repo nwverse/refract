@@ -205,6 +205,17 @@ class Session:
             validate_build_provenance(self.derived_data, self.revision)
         validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
+        # A fresh run starts with no accepted packets. The test process begins
+        # before this method, so only the identity packet it may publish before
+        # this point is valid. Begin and completion cannot precede our recorder.
+        self._admitted_packets = set()
+        for path in self.control_directory.iterdir():
+            if path.name not in ("request.json", "native-process.json"):
+                raise HandshakeError("Refusing a reused or stale control directory")
+            # A known filename is not admission: validate its complete identity
+            # now, while keeping the normal request wait as the sole reader.
+            unique_packet(self.control_directory, path.stem, self)
+            self._admitted_packets.add(path.name)
         self.raw.mkdir(exist_ok=False)
         recorder = None
         reader = None
@@ -236,12 +247,23 @@ class Session:
             # exists. PID and iteration identity are repeated to prevent reuse.
             acknowledgement = dict(request, state="recorder-ready", recorder_pid=recorder.pid,
                                    trace=str(self.trace))
+            # There is no second post-ready directory scan: Begin may become
+            # durable immediately after the acknowledgement link is published.
+            # Validate its actual state/PID below instead of racing its arrival.
             atomic_json(self.control_directory / "recorder-ready.json", acknowledgement)
             atomic_json(self.raw / "recorder-ready.json", acknowledgement)
 
             completion = wait_for(lambda: self._completion_if_present(), self.completion_timeout,
                                   "the exact native iteration completion",
                                   lambda: self._recorder_exit_after_ready(recorder))
+            begin = unique_packet(self.control_directory, "begin", self)
+            native_completion = unique_packet(self.control_directory, "native-completion", self)
+            if begin.get("state") != "begin" or begin.get("pid") != pid or begin.get("process") != "running":
+                raise HandshakeError("The native Begin identity or process state does not match this iteration")
+            if (native_completion.get("pid") != pid or native_completion.get("state") != "complete"
+                    or native_completion.get("process") != "running"
+                    or native_completion.get("completion") != f"{self.variant} {self.scenario} complete 1"):
+                raise HandshakeError("The native completion identity does not match this iteration")
             if completion.get("state") != "complete":
                 raise HandshakeError("The application completion state is not complete")
             first_display = checked_first_display(completion) if self.scenario == "startup" else None

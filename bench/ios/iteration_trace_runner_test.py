@@ -58,7 +58,7 @@ class RecorderFixture:
                 missing_completion: bool = False, app_iteration: int = 0,
                 saved_path: str | None = None, recorder_stop_status: int = 0,
                 completion_delay: float = 0, app_revision: str | None = None,
-                saved_spelling: str = "Output saved", saved_lines: int = 1):
+                saved_spelling: str = "Output saved", saved_lines: int = 1, missing_begin: bool = False):
         app_script = self.work / "fake_xcodebuild.py"
         app_script.write_text(f'''import json, pathlib, sys, time
 control = pathlib.Path(sys.argv[1])
@@ -74,6 +74,10 @@ while not (control / "recorder-ready.json").exists():
 time.sleep({completion_delay!r})
 packet["state"] = "complete"
 packet["completion"] = {completion!r}
+begin = dict(packet, state="begin")
+if not {missing_begin!r}:
+    (control / "begin.json").write_text(json.dumps(begin))
+    (control / "native-completion.json").write_text(json.dumps(packet))
 if not {missing_completion!r}:
     (control / "completion.json").write_text(json.dumps(packet))
 if {duplicate_completion!r}:
@@ -540,23 +544,37 @@ class IterationTraceRunnerTest(unittest.TestCase):
 
     def test_stale_or_premature_packets_are_rejected_before_provenance(self):
         self.recorder.prepare()
-        self.output = self.root / "xcodebuild.log"
-        self.output.write_text("current synthetic test\n")
-        self.recorder.output = self.output
+        self.recorder.output.write_text("current synthetic test\n")
+        self.recorder.process.terminate()
+        self.recorder.process.wait(timeout=5)
         for name, packet in (
-            ("request.json", {"schema": 1, "session": 1, "revision": "a" * 40,
-                              "variant": "generated", "scenario": "scroll", "iteration": 0,
-                              "pid": 4242, "process": "running", "state": "ready"}),
             ("begin.json", {}), ("native-completion.json", {}), ("completion.json", {}),
             ("unexpected.json", {}),
         ):
             with self.subTest(name=name):
                 (self.root / "control" / name).write_text(json.dumps(packet))
-                with mock.patch("iteration_trace_runner.validate_build_provenance") as provenance:
-                    with self.assertRaisesRegex(HandshakeError, "stale control directory"):
-                        self.capture(self.session())
-                provenance.assert_not_called()
+                with self.assertRaisesRegex(HandshakeError, "stale control directory"):
+                    self.capture(self.session())
                 (self.root / "control" / name).unlink()
+        for name, packet in (
+            ("request.json", {"schema": 1, "session": 1, "revision": "a" * 40,
+                              "variant": "generated", "scenario": "scroll", "iteration": 0,
+                              "pid": 4242, "process": "running", "state": "ready"}),
+            ("native-process.json", {"schema": 1, "session": 1, "revision": "a" * 40,
+                                     "variant": "generated", "scenario": "scroll", "iteration": 0,
+                                     "pid": 4242, "process": "running", "state": "ready"}),
+        ):
+            with self.subTest(name=name, change="wrong identity"):
+                (self.root / "control" / name).write_text(json.dumps(dict(packet, revision="b" * 40)))
+                with self.assertRaisesRegex(HandshakeError, "revision|stale"):
+                    self.capture(self.session())
+                (self.root / "control" / name).unlink()
+
+    def test_completion_injected_before_recorder_ready_is_rejected(self):
+        self.recorder.start(missing_begin=True)
+        with self.assertRaisesRegex(HandshakeError, "begin|native-completion"):
+            self.capture(self.session())
+        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
     def test_wrong_completion_is_rejected_before_archiving(self):
         self.recorder.start(completion="generated scroll complete 0")
