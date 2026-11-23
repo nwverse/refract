@@ -58,12 +58,14 @@ class RecorderFixture:
             root.mkdir(exist_ok=True)
             (root / "control").mkdir(exist_ok=True)
 
-    def start(self, preflight=None, **kwargs):
+    def start(self, preflight=None, session=None, **kwargs):
         # Mirror the real launch order: freeze the fresh control epoch before
         # the synthetic XCTest process is spawned. Callers that exercise the
         # runner protocol pass a preflight callback (typically
         # session.record_capture_start_epoch); negative fixtures that inject
         # pre-existing packets skip preflight on purpose.
+        if preflight is None and session is not None:
+            preflight = session.record_capture_start_epoch
         if preflight is not None:
             preflight()
         self.prepare(**kwargs)
@@ -270,7 +272,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.environment = dict(os.environ, TARGET_UDID="synthetic-target")
         self.trace = self.root / "generated-scroll-0.trace"
 
-    def session(self, **kwargs):
+    def session(self, start=False, **kwargs):
         values = dict(target="synthetic-target", variant="generated", scenario="scroll", iteration=0,
                       revision="a" * 40, run_directory=self.root, xcodebuild_log=self.recorder.output,
                       control_directory=self.root / "control", readiness_timeout=0.5, completion_timeout=0.5)
@@ -280,10 +282,18 @@ class IterationTraceRunnerTest(unittest.TestCase):
             derived_data, destination = self.write_synthetic_configuration(
                 values["run_directory"], values["revision"], values["control_directory"], values["iteration"])
             values["derived_data"] = derived_data
-        return Session(**values)
+        session = Session(**values)
+        if start:
+            self.recorder.start(session=session)
+        return session
 
     def capture(self, session, fixture=None):
         fixture = fixture or self.recorder
+        if getattr(session, "_capture_epoch", None) is None:
+            # A direct synthetic Session has no real main() preflight. Freeze
+            # before invoking capture, not after the packet checks, mirroring
+            # the explicit launch boundary used by the real CLI.
+            session.record_capture_start_epoch()
         with mock.patch("iteration_trace_runner.subprocess.run", side_effect=self.read_synthetic_environment):
             return session.capture(fixture.process, fixture.recorder_factory)
 
@@ -340,7 +350,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
             (self.root / "raw/native-samples.json").read_bytes()).hexdigest())
 
     def test_stale_periodic_plist_cannot_override_the_valid_final_packet(self):
-        self.recorder.start(stale_periodic_plist=True)
+        self.recorder.start(session=self.session(), stale_periodic_plist=True)
         result = self.capture(self.session())
         self.recorder.process.wait(timeout=5)
         plist = plistlib.loads((self.root / "control/diagnostic.plist").read_bytes())
@@ -379,7 +389,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     checked_final_samples({"finalSamples": samples}, session, 4242)
 
     def test_native_packet_and_forwarded_samples_must_be_identical(self):
-        self.recorder.start(native_samples=synthetic_final_samples(frameIntervalMs=[16.5, 16.5, 16.5]))
+        self.recorder.start(session=self.session(), native_samples=synthetic_final_samples(frameIntervalMs=[16.5, 16.5, 16.5]))
         with self.assertRaisesRegex(HandshakeError, "exact native final sample"):
             self.capture(self.session())
         self.assertFalse((self.root / "raw/native-samples.json").exists())
@@ -402,15 +412,16 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 root.mkdir()
                 recorder = RecorderFixture(root)
                 self.addCleanup(recorder.stop)
+                session = self.session(run_directory=root, xcodebuild_log=recorder.output,
+                                       control_directory=root / "control")
                 if change == "duplicate":
-                    recorder.start(duplicate_native_completion=True)
+                    recorder.start(session=session, duplicate_native_completion=True)
                 elif change is None:
-                    recorder.start(final_samples=None)
+                    recorder.start(session=session, final_samples=None)
                 else:
-                    recorder.start(final_samples=synthetic_final_samples(**change))
+                    recorder.start(session=session, final_samples=synthetic_final_samples(**change))
                 with self.assertRaisesRegex(HandshakeError, "sample|frame|display|interval|Ambiguous"):
-                    self.capture(self.session(run_directory=root, xcodebuild_log=recorder.output,
-                                              control_directory=root / "control"), recorder)
+                    self.capture(session, recorder)
                 self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
                 self.assertFalse((root / "raw/native-samples.json").exists())
                 self.assertFalse((root / "raw/iteration-trace.json").exists())
@@ -452,7 +463,6 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.root = self.root / "current-cli-run"
         self.recorder = RecorderFixture(self.root, create_run_directory=False)
         self.addCleanup(self.recorder.stop)
-        self.recorder.prepare()
         derived_data = self.root.parent / "DerivedData"
         products = derived_data / "Build/Products/Release-iphonesimulator"
         test_bundle = products / "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest"
@@ -505,6 +515,9 @@ class IterationTraceRunnerTest(unittest.TestCase):
 
         def popen(command, **kwargs):
             if command[0] == "xcodebuild":
+                # main() has created and preflighted the fresh control epoch
+                # before reaching Popen; only now may the fake XCTest publish.
+                self.recorder.prepare()
                 return self.recorder.process
             return original_popen(command, **kwargs)
 
@@ -795,6 +808,17 @@ while not (control / 'recorder-finished.json').exists():
         self.recorder.process = subprocess.Popen(
             ["python3", "-I", str(script), str(control)],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        def stop_fast_test():
+            process = self.recorder.process
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate(timeout=5)
+        self.recorder.cleanup = stop_fast_test
         # Wait for request.json to be durable: the fake XCTest is running
         # and has crossed its launch boundary.
         deadline = time.monotonic() + 5
