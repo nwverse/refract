@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import plistlib
 import re
@@ -33,7 +34,7 @@ class HandshakeError(ValueError):
 
 
 VARIANTS = ("generated", "reference")
-SCENARIOS = ("scroll", "stateUpdate")
+SCENARIOS = ("scroll", "stateUpdate", "startup")
 TARGET_PROBE_FILENAMES = ("targets.json", "simulators.json", "target.json")
 READY_OUTPUT = re.compile(r"(?:^|\n)Starting recording with the (.+?) template\.[^\n]*(?:\n|$)")
 SAVED_OUTPUT = re.compile(r"(?:^|\n)Output (?:file saved as|saved): (.+?)\s*(?:\n|$)")
@@ -93,6 +94,8 @@ def unique_packet(directory: Path, stem: str, session: "Session") -> dict:
     if not directory.is_dir() or directory.is_symlink():
         raise HandshakeError("Control directory must be a real directory")
     matches = sorted(path for path in directory.glob(f"{stem}*.json") if path.is_file() and not path.is_symlink())
+    if not matches:
+        raise HandshakeError(f"Missing {stem} packet: expected exactly {stem}.json")
     if len(matches) != 1 or matches[0].name != f"{stem}.json":
         raise HandshakeError(f"Ambiguous {stem} packets: expected exactly {stem}.json")
     packet = read_json(matches[0])
@@ -111,6 +114,18 @@ def wait_for(check, timeout: float, description: str, interrupted=None):
         if time.monotonic() >= deadline:
             raise HandshakeError(f"Timed out waiting for {description}")
         time.sleep(0.01)
+
+
+def checked_first_display(packet: dict) -> dict:
+    """Retain app-recorded monotonic first-display evidence, never elapsed shell time."""
+    evidence = packet.get("firstDisplay")
+    if (not isinstance(evidence, dict) or set(evidence) != {"clock", "timestamp"}
+            or evidence.get("clock") != "CACurrentMediaTime"):
+        raise HandshakeError("Startup completion requires exact native first-display evidence")
+    timestamp = evidence.get("timestamp")
+    if type(timestamp) not in (int, float) or not math.isfinite(timestamp) or timestamp <= 0:
+        raise HandshakeError("Startup first-display timestamp must be one finite positive number")
+    return evidence
 
 
 class Session:
@@ -219,11 +234,13 @@ class Session:
                                   lambda: self._recorder_exit_after_ready(recorder))
             if completion.get("state") != "complete":
                 raise HandshakeError("The application completion state is not complete")
+            first_display = checked_first_display(completion) if self.scenario == "startup" else None
             # Accessibility reports this launch's native completion count (one),
             # not a cumulative count from the retired single-launch task.
             expected_completion = f"{self.variant} {self.scenario} complete 1"
-            if completion.get("completion") != expected_completion or completion.get("pid") != pid:
-                raise HandshakeError("The native completion or PID does not match this iteration")
+            if (completion.get("completion") != expected_completion or completion.get("pid") != pid
+                    or completion.get("process") != "running"):
+                raise HandshakeError("The native completion, process state or PID does not match this iteration")
             # XCTest may return as soon as the app terminates. Its final exit
             # status is checked by main after this recorder is fully stopped.
             atomic_json(self.raw / "completion.json", completion)
@@ -271,6 +288,8 @@ class Session:
                                      self.derived_data)
             if self.derived_data is not None:
                 validate_build_provenance(self.derived_data, self.revision)
+            if first_display is not None:
+                result["native_first_display"] = first_display
             atomic_json(self.raw / "iteration-trace.json", result)
             return result
         finally:
@@ -466,7 +485,7 @@ def original_test_run(derived_data: Path, build_provenance: dict) -> Path:
 
 def traced_test_name(variant: str, scenario: str) -> str:
     """Return the existing Swift XCTest selector without changing its camel case."""
-    selector = {"scroll": "Scroll", "stateUpdate": "StateUpdate"}[scenario]
+    selector = {"scroll": "Scroll", "stateUpdate": "StateUpdate", "startup": "Startup"}[scenario]
     return f"RefractBenchUITests/RefractBenchUITests/test{variant.capitalize()}{selector}Trace"
 
 
