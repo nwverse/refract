@@ -172,8 +172,9 @@ signal.pause()
         return self.start_process(script, command)
 
     def capture(self):
+        """Drive runner request/completion, not the full Swift native handshake."""
         packet = json.dumps(self.packet)
-        script = self.root / "native.py"
+        script = self.root / "request_completion.py"
         script.write_text(f"""import json, pathlib, time
 control = pathlib.Path({str(self.control)!r})
 (control / 'request.json').write_text(json.dumps({{
@@ -186,11 +187,11 @@ if {self.completion!r}:
 while not (control / 'recorder-finished.json').exists():
     time.sleep(0.01)
 """)
-        native = self.start_process(script)
+        request_writer = self.start_process(script)
         with mock.patch("iteration_trace_runner.subprocess.run", side_effect=self.read_environment):
-            result = self.session.capture(native, self.recorder)
+            result = self.session.capture(request_writer, self.recorder)
         if result["status"] == "complete":
-            native.wait(timeout=5)
+            request_writer.wait(timeout=5)
         return result
 
     def stop(self):

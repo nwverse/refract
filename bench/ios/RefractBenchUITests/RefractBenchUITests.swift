@@ -17,6 +17,14 @@ private enum TraceHandshake {
     static func ready(in directory: URL, expected: [String: Any],
                       name: String = "recorder-ready.json") -> [String: Any]? {
         let path = directory.appendingPathComponent(name)
+        if name == "native-process.json" || name == "native-completion.json" || name == "begin.json" {
+            let stem = name.dropLast(".json".count)
+            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: directory.path),
+                  entries.filter({ $0.hasPrefix(stem) && $0.hasSuffix(".json") }).sorted() == [name] else {
+                XCTFail("Missing or ambiguous \(name) native packet")
+                return nil
+            }
+        }
         guard let data = try? Data(contentsOf: path),
               let packet = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         for (key, value) in expected where !isEqual(packet[key], value) {

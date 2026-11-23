@@ -87,6 +87,18 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('"pid": pid', TESTS)
 
 
+    def test_duplicate_native_packets_fail_before_completion_is_forwarded(self):
+        check = TESTS.index('if name == "native-process.json" || name == "native-completion.json" || name == "begin.json"')
+        unique = TESTS.index('entries.filter({ $0.hasPrefix(stem) && $0.hasSuffix(".json") }).sorted() == [name]', check)
+        failure = TESTS.index('XCTFail("Missing or ambiguous', unique)
+        self.assertLess(check, unique)
+        self.assertLess(unique, failure)
+        for name in ("native-process.json", "native-completion.json", "begin.json"):
+            self.assertIn(f'name == "{name}"', TESTS[check:unique])
+        self.assertIn("name: \"native-completion.json\") != nil", TESTS)
+        self.assertLess(TESTS.index("completionPID == pid"),
+                        TESTS.index('try TraceHandshake.write(completionPacket, named: "completion.json"'))
+
     def test_startup_uses_recorded_first_display_in_the_same_native_completion(self):
         ready = APP.index('case ("generated", "startup"), ("reference", "startup"):')
         completion = APP.index("completeStartup(iteration: iteration)", ready)
