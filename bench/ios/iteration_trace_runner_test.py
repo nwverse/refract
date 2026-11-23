@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -120,6 +121,7 @@ while not (control / "recorder-stop").exists():
         self.process = subprocess.Popen(
             ["python3", "-I", str(app_script), str(self.root / "control")],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.process.create_time = time.time()
 
         def factory(command, log):
             environment = dict(os.environ, REFRACT_SYNTHETIC_XCRUN=str(self.commands))
@@ -519,6 +521,50 @@ class IterationTraceRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(HandshakeError, "readiness|Starting recording"):
             self.capture(self.session())
         self.assertFalse((self.root / "control/recorder-ready.json").exists())
+
+    def test_current_test_packets_may_arrive_during_provenance_checks(self):
+        self.recorder.start()
+        self.recorder.process.create_time = time.time() - 1
+        packet = {"schema": 1, "session": 1, "revision": "a" * 40,
+                  "variant": "generated", "scenario": "scroll", "iteration": 0,
+                  "pid": 4242, "process": "running", "state": "complete",
+                  "completion": "generated scroll complete 0"}
+        (self.root / "control/completion.json").write_text(json.dumps(packet))
+        (self.root / "control/completion.json").touch()
+        with self.assertRaisesRegex(HandshakeError, "completion|PID"):
+            self.capture(self.session())
+        self.assertTrue((self.root / "raw/request.json").is_file())
+        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
+
+    def test_early_packets_must_be_current_valid_and_from_running_test(self):
+        self.recorder.start()
+        valid = {"schema": 1, "session": 1, "revision": "a" * 40,
+                 "variant": "generated", "scenario": "scroll", "iteration": 0,
+                 "pid": 4242, "process": "running", "state": "complete",
+                 "completion": "generated scroll complete 0"}
+        (self.root / "control/completion.json").write_text(json.dumps(valid))
+        old = time.time() - 60
+        os.utime(self.root / "control/completion.json", (old, old))
+        with self.assertRaisesRegex(HandshakeError, "stale control directory"):
+            self.capture(self.session())
+        (self.root / "control/completion.json").unlink()
+
+        (self.root / "control/unexpected.json").write_text(json.dumps(valid))
+        with self.assertRaisesRegex(HandshakeError, "stale control directory"):
+            self.capture(self.session())
+        (self.root / "control/unexpected.json").unlink()
+
+        (self.root / "control/completion.json").write_text(json.dumps(dict(valid, revision="b" * 40)))
+        (self.root / "control/completion.json").touch()
+        with self.assertRaisesRegex(HandshakeError, "revision|stale"):
+            self.capture(self.session())
+        (self.root / "control/completion.json").unlink()
+
+        (self.root / "control/completion.json").write_text(json.dumps(valid))
+        (self.root / "control/completion.json").touch()
+        del self.recorder.process.create_time
+        with self.assertRaisesRegex(HandshakeError, "start time"):
+            self.capture(self.session())
 
     def test_wrong_completion_is_rejected_before_archiving(self):
         self.recorder.start(completion="generated scroll complete 0")
