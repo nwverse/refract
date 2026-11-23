@@ -37,6 +37,7 @@ def complete_androidx_benchmarks(iterations=10):
                              "memoryRssAnonLastKb": {"runs": [100.0] * 10}}),
         ):
             value = report_test.benchmark(variant, scenario, metrics)
+            value["name"] = f"EMULATOR_{value['name']}"
             value["profilerOutputs"] = [{
                 "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
                 "filename": faithful_trace_filename(variant.lower(), scenario, iteration),
@@ -47,11 +48,7 @@ def complete_androidx_benchmarks(iterations=10):
     return values
 
 
-def faithful_trace_filename(variant, scenario, iteration):
-    method = {"startup": "Startup", "scroll": "Macrobenchmark[scroll]", "stateUpdate": "StateUpdate"}[scenario]
-    # AndroidX 1.4.1 MacrobenchmarkRule uses the simple class name and
-    # PerfettoCaptureWrapper appends this exact timestamp format.
-    return f"SettingsMacrobenchmark_{variant}{method}_iter{iteration:03d}_2026-01-02-03-04-{iteration:02d}.perfetto-trace"
+faithful_trace_filename = report_test.faithful_trace_filename
 
 
 def properties(**changes):
@@ -194,8 +191,7 @@ class EvidenceCollectionTest(unittest.TestCase):
     def test_ten_timestamped_androidx_iterations_bind_exact_relative_paths(self):
         benchmarks = complete_androidx_benchmarks()
         for value in benchmarks:
-            if value["name"].endswith("Macrobenchmark.scroll") and value["name"].startswith("dev") \
-                    and "generated" in value["name"]:
+            if value["name"] == "EMULATOR_dev.refract.bench.test.SettingsMacrobenchmark.generatedMacrobenchmark.scroll":
                 value["profilerOutputs"] = [{
                     "type": "PerfettoTrace", "label": f"Trace Iteration {iteration}",
                     "filename": f"generatedMacrobenchmark[scroll]_iter{iteration:03d}_2026-01-02-03-04-{iteration:02d}.perfetto-trace",
