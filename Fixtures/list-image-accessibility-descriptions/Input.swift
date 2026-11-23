@@ -16,7 +16,7 @@ struct AccessibleImageList: View {
         if let value = description {
             List {
                 ForEach(model.items) { row in
-                    Image("profile_photo")
+                    Image("description_profile_photo")
                         .accessibilityLabel(Text(value))
                         .accessibilityHint(Text(value))
                         .accessibilityValue(Text(value))

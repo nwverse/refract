@@ -24,7 +24,7 @@ export struct AccessibleImageList {
       List() {
         LazyForEach(this.model.items, (row: AccessibleImageItem) => {
           ListItem() {
-            Image($r('app.media.profile_photo'))
+            Image($r('app.media.description_profile_photo'))
             .accessibilityText(value)
             .accessibilityDescription(value)
             .accessibilityStateDescription(value).width(44)

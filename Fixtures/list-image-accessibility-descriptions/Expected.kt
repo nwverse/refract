@@ -45,7 +45,7 @@ public fun AccessibleImageList(
                     key = { row -> row.id },
                     contentType = { "AccessibleImageItem" },
                 ) { row ->
-                    Image(painter = painterResource(R.drawable.profile_photo), contentDescription = null, modifier = Modifier.width(44.dp).semantics {
+                    Image(painter = painterResource(R.drawable.description_profile_photo), contentDescription = null, modifier = Modifier.width(44.dp).semantics {
                     contentDescription = value + " " + value
                     stateDescription = value
                     })
