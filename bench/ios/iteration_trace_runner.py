@@ -36,7 +36,7 @@ VARIANTS = ("generated", "reference")
 SCENARIOS = ("scroll", "stateUpdate")
 TARGET_PROBE_FILENAMES = ("targets.json", "simulators.json", "target.json")
 READY_OUTPUT = re.compile(r"(?:^|\n)Starting recording with the (.+?) template\.[^\n]*(?:\n|$)")
-SAVED_OUTPUT = re.compile(r"(?:^|\n)Output saved: (.+?)\s*(?:\n|$)")
+SAVED_OUTPUT = re.compile(r"(?:^|\n)Output (?:file saved as|saved): (.+?)\s*(?:\n|$)")
 
 
 def atomic_json(path: Path, payload: dict) -> None:
@@ -77,6 +77,7 @@ def checked_identity(packet: dict, session: "Session") -> None:
     expected = {
         "schema": 1,
         "session": session.session_id,
+        "revision": session.revision,
         "variant": session.variant,
         "scenario": session.scenario,
         "iteration": session.iteration,
@@ -248,7 +249,7 @@ class Session:
             if status != 0:
                 raise HandshakeError(f"Instruments recorder exited with status {status}; trace is not accepted")
             saved = SAVED_OUTPUT.findall(self._output)
-            if len(saved) != 1 or Path(saved[0].strip()) != self.trace:
+            if len(saved) != 1 or not saved_trace_matches(saved[0], self.trace):
                 raise HandshakeError("Instruments did not save the exact requested trace package")
             size, checksum = archive_trace(self.trace, self.archive)
             finished = dict(completion, state="recorder-finished", recorder_exit=status,
@@ -590,6 +591,12 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
     return destination
 
 
+def saved_trace_matches(saved: str, requested: Path) -> bool:
+    """xctrace may print a bare package name even when --output was absolute."""
+    path = Path(saved.strip())
+    return path == requested or (path.parent == Path(".") and path.name == requested.name)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-directory", required=True, type=Path, help="A new directory for one iteration")
@@ -601,6 +608,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenario", required=True, choices=SCENARIOS)
     parser.add_argument("--iteration", required=True, type=int)
     parser.add_argument("--source-revision", required=True)
+    parser.add_argument("--template", default="Animation Hitches",
+                        help="Explicit Instruments template supported by the selected target")
     parser.add_argument("--readiness-timeout", type=float, default=60)
     parser.add_argument("--completion-timeout", type=float, default=180)
     args = parser.parse_args(argv)
@@ -656,8 +665,8 @@ def main(argv: list[str] | None = None) -> int:
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
                               xcodebuild_log=log, control_directory=control,
                               readiness_timeout=args.readiness_timeout,
-                              completion_timeout=args.completion_timeout, derived_data=args.derived_data,
-                              target_probe_files=target_probe_files)
+                              completion_timeout=args.completion_timeout, template=args.template,
+                              derived_data=args.derived_data, target_probe_files=target_probe_files)
             result = session.capture(process)
             status = process.wait(timeout=args.completion_timeout)
             if status != 0:
