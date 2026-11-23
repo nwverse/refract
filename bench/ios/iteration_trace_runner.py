@@ -103,12 +103,6 @@ def unique_packet(directory: Path, stem: str, session: "Session") -> dict:
     return packet
 
 
-def bounded_regular_file(path: Path) -> None:
-    stat_result = path.stat()
-    if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_nlink != 1 or path.is_symlink():
-        raise HandshakeError(f"Evidence must be one ordinary file: {path.name}")
-
-
 def wait_for(check, timeout: float, description: str, interrupted=None):
     deadline = time.monotonic() + timeout
     while True:
@@ -201,25 +195,16 @@ class Session:
         if not self.xcodebuild_log.is_file():
             raise HandshakeError("The current xcodebuild log is missing")
         self.control_directory.mkdir(parents=True, exist_ok=True)
+        # XCTest may publish its identity while the build is being verified.
+        # Reject reused control state before this slow validation, then let the
+        # ordinary request/ready/completion waits admit only this run's packets.
+        # No completion is valid before this capture publishes recorder-ready.
+        if any(self.control_directory.iterdir()):
+            raise HandshakeError("Refusing a reused or stale control directory")
         if self.derived_data is not None:
             validate_build_provenance(self.derived_data, self.revision)
         validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
-        if any(self.control_directory.iterdir()):
-            # XCTest starts before capture and may publish before these slow
-            # provenance checks finish. Admit only exact valid packets from this
-            # running test, never pre-existing or additional control files.
-            if not hasattr(test_process, "create_time"):
-                raise HandshakeError("The current test process start time is required for early packets")
-            if test_process.poll() is not None:
-                raise HandshakeError("The test exited before its early packets could be admitted")
-            for path in self.control_directory.iterdir():
-                if path.name not in ("request.json", "native-process.json", "begin.json", "native-completion.json", "completion.json"):
-                    raise HandshakeError("Refusing a reused or stale control directory")
-                bounded_regular_file(path)
-                if path.stat().st_mtime + 1e-6 < test_process.create_time:
-                    raise HandshakeError("Refusing a reused or stale control directory")
-                unique_packet(self.control_directory, path.stem, self)
         self.raw.mkdir(exist_ok=False)
         recorder = None
         reader = None
@@ -706,7 +691,6 @@ def main(argv: list[str] | None = None) -> int:
             process = subprocess.Popen(
                 test_command(test_run, args.target_udid, test, args.source_revision, run / "results.xcresult"),
                 env=environment, stdout=stream, stderr=subprocess.STDOUT)
-            process.create_time = time.time()
             session = Session(target=args.target_udid, variant=args.variant, scenario=args.scenario,
                               iteration=args.iteration, revision=args.source_revision, run_directory=run,
                               xcodebuild_log=log, control_directory=control,
