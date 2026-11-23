@@ -183,7 +183,7 @@ struct Generation {
                          parentAxis: axis, itemTypeName: itemTypeName, traversal: traversal,
                          localAliases: localAliases)
             }
-            writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping))
+            writer.close(suffix: try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases))
         case let .markdown(document, linkAction, modifiers, _):
             try emitMarkdown(document, linkAction: linkAction, modifiers: modifiers, into: &writer, mapping: mapping)
         case let .text(value, modifiers, _):

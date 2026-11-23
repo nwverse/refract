@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "android": {
+    "output": { "directory": "generated", "packageName": "refract.generated.accessibilityaliases" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "symbols": {
+      "person": { "kind": "materialIcon", "name": "Person" }
+    },
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "className": "refract.generated.accessibilityaliases.R",
+      "catalog": "values/strings.xml",
+      "strings": { "settings.item": "settings_item", "settings.profile": "settings_profile" }
+    }
+  },
+  "harmonyOS": {
+    "minimumAPI": 26,
+    "output": { "directory": "generated" },
+    "imports": [],
+    "components": {},
+    "nativeComponents": {},
+    "modifiers": {},
+    "symbols": {
+      "person": { "kind": "media", "name": "profile" }
+    },
+    "tokens": { "spacing": {}, "radius": {}, "font": {}, "color": {} },
+    "resources": {
+      "namespace": "app",
+      "stringTable": "string",
+      "catalog": "resources/base/element/string.json",
+      "strings": { "settings.item": "settings_item", "settings.profile": "settings_profile" }
+    }
+  }
+}

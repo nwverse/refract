@@ -18,7 +18,7 @@ extension Generation {
                      localAliases: localAliases)
             writer.close()
             writer.line(".scrollable(\(axis == .horizontal ? "ScrollDirection.Horizontal" : "ScrollDirection.Vertical"))")
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases), unlessEmpty: true)
         case let .list(children, modifiers, _):
             writer.open("List()")
             for child in children {
@@ -26,7 +26,7 @@ extension Generation {
                          localAliases: localAliases)
             }
             writer.close()
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases), unlessEmpty: true)
         case let .section(header, children, _):
             writer.open("ListItemGroup(\(try header.map { "{ header: Text(\(try ArkExpression.emit($0, mapping: mapping))) }" } ?? ""))")
             for child in children {
@@ -137,7 +137,7 @@ extension Generation {
                                  suggestion: "Use a projected Bool state/binding or a checked item model action.", location: value.location)
             }
             writer.close(suffix: ")")
-            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping, traversal: traversal), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(switchModifiers, item: item, mapping: mapping, traversal: traversal, localAliases: localAliases), unlessEmpty: true)
             writer.depth -= 1
             if !labelsHidden {
                 writer.close()
@@ -180,7 +180,7 @@ extension Generation {
             }
             writer.close(suffix: ")")
             writer.depth -= 1
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases), unlessEmpty: true)
         case let .secureInput(placeholder, value, reveal, modifiers, location):
             var arguments = ["text: \(try emitLocalExpression(value, item: item, mapping: mapping))"]
             if let placeholder {
@@ -214,16 +214,16 @@ extension Generation {
             }
             writer.close(suffix: ")")
             writer.depth -= 1
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases), unlessEmpty: true)
         case let .label(title, source, modifiers, _):
             writer.open("Row({ space: 8 })")
             writer.line("Image(\(try image(source, mapping: mapping)))")
             writer.line("Text(\(try ArkExpression.emit(title, mapping: mapping)))")
             writer.close()
             writer.line(".alignItems(VerticalAlign.Center)")
-            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
+            writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases), unlessEmpty: true)
         case let .divider(modifiers, _):
-            writer.line("Divider()\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping))")
+            writer.line("Divider()\(try ArkModifiers.emit(modifiers, item: item, mapping: mapping, localAliases: localAliases))")
         case .spacer:
             writer.line("Blank()")
         default:
