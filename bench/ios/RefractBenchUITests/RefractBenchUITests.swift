@@ -27,9 +27,20 @@ private enum TraceHandshake {
         }
         guard let data = try? Data(contentsOf: path),
               let packet = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        for (key, value) in expected where !isEqual(packet[key], value) {
-            XCTFail("Stale or mismatched recorder \(key)")
-            return nil
+        for (key, value) in expected {
+            if key == "finalSamples" {
+                // JSON round-trips produce nested Any dictionaries. Compare their
+                // canonical bytes instead of weakening the scalar comparator.
+                guard let actual = packet[key] as? [String: Any],
+                      let expectedSamples = value as? [String: Any],
+                      canonicalSamples(actual) == canonicalSamples(expectedSamples) else {
+                    XCTFail("Stale or mismatched recorder finalSamples")
+                    return nil
+                }
+            } else if !isEqual(packet[key], value) {
+                XCTFail("Stale or mismatched recorder \(key)")
+                return nil
+            }
         }
         return packet
     }
@@ -45,6 +56,39 @@ private enum TraceHandshake {
             throw NSError(domain: "RefractBench.TraceHandshake", code: 2)
         }
         return firstDisplay
+    }
+
+    static func finalSamples(in completionPacket: [String: Any], revision: String,
+                             variant: String, scenario: String,
+                             iteration: Int, pid: Int) throws -> [String: Any] {
+        let expectedKeys: Set<String> = ["schema", "session", "sourceRevision", "variant", "scenario",
+                                         "iteration", "pid", "completedIterations", "recordedIteration",
+                                         "frameIntervalMs", "iterationByFrame"]
+        guard let samples = completionPacket["finalSamples"] as? [String: Any],
+              Set(samples.keys) == expectedKeys,
+              samples["schema"] as? Int == 1, samples["session"] as? Int == 1,
+              samples["sourceRevision"] as? String == revision,
+              samples["variant"] as? String == variant, samples["scenario"] as? String == scenario,
+              samples["iteration"] as? Int == iteration, samples["pid"] as? Int == pid,
+              samples["completedIterations"] as? Int == 1,
+              samples["recordedIteration"] as? Int == iteration,
+              let intervals = samples["frameIntervalMs"] as? [Double],
+              let tags = samples["iterationByFrame"] as? [Int],
+              !intervals.isEmpty, intervals.count <= 4096, intervals.count == tags.count,
+              intervals.allSatisfy({ $0.isFinite && $0 > 0 }),
+              tags.allSatisfy({ $0 == iteration }) else {
+            XCTFail("Final native samples must match this iteration and contain finite positive display intervals")
+            throw NSError(domain: "RefractBench.TraceHandshake", code: 3)
+        }
+        return samples
+    }
+
+    private static func canonicalSamples(_ samples: [String: Any]) -> Data? {
+        guard JSONSerialization.isValidJSONObject(samples),
+              let data = try? JSONSerialization.data(withJSONObject: samples, options: [.sortedKeys]) else {
+            return nil
+        }
+        return data
     }
 
     private static func isEqual(_ lhs: Any?, _ rhs: Any) -> Bool {
@@ -253,6 +297,11 @@ final class RefractBenchUITests: XCTestCase {
                 return
             }
             let firstDisplay = scenario == "startup" ? try TraceHandshake.firstDisplay(in: completionPacket) : nil
+            if scenario != "startup" {
+                _ = try TraceHandshake.finalSamples(in: completionPacket, revision: revision,
+                                                    variant: variant, scenario: scenario,
+                                                    iteration: iteration, pid: pid)
+            }
             try TraceHandshake.write(completionPacket, named: "completion.json", in: control)
             var expectedFinished = completionPacket
             expectedFinished["state"] = "recorder-finished"
