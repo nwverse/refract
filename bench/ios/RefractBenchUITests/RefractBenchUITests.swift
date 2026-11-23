@@ -38,6 +38,7 @@ private enum TraceHandshake {
         switch rhs {
         case let value as String: return lhs as? String == value
         case let value as Int: return lhs as? Int == value
+        case let value as [String: String]: return lhs as? [String: String] == value
         default: return false
         }
     }
@@ -239,11 +240,12 @@ final class RefractBenchUITests: XCTestCase {
                 return
             }
             if scenario == "startup" {
-                guard let firstDisplay = completionPacket["firstDisplay"] as? [String: Any],
+                guard let firstDisplay = completionPacket["firstDisplay"] as? [String: String],
                       Set(firstDisplay.keys) == ["clock", "timestamp"],
-                      firstDisplay["clock"] as? String == "CACurrentMediaTime",
-                      let timestamp = firstDisplay["timestamp"] as? Double,
-                      timestamp.isFinite, timestamp > 0 else {
+                      firstDisplay["clock"] == "CACurrentMediaTime",
+                      let text = firstDisplay["timestamp"],
+                      let timestamp = Double(text),
+                      String(timestamp) == text, timestamp.isFinite, timestamp > 0 else {
                     XCTFail("Startup requires finite first-display evidence from the attached native process")
                     return
                 }
@@ -251,6 +253,11 @@ final class RefractBenchUITests: XCTestCase {
             try TraceHandshake.write(completionPacket, named: "completion.json", in: control)
             var expectedFinished = completionPacket
             expectedFinished["state"] = "recorder-finished"
+            if scenario == "startup" {
+                // Replace the JSON dictionary with its already validated typed
+                // strings; the scalar comparator deliberately rejects Any dictionaries.
+                expectedFinished["firstDisplay"] = firstDisplay
+            }
             let finished = XCTNSPredicateExpectation(
                 predicate: NSPredicate { _, _ in
                     TraceHandshake.ready(in: control, expected: expectedFinished,

@@ -107,13 +107,29 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertLess(completion, publish)
         self.assertIn('guard active, scenario == "startup", selectedIteration == iteration', RECORDER)
         self.assertIn("let firstDisplay, firstDisplay.isFinite, firstDisplay > 0", RECORDER)
-        self.assertIn('firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": timestamp]', APP)
+        self.assertIn('firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": String(timestamp)]', APP)
         self.assertIn("firstDisplay: firstDisplay)", APP)
         self.assertIn('Set(firstDisplay.keys) == ["clock", "timestamp"]', TESTS)
-        self.assertIn('firstDisplay["clock"] as? String == "CACurrentMediaTime"', TESTS)
-        self.assertIn("timestamp.isFinite, timestamp > 0", TESTS)
+        self.assertIn('firstDisplay["clock"] == "CACurrentMediaTime"', TESTS)
+        self.assertIn('let text = firstDisplay["timestamp"],', TESTS)
+        self.assertIn("String(timestamp) == text, timestamp.isFinite, timestamp > 0", TESTS)
         self.assertIn('if scenario == "startup"', TESTS)
+        self.assertIn('expectedFinished["firstDisplay"] = firstDisplay', TESTS)
         self.assertNotIn("CACurrentMediaTime()", TESTS)
+
+    def test_first_display_is_compared_as_one_exact_string_not_an_unsupported_dictionary(self):
+        startup = TESTS.index('if scenario == "startup"')
+        forward = TESTS.index('try TraceHandshake.write(completionPacket', startup)
+        expected = TESTS.index('var expectedFinished = completionPacket', forward)
+        self.assertIn('let firstDisplay = completionPacket["firstDisplay"] as? [String: String]',
+                      TESTS[startup:forward])
+        self.assertIn('expectedFinished["firstDisplay"] = firstDisplay', TESTS[expected:])
+        equality = TESTS.index("private static func isEqual")
+        comparator = TESTS[equality:TESTS.index("\n    }\n}", equality)]
+        self.assertIn('case let value as [String: String]: return lhs as? [String: String] == value', comparator)
+        self.assertNotIn("[String: Any]", comparator)
+        self.assertIn('type(text) is not str', RUNNER)
+        self.assertIn("repr(timestamp) != text", RUNNER)
 
     def test_build_and_trace_provenance_precedes_unchanged_capture_contract(self):
         build = BUILD.index("build-for-testing")

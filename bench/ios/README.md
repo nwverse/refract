@@ -121,10 +121,13 @@ metric.
 
 For a traced `startup` iteration, recorder readiness still precedes Begin. The app then completes only from the
 `CACurrentMediaTime` first-display timestamp that `BenchmarkDisplayRecorder` captured at scene activation. The
-native completion packet includes that timestamp and clock name with the same revision, variant, scenario, iteration
-and PID; the UI test and runner both reject missing, malformed or mismatched evidence. The receipt retains the
-monotonic `native_first_display` evidence, not a shell stopwatch duration or an inferred startup time. The separate
-30-iteration `XCTApplicationLaunchMetric` suite remains unchanged and supplies distinct platform launch samples.
+native completion packet carries that timestamp as a canonical round-trippable decimal string with its clock name and
+the same revision, variant, scenario, iteration and PID. A string avoids both Foundation dictionary/`NSNumber`
+comparison ambiguity and independent JSON number formatting; the UI test and runner require exact string equality,
+round-trip it to the original `Double`, and reject missing, non-canonical, non-finite, non-positive or mismatched
+evidence without a tolerance. The receipt retains the same string in monotonic `native_first_display` evidence, not a
+shell stopwatch duration or an inferred startup time. The separate 30-iteration `XCTApplicationLaunchMetric` suite
+remains unchanged and supplies distinct platform launch samples.
 
 Run the control-plane and source-wiring tests with:
 

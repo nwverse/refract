@@ -122,9 +122,15 @@ def checked_first_display(packet: dict) -> dict:
     if (not isinstance(evidence, dict) or set(evidence) != {"clock", "timestamp"}
             or evidence.get("clock") != "CACurrentMediaTime"):
         raise HandshakeError("Startup completion requires exact native first-display evidence")
-    timestamp = evidence.get("timestamp")
-    if type(timestamp) not in (int, float) or not math.isfinite(timestamp) or timestamp <= 0:
-        raise HandshakeError("Startup first-display timestamp must be one finite positive number")
+    text = evidence.get("timestamp")
+    if type(text) is not str:
+        raise HandshakeError("Startup first-display timestamp must be an exact decimal string")
+    try:
+        timestamp = float(text)
+    except ValueError as error:
+        raise HandshakeError("Startup first-display timestamp must be an exact decimal string") from error
+    if not math.isfinite(timestamp) or timestamp <= 0 or repr(timestamp) != text:
+        raise HandshakeError("Startup first-display timestamp must round-trip as one finite positive Double")
     return evidence
 
 

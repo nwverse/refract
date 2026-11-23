@@ -38,6 +38,13 @@ a simulator can reject Hitches, and `xctrace` can print `Output file saved as: <
 absolute path. None of these control-plane corrections permits a skipped test, incomplete scenario or failed
 recorder to become a passing trace.
 
+A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
+handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
+such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a second JSON writer may choose a different
+shortest decimal spelling for the same `Double`. Encode the native floating-point timestamp once as a canonical
+round-trippable string, validate it and compare the typed strings exactly at each hop. Exercise the concrete native
+value through the real control plane and compile the actual Swift comparator, including a mismatch rejection.
+
 ## Equal inputs need equal native behavior
 
 Both variants should use the same model, data, lazy-list identity, controls, accessibility and input script, but the
