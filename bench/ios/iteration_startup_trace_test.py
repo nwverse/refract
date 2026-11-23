@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import plistlib
 import shutil
 import subprocess
@@ -102,10 +103,10 @@ class StartupTraceRunnerTest(unittest.TestCase):
 
 
 class SwiftFirstDisplayContractTest(unittest.TestCase):
-    """Compile the actual scalar comparator and startup validation, not a transcription."""
+    """Compile the actual scalar comparator and startup scope, not a transcription."""
 
     def test_concrete_json_timestamp_round_trips_and_mismatches_fail(self):
-        swift = shutil.which("swiftc")
+        swift = os.environ.get("REFRACT_SWIFTC") or shutil.which("swiftc")
         if swift is None:
             self.fail("The focused Swift source regression requires a Swift toolchain")
         source = (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text()
@@ -117,25 +118,40 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
     }
 
 """ + comparator
-        startup = source[source.index("            if scenario == \"startup\" {",
-                                      source.index("let completionPID = completionPacket")):
-                         source.index("            try TraceHandshake.write(completionPacket")]
-        startup = startup[:startup.rindex("            }\n") + len("            }\n")]
-        startup = startup.replace("completionPacket", "decoded").replace(
-            'XCTFail("Startup requires finite first-display evidence from the attached native process")',
-            "throw ContractFailure.mismatch").replace(
-                "                    return\n", "                    throw ContractFailure.mismatch\n")
+        validation_start = source.find("    static func firstDisplay")
+        validation = (source[validation_start:source.index("    private static func isEqual")]
+                      if validation_start >= 0 else "")
+        completion_start = source.find("            let firstDisplay = scenario ==")
+        if completion_start < 0:
+            completion_start = source.index('            if scenario == "startup" {',
+                                            source.index("let completionPID = completionPacket"))
+        completion = source[completion_start:source.index("            try TraceHandshake.write(completionPacket",
+                                                         completion_start)]
+        write_start = source.index("            try TraceHandshake.write(completionPacket", completion_start)
+        write = source[write_start:source.index("\n", write_start) + 1]
+        expected = source[source.index("            var expectedFinished = completionPacket"):
+                          source.index("            let finished = XCTNSPredicateExpectation(")]
+        startup = (completion + write + expected).replace("try TraceHandshake.write(", "try writeCompletion(")
         script = textwrap.dedent("""
             import Foundation
 
             enum ContractFailure: Error { case mismatch }
             enum TraceHandshake {
             @COMPARATOR@
+            @VALIDATION@
             }
+
+            func XCTFail(_ message: String) {}
+            func writeCompletion(_ packet: [String: Any], named: String, in directory: URL) throws {}
+            let control = URL(fileURLWithPath: "/unused")
 
             func validate(_ decoded: [String: Any]) throws {
                 let scenario = "startup"
+                let completionPacket = decoded
             @STARTUP@
+                var finished = decoded
+                finished["state"] = "recorder-finished"
+                precondition(TraceHandshake.ready(in: finished, expected: expectedFinished) != nil)
             }
 
             do {
@@ -149,7 +165,8 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                 let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
                 try validate(decoded)
                 let expected: [String: String] = ["clock": "CACurrentMediaTime", "timestamp": canonical]
-                precondition(TraceHandshake.ready(in: decoded, expected: ["firstDisplay": expected]) != nil)
+                let firstDisplay = try TraceHandshake.firstDisplay(in: decoded)
+                precondition(firstDisplay == expected)
                 for field in ["clock", "timestamp"] {
                     for changed in (field == "clock" ? ["wallClock"] : ["0", "-1", "nan", "inf",
                                                                           "600795.59700104180"]) {
@@ -159,7 +176,7 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                         precondition(TraceHandshake.ready(in: invalid, expected: ["firstDisplay": expected]) == nil)
                         do {
                             try validate(invalid)
-                        } catch ContractFailure.mismatch { continue }
+                        } catch { continue }
                         preconditionFailure("accepted invalid \\(field): \\(changed)")
                     }
                 }
@@ -168,6 +185,8 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                     evidence["timestamp"] = different
                     let changed: [String: Any] = ["firstDisplay": evidence]
                     try validate(changed)
+                    let changedFirstDisplay = try TraceHandshake.firstDisplay(in: changed)
+                    precondition(changedFirstDisplay == evidence)
                     precondition(TraceHandshake.ready(in: changed, expected: ["firstDisplay": expected]) == nil)
                 }
                 print("exact Swift timestamp handshake and mismatch rejection passed")
@@ -180,7 +199,8 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                 return value
             }
             """).lstrip()
-        script = script.replace("@COMPARATOR@", comparator).replace("@STARTUP@", startup)
+        script = script.replace("@COMPARATOR@", comparator).replace(
+            "@VALIDATION@", validation).replace("@STARTUP@", startup)
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "main.swift"
             path.write_text(script)

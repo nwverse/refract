@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -519,6 +520,43 @@ class IterationTraceRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(HandshakeError, "readiness|Starting recording"):
             self.capture(self.session())
         self.assertFalse((self.root / "control/recorder-ready.json").exists())
+
+    def test_current_test_packets_may_arrive_during_provenance_checks(self):
+        self.recorder.start(completion="generated scroll complete 0")
+        original = runner.validate_build_provenance
+        validated = threading.Event()
+
+        def slow_provenance(*args):
+            original(*args)
+            validated.set()
+            time.sleep(0.15)
+
+        with mock.patch("iteration_trace_runner.validate_build_provenance", side_effect=slow_provenance):
+            with self.assertRaisesRegex(HandshakeError, "completion|PID"):
+                self.capture(self.session())
+        self.assertTrue(validated.is_set())
+        self.assertTrue((self.root / "raw/request.json").is_file())
+        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
+
+    def test_stale_or_premature_packets_are_rejected_before_provenance(self):
+        self.recorder.prepare()
+        self.output = self.root / "xcodebuild.log"
+        self.output.write_text("current synthetic test\n")
+        self.recorder.output = self.output
+        for name, packet in (
+            ("request.json", {"schema": 1, "session": 1, "revision": "a" * 40,
+                              "variant": "generated", "scenario": "scroll", "iteration": 0,
+                              "pid": 4242, "process": "running", "state": "ready"}),
+            ("begin.json", {}), ("native-completion.json", {}), ("completion.json", {}),
+            ("unexpected.json", {}),
+        ):
+            with self.subTest(name=name):
+                (self.root / "control" / name).write_text(json.dumps(packet))
+                with mock.patch("iteration_trace_runner.validate_build_provenance") as provenance:
+                    with self.assertRaisesRegex(HandshakeError, "stale control directory"):
+                        self.capture(self.session())
+                provenance.assert_not_called()
+                (self.root / "control" / name).unlink()
 
     def test_wrong_completion_is_rejected_before_archiving(self):
         self.recorder.start(completion="generated scroll complete 0")
