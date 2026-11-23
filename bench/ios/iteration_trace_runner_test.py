@@ -56,11 +56,12 @@ class RecorderFixture:
                 write_trace: bool = True, process_state: str = "running",
                 missing_completion: bool = False, app_iteration: int = 0,
                 saved_path: str | None = None, recorder_stop_status: int = 0,
-                completion_delay: float = 0):
+                completion_delay: float = 0, app_revision: str | None = None):
         app_script = self.work / "fake_xcodebuild.py"
         app_script.write_text(f'''import json, pathlib, sys, time
 control = pathlib.Path(sys.argv[1])
-packet = {{"schema": 1, "session": {session}, "variant": "generated", "scenario": "scroll", "iteration": {app_iteration},
+packet = {{"schema": 1, "session": {session}, "revision": {app_revision or ("a" * 40)!r},
+          "variant": "generated", "scenario": "scroll", "iteration": {app_iteration},
           "pid": {pid!r}, "process": {process_state!r}, "state": "ready"}}
 time.sleep(0.02)
 (control / "request.json").write_text(json.dumps(packet))
@@ -470,6 +471,16 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.recorder.start()
         with self.assertRaisesRegex(HandshakeError, "session|stale"):
             self.capture(self.session(session_id=2))
+
+    def test_stale_revision_is_rejected_before_recorder_start(self):
+        root = self.root / "stale-revision"
+        recorder = RecorderFixture(root)
+        recorder.start(app_revision="b" * 40)
+        self.addCleanup(recorder.stop)
+        with self.assertRaisesRegex(HandshakeError, "revision|stale"):
+            self.capture(self.session(run_directory=root, xcodebuild_log=recorder.output,
+                                      control_directory=root / "control"), recorder)
+        self.assertIsNone(recorder.recorder)
 
     def test_wrong_identity_and_unexpected_completion_fail_closed(self):
         for field, value, completion in (

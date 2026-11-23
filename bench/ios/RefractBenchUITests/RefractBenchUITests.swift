@@ -206,6 +206,16 @@ final class RefractBenchUITests: XCTestCase {
             var expectedIdentity = packet
             expectedIdentity["state"] = "complete"
             expectedIdentity["completion"] = completionText
+            expectedIdentity["pid"] = pid
+            let nativeCompletion = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    TraceHandshake.ready(in: control, expected: expectedIdentity,
+                                         name: "native-completion.json") != nil
+                }, object: nil)
+            guard XCTWaiter.wait(for: [nativeCompletion], timeout: 30) == .completed else {
+                XCTFail("The native completion identity or PID did not become ready: \(identityError.label)")
+                return
+            }
             guard let completionPacket = TraceHandshake.ready(
                     in: control, expected: expectedIdentity, name: "native-completion.json"),
                   let completionPID = completionPacket["pid"] as? Int, completionPID == pid else {

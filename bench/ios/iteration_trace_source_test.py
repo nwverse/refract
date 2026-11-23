@@ -72,9 +72,16 @@ class TraceSourceContractTest(unittest.TestCase):
                 self.assertIn('TraceHandshake.ready(in: control, expected: expectedIdentity,\n'
                               '                                     name: "native-process.json")', TESTS)
             else:
-                self.assertIn('in: control, expected: expectedIdentity, name: "native-completion.json")', TESTS)
+                native_completion = TESTS.index('name: "native-completion.json")')
+        completion_wait = TESTS.index("nativeCompletion", native_completion)
+        write_completion = TESTS.index('try TraceHandshake.write(completionPacket, named: "completion.json"', completion_wait)
+        self.assertLess(native_completion, completion_wait)
+        self.assertLess(completion_wait, write_completion)
+        self.assertIn('XCTWaiter.wait(for: [nativeCompletion], timeout: 30)', TESTS)
         self.assertIn('expectedIdentity["state"] = "complete"', TESTS)
         self.assertIn('expectedIdentity["completion"] = completionText', TESTS)
+        self.assertIn('expectedIdentity["pid"] = pid', TESTS)
+        self.assertIn('completionPID == pid', TESTS)
         self.assertIn('expectedFinished["state"] = "recorder-finished"', TESTS)
         self.assertIn('TraceHandshake.ready(in: control, expected: expectedFinished,', TESTS)
         self.assertIn('"pid": pid', TESTS)

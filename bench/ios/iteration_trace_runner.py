@@ -77,6 +77,7 @@ def checked_identity(packet: dict, session: "Session") -> None:
     expected = {
         "schema": 1,
         "session": session.session_id,
+        "revision": session.revision,
         "variant": session.variant,
         "scenario": session.scenario,
         "iteration": session.iteration,
