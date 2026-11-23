@@ -92,6 +92,10 @@ class RecorderFixture:
         app_script = self.work / "fake_xcodebuild.py"
         app_script.write_text(f'''import json, pathlib, plistlib, sys, time
 control = pathlib.Path(sys.argv[1])
+def publish(name, value):
+    temporary = control / ('.' + name + '.tmp')
+    temporary.write_text(json.dumps(value))
+    temporary.rename(control / name)
 packet = {{"schema": 1, "session": {session}, "revision": {app_revision or ("a" * 40)!r},
           "variant": "generated", "scenario": "scroll", "iteration": {app_iteration},
           "pid": {pid!r}, "process": {process_state!r}, "state": "ready"}}
@@ -107,15 +111,15 @@ packet["completion"] = {completion!r}
 packet["finalSamples"] = json.loads({json.dumps(final_samples)!r})
 begin = dict(packet, state="begin")
 if not {missing_begin!r}:
-    (control / "begin.json").write_text(json.dumps(begin))
+    publish("begin.json", begin)
     native = dict(packet, finalSamples=json.loads({json.dumps(native_samples)!r}))
-    (control / "native-completion.json").write_text(json.dumps(native))
+    publish("native-completion.json", native)
 if {duplicate_native_completion!r}:
     (control / "native-completion-2.json").write_text(json.dumps(packet))
 if {stale_periodic_plist!r}:
     (control / "diagnostic.plist").write_bytes(plistlib.dumps({{**packet, **{stale_plist!r}}}))
 if not {missing_completion!r}:
-    (control / "completion.json").write_text(json.dumps(packet))
+    publish("completion.json", packet)
 if {duplicate_completion!r}:
     (control / "completion-2.json").write_text(json.dumps(packet))
 while not (control / "recorder-finished.json").exists():
@@ -750,12 +754,22 @@ class IterationTraceRunnerTest(unittest.TestCase):
                   "variant": "generated", "scenario": "scroll", "iteration": 0,
                   "pid": 4242, "process": "running", "state": "ready"}
         complete = dict(packet, state="complete", completion="generated scroll complete 1")
+        complete["finalSamples"] = {
+            "schema": 1, "session": 1, "sourceRevision": "a" * 40,
+            "variant": "generated", "scenario": "scroll", "iteration": 0, "pid": 4242,
+            "completedIterations": 1, "recordedIteration": 0,
+            "frameIntervalMs": [16.5], "iterationByFrame": [0],
+        }
         begin = dict(packet, state="begin")
         launch_gate = self.recorder.work / "launch-gate"
         published_gate = self.recorder.work / "published-gate"
         script = self.recorder.work / "fast_xcodebuild.py"
         script.write_text(f"""import json, pathlib, sys, time
 control = pathlib.Path(sys.argv[1])
+def publish(name, value):
+    temporary = control / ('.' + name + '.tmp')
+    temporary.write_text(json.dumps(value))
+    temporary.rename(control / name)
 launch_gate = pathlib.Path({str(launch_gate)!r})
 published_gate = pathlib.Path({str(published_gate)!r})
 # The fake XCTest itself publishes request.json on launch, then blocks on a
@@ -765,9 +779,9 @@ while not launch_gate.exists():
     time.sleep(0.005)
 # The gate is open: publish Begin, native completion and forwarded
 # completion in this same process, then signal that they are durable.
-(control / 'begin.json').write_text(json.dumps({begin!r}))
-(control / 'native-completion.json').write_text(json.dumps({complete!r}))
-(control / 'completion.json').write_text(json.dumps({complete!r}))
+publish('begin.json', {begin!r})
+publish('native-completion.json', {complete!r})
+publish('completion.json', {complete!r})
 published_gate.write_text('published')
 while not (control / 'recorder-finished.json').exists():
     time.sleep(0.01)
