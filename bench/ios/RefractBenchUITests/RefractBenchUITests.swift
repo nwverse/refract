@@ -34,6 +34,19 @@ private enum TraceHandshake {
         return packet
     }
 
+    static func firstDisplay(in completionPacket: [String: Any]) throws -> [String: String] {
+        guard let firstDisplay = completionPacket["firstDisplay"] as? [String: String],
+              Set(firstDisplay.keys) == ["clock", "timestamp"],
+              firstDisplay["clock"] == "CACurrentMediaTime",
+              let text = firstDisplay["timestamp"],
+              let timestamp = Double(text),
+              String(timestamp) == text, timestamp.isFinite, timestamp > 0 else {
+            XCTFail("Startup requires finite first-display evidence from the attached native process")
+            throw NSError(domain: "RefractBench.TraceHandshake", code: 2)
+        }
+        return firstDisplay
+    }
+
     private static func isEqual(_ lhs: Any?, _ rhs: Any) -> Bool {
         switch rhs {
         case let value as String: return lhs as? String == value
@@ -239,21 +252,11 @@ final class RefractBenchUITests: XCTestCase {
                 XCTFail("The native completion identity or PID does not match the attached process")
                 return
             }
-            if scenario == "startup" {
-                guard let firstDisplay = completionPacket["firstDisplay"] as? [String: String],
-                      Set(firstDisplay.keys) == ["clock", "timestamp"],
-                      firstDisplay["clock"] == "CACurrentMediaTime",
-                      let text = firstDisplay["timestamp"],
-                      let timestamp = Double(text),
-                      String(timestamp) == text, timestamp.isFinite, timestamp > 0 else {
-                    XCTFail("Startup requires finite first-display evidence from the attached native process")
-                    return
-                }
-            }
+            let firstDisplay = scenario == "startup" ? try TraceHandshake.firstDisplay(in: completionPacket) : nil
             try TraceHandshake.write(completionPacket, named: "completion.json", in: control)
             var expectedFinished = completionPacket
             expectedFinished["state"] = "recorder-finished"
-            if scenario == "startup" {
+            if let firstDisplay {
                 // Replace the JSON dictionary with its already validated typed
                 // strings; the scalar comparator deliberately rejects Any dictionaries.
                 expectedFinished["firstDisplay"] = firstDisplay
