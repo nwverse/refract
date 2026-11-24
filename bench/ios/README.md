@@ -75,14 +75,17 @@ xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --form
 # The runner configures a fresh xctestrun beside Xcode's original test-run,
 # waits for explicit Instruments readiness before XCTest taps the native Begin
 # control, checks identity-matched native completion, gracefully stops xctrace
-# and preserves its package. Repeat for each iteration 0...29 with a new run
-# directory. --window bounds deferred work, not the measured iteration window.
+# and preserves its package. The #219 traced protocol has thirty exact identities,
+# 2...30 inclusive; it is not 0...30 (31 identities) and does not renumber the
+# non-traced 0..<30 loops or transfer prior evidence. Repeat for each iteration
+# 2...30 with a new run directory. --window bounds deferred work, not the measured
+# iteration window.
 # --template defaults to Animation Hitches. Select SwiftUI explicitly for the
 # currently supported simulator target; an unsupported template remains an error.
 python3 -I bench/ios/iteration_trace_runner.py \
   --target-udid <owned-udid> --derived-data <build-output-directory> \
   --variant <generated-or-reference> --scenario <scroll-or-stateUpdate-or-startup> \
-  --iteration <0-through-29> --source-revision <clean-committed-revision> \
+  --iteration <2-through-30> --source-revision <clean-committed-revision> \
   --template 'SwiftUI' --run-directory <new-iteration-run-directory>
 
 # Select a template supported by the exact target. Animation Hitches and the

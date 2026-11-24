@@ -5,6 +5,8 @@ import QuartzCore
 @MainActor
 final class BenchmarkDisplayRecorder: ObservableObject {
     static let shared = BenchmarkDisplayRecorder()
+    // #219 has exactly thirty traced identities: 2 through 30 inclusive.
+    static let tracedIterations = 2...30
 
     private let framesKey = "refract.bench.frames.v1"
     private var link: CADisplayLink?
@@ -44,7 +46,7 @@ final class BenchmarkDisplayRecorder: ObservableObject {
 
     func completeStartup(iteration: Int) -> CFTimeInterval? {
         guard active, scenario == "startup", selectedIteration == iteration,
-              (0..<30).contains(iteration), let firstDisplay, firstDisplay.isFinite, firstDisplay > 0,
+              Self.tracedIterations.contains(iteration), let firstDisplay, firstDisplay.isFinite, firstDisplay > 0,
               !revision.isEmpty, !variant.isEmpty else { return nil }
         completedIterations = 1
         recordedIteration = iteration
@@ -70,7 +72,7 @@ final class BenchmarkDisplayRecorder: ObservableObject {
     func completeIteration(_ scenario: String, iteration: Int) {
         guard active, scenario == self.scenario else { return }
         if let selectedIteration {
-            guard iteration == selectedIteration, (0..<30).contains(iteration) else { return }
+            guard iteration == selectedIteration, Self.tracedIterations.contains(iteration) else { return }
             completedIterations = 1
         } else {
             guard iteration == completedIterations, (0..<30).contains(iteration), frames.count > 1 else { return }
@@ -89,7 +91,7 @@ final class BenchmarkDisplayRecorder: ObservableObject {
     /// The selected iteration's immutable completion evidence, independent of
     /// the asynchronously persisted diagnostic preferences snapshot.
     func finalSamples(iteration: Int) -> [String: Any]? {
-        guard selectedIteration == iteration, completedIterations == 1,
+        guard selectedIteration == iteration, Self.tracedIterations.contains(iteration), completedIterations == 1,
               recordedIteration == iteration, !frames.isEmpty,
               frames.count <= 4096, frames.allSatisfy({ $0.isFinite && $0 > 0 }),
               iterations.count == frames.count, iterations.allSatisfy({ $0 == iteration }),

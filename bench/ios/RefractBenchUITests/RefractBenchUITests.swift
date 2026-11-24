@@ -2,7 +2,12 @@ import XCTest
 
 @MainActor
 private enum TraceHandshake {
-    static let iterationCount = 30
+    static let tracedIterations = 2...30
+
+    static func tracedIteration(_ value: String?) -> Int? {
+        guard let value, let iteration = Int(value) else { return nil }
+        return tracedIterations.contains(iteration) ? iteration : nil
+    }
 
     static func write(_ payload: [String: Any], named name: String, in directory: URL) throws {
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
@@ -190,7 +195,7 @@ final class RefractBenchUITests: XCTestCase {
             throw XCTSkip("Per-iteration capture requires the explicit Instruments runner")
         }
         guard let iterationValue = environment["REFRACT_BENCH_TRACE_ITERATION"],
-              let iteration = Int(iterationValue), (0..<TraceHandshake.iterationCount).contains(iteration),
+              let iteration = TraceHandshake.tracedIteration(iterationValue),
               let controlValue = environment["REFRACT_BENCH_TRACE_CONTROL"] else {
             XCTFail("An exact iteration and new control directory are required")
             return
@@ -204,6 +209,12 @@ final class RefractBenchUITests: XCTestCase {
             "REFRACT_BENCH_ITERATION": iterationValue,
             "REFRACT_BENCH_TRACE_CONTROL": controlValue,
         ]
+        // Only the existing single traced launch consumes iterationRange().
+        // Its legacy non-traced loop remains the unchanged 0..<30 identity sequence.
+        if let iteration = TraceHandshake.tracedIteration(environment["REFRACT_BENCH_TRACE_ITERATION"]),
+           environment["REFRACT_BENCH_TRACE_CONTROL"] != nil {
+            application.launchEnvironment["REFRACT_BENCH_ITERATION"] = String(iteration)
+        }
         application.launch()
         defer { application.terminate() }
         guard application.staticTexts["Setting 0"].waitForExistence(timeout: 20),

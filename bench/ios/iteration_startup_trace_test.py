@@ -32,7 +32,7 @@ class StartupTraceRunnerTest(unittest.TestCase):
     def startup_completion(self, **changes):
         packet = {
             "schema": 1, "session": 1, "revision": "a" * 40,
-            "variant": "generated", "scenario": "startup", "iteration": 0,
+            "variant": "generated", "scenario": "startup", "iteration": 2,
             "pid": 4242, "process": "running", "state": "complete",
             "completion": "generated startup complete 1",
             "firstDisplay": {"clock": "CACurrentMediaTime", "timestamp": "12345.25"},
@@ -73,7 +73,7 @@ class StartupTraceRunnerTest(unittest.TestCase):
                     checked_first_display({"firstDisplay": value})
 
     def test_missing_stale_duplicate_and_mismatched_completion_fail_closed(self):
-        session = mock.Mock(session_id=1, variant="generated", scenario="startup", iteration=0)
+        session = mock.Mock(session_id=1, variant="generated", scenario="startup", iteration=2)
         for field, value in (
             ("schema", 2), ("session", 2),
             ("variant", "reference"), ("scenario", "scroll"), ("iteration", 1),
@@ -135,7 +135,10 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
         script = textwrap.dedent("""
             import Foundation
 
-            enum ContractFailure: Error { case mismatch }
+            enum ContractFailure: Error {
+                case mismatch
+                case acceptedInvalidFirstDisplay(String)
+            }
             enum TraceHandshake {
             @COMPARATOR@
             @VALIDATION@
@@ -145,11 +148,11 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
             func writeCompletion(_ packet: [String: Any], named: String, in directory: URL) throws {}
             let control = URL(fileURLWithPath: "/unused")
 
-            func validate(_ decoded: [String: Any]) throws {
+            func validate(_ decoded: [String: Any], selectedIteration: Int = 30) throws {
                 let scenario = "startup"
                 let revision = "revision"
                 let variant = "generated"
-                let iteration = 0
+                let iteration = selectedIteration
                 let pid = 4242
                 let completionPacket = decoded
             @STARTUP@
@@ -166,8 +169,13 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                 let encoded = try JSONSerialization.data(withJSONObject: [
                     "firstDisplay": ["clock": "CACurrentMediaTime", "timestamp": canonical],
                 ])
-                let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-                try validate(decoded)
+                var decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+                for (key, value) in [("schema", 1), ("session", 1), ("revision", "revision"),
+                                     ("variant", "generated"), ("scenario", "startup"), ("iteration", 30),
+                                     ("pid", 4242), ("process", "running"), ("state", "complete")] as [(String, Any)] {
+                    decoded[key] = value
+                }
+                try validate(decoded, selectedIteration: 30)
                 let expected: [String: String] = ["clock": "CACurrentMediaTime", "timestamp": canonical]
                 let firstDisplay = try TraceHandshake.firstDisplay(in: decoded)
                 precondition(firstDisplay == expected)
@@ -176,22 +184,36 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                                                                           "600795.59700104180"]) {
                         var evidence = expected
                         evidence[field] = changed
-                        let invalid: [String: Any] = ["firstDisplay": evidence]
+                        var invalid = decoded
+                        invalid["firstDisplay"] = evidence
                         precondition(TraceHandshake.ready(in: invalid, expected: ["firstDisplay": expected]) == nil)
                         do {
-                            try validate(invalid)
-                        } catch { continue }
-                        preconditionFailure("accepted invalid \\(field): \\(changed)")
+                            _ = try TraceHandshake.firstDisplay(in: invalid)
+                            preconditionFailure("firstDisplay accepted invalid \\(field): \\(changed)")
+                        } catch let error as NSError where error.domain == "RefractBench.TraceHandshake" && error.code == 2 {
+                            // The intended native timestamp/clock validation failed.
+                        }
+                        do {
+                            try validate(invalid, selectedIteration: 30)
+                            throw ContractFailure.acceptedInvalidFirstDisplay("\\(field): \\(changed)")
+                        } catch ContractFailure.acceptedInvalidFirstDisplay(let detail) {
+                            fatalError("validate accepted invalid firstDisplay \\(detail)")
+                        } catch let error as NSError where error.domain == "RefractBench.TraceHandshake" && error.code == 2 {
+                            // The complete packet reaches firstDisplay validation, not identity mismatch.
+                        }
                     }
                 }
                 for different in ["600795.5970010419", "12345.25"] {
                     var evidence = expected
                     evidence["timestamp"] = different
-                    let changed: [String: Any] = ["firstDisplay": evidence]
-                    try validate(changed)
+                    var changed = decoded
+                    changed["firstDisplay"] = evidence
+                    try validate(changed, selectedIteration: 30)
                     let changedFirstDisplay = try TraceHandshake.firstDisplay(in: changed)
                     precondition(changedFirstDisplay == evidence)
                     precondition(TraceHandshake.ready(in: changed, expected: ["firstDisplay": expected]) == nil)
+                    precondition(TraceHandshake.ready(in: changed, expected: decoded) == nil,
+                                 "forwarding must compare the exact timestamp within a complete identity packet")
                 }
                 print("exact Swift timestamp handshake and mismatch rejection passed")
             } catch {
@@ -219,7 +241,7 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
 
 class SyntheticStartupSession:
     def __init__(self, test: unittest.TestCase, packet: dict | None, completion: bool = True,
-                 native_first_display: dict | None = None):
+                 native_first_display: dict | None = None, iteration: int = 2):
         temporary = tempfile.TemporaryDirectory()
         test.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -229,12 +251,13 @@ class SyntheticStartupSession:
         self.derived_data = self.root / "DerivedData"
         self.log = self.run / "xcodebuild.log"
         self.log.write_text("synthetic native test\n")
+        self.iteration = iteration
         self.packet = packet
         self.completion = completion
         self.native_first_display = native_first_display
         self.test = test
         self.prepare_provenance()
-        self.session = Session(target="synthetic-target", variant="generated", scenario="startup", iteration=0,
+        self.session = Session(target="synthetic-target", variant="generated", scenario="startup", iteration=iteration,
                                revision="a" * 40, run_directory=self.run, xcodebuild_log=self.log,
                                control_directory=self.control, readiness_timeout=0.5,
                                completion_timeout=0.2, derived_data=self.derived_data)
@@ -258,7 +281,7 @@ class SyntheticStartupSession:
         record_build_provenance(self.derived_data, "a" * 40)
         values = {"REFRACT_BENCH_REVISION": "a" * 40,
                   "REFRACT_BENCH_TRACE_CONTROL": str(self.control),
-                  "REFRACT_BENCH_TRACE_ITERATION": "0"}
+                  "REFRACT_BENCH_TRACE_ITERATION": str(self.iteration)}
         destination = self.derived_data / "Build/Products/iteration-trace-config-0123456789abcdef01234567.xctestrun"
         destination.write_bytes(plistlib.dumps({"RefractBenchUITests": {"TestingEnvironmentVariables": values}}))
         archived = self.run / "iteration-trace-config.xctestrun"
@@ -269,7 +292,7 @@ class SyntheticStartupSession:
             "schema": 1, "path": destination.name, "archive": archived.name,
             "configuration_sha256": hashlib.sha256(archived.read_bytes()).hexdigest(),
             "build_provenance_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-            "source_revision": "a" * 40, "control_directory": str(self.control), "iteration": 0,
+            "source_revision": "a" * 40, "control_directory": str(self.control), "iteration": self.iteration,
         }))
 
     def read_environment(self, command, check, capture_output, text):
@@ -306,7 +329,7 @@ signal.pause()
 control = pathlib.Path({str(self.control)!r})
 (control / 'request.json').write_text(json.dumps({{
     'schema': 1, 'session': 1, 'revision': {'a' * 40!r}, 'variant': 'generated', 'scenario': 'startup',
-    'iteration': 0, 'pid': 4242, 'process': 'running', 'state': 'ready'}}))
+    'iteration': {self.iteration}, 'pid': 4242, 'process': 'running', 'state': 'ready'}}))
 while not (control / 'recorder-ready.json').exists():
     time.sleep(0.01)
 if {self.completion!r}:
@@ -364,6 +387,23 @@ class StartupTraceSessionTest(unittest.TestCase):
                 self.assertIs(type(evidence["timestamp"]), str)
         receipt_text = (capture.run / "raw/iteration-trace.json").read_text()
         self.assertIn('"timestamp": "600795.5970010418"', receipt_text)
+
+    def test_startup_capture_admits_iteration_30_and_retains_exact_first_display(self):
+        capture = SyntheticStartupSession(self, self.startup_completion(iteration=30), iteration=30)
+        result = capture.capture()
+        self.assertEqual(result["iteration"], 30)
+        for name in ("request", "begin", "native-completion", "completion"):
+            packet = json.loads((capture.control / f"{name}.json").read_text())
+            self.assertEqual(packet["iteration"], 30, name)
+            self.assertEqual(packet["scenario"], "startup", name)
+        expected = {"clock": "CACurrentMediaTime", "timestamp": "12345.25"}
+        for name in ("native-completion", "completion"):
+            packet = json.loads((capture.control / f"{name}.json").read_text())
+            self.assertEqual(packet["firstDisplay"], expected, name)
+        self.assertEqual(result["native_first_display"], expected)
+        receipt = json.loads((capture.run / "raw/iteration-trace.json").read_text())
+        self.assertEqual(receipt["native_first_display"], expected)
+        self.assertTrue((capture.run / "raw/generated-startup-30.trace.zip").is_file())
 
     def test_startup_capture_rejects_native_forwarded_timestamp_mismatch(self):
         capture = SyntheticStartupSession(self, self.startup_completion(firstDisplay={
