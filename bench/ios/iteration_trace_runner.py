@@ -183,7 +183,7 @@ class Session:
                  target_probe_files: tuple[Path, ...] = ()):
         if variant not in VARIANTS or scenario not in SCENARIOS:
             raise HandshakeError("Unsupported variant or scenario")
-        if iteration not in TRACED_ITERATIONS:
+        if type(iteration) is not int or iteration not in TRACED_ITERATIONS:
             raise HandshakeError("Iteration must be in 2..30")
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise HandshakeError("A committed 40-character source revision is required")
@@ -661,7 +661,8 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
                      target_probe_files: tuple[Path, ...] = ()):
     if run_directory is None or build_provenance is None:
         raise HandshakeError("Each trace configuration requires a new run directory and validated build provenance")
-    if not re.fullmatch(r"[0-9a-f]{40}", revision) or iteration not in TRACED_ITERATIONS:
+    if (not re.fullmatch(r"[0-9a-f]{40}", revision) or type(iteration) is not int
+            or iteration not in TRACED_ITERATIONS):
         raise HandshakeError("Trace configuration requires an exact source revision and iteration in 2..30")
     if (build_provenance.get("path") != derived_data / BUILD_PROVENANCE_NAME
             or build_provenance.get("source_revision") != revision):

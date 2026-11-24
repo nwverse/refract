@@ -135,7 +135,10 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
         script = textwrap.dedent("""
             import Foundation
 
-            enum ContractFailure: Error { case mismatch }
+            enum ContractFailure: Error {
+                case mismatch
+                case acceptedInvalidFirstDisplay(String)
+            }
             enum TraceHandshake {
             @COMPARATOR@
             @VALIDATION@
@@ -181,22 +184,36 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                                                                           "600795.59700104180"]) {
                         var evidence = expected
                         evidence[field] = changed
-                        let invalid: [String: Any] = ["firstDisplay": evidence]
+                        var invalid = decoded
+                        invalid["firstDisplay"] = evidence
                         precondition(TraceHandshake.ready(in: invalid, expected: ["firstDisplay": expected]) == nil)
                         do {
+                            _ = try TraceHandshake.firstDisplay(in: invalid)
+                            preconditionFailure("firstDisplay accepted invalid \\(field): \\(changed)")
+                        } catch let error as NSError where error.domain == "RefractBench.TraceHandshake" && error.code == 2 {
+                            // The intended native timestamp/clock validation failed.
+                        }
+                        do {
                             try validate(invalid, selectedIteration: 30)
-                        } catch { continue }
-                        preconditionFailure("accepted invalid \\(field): \\(changed)")
+                            throw ContractFailure.acceptedInvalidFirstDisplay("\\(field): \\(changed)")
+                        } catch ContractFailure.acceptedInvalidFirstDisplay(let detail) {
+                            fatalError("validate accepted invalid firstDisplay \\(detail)")
+                        } catch let error as NSError where error.domain == "RefractBench.TraceHandshake" && error.code == 2 {
+                            // The complete packet reaches firstDisplay validation, not identity mismatch.
+                        }
                     }
                 }
                 for different in ["600795.5970010419", "12345.25"] {
                     var evidence = expected
                     evidence["timestamp"] = different
-                    let changed: [String: Any] = ["firstDisplay": evidence]
+                    var changed = decoded
+                    changed["firstDisplay"] = evidence
                     try validate(changed, selectedIteration: 30)
                     let changedFirstDisplay = try TraceHandshake.firstDisplay(in: changed)
                     precondition(changedFirstDisplay == evidence)
                     precondition(TraceHandshake.ready(in: changed, expected: ["firstDisplay": expected]) == nil)
+                    precondition(TraceHandshake.ready(in: changed, expected: decoded) == nil,
+                                 "forwarding must compare the exact timestamp within a complete identity packet")
                 }
                 print("exact Swift timestamp handshake and mismatch rejection passed")
             } catch {

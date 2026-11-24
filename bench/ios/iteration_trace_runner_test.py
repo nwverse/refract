@@ -1317,7 +1317,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                 self.assertEqual(session.iteration, iteration)
             with self.subTest(entry="prepare", iteration=iteration):
                 self.prepare(iteration)
-        for iteration in (31, 1, 0):
+        for iteration in (31, 1, 0, 30.0, True):
             with self.subTest(entry="session", iteration=iteration):
                 run = self.root / f"rejected-session-{iteration}"
                 self.make_run(run)
