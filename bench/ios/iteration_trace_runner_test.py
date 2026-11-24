@@ -33,10 +33,10 @@ import iteration_trace_runner as runner
 def synthetic_final_samples(**changes):
     samples = {
         "schema": 1, "session": 1, "sourceRevision": "a" * 40,
-        "variant": "generated", "scenario": "scroll", "iteration": 0, "pid": 4242,
-        "completedIterations": 1, "recordedIteration": 0,
+        "variant": "generated", "scenario": "scroll", "iteration": 2, "pid": 4242,
+        "completedIterations": 1, "recordedIteration": 2,
         "frameIntervalMs": [16.666666666666668, 16.5, 16.75],
-        "iterationByFrame": [0, 0, 0],
+        "iterationByFrame": [2, 2, 2],
     }
     samples.update(changes)
     return samples
@@ -76,16 +76,17 @@ class RecorderFixture:
                 session: int = 1, duplicate_completion: bool = False, duplicate_request: bool = False,
                 recorder_after_ready_exit: int = 0, ready_delay: float = 0,
                 write_trace: bool = True, process_state: str = "running",
-                missing_completion: bool = False, app_iteration: int = 0,
+                missing_completion: bool = False, app_iteration: int = 2,
                 saved_path: str | None = None, recorder_stop_status: int = 0,
                 completion_delay: float = 0, app_revision: str | None = None,
+                app_scenario: str = "scroll",
                 saved_spelling: str = "Output saved", saved_lines: int = 1, missing_begin: bool = False,
                 final_samples: dict | None | str = "default",
                 stale_periodic_plist: bool = False, duplicate_native_completion: bool = False,
                 native_samples: dict | None | str = "default"):
         if final_samples == "default":
             final_samples = synthetic_final_samples(iteration=app_iteration, recordedIteration=app_iteration,
-                                                    scenario="scroll", iterationByFrame=[app_iteration] * 3,
+                                                    scenario=app_scenario, iterationByFrame=[app_iteration] * 3,
                                                     sourceRevision=app_revision or "a" * 40)
         if native_samples == "default":
             native_samples = final_samples
@@ -99,7 +100,7 @@ def publish(name, value):
     temporary.write_text(json.dumps(value))
     temporary.rename(control / name)
 packet = {{"schema": 1, "session": {session}, "revision": {app_revision or ("a" * 40)!r},
-          "variant": "generated", "scenario": "scroll", "iteration": {app_iteration},
+          "variant": "generated", "scenario": {app_scenario!r}, "iteration": {app_iteration},
           "pid": {pid!r}, "process": {process_state!r}, "state": "ready"}}
 time.sleep(0.02)
 (control / "request.json").write_text(json.dumps(packet))
@@ -270,10 +271,10 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.recorder = RecorderFixture(self.root)
         self.addCleanup(lambda: self.recorder.stop())
         self.environment = dict(os.environ, TARGET_UDID="synthetic-target")
-        self.trace = self.root / "generated-scroll-0.trace"
+        self.trace = self.root / "generated-scroll-2.trace"
 
     def session(self, start=False, **kwargs):
-        values = dict(target="synthetic-target", variant="generated", scenario="scroll", iteration=0,
+        values = dict(target="synthetic-target", variant="generated", scenario="scroll", iteration=2,
                       revision="a" * 40, run_directory=self.root, xcodebuild_log=self.recorder.output,
                       control_directory=self.root / "control", readiness_timeout=0.5, completion_timeout=0.5)
         values.update(kwargs)
@@ -321,7 +322,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(result["target_label"], "SIMULATOR")
         self.assertFalse(result["device_result"])
         self.assertEqual(result["source_revision"], "a" * 40)
-        self.assertEqual(result["trace"], "raw/generated-scroll-0.trace.zip")
+        self.assertEqual(result["trace"], "raw/generated-scroll-2.trace.zip")
         archive = self.root / result["trace"]
         self.assertTrue(archive.is_file())
         self.assertEqual(result["bytes"], archive.stat().st_size)
@@ -336,13 +337,13 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertIn('"--window", "5s"', command)
         self.assertNotIn('"boot"', command)
         self.assertNotIn('"shutdown"', command)
-        self.assertFalse((self.root / "raw/generated-scroll-0.trace").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-2.trace").exists())
         self.assertTrue((self.root / "raw/recorder-ready.json").is_file())
         self.assertTrue((self.root / "raw/completion.json").is_file())
         self.assertTrue((self.root / "raw/recorder.log").is_file())
         self.assertTrue((self.root / "xcodebuild.log").is_file())
         self.assertTrue((self.root / "raw/recorder-finished.json").is_file())
-        self.assertEqual(result["archived_package_name"], "generated-scroll-0.trace")
+        self.assertEqual(result["archived_package_name"], "generated-scroll-2.trace")
         self.assertEqual(result["native_samples"]["path"], "raw/native-samples.json")
         archived_samples = json.loads((self.root / result["native_samples"]["path"]).read_text())
         self.assertEqual(archived_samples, synthetic_final_samples())
@@ -359,19 +360,19 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(len(plist["frameIntervalMs"]), 60)
         samples = json.loads((self.root / result["native_samples"]["path"]).read_text())
         self.assertEqual(samples["completedIterations"], 1)
-        self.assertEqual(samples["recordedIteration"], 0)
+        self.assertEqual(samples["recordedIteration"], 2)
         self.assertEqual(len(samples["frameIntervalMs"]), 3)
         self.assertEqual(result["status"], "complete")
 
     def test_final_sample_identity_and_finite_intervals_fail_closed(self):
-        session = mock.Mock(session_id=1, revision="a" * 40, variant="generated", scenario="scroll", iteration=0)
+        session = mock.Mock(session_id=1, revision="a" * 40, variant="generated", scenario="scroll", iteration=2)
         valid = synthetic_final_samples()
         self.assertEqual(checked_final_samples({"finalSamples": valid}, session, 4242), valid)
         invalid = [
             synthetic_final_samples(sourceRevision="b" * 40),
             synthetic_final_samples(session=2), synthetic_final_samples(pid=4243),
             synthetic_final_samples(variant="reference"), synthetic_final_samples(scenario="stateUpdate"),
-            synthetic_final_samples(iteration=1), synthetic_final_samples(recordedIteration=1),
+            synthetic_final_samples(iteration=30), synthetic_final_samples(recordedIteration=30),
             synthetic_final_samples(completedIterations=0), synthetic_final_samples(completedIterations=2),
             synthetic_final_samples(frameIntervalMs=[]),
             synthetic_final_samples(frameIntervalMs=[16.5, float("nan")]),
@@ -379,9 +380,9 @@ class IterationTraceRunnerTest(unittest.TestCase):
             synthetic_final_samples(frameIntervalMs=[16.5, float("inf")]),
             synthetic_final_samples(frameIntervalMs=[16.5, -1]),
             synthetic_final_samples(frameIntervalMs=[16.5, True]),
-            synthetic_final_samples(iterationByFrame=[0, 1, 0]),
-            synthetic_final_samples(iterationByFrame=[0, 0]),
-            synthetic_final_samples(iterationByFrame=[0, False, 0]),
+            synthetic_final_samples(iterationByFrame=[2, 1, 2]),
+            synthetic_final_samples(iterationByFrame=[2, 2]),
+            synthetic_final_samples(iterationByFrame=[2, False, 2]),
         ]
         for samples in invalid:
             with self.subTest(samples=samples):
@@ -393,7 +394,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(HandshakeError, "exact native final sample"):
             self.capture(self.session())
         self.assertFalse((self.root / "raw/native-samples.json").exists())
-        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
 
     def test_missing_partial_stale_and_ambiguous_final_packets_reject_before_archive(self):
         missing_keys = tuple(synthetic_final_samples())
@@ -402,8 +403,8 @@ class IterationTraceRunnerTest(unittest.TestCase):
         cases.extend([
             ("stale-revision", {"sourceRevision": "b" * 40}),
             ("stale-completion", {"completedIterations": 0}),
-            ("wrong-iteration", {"recordedIteration": 1}),
-            ("wrong-frame-tag", {"iterationByFrame": [0, 1, 0]}),
+            ("wrong-iteration", {"recordedIteration": 30}),
+            ("wrong-frame-tag", {"iterationByFrame": [2, 1, 2]}),
             ("nonfinite", {"frameIntervalMs": [16.5, float("inf"), 16.5]}),
         ])
         for name, change in cases:
@@ -422,7 +423,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     recorder.start(session=session, final_samples=synthetic_final_samples(**change))
                 with self.assertRaisesRegex(HandshakeError, "sample|frame|display|interval|Ambiguous"):
                     self.capture(session, recorder)
-                self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
+                self.assertFalse((root / "raw/generated-scroll-2.trace.zip").exists())
                 self.assertFalse((root / "raw/native-samples.json").exists())
                 self.assertFalse((root / "raw/iteration-trace.json").exists())
 
@@ -537,7 +538,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 status = runner.main([
                     "--run-directory", str(self.root), "--derived-data", str(derived_data),
                     "--target-udid", "synthetic-target", "--variant", "generated", "--scenario", "scroll",
-                    "--iteration", "0", "--source-revision", "a" * 40,
+                    "--iteration", "2", "--source-revision", "a" * 40,
                     "--readiness-timeout", "0.5", "--completion-timeout", "0.5",
                 ])
         _, process_stderr = self.recorder.process.communicate(timeout=5)
@@ -549,23 +550,23 @@ class IterationTraceRunnerTest(unittest.TestCase):
             "DYLD_LIBRARY_PATH": "__TESTROOT__/Release-iphonesimulator",
             "REFRACT_BENCH_REVISION": "a" * 40,
             "REFRACT_BENCH_TRACE_CONTROL": str(self.root / "control"),
-            "REFRACT_BENCH_TRACE_ITERATION": "0",
+            "REFRACT_BENCH_TRACE_ITERATION": "2",
         })
         self.assertEqual(self.recorder.process.returncode, 0)
         self.assertTrue(all((self.root / name).is_file() for name in TARGET_PROBE_FILENAMES))
-        self.assertEqual(json.loads((self.root / "iteration-trace-config.json").read_text())["iteration"], 0)
+        self.assertEqual(json.loads((self.root / "iteration-trace-config.json").read_text())["iteration"], 2)
         self.assertTrue((self.root / "refract-build-provenance.json").is_file())
 
     def test_reused_run_directory_or_trace_is_never_replaced(self):
         self.run_success()
         self.recorder.stop()
-        original = (self.root / "raw/generated-scroll-0.trace.zip").read_bytes()
+        original = (self.root / "raw/generated-scroll-2.trace.zip").read_bytes()
         # No preflight here: the previous run left packets behind, and capture
         # must fail closed rather than treat them as a fresh epoch.
         self.recorder.start()
         with self.assertRaisesRegex(HandshakeError, "new run directory|Refusing"):
             self.capture(self.session())
-        self.assertEqual((self.root / "raw/generated-scroll-0.trace.zip").read_bytes(), original)
+        self.assertEqual((self.root / "raw/generated-scroll-2.trace.zip").read_bytes(), original)
 
     def test_executed_or_archived_configuration_drift_is_rejected_before_capture(self):
         for target in ("executed", "archived"):
@@ -607,7 +608,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                                                       "control_directory": root / "control"}, pid=pid)
                 with self.assertRaisesRegex(HandshakeError, "PID|pid|process"):
                     self.capture(session, recorder)
-                self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
+                self.assertFalse((root / "raw/generated-scroll-2.trace.zip").exists())
         root = self.root / "ambiguous-pid"
         recorder = RecorderFixture(root)
         self.addCleanup(recorder.stop)
@@ -625,6 +626,48 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(result["native_iteration_completion"], "generated scroll complete 1")
         self.assertEqual(json.loads((self.root / "raw/completion.json").read_text())["iteration"], 29)
         self.assertTrue((self.root / "raw/generated-scroll-29.trace.zip").is_file())
+
+    def test_iteration_30_preserves_all_completion_and_frame_identity(self):
+        for scenario in ("scroll", "stateUpdate"):
+            with self.subTest(scenario=scenario):
+                root = self.root / f"iteration-30-{scenario}"
+                recorder = RecorderFixture(root)
+                self.addCleanup(recorder.stop)
+                session = self.launch(
+                    fixture=recorder,
+                    session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                    "control_directory": root / "control", "scenario": scenario,
+                                    "iteration": 30},
+                    app_iteration=30,
+                    app_scenario=scenario,
+                    completion=f"generated {scenario} complete 1",
+                    final_samples=synthetic_final_samples(
+                        scenario=scenario, iteration=30, recordedIteration=30,
+                        iterationByFrame=[30, 30, 30]))
+                result = self.capture(session, recorder)
+                recorder.process.wait(timeout=5)
+                self.assertEqual(result["iteration"], 30)
+                self.assertEqual(result["scenario"], scenario)
+                self.assertEqual(result["native_iteration_completion"], f"generated {scenario} complete 1")
+                for name in ("request", "begin", "native-completion", "completion"):
+                    packet = json.loads((root / f"control/{name}.json").read_text())
+                    self.assertEqual(packet["iteration"], 30, name)
+                    self.assertEqual(packet["variant"], "generated", name)
+                    self.assertEqual(packet["scenario"], scenario, name)
+                    self.assertEqual(packet["session"], 1, name)
+                expected = synthetic_final_samples(scenario=scenario, iteration=30,
+                                                   recordedIteration=30, iterationByFrame=[30, 30, 30])
+                self.assertEqual(json.loads((root / "raw/native-samples.json").read_text()), expected)
+                self.assertEqual(json.loads((root / "control/completion.json").read_text())["finalSamples"],
+                                 expected)
+                self.assertTrue((root / f"raw/generated-{scenario}-30.trace.zip").is_file())
+
+    def test_stale_iteration_29_is_rejected_for_iteration_30_before_recorder_start(self):
+        session = self.launch(session_kwargs={"iteration": 30}, app_iteration=29)
+        with self.assertRaisesRegex(HandshakeError, "iteration.*expected 30.*got 29"):
+            self.capture(session)
+        self.assertIsNone(self.recorder.recorder)
+        self.assertFalse((self.root / "raw/iteration-trace.json").exists())
 
     def test_stale_session_is_rejected_before_recorder_start(self):
         # A stale session_id is rejected when the first identity packet arrives
@@ -649,7 +692,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         for field, value, completion in (
             ("variant", "reference", "reference scroll complete 1"),
             ("scenario", "stateUpdate", "generated stateUpdate complete 1"),
-            ("iteration", 1, "generated scroll complete 1"),
+            ("iteration", 30, "generated scroll complete 1"),
         ):
             with self.subTest(field=field):
                 root = self.root / f"identity-{field}"
@@ -663,13 +706,13 @@ class IterationTraceRunnerTest(unittest.TestCase):
                                       completion=completion)
                 with self.assertRaisesRegex(HandshakeError, "identity|iteration|completion|variant|scenario"):
                     self.capture(session, recorder)
-                self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
+                self.assertFalse((root / "raw/generated-scroll-2.trace.zip").exists())
 
     def test_ambiguous_completion_is_not_selected(self):
         session = self.launch(duplicate_completion=True)
         with self.assertRaisesRegex(HandshakeError, "Ambiguous.*completion"):
             self.capture(session)
-        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
 
     def test_recorder_exit_before_ready_cannot_be_hidden(self):
         session = self.launch(ready=None, ready_delay=0.02)
@@ -764,15 +807,10 @@ class IterationTraceRunnerTest(unittest.TestCase):
         session.record_capture_start_epoch()
 
         packet = {"schema": 1, "session": 1, "revision": "a" * 40,
-                  "variant": "generated", "scenario": "scroll", "iteration": 0,
+                  "variant": "generated", "scenario": "scroll", "iteration": 2,
                   "pid": 4242, "process": "running", "state": "ready"}
         complete = dict(packet, state="complete", completion="generated scroll complete 1")
-        complete["finalSamples"] = {
-            "schema": 1, "session": 1, "sourceRevision": "a" * 40,
-            "variant": "generated", "scenario": "scroll", "iteration": 0, "pid": 4242,
-            "completedIterations": 1, "recordedIteration": 0,
-            "frameIntervalMs": [16.5], "iterationByFrame": [0],
-        }
+        complete["finalSamples"] = synthetic_final_samples(frameIntervalMs=[16.5], iterationByFrame=[2])
         begin = dict(packet, state="begin")
         launch_gate = self.recorder.work / "launch-gate"
         published_gate = self.recorder.work / "published-gate"
@@ -900,7 +938,7 @@ while True:
         session = self.launch(write_trace=False)
         with self.assertRaisesRegex(HandshakeError, "did not save the exact requested trace package"):
             self.capture(session)
-        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
         self.assertTrue((self.root / "raw/completion.json").is_file())
 
     def test_saved_path_for_another_package_is_rejected(self):
@@ -915,7 +953,7 @@ while True:
                                     "exited before native completion with status 7"):
             self.capture(session)
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
-        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
 
     def capture_stop_race(self, recorder):
@@ -945,7 +983,7 @@ while True:
         self.capture_stop_race(recorder)
         self.assertEqual(recorder.signals, [])
         self.assertEqual(recorder.returncode, 7)
-        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
         self.assertFalse((self.root / "control/recorder-finished.json").exists())
 
     def test_exact_existing_xctest_selectors_and_xctestrun_command(self):
@@ -975,18 +1013,18 @@ while True:
     def test_real_xctrace_saved_output_spelling_is_accepted(self):
         self.assertEqual(SAVED_OUTPUT.findall(
             "Recording failed with errors. Saving output file...\n"
-            "Output file saved as: generated-scroll-0.trace\n"), ["generated-scroll-0.trace"])
-        self.assertEqual(SAVED_OUTPUT.findall("Output saved: generated-scroll-0.trace\n"),
-                         ["generated-scroll-0.trace"])
+            "Output file saved as: generated-scroll-2.trace\n"), ["generated-scroll-2.trace"])
+        self.assertEqual(SAVED_OUTPUT.findall("Output saved: generated-scroll-2.trace\n"),
+                         ["generated-scroll-2.trace"])
         self.assertEqual(SAVED_OUTPUT.findall(
-            "Output file saved as: generated-scroll-0.trace\n"
-            "Output file saved as: generated-scroll-0.trace\n"),
-            ["generated-scroll-0.trace", "generated-scroll-0.trace"])
+            "Output file saved as: generated-scroll-2.trace\n"
+            "Output file saved as: generated-scroll-2.trace\n"),
+            ["generated-scroll-2.trace", "generated-scroll-2.trace"])
 
-        self.assertTrue(saved_trace_matches("generated-scroll-0.trace", self.trace))
+        self.assertTrue(saved_trace_matches("generated-scroll-2.trace", self.trace))
         self.assertTrue(saved_trace_matches(str(self.trace), self.trace))
         self.assertFalse(saved_trace_matches("another.trace", self.trace))
-        self.assertFalse(saved_trace_matches("subdir/generated-scroll-0.trace", self.trace))
+        self.assertFalse(saved_trace_matches("subdir/generated-scroll-2.trace", self.trace))
 
     def test_actual_output_spelling_and_bare_package_are_archived(self):
         session = self.launch(saved_path=self.trace.name, saved_spelling="Output file saved as")
@@ -995,7 +1033,7 @@ while True:
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["archived_package_name"], self.trace.name)
         self.assertTrue((self.root / result["trace"]).is_file())
-        self.assertIn("Output file saved as: generated-scroll-0.trace\n",
+        self.assertIn("Output file saved as: generated-scroll-2.trace\n",
                       (self.root / "raw/recorder.log").read_text())
 
     def test_actual_output_spelling_keeps_path_and_uniqueness_gates(self):
@@ -1018,20 +1056,20 @@ while True:
                 with self.assertRaisesRegex(HandshakeError, "exact requested trace"):
                     self.capture(session, recorder)
                 self.assertFalse((root / "raw/iteration-trace.json").exists())
-                self.assertFalse((root / "raw/generated-scroll-0.trace.zip").exists())
+                self.assertFalse((root / "raw/generated-scroll-2.trace.zip").exists())
 
     def test_actual_output_spelling_never_accepts_failed_recorder(self):
         session = self.launch()
         recorder = StopRaceRecorder(
             self.root / "control", 7,
             stdout="Starting recording with the Animation Hitches template. Attach to stop.\n"
-                   "Output file saved as: generated-scroll-0.trace\n")
+                   "Output file saved as: generated-scroll-2.trace\n")
         self.recorder.recorder = recorder
         self.recorder.recorder_factory = lambda command, stream: recorder
         with self.assertRaisesRegex(HandshakeError, "exited with status 7"):
             self.capture(session)
         self.assertFalse((self.root / "raw/iteration-trace.json").exists())
-        self.assertFalse((self.root / "raw/generated-scroll-0.trace.zip").exists())
+        self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
 
     def test_swiftui_template_is_recorded_in_command_and_result_metadata(self):
         session = self.launch(session_kwargs={"template": "SwiftUI"},
@@ -1057,7 +1095,7 @@ while True:
         self.assertEqual(arguments[arguments.index("--template") + 1], "Animation Hitches")
         self.recorder.stop()
         self.root = self.root / "mismatched-template"
-        self.trace = self.root / "generated-scroll-0.trace"
+        self.trace = self.root / "generated-scroll-2.trace"
         self.recorder = RecorderFixture(self.root)
         self.addCleanup(self.recorder.stop)
         session = self.launch(session_kwargs={"template": "SwiftUI"},
@@ -1223,13 +1261,13 @@ class TraceBuildProvenanceTest(unittest.TestCase):
 
     def test_consecutive_preparations_retain_exact_configuration_identity(self):
         original = self.source.read_bytes()
-        first = self.prepare(0)
+        first = self.prepare(29)
         first_bytes = first.read_bytes()
-        second = self.prepare(1)
+        second = self.prepare(30)
         self.assertNotEqual(first, second)
         self.assertEqual(first.read_bytes(), first_bytes)
         self.assertEqual(self.source.read_bytes(), original)
-        for path, iteration in ((first, 0), (second, 1)):
+        for path, iteration in ((first, 29), (second, 30)):
             with self.subTest(iteration=iteration):
                 run = self.root / f"run-{iteration}"
                 self.assertEqual(run, self.root / f"run-{iteration}")
@@ -1260,9 +1298,43 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                 (run / "control/iteration-marker").write_text(str(iteration))
         self.assertNotEqual(first.read_bytes(), second.read_bytes())
         with self.assertRaisesRegex(HandshakeError, "Refusing to replace|new run"):
-            prepare_test_run(self.derived_data, self.root / "run-0/control", "a" * 40, 0,
-                             self.root / "run-0", validate_build_provenance(self.derived_data, "a" * 40))
+            prepare_test_run(self.derived_data, self.root / "run-29/control", "a" * 40, 29,
+                             self.root / "run-29", validate_build_provenance(self.derived_data, "a" * 40))
         self.assertEqual(first.read_bytes(), first_bytes)
+
+    def test_only_the_thirty_existing_traced_identities_are_admitted(self):
+        self.assertEqual(list(runner.TRACED_ITERATIONS), list(range(2, 31)))
+        for iteration in (29, 30):
+            with self.subTest(entry="session", iteration=iteration):
+                run = self.root / f"boundary-session-{iteration}"
+                self.make_run(run)
+                log = run / "xcodebuild.log"
+                log.write_text("synthetic test\n")
+                session = Session(target="synthetic-target", variant="generated", scenario="scroll",
+                                  iteration=iteration, revision="a" * 40, run_directory=run,
+                                  xcodebuild_log=log, control_directory=run / "control",
+                                  derived_data=self.derived_data)
+                self.assertEqual(session.iteration, iteration)
+            with self.subTest(entry="prepare", iteration=iteration):
+                self.prepare(iteration)
+        for iteration in (31, 1, 0):
+            with self.subTest(entry="session", iteration=iteration):
+                run = self.root / f"rejected-session-{iteration}"
+                self.make_run(run)
+                log = run / "xcodebuild.log"
+                log.write_text("synthetic test\n")
+                with self.assertRaisesRegex(HandshakeError, r"Iteration must be in 2\.\.30"):
+                    Session(target="synthetic-target", variant="generated", scenario="scroll",
+                            iteration=iteration, revision="a" * 40, run_directory=run,
+                            xcodebuild_log=log, control_directory=run / "control")
+            with self.subTest(entry="prepare", iteration=iteration):
+                run = self.root / f"rejected-prepare-{iteration}"
+                self.make_run(run)
+                with mock.patch("iteration_trace_runner.subprocess.run") as plutil:
+                    with self.assertRaisesRegex(HandshakeError, r"iteration in 2\.\.30"):
+                        self.prepare_run(run, iteration)
+                plutil.assert_not_called()
+                self.assertEqual(list((run / "control").iterdir()), [])
 
     def test_failed_preparation_keeps_publication_and_never_deletes_replacement(self):
         run = self.root / "failed-run"
@@ -1286,7 +1358,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                 with mock.patch("iteration_trace_runner.subprocess.run", side_effect=publish_then_replace):
                     expected = OSError if attempt == 0 else HandshakeError
                     with self.assertRaises(expected) as raised:
-                        prepare_test_run(self.derived_data, run / "control", "a" * 40, 0, run,
+                        prepare_test_run(self.derived_data, run / "control", "a" * 40, 2, run,
                                          validate_build_provenance(self.derived_data, "a" * 40))
                     if attempt == 0:
                         self.assertRegex(str(raised.exception), "synthetic failure after publication")
@@ -1313,14 +1385,14 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         with mock.patch("iteration_trace_runner.atomic_json", side_effect=fail_receipt), \
                 mock.patch("iteration_trace_runner.os.link", side_effect=retain_link):
             with self.assertRaisesRegex(OSError, "receipt write failed"):
-                self.prepare_run(run, 0)
+                self.prepare_run(run, 2)
         self.assertIsNotNone(published)
         self.assertTrue(published.is_file())
         self.assertFalse((run / "iteration-trace-config.json").exists())
         (run / "iteration-trace-config.xctestrun").unlink()
         (run / "refract-build-provenance.json").unlink()
         with self.assertRaisesRegex(HandshakeError, "Refusing to replace"):
-            self.prepare_run(run, 0)
+            self.prepare_run(run, 2)
 
     def test_failed_conversion_does_not_remove_another_preparations_destination(self):
         run = self.root / "concurrent-run"
@@ -1338,7 +1410,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
 
         with mock.patch("iteration_trace_runner.subprocess.run", side_effect=concurrent_convert):
             with self.assertRaisesRegex(OSError, "concurrent conversion failure"):
-                prepare_test_run(self.derived_data, run / "control", "a" * 40, 0, run,
+                prepare_test_run(self.derived_data, run / "control", "a" * 40, 2, run,
                                  validate_build_provenance(self.derived_data, "a" * 40))
         identity = hashlib.sha256(f"{'a' * 40}\0{run / 'control'}\00".encode()).hexdigest()[:24]
         destination = self.derived_data / "Build/Products" / f"iteration-trace-config-{identity}.xctestrun"
@@ -1348,7 +1420,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
     def test_product_replacement_after_prepare_is_rejected_before_capture(self):
         run = self.root / "capture-products-run"
         self.make_run(run)
-        self.prepare_run(run, 0)
+        self.prepare_run(run, 2)
         (run / "control").rmdir()
         (run / "control").mkdir()
         executable = (self.derived_data / "Build/Products/Release-iphonesimulator/"
@@ -1357,7 +1429,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         (run / "xcodebuild.log").write_text("synthetic test log\n")
         with mock.patch("iteration_trace_runner.subprocess.run") as plutil:
             with self.assertRaisesRegex(HandshakeError, "product|digest|identity"):
-                session = Session(target="synthetic-target", variant="generated", scenario="scroll", iteration=0,
+                session = Session(target="synthetic-target", variant="generated", scenario="scroll", iteration=2,
                                   revision="a" * 40, run_directory=run,
                                   xcodebuild_log=run / "xcodebuild.log",
                                   control_directory=run / "control", derived_data=self.derived_data)
@@ -1391,7 +1463,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
             status = main(["--run-directory", str(self.root / "replaced-before-launch"),
                            "--derived-data", str(self.derived_data),
                            "--target-udid", "synthetic-target", "--target-metadata", str(target),
-                           "--variant", "generated", "--scenario", "scroll", "--iteration", "0",
+                           "--variant", "generated", "--scenario", "scroll", "--iteration", "2",
                            "--source-revision", "a" * 40])
         self.assertEqual(status, 2)
         launch.assert_not_called()
@@ -1402,8 +1474,8 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         recorder = RecorderFixture(run, create_run_directory=False)
         self.addCleanup(recorder.stop)
         self.make_run(run)
-        self.prepare_run(run, 0)
-        session = Session(target="synthetic-target", variant="generated", scenario="scroll", iteration=0,
+        self.prepare_run(run, 2)
+        session = Session(target="synthetic-target", variant="generated", scenario="scroll", iteration=2,
                           revision="a" * 40, run_directory=run, xcodebuild_log=recorder.output,
                           control_directory=run / "control", readiness_timeout=0.5, completion_timeout=0.5,
                           derived_data=self.derived_data)
@@ -1436,7 +1508,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         self.make_run(run)
         with mock.patch("iteration_trace_runner.subprocess.run") as plutil:
             with self.assertRaisesRegex(HandshakeError, "Exactly one.*generated xctestrun"):
-                self.prepare_run(run, 0)
+                self.prepare_run(run, 2)
         plutil.assert_not_called()
 
     def test_build_products_from_a_are_rejected_at_b_head_before_launch(self):
@@ -1514,7 +1586,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
             status = main(["--run-directory", str(self.root / "ab-run"),
                            "--derived-data", str(self.derived_data),
                            "--target-udid", "synthetic-target", "--target-metadata", str(target),
-                           "--variant", "generated", "--scenario", "scroll", "--iteration", "0",
+                           "--variant", "generated", "--scenario", "scroll", "--iteration", "2",
                            "--source-revision", "b" * 40])
         self.assertEqual(status, 2)
         prepare.assert_not_called()
@@ -1537,7 +1609,7 @@ class TraceBuildProvenanceTest(unittest.TestCase):
             status = main(["--run-directory", str(self.root / "drifted-run"),
                            "--derived-data", str(self.derived_data),
                            "--target-udid", "synthetic-target", "--target-metadata", str(target),
-                           "--variant", "generated", "--scenario", "scroll", "--iteration", "0",
+                           "--variant", "generated", "--scenario", "scroll", "--iteration", "2",
                            "--source-revision", "a" * 40])
         self.assertEqual(status, 2)
         launch.assert_not_called()

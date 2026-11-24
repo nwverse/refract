@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -23,6 +24,18 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn("GeneratedSettingsScreen(model: model)", APP)
         self.assertIn("ReferenceSettingsScreen(model: model)", APP)
         self.assertIn('return 0..<30', APP)
+        self.assertIn("static let tracedIterations = 2...30", RECORDER)
+        self.assertIn("static let tracedIterations = 2...30", TESTS)
+        self.assertIn("let iteration = TraceHandshake.tracedIteration(iterationValue)", TESTS)
+        self.assertIn('application.launchEnvironment["REFRACT_BENCH_ITERATION"] = String(iteration)', TESTS)
+        self.assertEqual(APP.count("BenchmarkDisplayRecorder.tracedIterations.contains(iteration)"), 3)
+        self.assertEqual(RECORDER.count("Self.tracedIterations.contains(iteration)"), 3)
+        self.assertIn("iteration == completedIterations, (0..<30).contains(iteration)", RECORDER)
+        self.assertIn("TRACED_ITERATIONS = range(2, 31)", RUNNER)
+        self.assertEqual(RUNNER.count("iteration not in TRACED_ITERATIONS"), 2)
+        readme = (HERE / "README.md").read_text()
+        self.assertIn("2...30 inclusive", readme)
+        self.assertIn("--iteration <2-through-30>", readme)
 
     def test_selected_iteration_uses_the_same_native_input_step(self):
         self.assertIn("await scrollStep(iteration: iteration)", APP)
@@ -110,6 +123,7 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertLess(ready, completion)
         self.assertLess(completion, publish)
         self.assertIn('guard active, scenario == "startup", selectedIteration == iteration', RECORDER)
+        self.assertIn("Self.tracedIterations.contains(iteration), let firstDisplay", RECORDER)
         self.assertIn("let firstDisplay, firstDisplay.isFinite, firstDisplay > 0", RECORDER)
         self.assertIn('firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": String(timestamp)]', APP)
         self.assertIn("firstDisplay: firstDisplay, finalSamples: finalSamples)", APP)
@@ -143,7 +157,7 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('packet["finalSamples"] = finalSamples', APP)
         self.assertIn("func finalSamples(iteration: Int) -> [String: Any]?", RECORDER)
         for condition in (
-            "selectedIteration == iteration", "completedIterations == 1", "recordedIteration == iteration",
+            "selectedIteration == iteration", "Self.tracedIterations.contains(iteration)", "completedIterations == 1",
             "frames.allSatisfy({ $0.isFinite && $0 > 0 })", "iterations.count == frames.count",
             "iterations.allSatisfy({ $0 == iteration })", "completion?.count == 1",
         ):
@@ -190,6 +204,67 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('"-only-testing:{test}"', RUNNER)
 
 
+class SwiftTracedIterationDomainTest(unittest.TestCase):
+    def test_native_ready_and_recorder_guards_admit_29_30_and_reject_31(self):
+        swift = os.environ.get("REFRACT_SWIFTC") or shutil.which("swiftc")
+        if swift is None:
+            self.fail("The focused Swift source regression requires a Swift toolchain")
+        recorder_start = RECORDER.index("    // #219 has exactly thirty traced identities:")
+        recorder_range = RECORDER[recorder_start:RECORDER.index("\n\n", recorder_start)]
+        test_start = TESTS.index("    static let tracedIterations =")
+        test_domain = TESTS[test_start:TESTS.index("    static func write(", test_start)]
+        for marker in (
+            "guard let iteration = selectedIteration(), BenchmarkDisplayRecorder.tracedIterations.contains(iteration)",
+            "Self.tracedIterations.contains(iteration), let firstDisplay",
+            "guard iteration == selectedIteration, Self.tracedIterations.contains(iteration)",
+        ):
+            self.assertIn(marker, APP + RECORDER)
+        script = textwrap.dedent("""
+            import Foundation
+
+            enum BenchmarkDisplayRecorder {
+            @RECORDER_RANGE@
+            }
+
+            enum TraceHandshake {
+            @TEST_DOMAIN@
+            }
+
+            precondition(Array(BenchmarkDisplayRecorder.tracedIterations) == Array(2...30),
+                         "domain must contain exactly 2...30")
+            precondition(BenchmarkDisplayRecorder.tracedIterations.lowerBound == 2)
+            precondition(BenchmarkDisplayRecorder.tracedIterations.upperBound == 30)
+            precondition(TraceHandshake.tracedIterations.lowerBound == 2)
+            precondition(TraceHandshake.tracedIterations.upperBound == 30)
+            for iteration in [29, 30] {
+                precondition(TraceHandshake.tracedIteration(String(iteration)) == iteration,
+                             "accepted identity \\(iteration) must survive parsing")
+                precondition(BenchmarkDisplayRecorder.tracedIterations.contains(iteration),
+                             "recorder must accept \\(iteration)")
+            }
+            precondition(TraceHandshake.tracedIteration("030") == 30, "integer spelling 030 is the same identity")
+            for value in ["31", "1", "0", "30.0", " 30", "", "not-an-integer"] {
+                precondition(TraceHandshake.tracedIteration(value) == nil,
+                             "unexpected parsed value for \\(value.debugDescription): \\(String(describing: TraceHandshake.tracedIteration(value)))")
+            }
+            for iteration in [31, 1, 0] {
+                precondition(!BenchmarkDisplayRecorder.tracedIterations.contains(iteration),
+                             "recorder accepted out-of-domain \\(iteration)")
+            }
+            print("exact Swift traced iteration domain passed")
+            """).lstrip().replace("@RECORDER_RANGE@", recorder_range).replace("@TEST_DOMAIN@", test_domain)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "main.swift"
+            path.write_text(script)
+            result = subprocess.run([swift, str(path), "-o", str(Path(temporary) / "iteration-check")],
+                                    capture_output=True, text=True, timeout=60, check=False)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(Path(temporary) / "iteration-check")],
+                                    capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("exact Swift traced iteration domain passed", result.stdout)
+
+
 class SwiftFinalSamplesContractTest(unittest.TestCase):
     def test_extracted_native_ui_validation_round_trips_and_rejects_corruption(self):
         swift = os.environ.get("REFRACT_SWIFTC") or shutil.which("swiftc")
@@ -217,6 +292,18 @@ func check(_ samples: [String: Any], valid: Bool) {
         _ = try TraceHandshake.finalSamples(in: ["finalSamples": samples], revision: "revision",
                                            variant: "generated", scenario: "scroll", iteration: 2, pid: 42)
         precondition(valid, "accepted invalid final native samples")
+        for iteration in [29, 30] {
+            var boundary = samples
+            boundary["iteration"] = iteration
+            boundary["recordedIteration"] = iteration
+            boundary["iterationByFrame"] = [iteration, iteration]
+            for scenario in ["scroll", "stateUpdate"] {
+                boundary["scenario"] = scenario
+                _ = try TraceHandshake.finalSamples(in: ["finalSamples": boundary], revision: "revision",
+                                                     variant: "generated", scenario: scenario,
+                                                     iteration: iteration, pid: 42)
+            }
+        }
     } catch {
         precondition(!valid, "rejected valid final native samples: \\(error)")
     }

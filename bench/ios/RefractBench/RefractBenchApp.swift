@@ -33,8 +33,9 @@ struct RefractBenchApp: App {
 
     @MainActor
     private func beginTrace() {
-        guard let iteration = selectedIteration, let directory = traceControlDirectory() else {
-            traceIdentityError = "The selected iteration has no control directory"
+        guard let iteration = selectedIteration, BenchmarkDisplayRecorder.tracedIterations.contains(iteration),
+              let directory = traceControlDirectory() else {
+            traceIdentityError = "The selected traced iteration or control directory is unsupported"
             return
         }
         do {
@@ -118,7 +119,7 @@ private final class TraceReadiness: ObservableObject {
     @Published private(set) var isReady = false
 
     init() {
-        guard let iteration = selectedIteration(), (0..<30).contains(iteration),
+        guard let iteration = selectedIteration(), BenchmarkDisplayRecorder.tracedIterations.contains(iteration),
               let directory = traceControlDirectory(),
               let data = try? JSONSerialization.data(withJSONObject: [
                 "schema": 1, "session": 1,
@@ -145,7 +146,7 @@ private final class TraceReadiness: ObservableObject {
 
 @MainActor
 private func runTracedIteration(variant: String, model: BenchmarkSettingsModel) async {
-    guard let iteration = selectedIteration(), (0..<30).contains(iteration),
+    guard let iteration = selectedIteration(), BenchmarkDisplayRecorder.tracedIterations.contains(iteration),
           let directory = traceControlDirectory() else { return }
     let scenario = ProcessInfo.processInfo.environment["REFRACT_BENCH_SCENARIO"] ?? ""
     let revision = ProcessInfo.processInfo.environment["REFRACT_BENCH_REVISION"] ?? ""
@@ -290,7 +291,7 @@ private func selectedIteration() -> Int? {
 
 @MainActor
 private func iterationRange() -> Range<Int> {
-    if let iteration = selectedIteration(), (0..<30).contains(iteration) {
+    if let iteration = selectedIteration() {
         return iteration..<(iteration + 1)
     }
     return 0..<30

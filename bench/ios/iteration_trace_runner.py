@@ -35,6 +35,8 @@ class HandshakeError(ValueError):
 
 VARIANTS = ("generated", "reference")
 SCENARIOS = ("scroll", "stateUpdate", "startup")
+# The #219 traced series contains exactly the 30 existing identities 2...30.
+TRACED_ITERATIONS = range(2, 31)
 TARGET_PROBE_FILENAMES = ("targets.json", "simulators.json", "target.json")
 READY_OUTPUT = re.compile(r"(?:^|\n)Starting recording with the (.+?) template\.[^\n]*(?:\n|$)")
 SAVED_OUTPUT = re.compile(r"(?:^|\n)Output (?:file saved as|saved):[ \t]*(.+?)[ \t]*(?=\n|$)")
@@ -181,8 +183,8 @@ class Session:
                  target_probe_files: tuple[Path, ...] = ()):
         if variant not in VARIANTS or scenario not in SCENARIOS:
             raise HandshakeError("Unsupported variant or scenario")
-        if iteration not in range(30):
-            raise HandshakeError("Iteration must be in 0..29")
+        if iteration not in TRACED_ITERATIONS:
+            raise HandshakeError("Iteration must be in 2..30")
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise HandshakeError("A committed 40-character source revision is required")
         if not re.fullmatch(r"[1-9][0-9]*(s|ms)", window):
@@ -659,8 +661,8 @@ def prepare_test_run(derived_data: Path, control: Path, revision: str, iteration
                      target_probe_files: tuple[Path, ...] = ()):
     if run_directory is None or build_provenance is None:
         raise HandshakeError("Each trace configuration requires a new run directory and validated build provenance")
-    if not re.fullmatch(r"[0-9a-f]{40}", revision) or iteration not in range(30):
-        raise HandshakeError("Trace configuration requires an exact source revision and iteration in 0..29")
+    if not re.fullmatch(r"[0-9a-f]{40}", revision) or iteration not in TRACED_ITERATIONS:
+        raise HandshakeError("Trace configuration requires an exact source revision and iteration in 2..30")
     if (build_provenance.get("path") != derived_data / BUILD_PROVENANCE_NAME
             or build_provenance.get("source_revision") != revision):
         raise HandshakeError("Validated build provenance must match this exact revision and DerivedData")
