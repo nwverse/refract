@@ -350,7 +350,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
         return session
 
     def capture(self, session, fixture=None):
-        fixture = fixture or self.recorder
+        fixture = self.recorder if fixture is None else fixture
         if getattr(session, "_capture_epoch", None) is None:
             # A direct synthetic Session has no real main() preflight. Freeze
             # before invoking capture, not after the packet checks, mirroring
@@ -367,6 +367,26 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     content = path.read_text(encoding="utf-8") if path.is_file() else "<not written>"
                     error.add_note(f"Synthetic recorder {label}:\n{content}")
                 raise
+
+    def test_failed_capture_annotates_the_independent_fixture(self):
+        recorder = RecorderFixture(self.root / "independent")
+        self.addCleanup(recorder.stop)
+        recorder.prepare(resources=[], forwarded_resources=[])
+        recorder.commands.write_text("independent fixture command\n", encoding="utf-8")
+        with mock.patch.object(Session, "capture", autospec=True,
+                               side_effect=HandshakeError("forced capture failure")) as capture:
+            session = self.session()
+            with self.assertRaises(HandshakeError) as raised:
+                self.capture(session, recorder)
+        capture.assert_called_once_with(session, recorder.process, recorder.recorder_factory)
+        self.assertIs(capture.call_args.args[0], session)
+        self.assertIs(capture.call_args.args[1], recorder.process)
+        self.assertIs(capture.call_args.args[2], recorder.recorder_factory)
+        command_notes = [note for note in raised.exception.__notes__
+                         if note.startswith("Synthetic recorder command log:\n")]
+        self.assertEqual(command_notes,
+                         ["Synthetic recorder command log:\nindependent fixture command\n"])
+        self.assertFalse(self.recorder.commands.is_file())
 
     def launch(self, session=None, fixture=None, session_kwargs=None, **recorder_kwargs):
         """Mirror main(): preflight the fresh control epoch before launching
