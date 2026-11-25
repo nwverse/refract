@@ -23,6 +23,9 @@ Preserve them with exact source/toolchain/target metadata, acquisition/export co
 Instruments packages when ordinary files are needed for public review; a directory named `.trace` is not a trace file.
 `bench/ios/archive_trace.py` archives only an already completed package, never overwrites output and does not establish
 that capture finished or that a package belongs to a measurement.
+An ordinary artifact leaf is not sufficient containment: a symbolic-link `raw/` or nested parent can redirect unchanged,
+correctly checksummed bytes outside the evidence root. Reject a linked root and every raw-path ancestor before hashing,
+and require resolved parents to stay inside that root.
 Every sample must be directly bound to its variant, scenario and iteration and to the corresponding native trace.
 On iOS, also require exactly one identity-matched `xcode-metric-json` per timing measurement; a profiler trace is
 supporting evidence, not a substitute for the native launch or display-interval export. Do not infer ownership from a
