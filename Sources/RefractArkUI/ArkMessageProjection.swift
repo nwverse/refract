@@ -9,6 +9,11 @@ extension Generation {
                            resolver: InteropResolver?) throws {
         let items = nested.items
         guard let parentName = nested.parent ?? parent,
+              parent != parentName, declaredItemInputs.contains(parentName), ArkText.isIdentifier(parentName),
+              let parentArgument = nested.message,
+              parentArgument.label == "message", parentArgument.expression == parentName,
+              let blockArgument = nested.block,
+              blockArgument.label == "block", blockArgument.expression == items.itemName,
               let message = itemTypes.first(where: { $0.name == "ChatMessage" }),
               message.messageProjection,
               let block = itemTypes.first(where: { $0.name == items.itemType }),
@@ -25,8 +30,9 @@ extension Generation {
                 suggestion: "Use ForEach(message.blocks) with MessageBlock(message: message, block: block)",
                 location: location)
         }
-        writer.open("ForEach(\(parentName).blocks, (\(items.itemName): ChatBlock) =>")
-        let arguments = "message: \(parentName), block: \(items.itemName)"
+        let parentReceiver = "this.\(parentName)"
+        writer.open("ForEach(\(parentReceiver).blocks, (\(items.itemName): ChatBlock) =>")
+        let arguments = "message: \(parentReceiver), block: \(items.itemName)"
         writer.line("\(child.name)({ \(arguments) })")
         writer.close(suffix: ", (\(items.itemName): ChatBlock): string => \(items.itemName).id)")
     }

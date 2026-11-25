@@ -6,6 +6,11 @@ Compose examples, and add to it when something surprises you.
 - **`Modifier` ordering matters.** Compose applies modifiers left to right, and `padding` before `background` is
   not the same as `background` before `padding`. The emitter preserves SwiftUI source order; never reorder for
   tidiness.
+- **A `Double` state needs an explicit Kotlin type argument when its Swift initializer is an integer literal.**
+  `mutableStateOf(0)` stores `Int`, so a later `+= 1.5` loses the declared Swift semantics. Emit
+  `mutableStateOf<Double>(0)` for every Double local state, preserve `Int` inference for Int state, and pair the
+  golden with an invalid-literal diagnostic. Do not apply the same rule to model action arguments, where the
+  declared Double parameter already supplies Kotlin's expected type.
 - **The root `modifier` parameter is special.** Only the outermost container receives the call-site `modifier`.
   Passing it to inner containers double-applies padding and breaks layout. See `nested-containers`.
 - **`Button("Title") { action() }` collapses to `Button(onClick = action)`.** When the Swift action body is

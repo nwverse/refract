@@ -56,8 +56,8 @@ private func projectionUnit(replacing old: String? = nil, with new: String = "")
     let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
     #expect(ark.contains("@Trace revision: bigint;"))
     #expect(ark.contains("@Trace blocks: ChatBlock[];"))
-    #expect(ark.contains("ForEach(message.blocks, (block: ChatBlock) =>"))
-    #expect(ark.contains("MessageBlock({ message: message, block: block })"))
+    #expect(ark.contains("ForEach(this.message.blocks, (block: ChatBlock) =>"))
+    #expect(ark.contains("MessageBlock({ message: this.message, block: block })"))
     #expect(ark.contains("(block: ChatBlock): string => block.id"))
 }
 
