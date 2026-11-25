@@ -26,6 +26,7 @@ struct Generation {
     var declaredItemInputs: Set<String> = []
     var listItemTypes: [String: String] = [:]
     var currentModals: [ModalPresentation] = []
+    var currentNavigation: (operation: NavigationOperation, isDestination: Bool)?
 
     init(module: Module, mapping: Mapping, nativeSource: NativeSource,
          models: [ModelProtocol], itemTypes: [ItemType], enums: [EnumDeclaration]) {
@@ -94,6 +95,8 @@ struct Generation {
         try emitArkModels(module.models, into: &writer)
         try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
+            currentNavigation = try checkedNavigationContext(for: screen)
+            defer { currentNavigation = nil }
             if case let .navigationStack(stack, _) = screen.body {
                 try emitNavigationDestinations(stack, into: &writer)
             }
@@ -245,9 +248,9 @@ struct Generation {
             for child in stack.content {
                 try emit(child, into: &writer, mapping: mapping, resolver: resolver, localAliases: localAliases)
             }
-        case let .navigationLink(title, pathName, enumName, destination, _):
+        case let .navigationLink(title, pathName, enumName, destination, location):
             try emitNavigationLink(title: title, pathName: pathName, enumName: enumName,
-                                   destination: destination, into: &writer, mapping: mapping)
+                                   destination: destination, location: location, into: &writer, mapping: mapping)
         case let .tabView(tabs, _):
             try emitTabView(tabs, into: &writer, mapping: mapping)
         case let .nativeModifier(child, operations, location):

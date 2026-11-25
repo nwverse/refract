@@ -15,3 +15,9 @@
   `recreate()`, and verify native state rather than replacing the controller with a source-owned route list.
 - A golden fixture's HarmonyOS resource `catalog` is relative to the fixture root; repeat the form used by the existing
   navigation fixtures. Do not skip second-platform resource validation when the first target already generates.
+- A qualified destination link carries a conventional `path` placeholder until the frontend's graph binding supplies
+  `Screen.navigation`. ArkUI must resolve that placeholder only for a destination registered by the matching root
+  stack; treating the literal `path` as a backend-wide wildcard accepts inconsistent decoded or manually constructed
+  IR. Compare the root, destination and link operations and fail with `RFNAV003` when any is missing or mismatched.
+- Cover a non-default path name in source and golden tests. Default-only coverage lets a correctly declared
+  `onRoutePathNavigate` coexist with stale `onPathNavigate` calls and forwarding.

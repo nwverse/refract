@@ -2,12 +2,65 @@ import RefractIR
 import RefractMapping
 
 extension Generation {
+    func checkedNavigationContext(for screen: Screen) throws -> (operation: NavigationOperation, isDestination: Bool)? {
+        if case let .navigationStack(stack, location) = screen.body {
+            let operation = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+            let paths = screen.states.compactMap { state -> (String, String)? in
+                guard case let .navigationPath(name, enumName, _) = state else { return nil }
+                return (name, enumName)
+            }
+            guard stack.rootName == screen.name, screen.navigation == nil,
+                  paths.count == 1, paths[0].0 == operation.pathName, paths[0].1 == operation.enumName else {
+                throw Diagnostic(code: "RFNAV003",
+                    message: "A navigation root must own the enclosing stack's single typed path operation.",
+                    suggestion: "Use one declared @State destination array matching NavigationStack(path:).",
+                    location: location)
+            }
+            return (operation, false)
+        }
+        if let navigation = screen.navigation {
+            let isRegistered = module.screens.contains { candidate in
+                guard case let .navigationStack(stack, _) = candidate.body,
+                      candidate.name == stack.rootName else { return false }
+                return stack.destinations.contains(where: { $0.viewName == screen.name })
+                    && navigation == NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+            }
+            guard isRegistered else {
+                throw Diagnostic(code: "RFNAV003",
+                    message: "A qualified NavigationLink needs its checked enclosing navigation operation.",
+                    suggestion: "Register the qualified NavigationLink destination with the same typed path and enum in its enclosing graph.",
+                    location: screen.location)
+            }
+            return (navigation, true)
+        }
+        func containsLink(_ node: ViewNode) -> Bool {
+            if case .navigationLink = node { return true }
+            return node.children.contains(where: containsLink)
+        }
+        guard !containsLink(screen.body) else {
+            throw Diagnostic(code: "RFNAV003",
+                message: "A qualified NavigationLink needs its checked enclosing navigation operation.",
+                suggestion: "Register the qualified NavigationLink destination in its enclosing typed navigation graph.",
+                location: screen.location)
+        }
+        return nil
+    }
+
     func emitNavigationLink(title: Expression, pathName: String, enumName: String, destination: String,
-                            into writer: inout ArkWriter, mapping: Mapping) throws {
+                            location: SourceLocation?, into writer: inout ArkWriter, mapping: Mapping) throws {
         guard module.enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
             throw Diagnostic(code: "RFNAV003", message: "A NavigationLink destination is not in the declared path enum.",
-                             suggestion: "Use a static case of the source destination enum")
+                             suggestion: "Use a static case of the source destination enum", location: location)
         }
+        guard let currentNavigation, enumName == currentNavigation.operation.enumName,
+              pathName == currentNavigation.operation.pathName
+                || (pathName == "path" && currentNavigation.isDestination) else {
+            throw Diagnostic(code: "RFNAV003",
+                message: "A NavigationLink must match its checked enclosing navigation operation.",
+                suggestion: "Register the qualified NavigationLink destination and use its enclosing graph's typed path and enum.",
+                location: location)
+        }
+        let pathName = currentNavigation.operation.pathName
         writer.line("Button(\(try ArkExpression.emit(title, mapping: mapping)))")
         writer.depth += 1
         writer.open(".onClick(() =>")
@@ -62,8 +115,16 @@ extension Generation {
                     throw Diagnostic(code: "RFNAV003", message: "A destination model must match its root and target declarations.")
                 }
                 var arguments = ["\(model.label): this.\(model.expression)"]
-                if module.screens.first(where: { $0.name == destination.viewName })?.navigation != nil {
-                    arguments.append("onPathNavigate: this.onPathNavigate")
+                if let targetNavigation = module.screens.first(where: { $0.name == destination.viewName })?.navigation {
+                    let hostOperation = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+                    guard targetNavigation == hostOperation else {
+                        throw Diagnostic(code: "RFNAV003",
+                            message: "A destination callback must match its enclosing typed navigation operation.",
+                            suggestion: "Use the same source path and finite enum at every destination forwarding site.")
+                    }
+                    let name = hostOperation.pathName
+                    let callback = "on\(name.prefix(1).uppercased())\(name.dropFirst())Navigate"
+                    arguments.append("\(callback): this.\(callback)")
                 }
                 writer.line("\(destination.viewName)({ \(arguments.joined(separator: ", ")) })")
             } else {
