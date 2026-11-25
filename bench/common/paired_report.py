@@ -100,6 +100,8 @@ def raw_identity(payload: dict[str, Any], identity: tuple[str, str, int], revisi
     variant, scenario, iteration = identity
     expected = {"variant": variant, "scenario": scenario, "iteration": iteration, "sourceRevision": revision}
     for key, wanted in expected.items():
+        if key == "iteration":
+            checked_iteration(payload.get(key), "Native export iteration")
         if payload.get(key) != wanted:
             raise EvidenceError(f"Native export {key} does not match its artifact identity")
 
@@ -168,20 +170,24 @@ def checked_startup_value(payload: dict[str, Any], identity: tuple[str, str, int
 
 
 def checked_frame_samples(payload: dict[str, Any], identity: tuple[str, str, int], revision: str,
-                          pid: Any) -> list[float]:
+                          pid: Any, platform: str) -> list[float]:
     raw_identity(payload, identity, revision)
-    if (payload.get("schema") != 1 or type(payload.get("session")) is not int
-            or type(pid) is not int or pid <= 0 or payload.get("pid") != pid
-            or payload.get("completedIterations") != 1 or payload.get("recordedIteration") != identity[2]):
+    if (type(payload.get("schema")) is not int or payload["schema"] != 1
+            or type(payload.get("session")) is not int or type(pid) is not int or pid <= 0
+            or type(payload.get("pid")) is not int or payload["pid"] <= 0 or payload["pid"] != pid
+            or type(payload.get("completedIterations")) is not int or payload["completedIterations"] != 1
+            or type(payload.get("recordedIteration")) is not int
+            or payload["recordedIteration"] != identity[2]):
         raise EvidenceError("Native frame packet does not bind its selected session, process and iteration")
-    intervals = payload.get("frameIntervalMs")
+    field = "frameIntervalMs" if platform == "ios" else "frameDurationMs"
+    label = "CADisplayLink interval" if platform == "ios" else "frame duration"
+    samples = payload.get(field)
     tags = payload.get("iterationByFrame")
-    if (not isinstance(intervals, list) or not 0 < len(intervals) <= 4096
-            or not isinstance(tags, list) or len(tags) != len(intervals)
+    if (not isinstance(samples, list) or not 0 < len(samples) <= 4096
+            or not isinstance(tags, list) or len(tags) != len(samples)
             or any(type(tag) is not int or tag != identity[2] for tag in tags)):
-        raise EvidenceError("Native CADisplayLink intervals and iteration tags must be complete and bounded")
-    values = [finite_number(value, "native CADisplayLink interval", positive=True) for value in intervals]
-    return values
+        raise EvidenceError(f"Native {label} samples and iteration tags must be complete and bounded")
+    return [finite_number(value, f"native {label}", positive=True) for value in samples]
 
 
 def checked_resource_value(artifact: dict[str, Any], metric: str, revision: str, pid: Any) -> int:
@@ -272,6 +278,33 @@ def validate_environment(environment: Any, platform: str) -> dict[str, Any]:
     return environment
 
 
+def checked_raw_artifact(root: Path, relative: str) -> Path:
+    """Resolve a declared raw file without following a linked root or ancestor."""
+    try:
+        if root.is_symlink():
+            raise EvidenceError("The evidence root must not be a symbolic link")
+        resolved_root = root.resolve(strict=True)
+    except OSError as error:
+        raise EvidenceError(f"Cannot resolve the evidence root: {error}") from error
+    if not resolved_root.is_dir():
+        raise EvidenceError("The evidence root must be a real directory")
+    current = resolved_root
+    for part in Path(relative).parts[:-1]:
+        current = current / part
+        try:
+            if current.is_symlink():
+                raise EvidenceError(f"The raw artifact path must not contain a symbolic link: {relative}")
+            resolved_parent = current.resolve(strict=True)
+        except OSError as error:
+            raise EvidenceError(f"The raw artifact must remain inside the evidence root: {relative}") from error
+        if resolved_root != resolved_parent and resolved_root not in resolved_parent.parents:
+            raise EvidenceError(f"The raw artifact must remain inside the evidence root: {relative}")
+        if not resolved_parent.is_dir():
+            raise EvidenceError(f"The raw artifact parent must be a real directory: {relative}")
+        current = resolved_parent
+    return current / Path(relative).name
+
+
 def artifact(entry: Any, root: Path, platform: str, environment: dict[str, Any]) -> tuple[dict[str, Any], str]:
     if not isinstance(entry, dict):
         raise EvidenceError("Every artifact must be an object")
@@ -291,7 +324,7 @@ def artifact(entry: Any, root: Path, platform: str, environment: dict[str, Any])
     }[platform]
     if kind not in allowed:
         raise EvidenceError(f"Artifact kind {kind!r} is not a native {platform} artifact")
-    absolute = root / path
+    absolute = checked_raw_artifact(root, relative)
     if not absolute.is_file() or absolute.is_symlink() or absolute.stat().st_size == 0:
         raise EvidenceError(f"Missing, linked or empty native artifact: {relative}")
     expected_size = entry.get("bytes")
@@ -468,7 +501,7 @@ def samples_for(measurement: dict[str, Any], artifacts: list[dict[str, Any]]) ->
         first_frame = finite_number(raw["firstFrameTimestamp"], "native first-frame timestamp", positive=True)
         value = finite_number(first_frame - start, "native launch duration", positive=True)
     else:
-        raw = checked_frame_samples(raw, identity, revision, measurement.get("native_pid"))
+        raw = checked_frame_samples(raw, identity, revision, measurement.get("native_pid"), platform)
         if aggregation != "p99":
             raise EvidenceError("Frame intervals require an explicit per-iteration p99 reduction")
         value = percentile(raw, 0.99)
