@@ -43,7 +43,32 @@ supplies:
 1. `environment`: platform, complete source revision, the retained build-provenance path and SHA-256, exact
    acquisition/export commands, Release-like configuration, compiler/SDK/profiler versions, target
    model/OS/architecture and explicit `DEVICE`, `SIMULATOR` or `EMULATOR`. `device_result` must agree with the label.
-   A simulator or emulator never closes the physical-device gate.
+   A simulator or emulator never closes the physical-device gate. For canonical iOS evidence,
+   `environment.build_configuration` contains exactly these fields:
+
+   ```json
+   {
+     "name": "Release",
+     "target": "iphonesimulator",
+     "derived_data": "products/DerivedData"
+   }
+   ```
+
+   `derived_data` is a nonempty relative path from the schema-2 evidence manifest to the original DerivedData
+   directory. Absolute paths, `..`, backslashes and symbolic links in any path or ancestor component are rejected. Its
+   `Build/Products/RefractBench.xctestrun` and
+   `Build/Products/Release-iphonesimulator/{RefractBench.app,RefractBenchUITests-Runner.app}` are the original build
+   inputs, with the UI test bundle under `RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest`. Retain
+   that complete directory beside the evidence; it is not replaced by a second manifest declaring the same hashes.
+
+   The referenced build-provenance JSON has exactly `schema=1`, `source_revision`,
+   `configuration=Release-iphonesimulator`, `source_xctestrun={path,sha256}` and `products`. `products` has exactly the
+   three producer bundle keys above. Each value has `directories` (unique sorted bundle-relative paths) and `files`;
+   every file entry has `path`, positive integer `bytes`, Boolean `executable` and lowercase SHA-256. The reporter
+   recomputes this entire object from the retained original inputs and requires exact equality, so a syntactically
+   valid but wrong hash or byte count fails with `EvidenceError`. Invalid XML/binary plists and malformed directory
+   entries are evidence errors, not parser exceptions. Other platforms use an explicit `build_configuration.name` and
+   the generic generated/reference product identity contract below.
 2. `artifacts`: ordinary raw files below `raw/`, with SHA-256, source revision, shared build-provenance SHA-256,
    an explicit `timing`/`profiler`/`memory`/`binary`/`build-provenance` role, and exact variant/scenario/iteration
    ownership. The build manifest is shared by both variants and therefore has `variant=shared`, `scenario=build` and

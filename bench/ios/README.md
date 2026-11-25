@@ -23,16 +23,27 @@ Per-iteration simulator execution, when separately coordinated, is documented be
 
 `build.sh` requires a clean committed checkout before and after compilation. It writes an immutable
 `refract-build-provenance.json` in DerivedData with the exact source revision, original xctestrun SHA-256 and the
-app/UI-test bundle file identities. The paired reporter accepts this existing producer schema directly: the environment
-uses `build_configuration.name=Release`, `target=iphonesimulator` and a manifest-relative `derived_data` path to retain
-the original products. The reporter recomputes the source xctestrun and exact app/test bundle directory/file records
-from those products; it does not merely check SHA syntax. It compares all file bytes, executable flags and SHA-256
-values with the JSON and rejects well-formed but incorrect values and malformed entries with an evidence error. The
-canonical producer is accepted only for `SIMULATOR`. The single shared app/test build contains both variant execution
-paths; timing and resource artifacts separately retain their selected variant identities. No generated/reference app
-split is invented for reporting. The trace runner requires this manifest and rechecks every listed file before launch.
-Do not pair a checkout at one revision with products built from another, reuse a generic-device build or reuse products
-without their manifest; rebuild in a new DerivedData directory instead.
+app/UI-test bundle file identities. For the paired reporter, the schema-2 manifest's
+`environment.build_configuration` must contain exactly `name=Release`, `target=iphonesimulator` and `derived_data`.
+The latter is a nonempty relative path from the evidence manifest to the original DerivedData directory; absolute
+paths, `..`, backslashes and symbolic links in any path or ancestor component are rejected. For example:
+
+```json
+{
+  "name": "Release",
+  "target": "iphonesimulator",
+  "derived_data": "products/DerivedData"
+}
+```
+
+Retain that original `Build/Products` tree beside the evidence. The reporter recomputes the source xctestrun and exact
+app/test bundle directory/file records from it, comparing every file byte count, executable flag and SHA-256 with the
+JSON rather than merely checking SHA syntax. Well-formed but incorrect values and malformed entries fail with an
+evidence error. The canonical producer is accepted only for `SIMULATOR`. The single shared app/test build contains both
+variant execution paths; timing and resource artifacts separately retain their selected variant identities. No
+generated/reference app split is invented for reporting. The trace runner requires this manifest and rechecks every
+listed file before launch. Do not pair a checkout at one revision with products built from another, reuse a
+generic-device build or reuse products without their manifest; rebuild in a new DerivedData directory instead.
 
 ## Scenario construction
 

@@ -8,6 +8,7 @@ import os
 import plistlib
 import re
 import stat
+import xml.parsers.expat
 from pathlib import Path
 
 MAX_EVIDENCE_FILE_BYTES = 64 * 1024 * 1024
@@ -75,7 +76,7 @@ def bundle_identity(products: Path, relative: str) -> dict:
         raise BuildProvenanceError(f"Build product bundle has no files: {relative}")
     try:
         executable = plistlib.loads(bounded_file_bytes(bundle / "Info.plist")).get("CFBundleExecutable")
-    except (OSError, plistlib.InvalidFileException) as error:
+    except (OSError, plistlib.InvalidFileException, xml.parsers.expat.ExpatError) as error:
         raise BuildProvenanceError(f"Build product bundle Info.plist is missing or invalid: {relative}") from error
     expected_executable = f"{relative}/{executable}" if isinstance(executable, str) and executable else ""
     if not any(item["path"] == expected_executable for item in files):

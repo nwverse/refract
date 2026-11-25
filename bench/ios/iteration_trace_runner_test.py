@@ -1612,6 +1612,17 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         self.assertEqual(json.loads(destination.read_text(encoding="utf-8")),
                          json.loads((fixture.root / fixture.build_path).read_text(encoding="utf-8")))
 
+    def test_invalid_xml_plist_is_normalized_without_changing_runner_io_contract(self):
+        products = self.derived_data / "Build/Products/Release-iphonesimulator"
+        original = (products / "RefractBench.app/Info.plist").read_bytes()
+        for payload in (b"<plist><dict><key>CFBundleExecutable</key>", b"not a plist"):
+            (products / "RefractBench.app/Info.plist").write_bytes(payload)
+            with self.subTest(payload=payload), self.assertRaisesRegex(HandshakeError, "Info.plist"):
+                record_build_provenance(self.derived_data, "a" * 40)
+            with self.subTest(payload=payload), self.assertRaisesRegex(HandshakeError, "Info.plist"):
+                validate_build_provenance(self.derived_data, "a" * 40)
+            (products / "RefractBench.app/Info.plist").write_bytes(original)
+
     def test_recorded_provenance_still_rejects_an_executable_identity_change(self):
         fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
         destination, _ = self.prepare_reporter_provenance(fixture)

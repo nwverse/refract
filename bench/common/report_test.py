@@ -311,6 +311,13 @@ class PairedReportTest(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, "producer and build destination"):
             make_report(self.manifest, self.root)
 
+    def test_invalid_original_plist_is_an_evidence_error_not_parser_leak(self):
+        path = self.derived_data / "Build/Products/Release-iphonesimulator/RefractBench.app/Info.plist"
+        for payload in (b"<plist><dict><key>CFBundleExecutable</key>", b"not a plist"):
+            path.write_bytes(payload)
+            with self.subTest(payload=payload), self.assertRaisesRegex(EvidenceError, "Info.plist"):
+                make_report(self.manifest, self.root)
+
     def test_raw_cadinterval_array_drives_p99_not_manifest_source_samples(self):
         measurement = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "scroll")
         path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
