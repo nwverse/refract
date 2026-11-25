@@ -53,104 +53,12 @@ extension Builder {
                               navigation: bindings[screen.name], body: screen.body,
                               nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
             }
+            var body = screen.body
             if let operation = bindings[screen.name] {
-                func bindList(_ items: ListItems) -> ListItems? {
-                    bind(items.content).map { content in
-                        ListItems(collection: items.collection, itemName: items.itemName, itemType: items.itemType,
-                                  key: items.key, keyType: items.keyType, content: content, contentType: items.contentType,
-                                  projection: items.projection, modelType: items.modelType,
-                                  messageBlocks: items.messageBlocks, location: items.location)
-                    }
-                }
-                func bind(_ node: ViewNode) -> ViewNode? {
-                    if case let .navigationLink(title, pathName, enumName, destination, location) = node {
-                        // A qualified child link starts with the conventional placeholder in `navigationLink(_:)`.
-                        // Resolve it here, while the actual enclosing graph is known; backends never accept a wildcard.
-                        guard pathName == "path" || pathName == operation.pathName,
-                              enumName == operation.enumName,
-                              enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
-                            diagnostics.append(Diagnostic(code: "RFNAV003",
-                                message: "A linked destination must stay within its host's finite destination enum.",
-                                suggestion: "Use only registered cases of `\(operation.enumName)`", location: location))
-                            return nil
-                        }
-                        return .navigationLink(title: title, pathName: operation.pathName, enumName: operation.enumName,
-                                               destination: destination, location: location)
-                    }
-                    switch node {
-                    case let .stack(axis, children, modifiers, location):
-                        return .stack(axis: axis, children: children.compactMap(bind), modifiers: modifiers, location: location)
-                    case let .scroll(axis, child, modifiers, location):
-                        return bind(child).map { .scroll(axis: axis, child: $0, modifiers: modifiers, location: location) }
-                    case let .button(label, action, modifiers, location):
-                        return bind(label).map { .button(label: $0, action: action, modifiers: modifiers, location: location) }
-                    case let .nativeModifier(child, operations, location):
-                        return bind(child).map { .nativeModifier(child: $0, operations: operations, location: location) }
-                    case let .component(component, location):
-                        let bound = ComponentReference(name: component.name, arguments: component.arguments,
-                            children: component.children.compactMap(bind), modifiers: component.modifiers)
-                        return .component(bound, location: location)
-                    case let .platformView(alternatives, location):
-                        let bound = PlatformAlternatives(ios: alternatives.ios.compactMap(bind),
-                            android: alternatives.android.compactMap(bind), harmonyOS: alternatives.harmonyOS.compactMap(bind))
-                        return .platformView(bound, location: location)
-                    case let .conditional(branches, location):
-                        let bound = branches.map {
-                            ViewNode.ConditionBranch(condition: $0.condition, children: $0.children.compactMap(bind))
-                        }
-                        return .conditional(conditions: bound, location: location)
-                    case let .optionalBinding(subject, binding, children, otherwise, location):
-                        return .optionalBinding(subject: subject, binding: binding, children: children.compactMap(bind),
-                                                otherwise: otherwise.compactMap(bind), location: location)
-                    case let .switchExpression(subject, enumName, cases, location):
-                        let bound = cases.map {
-                            SwitchCase(name: $0.name, binding: $0.binding, children: $0.children.compactMap(bind))
-                        }
-                        return .switchExpression(subject: subject, enumName: enumName, cases: bound, location: location)
-                    case let .layout(layout, children, modifiers, location):
-                        return .layout(layout, children: children.compactMap(bind), modifiers: modifiers, location: location)
-                    case let .list(children, modifiers, location):
-                        return .list(children: children.compactMap(bind), modifiers: modifiers, location: location)
-                    case let .messageBlocks(nested, location):
-                        return bindList(nested.items).map {
-                            .messageBlocks(NestedListItems($0, parent: nested.parent, message: nested.message,
-                                                           block: nested.block), location: location)
-                        }
-                    case let .section(header, children, location):
-                        return .section(header: header, children: children.compactMap(bind), location: location)
-                    case let .listItem(child, location):
-                        return bind(child).map { .listItem(child: $0, location: location) }
-                    case let .forEach(items, location):
-                        return bindList(items).map { .forEach($0, location: location) }
-                    case let .horizontalSections(sections, location):
-                        return bind(sections.rows.content).map { content in
-                            let rows = HorizontalItemCollection(property: sections.rows.property, itemName: sections.rows.itemName,
-                                itemType: sections.rows.itemType, key: sections.rows.key, keyType: sections.rows.keyType,
-                                content: content, location: sections.rows.location)
-                            return .horizontalSections(HorizontalSectionCollection(collection: sections.collection,
-                                modelType: sections.modelType, sectionName: sections.sectionName,
-                                sectionType: sections.sectionType, sectionKey: sections.sectionKey,
-                                sectionKeyType: sections.sectionKeyType, titleProperty: sections.titleProperty,
-                                rows: rows, location: sections.location), location: location)
-                        }
-                    case let .navigationStack(stack, location):
-                        let bound = NavigationStackNode(pathName: stack.pathName, rootName: stack.rootName,
-                            enumName: stack.enumName, content: stack.content.compactMap(bind),
-                            destinations: stack.destinations, models: stack.models)
-                        return .navigationStack(bound, location: location)
-                    case .text, .markdown, .navigationLink, .native, .child, .tabView, .image, .toggle,
-                         .textInput, .secureInput, .label, .divider, .spacer:
-                        return node
-                    }
-                }
-                guard let body = bind(screen.body) else {
-                    return Screen(name: screen.name, parameters: screen.parameters, states: screen.states,
-                                  modals: screen.modals, navigation: operation, body: screen.body,
-                                  nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
-                }
-                return Screen(name: screen.name, parameters: screen.parameters, states: screen.states,
-                              modals: screen.modals, navigation: operation, body: body,
-                              nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
+                body = bindNavigationLinks(body, operation: operation)
+            } else if case let .navigationStack(stack, _) = screen.body, stack.rootName == screen.name {
+                let operation = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+                body = bindNavigationLinks(body, operation: operation)
             } else if !screen.states.contains(where: { if case .navigationPath = $0 { true } else { false } }) {
                 diagnostics.append(Diagnostic(code: "RFNAV003",
                     message: "A destination NavigationLink must use the enclosing graph's finite enum.",
@@ -158,9 +66,111 @@ extension Builder {
                     location: screen.location))
             }
             return Screen(name: screen.name, parameters: screen.parameters, states: screen.states, modals: screen.modals,
-                          navigation: bindings[screen.name], body: screen.body,
+                          navigation: bindings[screen.name], body: body,
                           nativeValues: screen.nativeValues, lifecycle: screen.lifecycle, location: screen.location)
         }
+    }
+
+    /// Resolve graph ownership into the IR itself. Backends never infer that the conventional literal `path`
+    /// came from the frontend: decoded and manually constructed IR must satisfy the same exact operation check.
+    private func bindNavigationLinks(_ node: ViewNode, operation: NavigationOperation) -> ViewNode {
+        switch node {
+        case let .navigationLink(title, pathName, enumName, destination, location):
+            guard (pathName == "path" || pathName == operation.pathName),
+                  enumName == operation.enumName,
+                  enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
+                diagnostics.append(Diagnostic(code: "RFNAV003",
+                    message: "A linked destination must stay within its host's finite destination enum.",
+                    suggestion: "Use only registered cases of `\(operation.enumName)`", location: location))
+                return node
+            }
+            return .navigationLink(title: title, pathName: operation.pathName, enumName: operation.enumName,
+                                   destination: destination, location: location)
+        case let .stack(axis, children, modifiers, location):
+            return .stack(axis: axis, children: children.map { bindNavigationLinks($0, operation: operation) },
+                          modifiers: modifiers, location: location)
+        case let .button(label, action, modifiers, location):
+            return .button(label: bindNavigationLinks(label, operation: operation), action: action,
+                           modifiers: modifiers, location: location)
+        case let .nativeModifier(child, operations, location):
+            return .nativeModifier(child: bindNavigationLinks(child, operation: operation), operations: operations,
+                                   location: location)
+        case let .component(component, location):
+            return .component(ComponentReference(name: component.name, arguments: component.arguments,
+                children: component.children.map { bindNavigationLinks($0, operation: operation) },
+                modifiers: component.modifiers), location: location)
+        case let .platformView(alternatives, location):
+            return .platformView(PlatformAlternatives(
+                ios: alternatives.ios.map { bindNavigationLinks($0, operation: operation) },
+                android: alternatives.android.map { bindNavigationLinks($0, operation: operation) },
+                harmonyOS: alternatives.harmonyOS.map { bindNavigationLinks($0, operation: operation) }), location: location)
+        case let .conditional(branches, location):
+            return .conditional(conditions: branches.map {
+                ViewNode.ConditionBranch(condition: $0.condition,
+                    children: $0.children.map { bindNavigationLinks($0, operation: operation) })
+            }, location: location)
+        case let .optionalBinding(subject, binding, children, otherwise, location):
+            return .optionalBinding(subject: subject, binding: binding,
+                children: children.map { bindNavigationLinks($0, operation: operation) },
+                otherwise: otherwise.map { bindNavigationLinks($0, operation: operation) }, location: location)
+        case let .switchExpression(subject, enumName, cases, location):
+            return .switchExpression(subject: subject, enumName: enumName, cases: cases.map {
+                SwitchCase(name: $0.name, binding: $0.binding,
+                           children: $0.children.map { bindNavigationLinks($0, operation: operation) })
+            }, location: location)
+        case let .layout(layout, children, modifiers, location):
+            return .layout(layout, children: children.map { bindNavigationLinks($0, operation: operation) },
+                           modifiers: modifiers, location: location)
+        case let .scroll(axis, child, modifiers, location):
+            return .scroll(axis: axis, child: bindNavigationLinks(child, operation: operation),
+                           modifiers: modifiers, location: location)
+        case let .list(children, modifiers, location):
+            return .list(children: children.map { bindNavigationLinks($0, operation: operation) },
+                         modifiers: modifiers, location: location)
+        case let .section(header, children, location):
+            return .section(header: header, children: children.map { bindNavigationLinks($0, operation: operation) },
+                            location: location)
+        case let .listItem(child, location):
+            return .listItem(child: bindNavigationLinks(child, operation: operation), location: location)
+        case let .forEach(items, location):
+            return .forEach(bindNavigationLinks(items, operation: operation), location: location)
+        case let .navigationStack(stack, location):
+            let content = stack.content.map { bindNavigationLinks($0, operation: operation) }
+            return .navigationStack(NavigationStackNode(pathName: stack.pathName, rootName: stack.rootName,
+                enumName: stack.enumName, content: content, destinations: stack.destinations, models: stack.models),
+                location: location)
+        case let .horizontalSections(sections, location):
+            let rows = sections.rows
+            let updated = HorizontalItemCollection(property: rows.property, itemName: rows.itemName,
+                itemType: rows.itemType, key: rows.key, keyType: rows.keyType,
+                content: bindNavigationLinks(rows.content, operation: operation), location: rows.location)
+            return .horizontalSections(HorizontalSectionCollection(collection: sections.collection,
+                modelType: sections.modelType, sectionName: sections.sectionName, sectionType: sections.sectionType,
+                sectionKey: sections.sectionKey, sectionKeyType: sections.sectionKeyType,
+                titleProperty: sections.titleProperty, rows: updated, location: sections.location), location: location)
+        case let .messageBlocks(nested, location):
+            return .messageBlocks(bindNavigationLinks(nested, operation: operation), location: location)
+        case .text, .markdown, .tabView, .native, .child,
+             .image, .toggle, .textInput, .secureInput, .label, .divider, .spacer:
+            return node
+        }
+    }
+
+    private func bindNavigationLinks(_ items: ListItems, operation: NavigationOperation) -> ListItems {
+        let messageBlocks = items.messageBlocks.map {
+            MessageBlockIdentity(content: bindNavigationLinks($0.content, operation: operation), parent: $0.parent,
+                                 blockName: $0.blockName, blockArgument: $0.blockArgument)
+        }
+        return ListItems(collection: items.collection, itemName: items.itemName, itemType: items.itemType,
+                         key: items.key, keyType: items.keyType,
+                         content: bindNavigationLinks(items.content, operation: operation), contentType: items.contentType,
+                         projection: items.projection, modelType: items.modelType, messageBlocks: messageBlocks,
+                         location: items.location)
+    }
+
+    private func bindNavigationLinks(_ nested: NestedListItems, operation: NavigationOperation) -> NestedListItems {
+        NestedListItems(bindNavigationLinks(nested.items, operation: operation), parent: nested.parent,
+                        message: nested.message, block: nested.block)
     }
 
     private func containsNavigationLink(_ node: ViewNode) -> Bool {

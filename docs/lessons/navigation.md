@@ -26,3 +26,10 @@
   whereas `[Route]` state creates an unforwarded native callback and must be rejected as an unsupported nested stack.
 - A golden fixture's HarmonyOS resource `catalog` is relative to the fixture root; repeat the form used by the existing
   navigation fixtures. Do not skip second-platform resource validation when the first target already generates.
+- A qualified destination link initially carries the conventional `path` placeholder. Frontend graph binding must
+  replace it with the checked enclosing graph's path before returning the `Module`. Backend registration alone does
+  not prove placeholder provenance, and an optional Boolean supplied by the caller is not proof either. Require exact
+  path/enum equality so inconsistent decoded or manually constructed IR fails with `RFNAV003` rather than being
+  silently normalized. Cover both a registered decoded/manual mismatch and a valid decoded custom-path module.
+- Cover a non-default path name in source and golden tests. Default-only coverage lets a correctly declared
+  `onRoutePathNavigate` coexist with stale `onPathNavigate` calls and forwarding.

@@ -81,7 +81,11 @@ let package = Package(
             dependencies: ["RefractCompose", "RefractFrontend", "RefractMapping"],
             exclude: ["Fixtures"]
         ),
-        .testTarget(name: "RefractArkUITests", dependencies: ["RefractArkUI", "RefractFrontend", "RefractCompose"]),
+        .testTarget(
+            name: "RefractArkUITests",
+            dependencies: ["RefractArkUI", "RefractFrontend", "RefractCompose"],
+            exclude: ["Fixtures"]
+        ),
         .testTarget(name: "RefractCLITests", dependencies: ["RefractOutput"]),
         .testTarget(name: "RefractGoldenTests", dependencies: ["RefractGolden"]),
         .target(

@@ -36,6 +36,12 @@ gradlePlugin {
 
 tasks.test {
     maxParallelForks = 1
+    // TestKit has a separate writable home; it must explicitly reuse the outer build's restored dependency cache.
+    environment("GRADLE_RO_DEP_CACHE", gradle.gradleUserHomeDir.resolve("caches"))
+    systemProperty(
+        "refract.test.testKitDir",
+        providers.environmentVariable("REFRACT_TESTKIT_DIR").orElse(layout.buildDirectory.dir("test-kit").map { it.asFile.absolutePath }).get(),
+    )
     systemProperty("refract.test.repository", layout.settingsDirectory.dir("../..").asFile.absolutePath)
     systemProperty("refract.test.cli", providers.environmentVariable("REFRACT_CLI_PATH").get())
     systemProperty("refract.test.version", providers.environmentVariable("REFRACT_REQUIRED_VERSION").get())
