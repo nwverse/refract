@@ -289,20 +289,20 @@ func XCTUnwrap<T>(_ value: T?) throws -> T {
     return value
 }
 func check(_ samples: [String: Any], valid: Bool) {
-    let data: Data
-    do {
-        data = try JSONSerialization.data(withJSONObject: ["finalSamples": samples])
-    } catch {
+    guard let data = try? JSONSerialization.data(withJSONObject: ["finalSamples": samples]) else {
         precondition(!valid, "non-JSON invalid sample must be rejected")
         return
     }
+    checkPacket(data, valid: valid)
+}
+func checkPacket(_ data: Data, valid: Bool, label: String = "typed") {
     do {
         let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         _ = try TraceHandshake.finalSamples(in: decoded, revision: "revision",
                                            variant: "generated", scenario: "scroll", iteration: 2, pid: 42)
-        precondition(valid, "accepted invalid final native samples")
+        precondition(valid, "accepted invalid final native samples: \\(label)")
     } catch {
-        precondition(!valid, "rejected valid final native samples: \\(error)")
+        precondition(!valid, "rejected valid final native samples \\(label): \\(error)")
     }
 }
 let original: [String: Any] = [
@@ -366,6 +366,22 @@ var ordinaryDouble = samples
 ordinaryDouble["frameIntervalMs"] = [16.5] as [Double]
 ordinaryDouble["iterationByFrame"] = [2]
 check(ordinaryDouble, valid: true)
+// Keep raw JSON spellings: serializing a typed huge integer into a test packet
+// first would erase the representation boundary that this regression checks.
+let rawPacket = #"{"finalSamples":{"schema":1,"session":1,"sourceRevision":"revision","variant":"generated","scenario":"scroll","iteration":2,"pid":42,"completedIterations":1,"recordedIteration":2,"frameIntervalMs":[INTERVAL],"iterationByFrame":[2]}}"#
+for (interval, valid) in [
+    ("9007199254740992", true), ("9007199254740992.0", true), ("1e19", false),
+    ("9007199254740993", false), ("9007199254740994", false),
+    ("18446744073709551615", false), ("18446744073709551616", false),
+    ("18446744073709551617", false), ("18446744073709551618", false),
+    ("18446744073709551619", false), ("18446744073709551620", false),
+    ("18446744073709551616.0", false), ("18446744073709551617.0", false),
+    ("1.8446744073709552e19", false),
+] {
+    let json = rawPacket.replacingOccurrences(of: "INTERVAL", with: interval)
+    precondition(json != rawPacket, "raw JSON case must replace the interval spelling")
+    checkPacket(Data(json.utf8), valid: valid, label: interval)
+}
 let control = FileManager.default.temporaryDirectory
     .appendingPathComponent("refract-final-samples-\\(UUID().uuidString)", isDirectory: true)
 try FileManager.default.createDirectory(at: control, withIntermediateDirectories: true)

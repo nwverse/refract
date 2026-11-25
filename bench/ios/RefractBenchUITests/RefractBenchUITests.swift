@@ -122,7 +122,12 @@ private enum TraceHandshake {
         } else {
             return nil
         }
-        if let double, double.isFinite, double > 0 { return double }
+        if let double, double.isFinite, double > 0, double <= 9_007_199_254_740_992 {
+            return double
+        }
+        // Above 2^53, Foundation can decode a large integer spelling as the same
+        // rounded `d` value as a legitimate huge Double. Reject that ambiguous
+        // out-of-domain magnitude instead of inventing its original spelling.
         return nil
     }
 
