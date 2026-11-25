@@ -168,20 +168,21 @@ def checked_startup_value(payload: dict[str, Any], identity: tuple[str, str, int
 
 
 def checked_frame_samples(payload: dict[str, Any], identity: tuple[str, str, int], revision: str,
-                          pid: Any) -> list[float]:
+                          pid: Any, platform: str) -> list[float]:
     raw_identity(payload, identity, revision)
     if (payload.get("schema") != 1 or type(payload.get("session")) is not int
             or type(pid) is not int or pid <= 0 or payload.get("pid") != pid
             or payload.get("completedIterations") != 1 or payload.get("recordedIteration") != identity[2]):
         raise EvidenceError("Native frame packet does not bind its selected session, process and iteration")
-    intervals = payload.get("frameIntervalMs")
+    field = "frameIntervalMs" if platform == "ios" else "frameDurationMs"
+    label = "CADisplayLink interval" if platform == "ios" else "frame duration"
+    samples = payload.get(field)
     tags = payload.get("iterationByFrame")
-    if (not isinstance(intervals, list) or not 0 < len(intervals) <= 4096
-            or not isinstance(tags, list) or len(tags) != len(intervals)
+    if (not isinstance(samples, list) or not 0 < len(samples) <= 4096
+            or not isinstance(tags, list) or len(tags) != len(samples)
             or any(type(tag) is not int or tag != identity[2] for tag in tags)):
-        raise EvidenceError("Native CADisplayLink intervals and iteration tags must be complete and bounded")
-    values = [finite_number(value, "native CADisplayLink interval", positive=True) for value in intervals]
-    return values
+        raise EvidenceError(f"Native {label} samples and iteration tags must be complete and bounded")
+    return [finite_number(value, f"native {label}", positive=True) for value in samples]
 
 
 def checked_resource_value(artifact: dict[str, Any], metric: str, revision: str, pid: Any) -> int:
@@ -468,7 +469,7 @@ def samples_for(measurement: dict[str, Any], artifacts: list[dict[str, Any]]) ->
         first_frame = finite_number(raw["firstFrameTimestamp"], "native first-frame timestamp", positive=True)
         value = finite_number(first_frame - start, "native launch duration", positive=True)
     else:
-        raw = checked_frame_samples(raw, identity, revision, measurement.get("native_pid"))
+        raw = checked_frame_samples(raw, identity, revision, measurement.get("native_pid"), platform)
         if aggregation != "p99":
             raise EvidenceError("Frame intervals require an explicit per-iteration p99 reduction")
         value = percentile(raw, 0.99)
