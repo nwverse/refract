@@ -7,10 +7,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from paired_report import EvidenceError, ITERATIONS, checked_iteration, make_report, markdown, percentile
+from paired_report import EvidenceError, ITERATIONS, artifact as validated_artifact, checked_iteration, make_report, markdown, percentile
 from build_provenance import BUNDLE_NAMES, original_build_provenance
 
 
@@ -472,6 +473,38 @@ class PairedReportTest(unittest.TestCase):
         self.manifest["environment"]["build_provenance"]["sha256"] = "0" * 64
         with self.assertRaisesRegex(EvidenceError, "another revision or build"):
             make_report(self.manifest, self.root)
+
+    def test_raw_directory_cannot_redirect_all_artifacts_outside_the_evidence_root(self):
+        external = self.root.parent / f"{self.root.name}-external"
+        (self.root / "raw").rename(external)
+        (self.root / "raw").symlink_to(external, target_is_directory=True)
+        with mock.patch("paired_report.sha256", side_effect=AssertionError("artifact read escaped the evidence root")), \
+                self.assertRaisesRegex(EvidenceError, "raw artifact path.*symbolic link"):
+            make_report(self.manifest, self.root)
+
+    def test_raw_ancestor_cannot_redirect_an_artifact_outside_the_evidence_root(self):
+        entry = next(item for item in self.manifest["artifacts"] if item["role"] == "profiler")
+        external = self.root.parent / f"{self.root.name}-external"
+        external.mkdir()
+        artifact = self.root / entry["path"]
+        original_path = entry["path"]
+        artifact.rename(external / artifact.name)
+        (self.root / "raw/nested").symlink_to(external, target_is_directory=True)
+        entry["path"] = f"raw/nested/{artifact.name}"
+        measurement = next(item for item in self.manifest["measurements"] if original_path in item["artifacts"])
+        measurement["artifacts"] = [entry["path"] if path == original_path else path
+                                    for path in measurement["artifacts"]]
+        environment = {"source_revision": entry["source_revision"],
+                       "build_provenance": {"path": self.build_path, "sha256": self.build_hash}}
+        with self.assertRaisesRegex(EvidenceError, "raw artifact path.*symbolic link"):
+            validated_artifact(entry, self.root, "ios", environment)
+
+    def test_evidence_root_cannot_be_a_symbolic_link(self):
+        linked = self.root.parent / f"{self.root.name}-linked"
+        linked.symlink_to(self.root, target_is_directory=True)
+        with mock.patch("paired_report.sha256", side_effect=AssertionError("artifact root was read")), \
+                self.assertRaisesRegex(EvidenceError, "root.*symbolic link"):
+            make_report(self.manifest, linked)
 
     def test_missing_one_iteration_is_not_a_pass(self):
         self.manifest["measurements"].pop()

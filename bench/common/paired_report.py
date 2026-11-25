@@ -272,6 +272,33 @@ def validate_environment(environment: Any, platform: str) -> dict[str, Any]:
     return environment
 
 
+def checked_raw_artifact(root: Path, relative: str) -> Path:
+    """Resolve a declared raw file without following a linked root or ancestor."""
+    try:
+        if root.is_symlink():
+            raise EvidenceError("The evidence root must not be a symbolic link")
+        resolved_root = root.resolve(strict=True)
+    except OSError as error:
+        raise EvidenceError(f"Cannot resolve the evidence root: {error}") from error
+    if not resolved_root.is_dir():
+        raise EvidenceError("The evidence root must be a real directory")
+    current = resolved_root
+    for part in Path(relative).parts[:-1]:
+        current = current / part
+        try:
+            if current.is_symlink():
+                raise EvidenceError(f"The raw artifact path must not contain a symbolic link: {relative}")
+            resolved_parent = current.resolve(strict=True)
+        except OSError as error:
+            raise EvidenceError(f"The raw artifact must remain inside the evidence root: {relative}") from error
+        if resolved_root != resolved_parent and resolved_root not in resolved_parent.parents:
+            raise EvidenceError(f"The raw artifact must remain inside the evidence root: {relative}")
+        if not resolved_parent.is_dir():
+            raise EvidenceError(f"The raw artifact parent must be a real directory: {relative}")
+        current = resolved_parent
+    return current / Path(relative).name
+
+
 def artifact(entry: Any, root: Path, platform: str, environment: dict[str, Any]) -> tuple[dict[str, Any], str]:
     if not isinstance(entry, dict):
         raise EvidenceError("Every artifact must be an object")
@@ -291,7 +318,7 @@ def artifact(entry: Any, root: Path, platform: str, environment: dict[str, Any])
     }[platform]
     if kind not in allowed:
         raise EvidenceError(f"Artifact kind {kind!r} is not a native {platform} artifact")
-    absolute = root / path
+    absolute = checked_raw_artifact(root, relative)
     if not absolute.is_file() or absolute.is_symlink() or absolute.stat().st_size == 0:
         raise EvidenceError(f"Missing, linked or empty native artifact: {relative}")
     expected_size = entry.get("bytes")
