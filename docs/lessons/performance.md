@@ -53,10 +53,12 @@ newline-delimited synthetic fixture is not enough; include an end-to-end duplica
 these control-plane corrections permits a skipped test, incomplete scenario or failed recorder to become a passing
 trace.
 
-A synthetic XCTest fixture has the same launch boundary as the real runner. Freeze its fresh control epoch before
-starting the fixture and pass that same `Session` to capture; constructing a second session after launch lets a fast
-current request be mistaken for stale state and mask the intended assertion. Wait for an early current request when
-covering that ordering, and never weaken stale-packet rejection to make a test pass.
+A synthetic XCTest fixture should make its launch boundary and ordering explicit. Use `launch()` to freeze the fresh
+control epoch before starting the fixture, pass that same `Session` to capture, and wait for the current request when
+it is the intended input to a negative check. The baseline helpers already preflight both supplied sessions, including
+when the current request arrives first; this is deterministic clarification, not a race fix. Do not infer a stale-request
+failure from a plausible ordering without reproducing it on the exact base. Never weaken stale-packet rejection to
+make a test pass.
 
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
 handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
