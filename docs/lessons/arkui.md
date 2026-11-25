@@ -54,6 +54,12 @@ committed artifact derived from the changed lowering: the Fixtures goldens and t
 current row's `itemTypeName`, just as stack recursion does; passing only its name makes a valid item Toggle's
 model-action write fail the receiver guard.
 
+A dedicated nested `ForEach` must apply the same distinction to its collection and child arguments. A `ChatMessage`
+stored item input is `this.message.blocks`, and its forwarded `message:` argument is also `this.message`; only the
+closure-owned `block` remains unqualified. Verify the dedicated emitter and both single-file and split-file goldens:
+their ordinary `Text(this.message.id)` and the outer `LazyForEach` can already be correct while its nested parent
+silently loses the receiver. This source/golden check is not ArkTS compiler or rendering evidence.
+
 ## LazyForEach needs a native data source and stable identity
 
 A Swift `ForEach` over identified data must not lower to the ordinary ArkUI `ForEach` when lazy rendering is part
