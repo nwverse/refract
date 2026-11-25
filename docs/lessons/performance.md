@@ -60,6 +60,18 @@ shortest decimal spelling for the same `Double`. Encode the native floating-poin
 round-trippable string, validate it and compare the typed strings exactly at each hop. Exercise the concrete native
 value through the real control plane and compile the actual Swift comparator, including a mismatch rejection.
 
+## Keep evidence domains and identity counts explicit
+
+An inclusive identity range is not automatically its acquisition count: 2...30 contains **29 identities**. Check the
+actual identity set before writing a coverage denominator, and do not silently renumber native artifacts to make an
+old denominator fit. One accepted pair at iteration 30 is 1/29 of that set, not a completed 30-pair matrix.
+
+Keep source revision, build provenance and target in every coverage statement. The accepted `eb16e22` iteration-30 pairs
+in #219 are not cumulative with `95a0f37` or any other historical capture. A raw Instruments trace proves native
+capture, not a complete paired scalar comparison, resource pairing, report PASS or device performance. In particular,
+startup `firstDisplay` is not launch duration. Index published issue evidence separately from committed reports rather
+than upgrading the production baseline implicitly.
+
 ## Equal inputs need equal native behavior
 
 Both variants should use the same model, data, lazy-list identity, controls, accessibility and input script, but the
