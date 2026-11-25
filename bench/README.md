@@ -11,12 +11,16 @@ generated observer registry or business-logic interpreter. These are settings-sh
 - Both variants share only the model, data and scenario driver. The same Release-like native build, input script and
   idle boundaries apply. Generated output is never hand-edited.
 - Exactly the retained traced identities **2...30** for cold start, scroll and local update (eight toggles per update
-  iteration). This is a fixed inclusive ID set, not a renumbered replacement for the protocol's 30 acquisitions. Never
-  renumber it as 0...29 or fill missing pairs from another source revision. Preserve native process/launch or frame
-  metrics and one distinct platform profiler trace per variant/scenario/iteration.
+  iteration). This is a fixed inclusive set of 29 traced acquisitions, separate from the 30 non-traced
+  `XCTApplicationLaunchMetric` cold-start iterations on iOS. These 29 traced acquisitions do not by themselves satisfy
+  issue #219's documented acceptance of at least 30 iterations on each provisioned target; that gate remains unchanged.
+  Never renumber the set as 0...29 or fill missing pairs from another source revision. Preserve native process/launch
+  or frame metrics and one distinct platform profiler trace per variant/scenario/iteration.
 - Use the existing lower-is-better screening threshold: greater than **5% AND 0.1 ms**, at p50 or p99. Quantiles use
-  nearest rank, so p99 is the maximum of 30 samples. This is a screening gate, not permission to accept a reproducible
-  regression below the threshold; investigate it with additional measurements instead of raising a baseline.
+  nearest rank, so outer p99 is the maximum of the 29 per-iteration scalars. Each iOS scroll/stateUpdate scalar is itself
+  the nearest-rank p99 of that iteration's raw `CADisplayLink` interval array. This is a screening gate, not permission
+  to accept a reproducible regression below the threshold; investigate it with additional measurements instead of
+  raising a baseline.
 - Memory is positive integer bytes, never a millisecond value. Installed binary size is reported separately from
   resident memory; neither is silently replaced by a build directory's size.
 - `python3 -I bench/common/report.py <run>/manifest.json --output <new-report-directory>` verifies every raw artifact,

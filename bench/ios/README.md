@@ -52,8 +52,9 @@ The generated and reference screens have the same explicit `.plain` list style, 
 accessibility labels and stable `Identifiable` rows. `BenchmarkScrollDriver` wraps both hosts in the same
 `ScrollViewReader`; a shared native task issues identical programmatic scrolls. Local update performs eight toggles
 per iteration through the same model. The traced protocol uses the fixed inclusive identities 2...30: **29 identities**,
-not 0...29 or 0...30. Thirty acquisitions are retained as identities; one iteration-30 pair is one of those 29 identities,
-not completion of the matrix.
+not 0...29 or 0...30. Twenty-nine traced acquisitions are retained as identities; one iteration-30 pair is one of those
+29 identities, not completion of the matrix. The separate `XCTApplicationLaunchMetric` cold-start suite retains its
+30 non-traced iterations below; its count does not change this traced set.
 
 `XCTApplicationLaunchMetric` supplies launch samples from the platform's performance test infrastructure. The
 `CADisplayLink` helper records the native `targetTimestamp - timestamp` interval during the two other scenarios.
@@ -96,9 +97,10 @@ xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --form
 # The runner configures a fresh xctestrun beside Xcode's original test-run,
 # waits for explicit Instruments readiness before XCTest taps the native Begin
 # control, checks identity-matched native completion, gracefully stops xctrace
-# and preserves its package. The #219 traced protocol has thirty exact identities,
+# and preserves its package. The #219 traced protocol has 29 exact identities,
 # 2...30 inclusive; it is not 0...30 (31 identities) and does not renumber the
-# non-traced 0..<30 loops or transfer prior evidence. Repeat for each iteration
+# separate non-traced 0..<30 XCTApplicationLaunchMetric loops or transfer prior
+# evidence. Repeat for each iteration
 # 2...30 with a new run directory. --window bounds deferred work, not the measured
 # iteration window.
 # --template defaults to Animation Hitches. Select SwiftUI explicitly for the
@@ -180,9 +182,10 @@ python3 -I bench/ios/archive_trace_test.py -v
 These use synthetic processes and packages, not Instruments or timing evidence. The native driver requires an
 authorized macOS toolchain, a supported Python version and an explicitly owned, already-running target. Real Xcode
 compilation, XCTest and Instruments acquisition must be recorded separately from these tests. The original cold-start
-test still uses 30 `XCTApplicationLaunchMetric` iterations. The original non-traced scenario entry points remain
-available but the complete 30-iteration traced collection must use the new per-launch driver. Simulator results must
-remain explicitly labelled and cannot close the physical-device gate.
+test still uses 30 non-traced `XCTApplicationLaunchMetric` iterations. The original non-traced scenario entry points
+remain available but the complete 29-iteration traced collection must use the new per-launch driver. Those 29 traced
+acquisitions do not by themselves satisfy issue #219's documented at-least-30-iteration acceptance gate, which remains
+unchanged. Simulator results must remain explicitly labelled and cannot close the physical-device gate.
 
 Partial generated/reference simulator traces have exercised the earlier capture protocol on earlier integrated
 revisions; #219 retains their exact revisions, target/toolchain labels and private-artifact checksums. Those artifacts
