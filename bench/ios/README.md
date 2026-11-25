@@ -242,6 +242,64 @@ normalized `raw/metrics.json` and its `metric_selector` rather than silently cha
 `selected_duration` validation preserves the added PID field and verifies its selector checksum. Complete native sample
 collection, memory/binary pairing and fail-closed report validation remain required.
 
+## Offline schema-2 export of retained iterations
+
+`export_iteration_manifest.py` transforms a complete set of accepted existing run directories without invoking
+Xcode, Instruments, a simulator or a device. It requires all 174 generated/reference/scenario identities in `2...30`,
+with no missing, duplicate or renumbered member. Each run must retain its exact `accepted-evidence.json`,
+`retained-file-hashes.json`, the archived/executed trace configuration, `iteration-trace.json`, profiler and xcresult
+archives. Configuration identity includes the canonical `source_xctestrun`, configuration SHA-256, deterministic
+revision/control/iteration filename and those exact values in the archived hosted-test environment. Frame runs also
+require `raw/native-samples.json` with the iteration receipt's session and the original/alias native resources from
+`raw/iteration-trace.json`. A frame run exposes `raw/exports/resident-memory.json`; a startup run has no such alias.
+Only each variant's `startup/2` exposes `raw/exports/installed-binary.json`. Every original `raw/native-resources.json`,
+`raw/native-memory.json` and `raw/native-binary.json` remains retained, and the selected alias must have identical bytes
+and SHA-256. Startup normally requires the selector-bound normalized `raw/metrics.json` produced by #400 at
+`cf6d15ab833017d2df48d7f47d89341cc54381e6`, including its embedded selector, exact positive native PID, native-packet
+and raw-export SHA-256 provenance. Its exact-selector raw exports remain under `raw/exports/`; the producer must share
+an already-created exports directory with #402 without replacing an existing file. Older already-accepted inputs may
+explicitly use the legacy `raw/exports/xctest-metrics.json` normalized-object contract when `raw/metrics.json` is
+absent; that compatibility never substitutes the raw array or firstDisplay for a missing producer metric. Those
+resource files follow the reporter's explicit revision/identity/PID/bytes schema. Absent or mismatched memory, binary
+or normalized startup evidence is an error before any `manifest.json` is created; the exporter never invents or
+approximates resources.
+
+The environment input has exactly `source_revision`, `target_label`, `device_result`, `target`, `toolchain` and
+`commands`. The toolchain is exactly the accepted `xcode` version. The target's `udid`, `name`, `modelName`, `os_version`
+and `architecture` must match both the checksummed `raw/exports/xctest-summary.json` and the legacy tests export. For
+normalized startup, the exact-selector metrics testRun supplies the device record and the tests export supplies the
+one passing selector/test-plan configuration; the raw native identifier, unit and exact sample array must match the
+normalized measurement. Presentation-only metadata such as `displayName` may remain in the raw export: the producer's
+selector checksum still binds the complete normalized measurement, and the exporter never strips or rewrites raw bytes. The
+CoreSimulator model identifier must also match the retained `target.json`/`simulators.json` and `targets.json` probes.
+Input `commands` become `externally_asserted_commands` with an explicit not-reconstructed/not-evidence-verified label.
+The exporter cannot recover acquisition history. `environment.commands` identifies only the verified offline export
+operation; `export_command_template` is a rerun template with caller-supplied paths, not recovered executed command
+text. Normalized startup uses its embedded `metric_selector`. An optional `--startup-selections` file is supported only
+for older normalized measurement arrays or when it exactly repeats that embedded selector; a conflicting external
+selector is rejected. It binds `source_revision`, `build_provenance_sha256` and a list of
+`{variant, scenario: "startup", iteration, index, value_sha256}`. `firstDisplay` remains only a monotonic
+completion timestamp and is never used as the startup scalar. The durable accepted-evidence finalizer must separately
+retain and bind the normalized metrics, its native packets and resource exports; this offline reader does not create
+that finalizer inventory.
+
+```sh
+python3 -I bench/ios/export_iteration_manifest.py \
+  --run-root <retained-runs-root> --derived-data <original-DerivedData> \
+  --environment <export-environment.json> --startup-selections <startup-selections.json> \
+  --output <previously-absent-evidence-directory>
+python3 -I bench/ios/export_iteration_manifest_test.py
+```
+
+The output gets a deterministic, sorted manifest and checksum-preserved ordinary-file copies under `raw/`, plus the
+original canonical app/test products under `products/DerivedData` for reporter recomputation. Nested test-bundle files
+are staged once and retain executable bits. The exporter validates the complete staged manifest through
+`make_report()` before exclusively creating `manifest.json`; it does not emit a performance report or turn a native
+regression into a passing result. An existing output, a symbolic-link input or original DerivedData/product ancestor,
+or a source changing during copying is rejected. The tool transforms only evidence belonging to the retained
+revision/build/target: it cannot backfill a
+new main head or close the physical-device gate. Raw native resource and launch scalar collection is not provided by
+this offline tool.
 ## Published partial execution evidence
 
 The final [joint #219 audit](https://github.com/nwverse/refract/issues/219#issuecomment-7148267250) accepts exactly one
