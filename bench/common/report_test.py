@@ -119,15 +119,16 @@ class PairedReportTest(unittest.TestCase):
     def build_payload(self):
         return original_build_provenance(self.derived_data, "a" * 40)
 
-    def timing_payload(self, variant, scenario, iteration):
+    def timing_payload(self, variant, scenario, iteration, platform="ios"):
         identity = {"sourceRevision": "a" * 40, "variant": variant, "scenario": scenario, "iteration": iteration}
         if scenario == "startup":
             native = {**identity, "metric": "XCTApplicationLaunchMetric", "unit": "ms", "durationMs": 10.0}
             canonical = json.dumps(native, sort_keys=True, separators=(",", ":")).encode()
             return {**native, "nativeMeasurement": native,
                     "nativeMeasurementSha256": hashlib.sha256(canonical).hexdigest()}
+        field = "frameIntervalMs" if platform == "ios" else "frameDurationMs"
         return {**identity, "schema": 1, "session": 1, "pid": 4242, "completedIterations": 1,
-                "recordedIteration": iteration, "frameIntervalMs": [9.0, 10.0],
+                "recordedIteration": iteration, field: [9.0, 10.0],
                 "iterationByFrame": [iteration, iteration]}
 
     def resource_payload(self, variant, scenario, iteration, metric):
@@ -412,6 +413,27 @@ class PairedReportTest(unittest.TestCase):
             with self.subTest(key=key), self.assertRaisesRegex(EvidenceError, "identity|process|tags"):
                 make_report(self.manifest, self.root)
 
+    def test_raw_frame_integer_identities_are_not_numeric_equivalents(self):
+        for platform in ("ios", "harmonyos"):
+            if platform == "harmonyos":
+                self.use_harmony_native_metrics()
+            measurement = next(entry for entry in self.manifest["measurements"]
+                               if entry["variant"] == "generated" and entry["scenario"] == "scroll"
+                               and entry["iteration"] == 2)
+            path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
+            for key, value in (("schema", True), ("schema", 1.0),
+                               ("completedIterations", True), ("completedIterations", 1.0),
+                               ("iteration", 2.0), ("recordedIteration", 2.0),
+                               ("pid", True), ("pid", 4242.0)):
+                with self.subTest(platform=platform, key=key, value=value):
+                    packet = self.timing_payload("generated", "scroll", 2, platform=platform)
+                    packet[key] = value
+                    self.replace_json(path, packet)
+                    with self.assertRaisesRegex(EvidenceError, "integer|identity|process and iteration"):
+                        make_report(self.manifest, self.root)
+            self.replace_json(path, self.timing_payload("generated", "scroll", 2, platform=platform))
+            self.assertEqual(make_report(self.manifest, self.root)["status"], "pass")
+
     def test_raw_binary_identity_must_match_its_resource_artifact(self):
         path = "raw/generated-startup-2-binary.json"
         payload = self.resource_payload("generated", "startup", 2, "installedBinaryBytes")
@@ -625,8 +647,8 @@ class PairedReportTest(unittest.TestCase):
                                    launchStartTimestamp=90.0, firstFrameTimestamp=100.0)
                     self.replace_json(path, payload)
                 else:
-                    self.replace_json(artifact["path"], self.timing_payload(artifact["variant"], artifact["scenario"],
-                                                                            artifact["iteration"]))
+                    self.replace_json(artifact["path"], self.timing_payload(
+                        artifact["variant"], artifact["scenario"], artifact["iteration"], platform="harmonyos"))
 
     def test_harmony_uses_vendor_native_metrics_with_explicit_scalar_definitions(self):
         self.use_harmony_native_metrics()
@@ -652,6 +674,36 @@ class PairedReportTest(unittest.TestCase):
         startup["metric_selector"] = None
         with self.assertRaisesRegex(EvidenceError, "supported only for an iOS startup"):
             make_report(self.manifest, self.root)
+
+    def test_harmony_frame_duration_cannot_be_filled_by_display_intervals(self):
+        self.use_harmony_native_metrics()
+        for artifact in self.manifest["artifacts"]:
+            if artifact["role"] == "timing" and artifact["scenario"] != "startup":
+                # The pre-fix packet lacks frameDurationMs and supplies only the
+                # iOS frameIntervalMs field, despite declaring frameDurationMs.
+                self.replace_json(artifact["path"], self.timing_payload(
+                    artifact["variant"], artifact["scenario"], artifact["iteration"]))
+        with self.assertRaisesRegex(EvidenceError, "Native frame duration samples"):
+            make_report(self.manifest, self.root)
+
+    def test_harmony_recalculates_p99_from_native_frame_duration_samples(self):
+        self.use_harmony_native_metrics()
+        measurement = next(entry for entry in self.manifest["measurements"]
+                           if entry["variant"] == "generated" and entry["scenario"] == "scroll"
+                           and entry["iteration"] == 2)
+        path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
+        packet = self.timing_payload("generated", "scroll", 2, platform="harmonyos")
+        packet["frameDurationMs"] = [1.0, 2.0, 3.0]
+        packet["iterationByFrame"] = [2, 2, 2]
+        self.replace_json(path, packet)
+        with self.assertRaisesRegex(EvidenceError, "raw native metric export"):
+            make_report(self.manifest, self.root)
+        measurement["value"] = 3.0
+        report = make_report(self.manifest, self.root)
+        sample = next(sample for sample in report["samples"] if sample["scenario"] == "scroll"
+                      and sample["variant"] == "generated" and sample["iteration"] == 2)
+        self.assertEqual(sample["source_samples"], [1.0, 2.0, 3.0])
+        self.assertEqual(sample["value"], 3.0)
 
     def test_harmony_needs_vendor_trace_not_an_ios_trace(self):
         self.manifest["platform"] = "harmonyos"
