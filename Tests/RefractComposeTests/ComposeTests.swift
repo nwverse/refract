@@ -89,6 +89,16 @@ import RefractMapping
     #expect(output.contains("var count by remember { mutableStateOf(0) }"))
 }
 
+@Test func composePreservesDoubleStateFromIntegerLiteral() throws {
+    let module = Module(sourceFile: "Input.swift", screens: [
+        Screen(name: "Progress",
+               states: [.state(name: "progress", type: .double, initialValue: Expression(.numberLiteral("0")), location: nil)],
+               body: .text(Expression(.reference("progress")), modifiers: [], location: nil)),
+    ])
+    let output = try ComposeBackend().generate(module: module)
+    #expect(output.contains("var progress by remember { mutableStateOf<Double>(0) }"))
+}
+
 @Test func composeEmitsBindingParameters() throws {
     let module = Module(sourceFile: "Input.swift", screens: [
         Screen(name: "EnabledRow",

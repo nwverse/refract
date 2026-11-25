@@ -570,6 +570,14 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "state-double-integer-literal",
+      "implementationStatus": "ready"
+    },
+    {
+      "path": "state-reject-double-string-literal",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "theme-interaction-states",
       "implementationStatus": "ready"
     },

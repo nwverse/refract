@@ -1,0 +1,1 @@
+Input.swift:4:5: error [state.invalid_declaration]: Stored View properties require one private @State scalar with a literal initializer. Suggestion: Use `@State private var count: Int = 0`; bindings and models are implemented separately
