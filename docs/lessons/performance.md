@@ -74,6 +74,24 @@ shortest decimal spelling for the same `Double`. Encode the native floating-poin
 round-trippable string, validate it and compare the typed strings exactly at each hop. Exercise the concrete native
 value through the real control plane and compile the actual Swift comparator, including a mismatch rejection.
 
+## Manifest only stable bytes
+
+A finalizer must not include its caller's still-open stdout/stderr in an integrity manifest. If its buffered receipt is
+printed only after the manifest is written, the retained entry describes the initial empty file, not the later receipt.
+Before manifesting, wait for owned child processes and collector threads, close owned logs and archives, then measure the
+resulting byte count and SHA-256. Exclude caller-owned live diagnostic streams, or write them outside the walked tree,
+and validate their final contents separately after the child exits. If a finalizer owns a receipt that belongs in the
+manifest, write and close that receipt first; `flush()` alone does not close an owned file or make a foreign writer
+stable.
+
+Build the manifest only after all of its members are closed, and publish its complete bytes through a same-directory
+temporary file followed by an exclusive no-clobber link or rename. Flush and `fsync` the temporary file before
+publication, remove only that temporary on failure, and never replace an existing manifest or repair retained evidence
+after the fact. A later hash of a finished log is a new observation, not acquisition-time evidence and not a substitute
+for a valid original manifest. Cover the empty-before-flush ordering, live-stream exclusion, post-exit log validation,
+publication failure and refusal to overwrite with synthetic tests; these tests do not change native evidence thresholds
+or establish a performance result.
+
 ## Keep evidence domains and identity counts explicit
 
 An inclusive identity range is not automatically its acquisition count: 2...30 contains **29 identities**. Check the
