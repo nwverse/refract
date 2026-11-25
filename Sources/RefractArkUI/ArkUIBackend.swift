@@ -26,7 +26,7 @@ struct Generation {
     var declaredItemInputs: Set<String> = []
     var listItemTypes: [String: String] = [:]
     var currentModals: [ModalPresentation] = []
-    var currentNavigation: (operation: NavigationOperation, isDestination: Bool)?
+    var currentNavigation: NavigationOperation?
 
     init(module: Module, mapping: Mapping, nativeSource: NativeSource,
          models: [ModelProtocol], itemTypes: [ItemType], enums: [EnumDeclaration]) {

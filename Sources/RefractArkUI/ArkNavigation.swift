@@ -2,7 +2,7 @@ import RefractIR
 import RefractMapping
 
 extension Generation {
-    func checkedNavigationContext(for screen: Screen) throws -> (operation: NavigationOperation, isDestination: Bool)? {
+    func checkedNavigationContext(for screen: Screen) throws -> NavigationOperation? {
         if case let .navigationStack(stack, location) = screen.body {
             let operation = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
             let paths = screen.states.compactMap { state -> (String, String)? in
@@ -16,7 +16,7 @@ extension Generation {
                     suggestion: "Use one declared @State destination array matching NavigationStack(path:).",
                     location: location)
             }
-            return (operation, false)
+            return operation
         }
         if let navigation = screen.navigation {
             let isRegistered = module.screens.contains { candidate in
@@ -31,7 +31,7 @@ extension Generation {
                     suggestion: "Register the qualified NavigationLink destination with the same typed path and enum in its enclosing graph.",
                     location: screen.location)
             }
-            return (navigation, true)
+            return navigation
         }
         func containsLink(_ node: ViewNode) -> Bool {
             if case .navigationLink = node { return true }
@@ -52,15 +52,14 @@ extension Generation {
             throw Diagnostic(code: "RFNAV003", message: "A NavigationLink destination is not in the declared path enum.",
                              suggestion: "Use a static case of the source destination enum", location: location)
         }
-        guard let currentNavigation, enumName == currentNavigation.operation.enumName,
-              pathName == currentNavigation.operation.pathName
-                || (pathName == "path" && currentNavigation.isDestination) else {
+        guard let currentNavigation, pathName == currentNavigation.pathName,
+              enumName == currentNavigation.enumName else {
             throw Diagnostic(code: "RFNAV003",
                 message: "A NavigationLink must match its checked enclosing navigation operation.",
                 suggestion: "Register the qualified NavigationLink destination and use its enclosing graph's typed path and enum.",
                 location: location)
         }
-        let pathName = currentNavigation.operation.pathName
+        let pathName = currentNavigation.pathName
         writer.line("Button(\(try ArkExpression.emit(title, mapping: mapping)))")
         writer.depth += 1
         writer.open(".onClick(() =>")

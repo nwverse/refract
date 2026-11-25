@@ -65,16 +65,44 @@ func arkUIQualifiedLinkRequiresItsCheckedEnclosingOperation(_ name: String, _ op
     #expect(diagnostic?.suggestion?.isEmpty == false, Comment(rawValue: diagnostic?.rendered ?? name))
 }
 
-@Test func arkUIRejectsAQualifiedLinkPathThatDisagreesWithItsOperation() {
-    let link = ViewNode.navigationLink(
-        title: Expression(.stringLiteral("Open"), type: .string, location: nil),
-        pathName: "path", enumName: "DeepRoute", destination: "editor", location: nil)
-    let screen = Screen(name: "DeepDetailScreen",
-                        navigation: NavigationOperation(pathName: "routePath", enumName: "DeepRoute"), body: link)
-    let module = Module(sourceFile: "Input.swift", screens: [screen],
-                        enums: [EnumDeclaration(name: "DeepRoute", cases: ["editor"], isNavigationDestination: true)])
+private func frontendNavigationLinks(in node: ViewNode) -> [(path: String, enumName: String)] {
+    if case let .navigationLink(_, pathName, enumName, _, _) = node { return [(pathName, enumName)] }
+    return node.children.flatMap(frontendNavigationLinks)
+}
+
+@Test func frontendResolvesCustomGraphOwnershipBeforeBackendEmission() throws {
+    let (module, mapping) = try parsedCustomNavigationFixture()
+    let decoded = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(module))
+    let detail = try #require(decoded.screens.first(where: { $0.name == "DeepDetailScreen" }))
+    #expect(frontendNavigationLinks(in: detail.body).map(\.path) == ["routePath"])
+    let root = try #require(decoded.screens.first(where: { $0.name == "DeepNavigationScreen" }))
+    #expect(frontendNavigationLinks(in: root.body).map(\.path) == ["routePath"])
+
+    let output = try ArkUIBackend().generate(module: decoded, mapping: mapping)
+    let expected = try String(contentsOf: customNavigationFixture.appendingPathComponent("Expected.ets"), encoding: .utf8)
+    #expect(output == expected)
+}
+
+@Test(arguments: [false, true])
+func arkUIRejectsRegisteredDecodedOrManualLinkPathMismatch(decoded: Bool) throws {
+    var (module, mapping) = try parsedCustomNavigationFixture()
+    let detail = try #require(module.screens.first(where: { $0.name == "DeepDetailScreen" }))
+    let link = ViewNode.navigationLink(title: Expression(.stringLiteral("Open"), type: .string, location: nil),
+                                       pathName: "path", enumName: "DeepRoute", destination: "editor", location: nil)
+    let replacement = Screen(name: detail.name, parameters: detail.parameters, states: detail.states,
+                             modals: detail.modals, navigation: detail.navigation, body: link,
+                             nativeValues: detail.nativeValues, lifecycle: detail.lifecycle, location: detail.location)
+    module = Module(sourceFile: module.sourceFile,
+                    screens: module.screens.map { $0.name == detail.name ? replacement : $0 },
+                    nativeDeclarations: module.nativeDeclarations, models: module.models,
+                    itemTypes: module.itemTypes, enums: module.enums, nativeHosts: module.nativeHosts)
+    if decoded {
+        module = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(module))
+    }
+
     let diagnostic = #expect(throws: Diagnostic.self) {
-        try ArkUIBackend().generate(module: module)
+        try ArkUIBackend().generate(module: module, mapping: mapping)
     }
     #expect(diagnostic?.code == "RFNAV003")
+    #expect(diagnostic?.message.contains("enclosing navigation operation") == true)
 }

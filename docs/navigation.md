@@ -96,9 +96,10 @@ callback when any branch needs it and forwards it to those branches. Leaf destin
 remain unchanged. This is ordinary explicit callback forwarding, not an environment object, singleton, route table
 or second stack. `Fixtures/navigation-deep-restoration/` contains the root → detail → editor source and both outputs.
 `Tests/RefractArkUITests/Fixtures/navigation-custom-path/` additionally pins an ArkTS `routePath` regression. The
-backend binds each link to its checked enclosing graph, so declaration, call and forwarding names all use the actual
-path. Only a registered destination may resolve the frontend's conventional qualified-link placeholder; a missing or
-mismatched graph is `RFNAV003`, never a guessed callback. This is source-level golden evidence, not ArkTS compilation.
+frontend resolves each link's path and enum from its checked enclosing graph before backend emission. A public
+backend then requires exact link/operation equality, including after JSON decoding: a conventional literal `path`
+does not prove frontend provenance. Missing or mismatched graph operations are `RFNAV003`, never a guessed callback.
+This is source-level golden evidence, not ArkTS compilation.
 
 Native back and restoration are **not** translated into generated state. The generated Kotlin and ArkTS contain no
 saved-state bundle, serializer, process-restoration observer or path mutation. Native destination-local state uses
