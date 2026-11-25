@@ -1584,14 +1584,16 @@ class TraceBuildProvenanceTest(unittest.TestCase):
     def prepare_reporter_provenance(self, fixture):
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
-        fixture.manifest["environment"]["build_configuration"]["target"] = "iphonesimulator"
-        products = self.derived_data / "Build/Products/Release-iphonesimulator"
+        producer_copy = fixture.derived_data
+        fixture.manifest["environment"]["build_configuration"].update(
+            target="iphonesimulator", derived_data=producer_copy.relative_to(fixture.root).as_posix())
+        products = producer_copy / "Build/Products/Release-iphonesimulator"
         for executable in ("RefractBench.app/RefractBench",
                            "RefractBenchUITests-Runner.app/RefractBenchUITests-Runner",
                            "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest/RefractBenchUITests"):
             (products / executable).chmod(0o755)
         destination = fixture.root / "producer" / Path(fixture.build_path).name
-        recorded = record_build_provenance(self.derived_data, "a" * 40, destination=destination)
+        recorded = record_build_provenance(producer_copy, "a" * 40, destination=destination)
         return destination, recorded
 
     def test_existing_recorded_provenance_feeds_the_complete_paired_reporter(self):
@@ -1618,14 +1620,14 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                           if entry["path"] == "RefractBench.app/RefractBench")
         executable["executable"] = False
         fixture.replace_json(fixture.build_path, payload)
-        with self.assertRaisesRegex(EvidenceError, "main executable"):
+        with self.assertRaisesRegex(EvidenceError, "differs from the original build products"):
             make_report(fixture.manifest, fixture.root)
         payload["products"]["RefractBench.app"]["files"] = [
             entry for entry in payload["products"]["RefractBench.app"]["files"]
             if not entry["path"].endswith("/RefractBench")
         ]
         fixture.replace_json(fixture.build_path, payload)
-        with self.assertRaisesRegex(EvidenceError, "missing its main executable"):
+        with self.assertRaisesRegex(EvidenceError, "differs from the original build products"):
             make_report(fixture.manifest, fixture.root)
 
     def test_recorded_bundle_records_reject_directory_changes_and_removed_files(self):
@@ -1646,7 +1648,52 @@ class TraceBuildProvenanceTest(unittest.TestCase):
             payload = json.loads(destination.read_text(encoding="utf-8"))
             mutate(payload["products"][product][field])
             fixture.replace_json(fixture.build_path, payload)
-            with self.subTest(field=field, product=product), self.assertRaisesRegex(EvidenceError, message):
+            with self.subTest(field=field, product=product), self.assertRaisesRegex(EvidenceError,
+                                                                                     "differs from the original"):
+                make_report(fixture.manifest, fixture.root)
+
+    def test_well_formed_but_wrong_original_sha_and_bytes_are_rejected(self):
+        for mutation in ("source_sha256", "product_sha256", "product_bytes"):
+            fixture = PAIRED_REPORTER_FIXTURE[0](
+                methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+            destination, _ = self.prepare_reporter_provenance(fixture)
+            payload = json.loads(destination.read_text(encoding="utf-8"))
+            if mutation == "source_sha256":
+                payload["source_xctestrun"]["sha256"] = "0" * 64
+            else:
+                info = next(entry for entry in payload["products"]["RefractBench.app"]["files"]
+                            if entry["path"] == "RefractBench.app/Info.plist")
+                info["sha256" if mutation == "product_sha256" else "bytes"] = \
+                    "0" * 64 if mutation == "product_sha256" else info["bytes"] + 1
+            fixture.replace_json(fixture.build_path, payload)
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(EvidenceError,
+                                                                         "differs from the original"):
+                make_report(fixture.manifest, fixture.root)
+
+    def test_ios_cannot_downgrade_to_the_generic_validator_or_missing_products(self):
+        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+        self.prepare_reporter_provenance(fixture)
+        fixture.replace_json(fixture.build_path, fixture.generic_build_payload())
+        fixture.manifest["environment"]["build_configuration"].pop("target")
+        with self.assertRaisesRegex(EvidenceError, "explicit Release/iphonesimulator"):
+            make_report(fixture.manifest, fixture.root)
+        fixture.manifest["environment"]["build_configuration"]["target"] = "iphonesimulator"
+        with self.assertRaisesRegex(EvidenceError, "producer|differs from the original"):
+            make_report(fixture.manifest, fixture.root)
+        fixture.manifest["environment"]["build_configuration"].pop("derived_data")
+        with self.assertRaisesRegex(EvidenceError, "explicit Release/iphonesimulator"):
+            make_report(fixture.manifest, fixture.root)
+
+    def test_malformed_original_directory_entries_raise_evidence_errors(self):
+        for replacement in ([{}], ["RefractBenchUITests-Runner.app/PlugIns", 1], [None], [["nested"]]):
+            fixture = PAIRED_REPORTER_FIXTURE[0](
+                methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+            destination, _ = self.prepare_reporter_provenance(fixture)
+            payload = json.loads(destination.read_text(encoding="utf-8"))
+            payload["products"]["RefractBenchUITests-Runner.app"]["directories"] = replacement
+            fixture.replace_json(fixture.build_path, payload)
+            with self.subTest(replacement=replacement), self.assertRaisesRegex(EvidenceError,
+                                                                               "differs from the original"):
                 make_report(fixture.manifest, fixture.root)
 
     def test_a_build_at_b_head_rejects_main_before_any_trace_preparation(self):

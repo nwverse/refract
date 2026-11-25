@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import math
+import plistlib
 import sys
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from paired_report import EvidenceError, ITERATIONS, checked_iteration, make_report, markdown, percentile
+from build_provenance import BUNDLE_NAMES, original_build_provenance
 
 
 class PairedReportTest(unittest.TestCase):
@@ -18,6 +20,8 @@ class PairedReportTest(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         (self.root / "raw").mkdir()
+        self.derived_data = self.root / "producer/DerivedData"
+        self.write_original_products()
         self.build_path = "raw/refract-build-provenance.json"
         self.write_json(self.build_path, self.build_payload())
         self.build_hash = hashlib.sha256((self.root / self.build_path).read_bytes()).hexdigest()
@@ -31,7 +35,8 @@ class PairedReportTest(unittest.TestCase):
                 "source_revision": "a" * 40,
                 "build_provenance": {"path": self.build_path, "sha256": self.build_hash},
                 "toolchain": {"xcode": "test"},
-                "build_configuration": {"name": "Release", "target": "iphonesimulator"},
+                "build_configuration": {"name": "Release", "target": "iphonesimulator",
+                                        "derived_data": "producer/DerivedData"},
                 "target": {"model": "test", "os_version": "test", "architecture": "test"},
                 "commands": ["xcresulttool get test-results metrics"],
             },
@@ -83,13 +88,36 @@ class PairedReportTest(unittest.TestCase):
     def write_json(self, path, payload):
         (self.root / path).write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
 
-    def build_payload(self):
+    def generic_build_payload(self):
         products = {}
         for variant in ("generated", "reference"):
             data = f"{variant} product".encode()
             products[variant] = {"bundle": variant, "files": [{"path": f"{variant}/RefractBench", "bytes": len(data),
                                                                  "sha256": hashlib.sha256(data).hexdigest()}]}
         return {"schema": 1, "source_revision": "a" * 40, "configuration": "Release", "products": products}
+
+    def use_harmony_build_provenance(self):
+        self.replace_json(self.build_path, self.generic_build_payload())
+        self.manifest["environment"]["build_configuration"] = {"name": "Release"}
+
+    def write_original_products(self):
+        products = self.derived_data / "Build/Products/Release-iphonesimulator"
+        for bundle in BUNDLE_NAMES:
+            path = products / bundle
+            path.mkdir(parents=True)
+            executable = Path(bundle).stem
+            (path / executable).write_bytes(f"synthetic executable: {bundle}".encode())
+            (path / executable).chmod(0o755)
+            (path / "Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": executable}))
+        (products / "RefractBenchUITests-Runner.app/Frameworks").mkdir()
+        (products / "RefractBenchUITests-Runner.app/Frameworks/Support.dylib").write_bytes(b"support")
+        source = self.derived_data / "Build/Products/RefractBench.xctestrun"
+        source.write_bytes(plistlib.dumps({"RefractBenchUITests": {"TestingEnvironmentVariables": {
+            "XCODE_SCHEME_NAME": "RefractBench",
+        }}}))
+
+    def build_payload(self):
+        return original_build_provenance(self.derived_data, "a" * 40)
 
     def timing_payload(self, variant, scenario, iteration):
         identity = {"sourceRevision": "a" * 40, "variant": variant, "scenario": scenario, "iteration": iteration}
@@ -231,29 +259,7 @@ class PairedReportTest(unittest.TestCase):
             make_report(self.manifest, self.root)
 
     def test_existing_ios_build_provenance_is_accepted_without_weakening_its_identity(self):
-        products = {
-            "RefractBench.app": {"directories": [], "files": [
-                {"path": "RefractBench.app/RefractBench", "bytes": 100, "executable": True, "sha256": "1" * 64},
-                {"path": "RefractBench.app/Info.plist", "bytes": 200, "executable": False, "sha256": "2" * 64},
-            ]},
-            "RefractBenchUITests-Runner.app": {"directories": [
-                "RefractBenchUITests-Runner.app/PlugIns",
-            ], "files": [
-                {"path": "RefractBenchUITests-Runner.app/Info.plist", "bytes": 300,
-                 "executable": False, "sha256": "3" * 64},
-                {"path": "RefractBenchUITests-Runner.app/RefractBenchUITests-Runner", "bytes": 400,
-                 "executable": True, "sha256": "4" * 64},
-            ]},
-            "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest": {
-                "directories": [], "files": [
-                    {"path": "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest/Info.plist",
-                     "bytes": 500, "executable": False, "sha256": "5" * 64},
-                    {"path": "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest/RefractBenchUITests",
-                     "bytes": 600, "executable": True, "sha256": "6" * 64},
-                ]},
-        }
-        payload = {"schema": 1, "source_revision": "a" * 40, "configuration": "Release-iphonesimulator",
-                   "source_xctestrun": {"path": "RefractBench.xctestrun", "sha256": "7" * 64}, "products": products}
+        payload = self.build_payload()
         self.replace_json(self.build_path, payload)
         self.assertEqual(make_report(self.manifest, self.root)["status"], "pass")
         for key, value in (("source_revision", "b" * 40), ("configuration", "Debug-iphonesimulator")):
@@ -262,22 +268,44 @@ class PairedReportTest(unittest.TestCase):
             self.replace_json(self.build_path, changed)
             with self.subTest(field=key), self.assertRaisesRegex(EvidenceError, "revision|configuration|destination"):
                 make_report(self.manifest, self.root)
-        changed = copy.deepcopy(payload)
-        changed["source_xctestrun"]["sha256"] = "not-a-checksum"
-        self.replace_json(self.build_path, changed)
-        with self.assertRaisesRegex(EvidenceError, "xctestrun"):
-            make_report(self.manifest, self.root)
-        for key, value in (("executable", False), ("sha256", "not-a-checksum"), ("bytes", 0)):
+        for field, target, value in (
+                ("source_sha256", payload["source_xctestrun"], "0" * 64),
+                ("product_sha256", payload["products"]["RefractBench.app"]["files"][0], "0" * 64),
+                ("product_bytes", payload["products"]["RefractBench.app"]["files"][0], None),
+                ("executable", payload["products"]["RefractBench.app"]["files"][0], False),
+        ):
             changed = copy.deepcopy(payload)
-            changed["products"]["RefractBench.app"]["files"][0][key] = value
+            if field == "source_sha256":
+                changed["source_xctestrun"]["sha256"] = value
+            else:
+                entry = next(item for item in changed["products"]["RefractBench.app"]["files"]
+                             if item["path"] == "RefractBench.app/RefractBench")
+                if field == "product_sha256":
+                    entry["sha256"] = value
+                elif field == "product_bytes":
+                    entry["bytes"] += 1
+                else:
+                    entry["executable"] = value
             self.replace_json(self.build_path, changed)
-            with self.subTest(field=key), self.assertRaisesRegex(EvidenceError, "executable|SHA-256|byte"):
+            with self.subTest(field=field), self.assertRaisesRegex(EvidenceError, "differs from the original"):
                 make_report(self.manifest, self.root)
         changed = copy.deepcopy(payload)
         changed["products"]["RefractBench.app"]["directories"] = ["RefractBenchReference.app"]
         self.replace_json(self.build_path, changed)
-        with self.assertRaisesRegex(EvidenceError, "outside its declared iOS bundle"):
+        with self.assertRaisesRegex(EvidenceError, "differs from the original"):
             make_report(self.manifest, self.root)
+        for directories in ([{}], ["RefractBench.app", 1], [None]):
+            changed = copy.deepcopy(payload)
+            changed["products"]["RefractBench.app"]["directories"] = directories
+            self.replace_json(self.build_path, changed)
+            with self.subTest(directories=directories), self.assertRaisesRegex(EvidenceError,
+                                                                                "differs from the original"):
+                make_report(self.manifest, self.root)
+        self.manifest["environment"]["build_configuration"].pop("target")
+        with self.assertRaisesRegex(EvidenceError, "explicit Release/iphonesimulator"):
+            make_report(self.manifest, self.root)
+        self.manifest["environment"]["build_configuration"]["target"] = "iphonesimulator"
+        self.replace_json(self.build_path, payload)
         self.manifest["environment"]["target_label"] = "DEVICE"
         self.manifest["environment"]["device_result"] = True
         with self.assertRaisesRegex(EvidenceError, "producer and build destination"):
@@ -342,9 +370,9 @@ class PairedReportTest(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, "internal revision"):
             make_report(self.manifest, self.root)
         payload["source_revision"] = "a" * 40
-        payload["products"].pop("reference")
+        payload["products"].pop("RefractBench.app")
         self.replace_json(self.build_path, payload)
-        with self.assertRaisesRegex(EvidenceError, "reference product identity"):
+        with self.assertRaisesRegex(EvidenceError, "differs from the original"):
             make_report(self.manifest, self.root)
 
     def test_frame_reduction_uses_nearest_rank_and_preserves_thresholds(self):
@@ -512,6 +540,7 @@ class PairedReportTest(unittest.TestCase):
     def use_harmony_native_metrics(self):
         self.manifest["platform"] = "harmonyos"
         self.manifest["environment"]["platform"] = "harmonyos"
+        self.use_harmony_build_provenance()
         for artifact in self.manifest["artifacts"]:
             artifact["kind"] = "vendor-metric-json" if artifact["kind"] != "xctrace" else "vendor-trace"
         for measurement in self.manifest["measurements"]:

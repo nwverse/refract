@@ -52,8 +52,11 @@ supplies:
    the retained build JSON and requires its own `source_revision` and configuration to match, plus explicit product
    identities. On iOS this is the existing `record_build_provenance()` schema: its original xctestrun path/SHA-256 and
    the complete app/test bundle directory and file records, including byte counts, executable flags and checksums.
-   `build_configuration.name=Release` and `target=iphonesimulator` describe the producer's `Release-iphonesimulator`
-   configuration. That one shared app/test build contains both `REFRACT_BENCH_VARIANT` execution paths; the reporter
+   `build_configuration.name=Release` and `target=iphonesimulator` are mandatory; `derived_data` names the original
+   DerivedData directory relative to the evidence manifest. The reporter recomputes the source xctestrun and every
+   directory/file/byte/executable/SHA-256 record from those original products and requires exact equality with the
+   retained JSON; a well-formed but different SHA or byte count is rejected. The canonical producer remains
+   `SIMULATOR`-only. That one shared app/test build contains both `REFRACT_BENCH_VARIANT` execution paths; the reporter
    does not reinterpret it as two different app bundles. Each timing/resource artifact still binds its selected variant,
    source revision and build hash. Other manifests must declare distinct nonempty generated/reference product file
    identities. Manifest declarations alone are not build provenance. iOS uses ZIP-copied `.xcresult` bundles, Xcode

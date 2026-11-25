@@ -14,6 +14,7 @@ import math
 import re
 from pathlib import Path
 from typing import Any
+from build_provenance import original_build_provenance
 
 VARIANTS = ("generated", "reference")
 SCENARIOS = ("startup", "scroll", "stateUpdate")
@@ -28,17 +29,6 @@ GATED_METRICS = {
 SCENARIO_METRICS = {
     "ios": {"startup": "startupMs", "scroll": "frameIntervalMs", "stateUpdate": "frameIntervalMs"},
     "harmonyos": {"startup": "startupMs", "scroll": "frameDurationMs", "stateUpdate": "frameDurationMs"},
-}
-IOS_BUILD_BUNDLES = (
-    "RefractBench.app",
-    "RefractBenchUITests-Runner.app",
-    "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest",
-)
-IOS_BUILD_EXECUTABLES = {
-    "RefractBench.app": "RefractBench.app/RefractBench",
-    "RefractBenchUITests-Runner.app": "RefractBenchUITests-Runner.app/RefractBenchUITests-Runner",
-    "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest":
-        "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest/RefractBenchUITests",
 }
 
 
@@ -256,6 +246,19 @@ def validate_environment(environment: Any, platform: str) -> dict[str, Any]:
     for key in ("toolchain", "build_configuration"):
         if not isinstance(environment[key], dict) or not environment[key]:
             raise EvidenceError(f"{key} must be a nonempty object")
+    configuration = environment["build_configuration"]
+    if platform == "ios" and (set(configuration) != {"name", "target", "derived_data"}
+                              or configuration.get("name") != "Release"
+                              or configuration.get("target") != "iphonesimulator"):
+        raise EvidenceError("iOS requires explicit Release/iphonesimulator build-producer configuration")
+    if platform == "ios":
+        derived_data = configuration.get("derived_data")
+        if not isinstance(derived_data, str):
+            raise EvidenceError("iOS build producer requires a retained DerivedData path")
+        bounded_text(derived_data, "build_configuration.derived_data", path=True)
+        path = Path(derived_data)
+        if path.is_absolute() or ".." in path.parts or "\\" in derived_data:
+            raise EvidenceError("iOS DerivedData must be a relative path without traversal")
     target = environment["target"]
     if not isinstance(target, dict):
         raise EvidenceError("Target must identify model, OS and architecture")
@@ -322,68 +325,41 @@ def bundle_relative_path(value: Any, label: str) -> str:
     return path
 
 
-def checked_ios_build_provenance(payload: dict[str, Any], environment: dict[str, Any]) -> None:
-    """Validate the canonical producer's shared app/test build, not two fake apps."""
+def checked_ios_build_provenance(payload: dict[str, Any], environment: dict[str, Any], root: Path) -> None:
+    """Compare the complete canonical identity with recomputed original products."""
     configuration = environment["build_configuration"]
-    target = configuration.get("target", "iphonesimulator" if environment["target_label"] == "SIMULATOR" else None)
-    expected_configuration = f"{configuration.get('name')}-{target}"
-    if (environment["target_label"] != "SIMULATOR" or payload.get("configuration") != expected_configuration
+    if (environment["target_label"] != "SIMULATOR" or payload.get("configuration") != "Release-iphonesimulator"
             or set(payload) != {"schema", "source_revision", "configuration", "source_xctestrun", "products"}):
         raise EvidenceError("iOS build provenance does not match the existing producer and build destination")
-    source = payload["source_xctestrun"]
-    if type(source) is not dict or set(source) != {"path", "sha256"}:
-        raise EvidenceError("iOS build provenance requires its original source xctestrun identity")
-    source_path = bundle_relative_path(source["path"], "source_xctestrun.path")
-    if (Path(source_path).name != source_path or not source_path.endswith(".xctestrun")
-            or source_path.startswith("iteration-trace-config-")):
-        raise EvidenceError("iOS build provenance requires its original source xctestrun identity")
-    sha256_text(source["sha256"], "source_xctestrun.sha256")
-    products = payload["products"]
-    if type(products) is not dict or set(products) != set(IOS_BUILD_BUNDLES):
-        raise EvidenceError("iOS build provenance must contain the producer's exact app and test bundle identities")
-    for bundle_name in IOS_BUILD_BUNDLES:
-        product = products[bundle_name]
-        if (type(product) is not dict or set(product) != {"directories", "files"}
-                or type(product["files"]) is not list or not product["files"]
-                or type(product["directories"]) is not list):
-            raise EvidenceError(f"iOS build provenance requires the complete {bundle_name} identity")
-        directories = product["directories"]
-        if len(set(directories)) != len(directories) or directories != sorted(directories):
-            raise EvidenceError("iOS build product directories must be unique and deterministically ordered")
-        for directory in directories:
-            relative = bundle_relative_path(directory, "product.directory")
-            if relative != bundle_name and not relative.startswith(bundle_name + "/"):
-                raise EvidenceError("Build product directory is outside its declared iOS bundle")
-        seen_paths = set()
-        for entry in product["files"]:
-            if type(entry) is not dict or set(entry) != {"path", "bytes", "executable", "sha256"}:
-                raise EvidenceError("iOS build files need path, byte, executable and checksum identities")
-            relative = bundle_relative_path(entry["path"], "product.path")
-            if relative != bundle_name and not relative.startswith(bundle_name + "/"):
-                raise EvidenceError("Build product file is outside its declared iOS bundle")
-            if relative in seen_paths:
-                raise EvidenceError("iOS build product files must have unique bundle-relative identities")
-            seen_paths.add(relative)
-            if type(entry["bytes"]) is not int or entry["bytes"] <= 0:
-                raise EvidenceError("Build product files require positive byte sizes")
-            if type(entry["executable"]) is not bool:
-                raise EvidenceError("Build product files require an explicit executable flag")
-            sha256_text(entry["sha256"], "product.sha256")
-        executable = IOS_BUILD_EXECUTABLES[bundle_name]
-        if any(entry["path"] == executable and entry["executable"] is not True for entry in product["files"]):
-            raise EvidenceError(f"The producer's main executable must retain its executable identity: {bundle_name}")
-        if not any(entry["path"] == executable and entry["sha256"]
-                   for entry in product["files"]):
-            raise EvidenceError(f"iOS build provenance is missing its main executable: {bundle_name}")
+    derived_data = root / configuration["derived_data"]
+    try:
+        current = root.resolve(strict=True)
+        if not current.is_dir():
+            raise EvidenceError("Evidence root must be a real directory")
+        for part in Path(configuration["derived_data"]).parts:
+            current = current / part
+            if current.is_symlink():
+                raise EvidenceError("iOS DerivedData and its ancestors must not be symbolic links")
+        derived_data = current.resolve(strict=True)
+    except OSError as error:
+        raise EvidenceError(f"Cannot resolve the original iOS DerivedData: {error}") from error
+    if not derived_data.is_dir():
+        raise EvidenceError("iOS original DerivedData must be a real retained directory")
+    try:
+        original = original_build_provenance(derived_data, environment["source_revision"])
+    except (OSError, TypeError, ValueError, KeyError) as error:
+        raise EvidenceError(f"Cannot recompute original iOS build provenance: {error}") from error
+    if payload != original:
+        raise EvidenceError("iOS xctestrun or product identity differs from the original build products")
 
 
-def checked_build_provenance(artifact: dict[str, Any], environment: dict[str, Any]) -> None:
+def checked_build_provenance(artifact: dict[str, Any], environment: dict[str, Any], root: Path) -> None:
     payload = native_json(artifact)
     if (payload.get("schema") != 1 or payload.get("source_revision") != environment["source_revision"]
             or type(payload.get("products")) is not dict):
         raise EvidenceError("Build provenance's internal revision or configuration does not match the environment")
-    if environment["platform"] == "ios" and "source_xctestrun" in payload:
-        checked_ios_build_provenance(payload, environment)
+    if environment["platform"] == "ios":
+        checked_ios_build_provenance(payload, environment, root)
         return
     if (payload.get("configuration") != environment["build_configuration"].get("name")
             or set(payload) != {"schema", "source_revision", "configuration", "products"}):
@@ -615,7 +591,7 @@ def make_report(manifest: Any, root: Path) -> dict[str, Any]:
         raise EvidenceError("Build provenance identity does not match its artifact bytes")
     if build_artifact["role"] != "build-provenance":
         raise EvidenceError("Build provenance path must have the build-provenance role")
-    checked_build_provenance(build_artifact, environment)
+    checked_build_provenance(build_artifact, environment, root)
     measurements = manifest.get("measurements")
     if not isinstance(measurements, list) or not measurements:
         raise EvidenceError("No raw measurements")

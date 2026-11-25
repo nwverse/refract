@@ -27,6 +27,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from archive_trace import ArchiveError, archive_trace
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+from build_provenance import MAX_EVIDENCE_FILE_BYTES, BuildProvenanceError, generated_test_runs
+from build_provenance import original_build_provenance as canonical_build_provenance
 
 
 class HandshakeError(ValueError):
@@ -471,10 +474,7 @@ class Session:
             raise HandshakeError(f"Instruments recorder exited before native completion with status {process.returncode}")
 
 
-MAX_EVIDENCE_FILE_BYTES = 64 * 1024 * 1024
 BUILD_PROVENANCE_NAME = "refract-build-provenance.json"
-BUNDLE_NAMES = ("RefractBench.app", "RefractBenchUITests-Runner.app",
-                "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest")
 
 
 def bounded_regular_file(path: Path) -> os.stat_result:
@@ -494,61 +494,11 @@ def file_sha256(path: Path) -> str:
         digest.update(data[offset:offset + 1024 * 1024])
     return digest.hexdigest()
 
-
-def bundle_identity(products: Path, relative: str) -> dict:
-    bundle = products / relative
-    if not bundle.is_dir() or bundle.is_symlink():
-        raise HandshakeError(f"Build product is not a real bundle directory: {relative}")
-    files = []
-    directories = []
-    for directory, directory_names, file_names in os.walk(bundle, topdown=True, followlinks=False):
-        directory_names.sort()
-        file_names.sort()
-        for name in (*directory_names, *file_names):
-            path = Path(directory) / name
-            mode = path.lstat().st_mode
-            if not stat.S_ISDIR(mode) and not stat.S_ISREG(mode):
-                raise HandshakeError(f"Build product contains a symbolic link or special file: {relative}")
-    for directory, directory_names, file_names in os.walk(bundle, followlinks=False):
-        directory_names.sort()
-        directories.extend((Path(directory) / name).relative_to(products).as_posix()
-                           for name in sorted(directory_names))
-        for name in sorted(file_names):
-            path = Path(directory) / name
-            files.append({"path": path.relative_to(products).as_posix(),
-                          "bytes": path.stat(follow_symlinks=False).st_size,
-                          "executable": bool(path.stat(follow_symlinks=False).st_mode & 0o111),
-                          "sha256": file_sha256(path)})
-    if not files:
-        raise HandshakeError(f"Build product bundle has no files: {relative}")
-    try:
-        executable = plistlib.loads(bounded_file_bytes(bundle / "Info.plist")).get("CFBundleExecutable")
-    except (OSError, plistlib.InvalidFileException) as error:
-        raise HandshakeError(f"Build product bundle Info.plist is missing or invalid: {relative}") from error
-    expected_executable = f"{relative}/{executable}" if isinstance(executable, str) and executable else ""
-    if not any(item["path"] == expected_executable for item in files):
-        raise HandshakeError(f"Build product CFBundleExecutable is missing from its identity: {relative}")
-    return {"directories": sorted(directories), "files": files}
-
-
-def generated_test_runs(derived_data: Path) -> list[Path]:
-    sources = sorted(path for path in (derived_data / "Build/Products").glob("*.xctestrun")
-                     if path.name != "iteration-trace-config.xctestrun"
-                     and not path.name.startswith("iteration-trace-config-"))
-    if len(sources) != 1 or sources[0].is_symlink():
-        raise HandshakeError("Exactly one original generated xctestrun file is required")
-    bounded_regular_file(sources[0])
-    return sources
-
-
 def record_build_provenance(derived_data: Path, revision: str, destination: Path | None = None) -> dict:
-    if not re.fullmatch(r"[0-9a-f]{40}", revision):
-        raise HandshakeError("Build provenance requires a committed 40-character source revision")
-    products = derived_data / "Build/Products/Release-iphonesimulator"
-    sources = generated_test_runs(derived_data)
-    manifest = {"schema": 1, "source_revision": revision, "configuration": "Release-iphonesimulator",
-                "source_xctestrun": {"path": sources[0].name, "sha256": file_sha256(sources[0])},
-                "products": {name: bundle_identity(products, name) for name in BUNDLE_NAMES}}
+    try:
+        manifest = canonical_build_provenance(derived_data, revision, checked_file_bytes=bounded_file_bytes)
+    except BuildProvenanceError as error:
+        raise HandshakeError(str(error)) from error
     path = destination or derived_data / BUILD_PROVENANCE_NAME
     atomic_json(path, manifest)
     return {**manifest, "path": path}
@@ -563,22 +513,19 @@ def validate_build_provenance(derived_data: Path, revision: str) -> dict:
                 or (path.exists() and not path.is_file()) or path.is_symlink()):
             raise HandshakeError("Build provenance must be an ordinary file in a real DerivedData directory")
         manifest = read_json(path)
-        if manifest.get("schema") != 1 or manifest.get("source_revision") != revision:
+        original = canonical_build_provenance(derived_data, revision, checked_file_bytes=bounded_file_bytes)
+        if manifest.get("source_revision") != revision:
             raise HandshakeError("Build product source revision does not match the requested current HEAD")
         if manifest.get("configuration") != "Release-iphonesimulator":
             raise HandshakeError("Build product configuration does not match the trace destination")
-        expected_products = manifest.get("products")
         source = manifest.get("source_xctestrun")
-        sources = generated_test_runs(derived_data)
-        expected_source = {"path": sources[0].name, "sha256": file_sha256(sources[0])}
-        if source != expected_source:
+        if source != original["source_xctestrun"]:
             raise HandshakeError("The original xctestrun changed; rebuild the build-for-testing products")
-        if not isinstance(expected_products, dict) or set(expected_products) != set(BUNDLE_NAMES):
+        products = manifest.get("products")
+        if not isinstance(products, dict) or set(products) != set(original["products"]):
             raise HandshakeError("Build provenance does not identify exactly the app and test bundles")
-        products = derived_data / "Build/Products/Release-iphonesimulator"
-        for name in BUNDLE_NAMES:
-            expected = bundle_identity(products, name)
-            if expected_products[name] != expected:
+        for name, expected in original["products"].items():
+            if products[name] != expected:
                 raise HandshakeError(f"Build product file digest or identity changed: {name}; rebuild with build.sh")
         return {**manifest, "path": path}
     except (KeyError, TypeError, ValueError, OSError) as error:
