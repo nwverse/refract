@@ -53,6 +53,11 @@ newline-delimited synthetic fixture is not enough; include an end-to-end duplica
 these control-plane corrections permits a skipped test, incomplete scenario or failed recorder to become a passing
 trace.
 
+A synthetic XCTest fixture has the same launch boundary as the real runner. Freeze its fresh control epoch before
+starting the fixture and pass that same `Session` to capture; constructing a second session after launch lets a fast
+current request be mistaken for stale state and mask the intended assertion. Wait for an early current request when
+covering that ordering, and never weaken stale-packet rejection to make a test pass.
+
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
 handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
 such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a second JSON writer may choose a different
