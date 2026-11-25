@@ -23,7 +23,8 @@ sys.path.insert(0, str(HERE.parent / "common"))
 
 from build_provenance import BUNDLE_NAMES, original_build_provenance
 from export_iteration_manifest import (BINARY_PATH, JSON_DEPTH_LIMIT, LEGACY_METRICS_PATH, MEMORY_PATH, METRICS_PATH,
-                                       TESTS_PATH, ExportError, checked_xctest_case, export_manifest, main)
+                                       TESTS_PATH, ExportError, checked_target_evidence, checked_xctest_case,
+                                       export_manifest, main)
 from paired_report import EvidenceError, make_report
 
 
@@ -181,7 +182,8 @@ class IterationManifestExportTest(unittest.TestCase):
             test_configuration = {"configurationId": "1", "configurationName": "Test Scheme Action"}
             raw_metrics = [{"testIdentifier": identifier, "testRuns": [{
                 "device": self.xctest_device(), "testPlanConfiguration": test_configuration,
-                "metrics": [{"identifier": native["nativeMetricIdentifier"], **native["nativeValue"]}],
+                "metrics": [{"identifier": native["nativeMetricIdentifier"], "displayName": "Application Launch",
+                             **native["nativeValue"]}],
             }]}]
             raw_tests = {"testPlanConfigurations": [test_configuration],
                          "testNodes": [{"nodeType": "Test Plan", "result": "Passed", "children": [
@@ -545,6 +547,66 @@ class IterationManifestExportTest(unittest.TestCase):
         self.assertEqual(measurement["value"], 10.0)
         self.assertEqual(measurement["definition"], "XCTApplicationLaunchMetric")
         self.assertNotIn("firstDisplay", measurement)
+
+    def test_actual_producer_metric_metadata_is_presentation_only(self):
+        run = self.run_path("generated", "startup", 2)
+        raw = json.loads((run / METRICS_PATH).read_text())
+        accepted = json.loads((run / "accepted-evidence.json").read_text())
+        # This is the complete metric object emitted by the #400 production
+        # exporter fixture, including its non-normalized presentation label.
+        metrics = json.loads((run / LEGACY_METRICS_PATH).read_text())
+        original = copy.deepcopy(metrics[0]["testRuns"][0]["metrics"][0])
+        self.assertEqual(original, {"identifier": raw["measurements"][0]["nativeMetricIdentifier"],
+                                    "displayName": "Application Launch",
+                                    "unitOfMeasurement": "s", "measurements": [0.01]})
+        original_bytes = (run / LEGACY_METRICS_PATH).read_bytes()
+        checked_target_evidence(run, accepted, self.target, startup=True)
+        self.assertEqual((run / LEGACY_METRICS_PATH).read_bytes(), original_bytes)
+        manifest = self.export()
+        selected = next(item for item in manifest["measurements"]
+                        if (item["variant"], item["scenario"], item["iteration"]) == ("generated", "startup", 2))
+        self.assertEqual(selected["value"], 10.0)
+        self.assertEqual(selected["metric_selector"], raw["metric_selector"])
+
+        cases = [
+            ("wrong-identifier", {"identifier": "other.metric"}),
+            ("missing-identifier", {"identifier": None}),
+            ("wrong-unit", {"unitOfMeasurement": "ms"}),
+            ("missing-unit", {"unitOfMeasurement": None}),
+            ("changed-value", {"measurements": [0.02]}),
+            ("missing-value", {"measurements": None}),
+            ("wrong-selector", {"testIdentifier": "RefractBenchUITests/testUnrelatedStartupTrace()"}),
+            ("duplicate-metric", {"metrics": [original, original]}),
+            ("unrelated-metric", {"metrics": [{"identifier": "other.metric", "unitOfMeasurement": "s",
+                                                "measurements": [0.01]}]}),
+        ]
+        for name, change in cases:
+            with self.subTest(name=name):
+                changed = copy.deepcopy(metrics)
+                if name == "wrong-selector":
+                    changed[0].update(change)
+                elif name in ("duplicate-metric", "unrelated-metric"):
+                    changed[0]["testRuns"][0].update(change)
+                else:
+                    changed[0]["testRuns"][0]["metrics"][0].update(
+                        {key: value for key, value in change.items() if value is not None})
+                    for key, value in change.items():
+                        if value is None:
+                            changed[0]["testRuns"][0]["metrics"][0].pop(key, None)
+                with self.assertRaisesRegex(ExportError, "selector|raw metric"):
+                    self.checked_changed_metric(run, accepted, raw, changed)
+        changed = copy.deepcopy(metrics)
+        changed[0]["testRuns"][0]["metrics"][0]["displayName"] = "A localized presentation label"
+        checked = self.checked_changed_metric(run, accepted, raw, changed)
+        self.assertEqual(checked[0]["testRuns"][0]["metrics"][0]["displayName"], "A localized presentation label")
+
+    def checked_changed_metric(self, run, accepted, raw, changed):
+        self.write_json(run / LEGACY_METRICS_PATH, changed)
+        raw["provenance"]["raw_exports"]["xctest-metrics.json"]["sha256"] = self.file_record(
+            run / LEGACY_METRICS_PATH)["sha256"]
+        self.write_json(run / METRICS_PATH, raw)
+        checked_target_evidence(run, accepted, self.target, startup=True)
+        return changed
 
     def test_missing_selector_and_first_display_substitution_fail(self):
         run = self.run_path("generated", "startup", 2)

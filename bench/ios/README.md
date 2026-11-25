@@ -230,7 +230,9 @@ The environment input has exactly `source_revision`, `target_label`, `device_res
 `commands`. The toolchain is exactly the accepted `xcode` version. The target's `udid`, `name`, `modelName`, `os_version`
 and `architecture` must match both the checksummed `raw/exports/xctest-summary.json` and the legacy tests export. For
 normalized startup, the exact-selector metrics testRun supplies the device record and the tests export supplies the
-one passing selector/test-plan configuration; the raw native sample must match the normalized measurement. The
+one passing selector/test-plan configuration; the raw native identifier, unit and exact sample array must match the
+normalized measurement. Presentation-only metadata such as `displayName` may remain in the raw export: the producer's
+selector checksum still binds the complete normalized measurement, and the exporter never strips or rewrites raw bytes. The
 CoreSimulator model identifier must also match the retained `target.json`/`simulators.json` and `targets.json` probes.
 Input `commands` become `externally_asserted_commands` with an explicit not-reconstructed/not-evidence-verified label.
 The exporter cannot recover acquisition history. `environment.commands` identifies only the verified offline export

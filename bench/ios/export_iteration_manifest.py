@@ -560,9 +560,17 @@ def checked_target_evidence(run: Path, accepted: dict[str, Any], target: dict[st
                 or runs[0].get("testPlanConfiguration") != configurations[0]:
             raise ExportError("Normalized startup test and metrics configurations differ")
         native_metrics = runs[0].get("metrics")
-        if not isinstance(native_metrics, list) or len(native_metrics) != 1 \
-                or native_metrics[0] != {"identifier": measurement["nativeMetricIdentifier"],
-                                         **measurement["nativeValue"]}:
+        if not isinstance(native_metrics, list) or len(native_metrics) != 1:
+            raise ExportError("Normalized startup duration differs from its selector-bound raw metric")
+        native_metric = native_metrics[0]
+        # The producer's selector checksum covers the complete normalized
+        # measurement. The raw export additionally carries presentation-only
+        # metadata such as displayName; compare the identity, unit and exact
+        # samples without stripping or rewriting the retained raw object.
+        if not isinstance(native_metric, dict) \
+                or native_metric.get("identifier") != measurement["nativeMetricIdentifier"] \
+                or {key: native_metric.get(key) for key in ("unitOfMeasurement", "measurements")} \
+                != measurement["nativeValue"]:
             raise ExportError("Normalized startup duration differs from its selector-bound raw metric")
         tests_device = device_identity(runs[0].get("device"), "XCTest selector metrics")
     else:
