@@ -35,8 +35,12 @@ read. Cover a valid dictionary, malformed XML and legal wrong-type plists throug
 
 JSON integers have arbitrary precision, but benchmark timing scalars are represented as finite binary floats. Convert
 through a guarded boundary so an unrepresentable integer becomes `EvidenceError`, not an `OverflowError` traceback;
-exercise direct and checksum-selected native measurements. Validate artifact role and kind together: a metric JSON file
-cannot satisfy the profiler requirement, whose exact trace kind is `xctrace` on iOS and `vendor-trace` on HarmonyOS.
+exercise direct and checksum-selected native measurements. Match the raw array field to the platform metric as well:
+an identity-valid `frameIntervalMs` packet must not satisfy a declared HarmonyOS `frameDurationMs` measurement. Exercise
+both platform-specific field names and recompute p99 from the actual duration array. Require exact integers for raw
+schema, completion, iteration and PID identities: Python's `True == 1` and `4242 == 4242.0` must not make Boolean or
+floating-point substitutes valid evidence. Validate artifact role and kind together: a metric JSON file cannot satisfy
+the profiler requirement, whose exact trace kind is `xctrace` on iOS and `vendor-trace` on HarmonyOS.
 Route original xctestrun discovery through the shared `BuildProvenanceError` boundary so the recording CLI returns its
 controlled diagnostic and status 2 when the original file is missing or ambiguous.
 
@@ -59,6 +63,18 @@ such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a sec
 shortest decimal spelling for the same `Double`. Encode the native floating-point timestamp once as a canonical
 round-trippable string, validate it and compare the typed strings exactly at each hop. Exercise the concrete native
 value through the real control plane and compile the actual Swift comparator, including a mismatch rejection.
+
+## Keep evidence domains and identity counts explicit
+
+An inclusive identity range is not automatically its acquisition count: 2...30 contains **29 identities**. Check the
+actual identity set before writing a coverage denominator, and do not silently renumber native artifacts to make an
+old denominator fit. One accepted pair at iteration 30 is 1/29 of that set, not a completed 30-pair matrix.
+
+Keep source revision, build provenance and target in every coverage statement. The accepted `eb16e22` iteration-30 pairs
+in #219 are not cumulative with `95a0f37` or any other historical capture. A raw Instruments trace proves native
+capture, not a complete paired scalar comparison, resource pairing, report PASS or device performance. In particular,
+startup `firstDisplay` is not launch duration. Index published issue evidence separately from committed reports rather
+than upgrading the production baseline implicitly.
 
 ## Equal inputs need equal native behavior
 
