@@ -135,6 +135,32 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('expectedFinished["firstDisplay"] = firstDisplay', TESTS)
         self.assertNotIn("CACurrentMediaTime()", TESTS)
 
+    def test_startup_duration_is_exported_only_after_the_exact_test_succeeds(self):
+        helper = TESTS[TESTS.index("    private func tracedStartupMetric"):
+                       TESTS.index("    private func launchMetric")]
+        self.assertIn("options.iterationCount = 1", helper)
+        self.assertEqual(helper.count('try runTracedIteration("startup", variant: variant)'), 2)
+        self.assertEqual(helper[helper.index("measure(metrics:"):].count(
+            'try runTracedIteration("startup", variant: variant)'), 1)
+        self.assertIn("A throwing measure block cannot preserve XCTSkip", helper)
+        self.assertIn("var iterationError: Error?", helper)
+        self.assertIn("throw iterationError", helper)
+        self.assertEqual(TESTS.count("options.iterationCount = 30"), 1)
+        self.assertEqual(TESTS.count("options.iterationCount = 1"), 1)
+        completed = RUNNER.index("if status != 0:")
+        export = RUNNER.index("result[\"native_launch_metric\"] = export_launch_metric(", completed)
+        self.assertLess(completed, export)
+        self.assertLess(export, RUNNER.index("print(json.dumps(result", export))
+        self.assertIn('if args.scenario == "startup":', RUNNER[completed:export])
+        exporter = (HERE / "launch_metric.py").read_text()
+        self.assertIn('"--test-id", identifier', exporter)
+        self.assertIn('com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration', exporter)
+        self.assertIn("data = bounded_export_output(command, run_command)", exporter)
+        self.assertIn("write_once(destination / name, data)", exporter)
+        self.assertNotIn("capture_output=True", exporter)
+        self.assertNotIn("firstDisplay", exporter[exporter.index("def selected_launch_measurement"):
+                                                  exporter.index("def export_launch_metric")])
+
     def test_first_display_is_compared_as_one_exact_string_not_an_unsupported_dictionary(self):
         forward = TESTS.index('try TraceHandshake.write(completionPacket')
         expected = TESTS.index('var expectedFinished = completionPacket', forward)
@@ -170,10 +196,11 @@ class TraceSourceContractTest(unittest.TestCase):
     def test_ui_test_validates_final_samples_before_forwarding_completion(self):
         guard = TESTS.index("guard let samples = completionPacket[\"finalSamples\"]")
         for field in ('samples["sourceRevision"] as? String == revision',
-                      'samples["pid"] as? Int == pid', 'samples["completedIterations"] as? Int == 1',
-                      'samples["recordedIteration"] as? Int == iteration',
-                      'intervals.allSatisfy({ $0.isFinite && $0 > 0 })',
-                      'tags.allSatisfy({ $0 == iteration })'):
+                      'exactInteger(samples["pid"], equals: pid)',
+                      'exactInteger(samples["completedIterations"], equals: 1)',
+                      'exactInteger(samples["recordedIteration"], equals: iteration)',
+                      'exactFinitePositiveDouble($0) != nil',
+                      'exactInteger($0, equals: iteration)'):
             self.assertIn(field, TESTS[guard:TESTS.index("private static func isEqual", guard)])
         validation = TESTS.index("try TraceHandshake.finalSamples(")
         forwarded = TESTS.index('try TraceHandshake.write(completionPacket, named: "completion.json"', validation)
@@ -323,24 +350,20 @@ func XCTUnwrap<T>(_ value: T?) throws -> T {
     return value
 }
 func check(_ samples: [String: Any], valid: Bool) {
+    guard let data = try? JSONSerialization.data(withJSONObject: ["finalSamples": samples]) else {
+        precondition(!valid, "non-JSON invalid sample must be rejected")
+        return
+    }
+    checkPacket(data, valid: valid)
+}
+func checkPacket(_ data: Data, valid: Bool, label: String = "typed") {
     do {
-        _ = try TraceHandshake.finalSamples(in: ["finalSamples": samples], revision: "revision",
+        let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        _ = try TraceHandshake.finalSamples(in: decoded, revision: "revision",
                                            variant: "generated", scenario: "scroll", iteration: 2, pid: 42)
-        precondition(valid, "accepted invalid final native samples")
-        for iteration in [29, 30] {
-            var boundary = samples
-            boundary["iteration"] = iteration
-            boundary["recordedIteration"] = iteration
-            boundary["iterationByFrame"] = [iteration, iteration]
-            for scenario in ["scroll", "stateUpdate"] {
-                boundary["scenario"] = scenario
-                _ = try TraceHandshake.finalSamples(in: ["finalSamples": boundary], revision: "revision",
-                                                     variant: "generated", scenario: scenario,
-                                                     iteration: iteration, pid: 42)
-            }
-        }
+        precondition(valid, "accepted invalid final native samples: \\(label)")
     } catch {
-        precondition(!valid, "rejected valid final native samples: \\(error)")
+        precondition(!valid, "rejected valid final native samples \\(label): \\(error)")
     }
 }
 let original: [String: Any] = [
@@ -352,6 +375,18 @@ let original: [String: Any] = [
 let encoded = try JSONSerialization.data(withJSONObject: ["finalSamples": original], options: [.sortedKeys])
 let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
 let samples = try XCTUnwrap(decoded["finalSamples"] as? [String: Any])
+for iteration in [29, 30] {
+    for scenario in ["scroll", "stateUpdate"] {
+        var boundary = samples
+        boundary["iteration"] = iteration
+        boundary["recordedIteration"] = iteration
+        boundary["iterationByFrame"] = [iteration, iteration]
+        boundary["scenario"] = scenario
+        _ = try TraceHandshake.finalSamples(in: ["finalSamples": boundary], revision: "revision",
+                                           variant: "generated", scenario: scenario,
+                                           iteration: iteration, pid: 42)
+    }
+}
 check(samples, valid: true)
 for key in original.keys {
     var partial = samples
@@ -364,18 +399,58 @@ for (key, value) in [("sourceRevision", "stale"), ("session", 2), ("iteration", 
     changed[key] = value
     check(changed, valid: false)
 }
-for intervals in [[], [Double.nan], [Double.infinity], [0.0], [-1.0], [16.5, 16.5, 16.5]] {
+for invalid in [
+    ["session": true], ["pid": true], ["completedIterations": true],
+    ["frameIntervalMs": [9007199254740993]],
+] as [[String: Any]] {
+    var changed = samples
+    for (key, value) in invalid {
+        changed[key] = value
+    }
+    check(changed, valid: false)
+}
+for intervals in [[], [Double.nan], [Double.infinity], [0.0], [-1.0], [true],
+                  [16.5, 16.5, 16.5]] {
     var changed = samples
     changed["frameIntervalMs"] = intervals
+    check(changed, valid: false)
+}
+for tags in [[2, 1], [true, true], [9007199254740993, 9007199254740993]] {
+    var changed = samples
+    changed["iterationByFrame"] = tags
     check(changed, valid: false)
 }
 var tags = samples
 tags["iterationByFrame"] = [2, 1]
 check(tags, valid: false)
+var ordinaryDouble = samples
+ordinaryDouble["frameIntervalMs"] = [16.5] as [Double]
+ordinaryDouble["iterationByFrame"] = [2]
+check(ordinaryDouble, valid: true)
+// Keep raw JSON spellings: serializing a typed huge integer into a test packet
+// first would erase the representation boundary that this regression checks.
+let rawPacket = #"{"finalSamples":{"schema":1,"session":1,"sourceRevision":"revision","variant":"generated","scenario":"scroll","iteration":2,"pid":42,"completedIterations":1,"recordedIteration":2,"frameIntervalMs":[INTERVAL],"iterationByFrame":[2]}}"#
+for (interval, valid) in [
+    ("9007199254740992", true), ("9007199254740992.0", true), ("1e19", false),
+    ("9007199254740993", false), ("9007199254740994", false),
+    ("18446744073709551615", false), ("18446744073709551616", false),
+    ("18446744073709551617", false), ("18446744073709551618", false),
+    ("18446744073709551619", false), ("18446744073709551620", false),
+    ("18446744073709551616.0", false), ("18446744073709551617.0", false),
+    ("1.8446744073709552e19", false),
+] {
+    let json = rawPacket.replacingOccurrences(of: "INTERVAL", with: interval)
+    precondition(json != rawPacket, "raw JSON case must replace the interval spelling")
+    checkPacket(Data(json.utf8), valid: valid, label: interval)
+}
 let control = FileManager.default.temporaryDirectory
     .appendingPathComponent("refract-final-samples-\\(UUID().uuidString)", isDirectory: true)
 try FileManager.default.createDirectory(at: control, withIntermediateDirectories: true)
 defer { try? FileManager.default.removeItem(at: control) }
+try JSONSerialization.data(withJSONObject: ["schema": true], options: [.sortedKeys])
+    .write(to: control.appendingPathComponent("boolean-ready.json"))
+precondition(TraceHandshake.ready(in: control, expected: ["schema": 1], name: "boolean-ready.json") == nil,
+             "Boolean schema must not bridge to integer identity")
 func writeFinished(_ packet: [String: Any]) throws {
     try JSONSerialization.data(withJSONObject: packet, options: [.sortedKeys])
         .write(to: control.appendingPathComponent("recorder-finished.json"))
@@ -386,7 +461,11 @@ precondition(TraceHandshake.ready(in: control, expected: decoded,
              "valid finalSamples must survive the complete forwarding comparison")
 var mismatched = decoded
 mismatched["finalSamples"] = tags
-try writeFinished(tags)
+try writeFinished(mismatched)
+precondition(TraceHandshake.ready(in: control, expected: mismatched,
+                                 name: "recorder-finished.json") != nil,
+             "equal corrupted finalSamples must survive the forwarding comparison")
+try writeFinished(decoded)
 precondition(TraceHandshake.ready(in: control, expected: mismatched,
                                  name: "recorder-finished.json") == nil,
              "forwarding must reject mismatched finalSamples")

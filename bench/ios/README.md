@@ -66,13 +66,18 @@ or state-update iteration, `completeIteration` establishes the final recorder st
 iteration and native PID, `completedIterations == 1`, `recordedIteration == selectedIteration`, and equally sized frame
 interval/tag arrays whose every tag names the selected iteration. Both XCTest and the runner reject missing, partial,
 duplicate, stale or mismatched packets, empty or unbounded arrays, and non-finite or non-positive display intervals
-before completion or archive acceptance. The runner persists this packet directly as `raw/native-samples.json` and
+before completion or archive acceptance. JSON identities use actual integer encodings rather than Boolean coercion.
+Interval samples must be finite, positive and no greater than `2^53` milliseconds, without Boolean coercion or
+lossy large-integer conversion; a Swift `NSNumber` cast alone does not enforce that boundary. Exact integer `2^53`
+and ordinary fractional Double samples remain valid. Larger values fail closed because Foundation can decode a large
+integer spelling as the same rounded `d` value as a legitimate huge Double; the validator cannot recover or infer the
+original spelling. The runner persists this packet directly as `raw/native-samples.json` and
 binds its path and SHA-256 in `raw/iteration-trace.json`; finalizers consume that durable file, not preferences.
 
 `UserDefaults` is diagnostic only. Its asynchronous plist can still contain a periodic snapshot with
 `completedIterations == 0` after native completion; no sleep, polling or `UserDefaults.synchronize()` can turn it into
 the completion channel. A stale diagnostic plist never overrides a valid final completion packet. The separate startup
-packet retains its exact `firstDisplay` timestamp, and the 30-iteration cold-start metric remains unchanged.
+packet retains its exact `firstDisplay` timestamp, and the separate 30-iteration cold-start metric remains unchanged.
 The XCUITest target is not part of the app runtime, and the helper adds no Refract library.
 
 ## Running without touching shared targets
@@ -167,12 +172,46 @@ the same revision, variant, scenario, iteration and PID. A string avoids both Fo
 comparison ambiguity and independent JSON number formatting; the UI test and runner require exact string equality,
 round-trip it to the original `Double`, and reject missing, non-canonical, non-finite, non-positive or mismatched
 evidence without a tolerance. The receipt retains the same string in monotonic `native_first_display` evidence, not a
-shell stopwatch duration or an inferred startup time. The separate 30-iteration `XCTApplicationLaunchMetric` suite
-remains unchanged and supplies distinct platform launch samples.
+shell stopwatch duration or an inferred startup time. The selected `*StartupTrace` XCTest measures the same unchanged
+`runTracedIteration` helper once with `XCTApplicationLaunchMetric` and `iterationCount = 1`. The two separate
+30-iteration cold-start tests are unchanged; neither those automatic measurement ordinals nor array indexes supply
+traced identities `2...30`.
+
+After that exact XCTest succeeds, the runner exports `test-results tests` and `test-results metrics --test-id
+<RefractBenchUITests/testGeneratedStartupTrace()-or-testReferenceStartupTrace()>` from its own `results.xcresult`.
+It retains the raw JSON bytes and exact commands in `raw/exports/`. The normalized `raw/metrics.json` selects exactly
+one native `com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration` measurement in explicit seconds, converts it
+once to milliseconds, and carries a checksum-based `metric_selector` for `paired_report.py`. The selected test,
+passing result, target, trace receipt and configuration receipt are bound to the same run. Before invoking either
+xcresult export command, the exporter requires the canonical `control/native-process.json`, retained request,
+`control/native-completion.json` and forwarded completion to agree on session, revision, variant, startup iteration
+and one strictly positive integer native PID; the iteration receipt must match that PID, not supply an unchecked
+identity. Boolean, floating-point, missing, non-positive and unrelated PIDs fail before export. The selected
+measurement contains the exact `pid` inside the selector checksum, and provenance retains each native packet's
+relative path and SHA-256. Receipt/configuration identity and schema fields require exact JSON types, including integer
+schema 1, `device_result is False`, and an exact positive integer PID. Duplicate object keys, nesting beyond 128 levels,
+inexact arbitrary-precision integer conversion, and malformed xctestrun XML are controlled evidence errors. Integer
+seconds are converted only when both the binary-float seconds and millisecond values preserve the exact rational value;
+ordinary exact integer and floating-point durations remain supported. Empty, duplicate, unrelated, non-finite or
+non-positive measurements fail without publishing a duration.
+Each xcresulttool invocation has a separate 60-second local exporter watchdog. It applies only after native acquisition
+and is not a production performance threshold or a replacement for the unchanged XCTest/native completion deadlines.
+A nonblocking selector drains both pipes; stdout is limited to 16 MiB while streaming, stderr retains only a bounded
+diagnostic tail, and an overrun or deadline kills and reaps the exporter's own process group. No partial oversized JSON
+is retained. `raw/exports/` may already contain unrelated `resident-memory.json` or `installed-binary.json` evidence;
+the exporter preserves those files but refuses any existing `xctest-tests.json`, `xctest-metrics.json` or
+`raw/metrics.json` before running xcresulttool. The export directory must be a real directory, never a symbolic link.
+`firstDisplay` remains a separate
+scene-activation instant and is never subtracted from another timestamp or relabelled as elapsed launch time.
+This UI-test source change requires a new build identity. For separately authorized native verification, rebuild the
+exact committed head with `DERIVED_DATA=<fresh-new-head-build> bench/ios/build.sh`, then use the existing traced-runner
+command with that new DerivedData and a fresh run directory. Do not reuse old products, transfer an old cold-start
+result, or treat the old empty metrics exports as backfilled durations.
 
 Run the control-plane and source-wiring tests with:
 
 ```sh
+python3 -I bench/ios/launch_metric_test.py -v
 python3 -I bench/ios/iteration_trace_runner_test.py -v
 python3 -I bench/ios/iteration_trace_source_test.py -v
 python3 -I bench/ios/iteration_startup_trace_test.py -v
@@ -195,9 +234,13 @@ new-revision evidence and the separately counted historical inventory are docume
 For scroll and state update, the runner's retained `raw/native-samples.json` is the durable final sample artifact.
 Its immutable identity and SHA-256 are in `raw/iteration-trace.json`; finalizers must use this packet rather than export
 `refract.bench.frames.v1` from `UserDefaults`. The app may still persist that key for diagnostics, but a periodic plist
-snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup continues
-to use its exact native first-display packet and the unchanged cold-start launch metric. Complete native sample
-collection, memory/binary pairing and fail-closed report validation remain required.
+snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup retains
+its exact native first-display packet and, on a successful new-head run, its separate selector-bound `raw/metrics.json`
+launch duration. Existing runs whose metrics export is empty cannot be backfilled. The merged #395 retained-manifest
+exporter normally consumes this normalized `raw/metrics.json` and its `metric_selector`; its explicit legacy path is
+only for older already-accepted inputs and never treats a historical raw array or firstDisplay as the missing launch
+measurement. Its existing `selected_duration` validation preserves the added PID field and verifies the selector
+checksum. Complete native sample collection, memory/binary pairing and fail-closed report validation remain required.
 
 ### Native resource snapshots
 
@@ -231,12 +274,13 @@ remain under `raw/native-memory.json` and `raw/native-binary.json`, never silent
 report pair. `raw/iteration-trace.json` records the selected exporter-facing path and its identical SHA-256.
 
 The separate startup scalar interface remains explicit: the traced-startup producer owns selector-bound
-`raw/metrics.json`; this resource PR does not synthesize that artifact. The retained-manifest exporter must read that
-file rather than the historical raw-array `raw/exports/xctest-metrics.json` before the complete 174-run matrix can be
-exported. Resource aliases do not supply, backfill or claim a launch duration. The #400 launch-metric exporter must
-also coordinate ownership of this shared `raw/exports` directory while retaining no-clobber behavior. Until #400
-provides that coordinated writer, resource capture followed by launch-metric export remains blocked; the resource
-aliases alone are not shared-directory compatibility evidence.
+`raw/metrics.json`; this resource PR does not synthesize that artifact. The merged retained-manifest exporter normally
+reads that file, with its explicit legacy compatibility limited to older already-accepted inputs, before a complete
+174-run matrix can be exported. Resource aliases do not supply, backfill or claim a launch duration. The #400
+launch-metric exporter shares `raw/exports` after resource capture while reserving its own two raw export targets and
+`raw/metrics.json`; existing targets or a symbolic-link directory fail before either xcresult command. A synthetic
+same-run startup/2 regression executes the actual resource writer followed by the actual launch exporter and proves
+both aliases unchanged. That composition remains synthetic evidence, not a native launch measurement.
 
 The installed-file definition intentionally excludes directory-entry and filesystem-allocation overhead. Simulator
 installation and device installation can differ, and an on-device/thinned App Store product needs a separately named
@@ -250,6 +294,65 @@ resource validator, including boolean/floating-point/overflow/path/identity cont
 app sampler or execute it on iOS. An authorized native run must still prove Xcode compilation, successful `task_info`
 execution and exact installed-versus-original bundle identity on the selected target. No resource value is native
 proof merely because a synthetic test supplied it.
+
+## Offline schema-2 export of retained iterations
+
+`export_iteration_manifest.py` transforms a complete set of accepted existing run directories without invoking
+Xcode, Instruments, a simulator or a device. It requires all 174 generated/reference/scenario identities in `2...30`,
+with no missing, duplicate or renumbered member. Each run must retain its exact `accepted-evidence.json`,
+`retained-file-hashes.json`, the archived/executed trace configuration, `iteration-trace.json`, profiler and xcresult
+archives. Configuration identity includes the canonical `source_xctestrun`, configuration SHA-256, deterministic
+revision/control/iteration filename and those exact values in the archived hosted-test environment. Frame runs also
+require `raw/native-samples.json` with the iteration receipt's session and the original/alias native resources from
+`raw/iteration-trace.json`. A frame run exposes `raw/exports/resident-memory.json`; a startup run has no such alias.
+Only each variant's `startup/2` exposes `raw/exports/installed-binary.json`. Every original `raw/native-resources.json`,
+`raw/native-memory.json` and `raw/native-binary.json` remains retained, and the selected alias must have identical bytes
+and SHA-256. Startup normally requires the selector-bound normalized `raw/metrics.json` produced by #400 at
+`cf6d15ab833017d2df48d7f47d89341cc54381e6`, including its embedded selector, exact positive native PID, native-packet
+and raw-export SHA-256 provenance. Its exact-selector raw exports remain under `raw/exports/`; the producer must share
+an already-created exports directory with #402 without replacing an existing file. Older already-accepted inputs may
+explicitly use the legacy `raw/exports/xctest-metrics.json` normalized-object contract when `raw/metrics.json` is
+absent; that compatibility never substitutes the raw array or firstDisplay for a missing producer metric. Those
+resource files follow the reporter's explicit revision/identity/PID/bytes schema. Absent or mismatched memory, binary
+or normalized startup evidence is an error before any `manifest.json` is created; the exporter never invents or
+approximates resources.
+
+The environment input has exactly `source_revision`, `target_label`, `device_result`, `target`, `toolchain` and
+`commands`. The toolchain is exactly the accepted `xcode` version. The target's `udid`, `name`, `modelName`, `os_version`
+and `architecture` must match both the checksummed `raw/exports/xctest-summary.json` and the legacy tests export. For
+normalized startup, the exact-selector metrics testRun supplies the device record and the tests export supplies the
+one passing selector/test-plan configuration; the raw native identifier, unit and exact sample array must match the
+normalized measurement. Presentation-only metadata such as `displayName` may remain in the raw export: the producer's
+selector checksum still binds the complete normalized measurement, and the exporter never strips or rewrites raw bytes. The
+CoreSimulator model identifier must also match the retained `target.json`/`simulators.json` and `targets.json` probes.
+Input `commands` become `externally_asserted_commands` with an explicit not-reconstructed/not-evidence-verified label.
+The exporter cannot recover acquisition history. `environment.commands` identifies only the verified offline export
+operation; `export_command_template` is a rerun template with caller-supplied paths, not recovered executed command
+text. Normalized startup uses its embedded `metric_selector`. An optional `--startup-selections` file is supported only
+for older normalized measurement arrays or when it exactly repeats that embedded selector; a conflicting external
+selector is rejected. It binds `source_revision`, `build_provenance_sha256` and a list of
+`{variant, scenario: "startup", iteration, index, value_sha256}`. `firstDisplay` remains only a monotonic
+completion timestamp and is never used as the startup scalar. The durable accepted-evidence finalizer must separately
+retain and bind the normalized metrics, its native packets and resource exports; this offline reader does not create
+that finalizer inventory.
+
+```sh
+python3 -I bench/ios/export_iteration_manifest.py \
+  --run-root <retained-runs-root> --derived-data <original-DerivedData> \
+  --environment <export-environment.json> --startup-selections <startup-selections.json> \
+  --output <previously-absent-evidence-directory>
+python3 -I bench/ios/export_iteration_manifest_test.py
+```
+
+The output gets a deterministic, sorted manifest and checksum-preserved ordinary-file copies under `raw/`, plus the
+original canonical app/test products under `products/DerivedData` for reporter recomputation. Nested test-bundle files
+are staged once and retain executable bits. The exporter validates the complete staged manifest through
+`make_report()` before exclusively creating `manifest.json`; it does not emit a performance report or turn a native
+regression into a passing result. An existing output, a symbolic-link input or original DerivedData/product ancestor,
+or a source changing during copying is rejected. The tool transforms only evidence belonging to the retained
+revision/build/target: it cannot backfill a
+new main head or close the physical-device gate. Raw native resource and launch scalar collection is not provided by
+this offline tool.
 
 ## Published partial execution evidence
 

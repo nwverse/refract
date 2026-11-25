@@ -25,6 +25,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
+from launch_metric import LaunchMetricError, export_launch_metric
+from launch_metric_test import synthetic_metrics, synthetic_tests
 from iteration_trace_runner import (SAVED_OUTPUT, TARGET_PROBE_FILENAMES, HandshakeError, Session,
                                     checked_final_samples, checked_native_resources, main, original_test_run, prepare_test_run,
                                     record_build_provenance, saved_trace_matches, test_command, traced_test_name,
@@ -148,6 +150,7 @@ packet = {{"schema": 1, "session": {session}, "revision": {app_revision or ("a" 
           "variant": "generated", "scenario": {app_scenario!r}, "iteration": {app_iteration},
           "pid": {pid!r}, "process": {process_state!r}, "state": "ready"}}
 time.sleep(0.02)
+publish("native-process.json", packet)
 (control / "request.json").write_text(json.dumps(packet))
 if {duplicate_request!r}:
     (control / "request-2.json").write_text(json.dumps(dict(packet, pid=4243)))
@@ -160,6 +163,8 @@ packet["finalSamples"] = json.loads({json.dumps(final_samples)!r})
 packet["nativeResources"] = json.loads({json.dumps(forwarded_resources)!r})
 if {first_display!r} is not None:
     packet["firstDisplay"] = {first_display!r}
+elif {app_scenario!r} == "startup":
+    packet["firstDisplay"] = {{"clock": "CACurrentMediaTime", "timestamp": "12345.25"}}
 begin = dict(packet, state="begin")
 if not {missing_begin!r}:
     publish("begin.json", begin)
@@ -524,6 +529,128 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 fixture.replace_bytes(relative, retained_bytes)
         self.assertEqual(make_report(fixture.manifest, fixture.root)["status"], "pass")
 
+    def capture_startup_resources(self):
+        # XCTest creates its result after the runner's fresh-directory
+        # admission, not as unexplained pre-existing evidence.
+        resources = synthetic_native_resources(self.root, derived_data=self.session().derived_data,
+                                               memory_scenario="startup", binary_scenario="startup")
+        original_validate = runner.validate_trace_configuration
+
+        def create_result_during_test(*args, **kwargs):
+            results = self.root / "results.xcresult"
+            results.mkdir(exist_ok=True)
+            (results / "Info.plist").write_bytes(b"synthetic retained xcresult")
+            return original_validate(*args, **kwargs)
+
+        with mock.patch.object(runner, "validate_trace_configuration", side_effect=create_result_during_test):
+            session = self.launch(app_scenario="startup", completion="generated startup complete 1",
+                                  session_kwargs={"scenario": "startup"},
+                                  final_samples=None, native_samples=None, resources=resources,
+                                  first_display={"clock": "CACurrentMediaTime", "timestamp": "12345.25"})
+            captured = self.capture(session)
+        self.recorder.process.wait(timeout=5)
+        return captured
+
+    def test_actual_startup_resource_capture_composes_with_launch_export(self):
+        # Use the real resource writer and the real launch exporter on one
+        # startup/2 run. Only the already-acquired xcresult command is replaced
+        # with genuine bounded subprocess pipes carrying synthetic export JSON.
+        captured = self.capture_startup_resources()
+        alias = self.root / "raw/exports/installed-binary.json"
+        original = self.root / "raw/native-binary.json"
+        self.assertEqual(alias.read_bytes(), original.read_bytes())
+        self.assertEqual(captured["native_resources"]["exports"]["installedBinaryBytes"]["path"],
+                         "raw/exports/installed-binary.json")
+        self.assertEqual(captured["native_resources"]["exports"]["residentMemoryBytes"]["path"],
+                         "raw/native-memory.json")
+        retained = {name: (self.root / name).read_bytes() for name in
+                    ("raw/native-resources.json", "raw/native-memory.json", "raw/native-binary.json",
+                     "raw/exports/installed-binary.json", "raw/iteration-trace.json")}
+        self.assertFalse((self.root / "raw/exports/resident-memory.json").exists())
+        commands = []
+
+        def export_pipe(command, **options):
+            self.assertEqual(options, {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
+                                       "start_new_session": True})
+            commands.append(command)
+            payload = synthetic_tests() if " tests " in " ".join(command) else synthetic_metrics()
+            script = ("import os,sys; data=sys.stdin.buffer.read(); "
+                      "os.write(1,data); os.write(2,b'synthetic export diagnostic')")
+            process = subprocess.Popen([sys.executable, "-I", "-c", script], stdin=subprocess.PIPE, **options)
+            process.stdin.write(json.dumps(payload).encode())
+            process.stdin.close()
+            return process
+
+        exported = export_launch_metric(
+            self.root, variant="generated", revision="a" * 40, iteration=2,
+            target_udid="synthetic-target", run_command=export_pipe)
+        self.assertEqual(exported["duration_ms"], 1250.0)
+        self.assertEqual(len(commands), 2)
+        self.assertEqual([command[4] for command in commands], ["tests", "metrics"])
+        for name, expected in (("xctest-tests.json", synthetic_tests()),
+                               ("xctest-metrics.json", synthetic_metrics())):
+            path = self.root / "raw/exports" / name
+            self.assertTrue(path.is_file())
+            self.assertEqual(json.loads(path.read_text()), expected)
+        normalized = json.loads((self.root / exported["path"]).read_text())
+        self.assertEqual(normalized["measurements"][0]["pid"], 4242)
+        self.assertEqual(normalized["measurements"][0]["value"]["duration_ms"], 1250.0)
+        self.assertNotIn("firstDisplay", normalized["measurements"][0])
+        self.assertNotIn("nativeResources", normalized["measurements"][0])
+        self.assertNotIn("bytes", normalized["measurements"][0])
+        self.assertNotIn("residentMemoryBytes", normalized["measurements"][0])
+        self.assertNotIn("installedBinaryBytes", normalized["measurements"][0])
+        self.assertNotIn("duration_ms", captured["native_first_display"])
+        for name, content in retained.items():
+            self.assertEqual((self.root / name).read_bytes(), content, name)
+
+        for relative in ("raw/exports/xctest-tests.json", "raw/exports/xctest-metrics.json", "raw/metrics.json"):
+            with self.subTest(conflicting_target=relative):
+                case = IterationTraceRunnerTest("test_actual_startup_resource_capture_composes_with_launch_export")
+                case.setUp()
+                try:
+                    case.capture_startup_resources()
+                    target = case.root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(b"pre-existing launch export evidence\n")
+                    before = {name: (case.root / name).read_bytes() for name in
+                              ("raw/exports/installed-binary.json", relative)}
+                    conflict_commands = []
+                    with self.assertRaisesRegex(LaunchMetricError, "Refusing to replace"):
+                        export_launch_metric(
+                            case.root, variant="generated", revision="a" * 40, iteration=2,
+                            target_udid="synthetic-target",
+                            run_command=lambda *args, **kwargs: conflict_commands.append(args))
+                    self.assertEqual(conflict_commands, [])
+                    for name, content in before.items():
+                        self.assertEqual((case.root / name).read_bytes(), content)
+                finally:
+                    case.doCleanups()
+
+        case = IterationTraceRunnerTest("test_actual_startup_resource_capture_composes_with_launch_export")
+        case.setUp()
+        try:
+            case.capture_startup_resources()
+            exports = case.root / "raw/exports"
+            retained_binary = (exports / "installed-binary.json").read_bytes()
+            elsewhere = case.root / "elsewhere"
+            elsewhere.mkdir()
+            (exports / "installed-binary.json").unlink()
+            exports.rmdir()
+            exports.symlink_to(elsewhere, target_is_directory=True)
+            conflict_commands = []
+            with self.assertRaisesRegex(LaunchMetricError, "real directory"):
+                export_launch_metric(
+                    case.root, variant="generated", revision="a" * 40, iteration=2,
+                    target_udid="synthetic-target",
+                    run_command=lambda *args, **kwargs: conflict_commands.append(args))
+            self.assertEqual(conflict_commands, [])
+            self.assertEqual(retained_binary, (case.root / "raw/native-binary.json").read_bytes())
+            self.assertFalse((elsewhere / "installed-binary.json").exists())
+            self.assertFalse((case.root / "raw/metrics.json").exists())
+        finally:
+            case.doCleanups()
+
     def test_missing_stale_invalid_and_forwarded_resource_mismatches_fail_closed(self):
         self.session()
         cases = [
@@ -835,6 +962,50 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertTrue(all((self.root / name).is_file() for name in TARGET_PROBE_FILENAMES))
         self.assertEqual(json.loads((self.root / "iteration-trace-config.json").read_text())["iteration"], 2)
         self.assertTrue((self.root / "refract-build-provenance.json").is_file())
+
+    def test_startup_export_follows_a_successful_test_and_never_masks_a_failure(self):
+        (self.root / "target.json").write_text(json.dumps({
+            "target_label": "SIMULATOR", "device_result": False, "udid": "synthetic-target",
+        }))
+        expected_export = {"path": "raw/metrics.json", "sha256": "a" * 64, "duration_ms": 1250.0}
+        cases = (("scroll", "generated", 0, False), ("startup", "generated", 0, True),
+                 ("startup", "reference", 0, True), ("startup", "generated", 65, False))
+        for scenario, variant, test_status, exported in cases:
+            with self.subTest(scenario=scenario, variant=variant, test_status=test_status):
+                run = self.root / f"export-order-{variant}-{scenario}-{test_status}"
+                test_run = run / "iteration.xctestrun"
+                process = mock.Mock(returncode=test_status)
+                process.wait.return_value = test_status
+                process.poll.return_value = test_status
+                receipt = {"status": "complete", "iteration": 30,
+                           "native_first_display": {"clock": "CACurrentMediaTime", "timestamp": "12345.25"}}
+                with mock.patch.object(runner.subprocess, "check_output", side_effect=["a" * 40 + "\n", ""]), \
+                        mock.patch.object(runner.subprocess, "Popen", return_value=process) as popen, \
+                        mock.patch.object(runner, "prepare_test_run", return_value=test_run), \
+                        mock.patch.object(runner, "validate_build_provenance"), \
+                        mock.patch.object(runner, "validate_trace_configuration"), \
+                        mock.patch.object(Session, "capture", return_value=receipt), \
+                        mock.patch.object(runner, "export_launch_metric",
+                                          return_value=expected_export) as export:
+                    stdout = io.StringIO()
+                    with redirect_stdout(stdout):
+                        status = runner.main([
+                            "--run-directory", str(run), "--derived-data", str(self.root.parent / "DerivedData"),
+                            "--target-udid", "synthetic-target", "--target-metadata", str(self.root / "target.json"),
+                            "--variant", variant, "--scenario", scenario, "--iteration", "30",
+                            "--source-revision", "a" * 40, "--completion-timeout", "0.5",
+                        ])
+                self.assertEqual(status, 0 if exported or scenario == "scroll" else 2)
+                if exported:
+                    export.assert_called_once_with(
+                        run, variant=variant, revision="a" * 40, iteration=30,
+                        target_udid="synthetic-target")
+                    result = json.loads(stdout.getvalue())
+                    self.assertEqual(result["native_launch_metric"], expected_export)
+                    self.assertNotIn("duration_ms", result["native_first_display"])
+                else:
+                    export.assert_not_called()
+                self.assertEqual(popen.call_count, 1)
 
     def test_reused_run_directory_or_trace_is_never_replaced(self):
         self.run_success()

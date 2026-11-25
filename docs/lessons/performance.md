@@ -60,6 +60,29 @@ newline-delimited synthetic fixture is not enough; include an end-to-end duplica
 these control-plane corrections permits a skipped test, incomplete scenario or failed recorder to become a passing
 trace.
 
+A traced startup selector does not export `XCTApplicationLaunchMetric` merely because a separate cold-start test
+measures 30 launches: the selected selector itself must call `measure(metrics:)`. One measurement around the unchanged
+trace handshake supplies one native duration for that exact launch; those 30 automatic measurement ordinals must never
+be renamed as traced identities `2...30`. Export the same xcresult with the exact test ID, retain raw JSON and checksums,
+and bind the chosen scalar to the trace/configuration identity. Before exporting that scalar, validate the actual
+native-process, request, native-completion and forwarded-completion packets against the exact run identity and one
+strictly positive integer PID; do not infer it from a filename or trust the iteration receipt's self-declaration alone.
+Carry the exact PID inside the checksum-selected measurement and bind native-packet checksums in provenance. Reject
+missing, non-positive, Boolean, floating-point and unrelated PIDs before invoking xcresult commands. Empty exports
+fail; `CACurrentMediaTime firstDisplay`
+remains a scene-activation instant, not a duration or a substitute for a missing native measurement.
+
+Treat xcresult export as an untrusted evidence decoder, even when the result bundle was acquired successfully. Reject
+duplicate JSON object keys before identity validation, bound JSON depth and traverse containers iteratively, require
+exact receipt field types, and normalize parser recursion and malformed XML into the public evidence error. An
+arbitrary-precision integer must survive both its float conversion and unit scaling exactly; accepting a rounded
+`duration_ms` beside the original `nativeValue` contradicts retained evidence. Use a nonblocking child-pipe pump rather
+than `capture_output=True`: stop at 16 MiB before writing partial JSON, drain stderr with a bounded diagnostic tail,
+and give every export its own local watchdog and owned process-group cleanup. This exporter watchdog is not a native
+completion deadline or performance threshold. `raw/exports/` is shared evidence storage, so allow unrelated resource
+files while reserving the launch metric's own target paths before spawning a child; directory sharing must not weaken
+per-file no-clobber or symbolic-link rejection.
+
 A synthetic XCTest fixture should make its launch boundary and ordering explicit. Use `launch()` to freeze the fresh
 control epoch before starting the fixture, pass that same `Session` to capture, and wait for the current request when
 it is the intended input to a negative check. The baseline helpers already preflight both supplied sessions, including

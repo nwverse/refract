@@ -72,17 +72,20 @@ private enum TraceHandshake {
                                          "frameIntervalMs", "iterationByFrame"]
         guard let samples = completionPacket["finalSamples"] as? [String: Any],
               Set(samples.keys) == expectedKeys,
-              samples["schema"] as? Int == 1, samples["session"] as? Int == 1,
+              exactInteger(samples["schema"], equals: 1), exactInteger(samples["session"], equals: 1),
               samples["sourceRevision"] as? String == revision,
               samples["variant"] as? String == variant, samples["scenario"] as? String == scenario,
-              samples["iteration"] as? Int == iteration, samples["pid"] as? Int == pid,
-              samples["completedIterations"] as? Int == 1,
-              samples["recordedIteration"] as? Int == iteration,
-              let intervals = samples["frameIntervalMs"] as? [Double],
-              let tags = samples["iterationByFrame"] as? [Int],
-              !intervals.isEmpty, intervals.count <= 4096, intervals.count == tags.count,
-              intervals.allSatisfy({ $0.isFinite && $0 > 0 }),
-              tags.allSatisfy({ $0 == iteration }) else {
+              exactInteger(samples["iteration"], equals: iteration), exactInteger(samples["pid"], equals: pid),
+              exactInteger(samples["completedIterations"], equals: 1),
+              exactInteger(samples["recordedIteration"], equals: iteration),
+              let rawIntervals = samples["frameIntervalMs"] as? [Any],
+              let rawTags = samples["iterationByFrame"] as? [Any] else {
+            XCTFail("Final native samples must contain complete typed identities and sample arrays")
+            throw NSError(domain: "RefractBench.TraceHandshake", code: 3)
+        }
+        guard !rawIntervals.isEmpty, rawIntervals.count <= 4096, rawIntervals.count == rawTags.count,
+              rawIntervals.allSatisfy({ exactFinitePositiveDouble($0) != nil }),
+              rawTags.allSatisfy({ exactInteger($0, equals: iteration) }) else {
             XCTFail("Final native samples must match this iteration and contain finite positive display intervals")
             throw NSError(domain: "RefractBench.TraceHandshake", code: 3)
         }
@@ -191,10 +194,42 @@ private enum TraceHandshake {
         return data
     }
 
+    private static func exactInteger(_ value: Any?, equals expected: Int) -> Bool {
+        guard let value, let number = value as? NSNumber else { return false }
+        // NSNumber bridging lets JSON true pass `as? Int`; its encoding does not.
+        guard "silqSILQ".contains(String(cString: number.objCType)) else { return false }
+        return Int(number.stringValue) == expected
+    }
+
+    private static func exactFinitePositiveDouble(_ value: Any) -> Double? {
+        guard let number = value as? NSNumber else { return nil }
+        let encoding = String(cString: number.objCType)
+        // Check the actual numeric encoding: `value is Bool` also matches a
+        // bridged NSNumber(1) in swift-corelibs-foundation. Never round a large
+        // integer through Double before deciding whether it is exactly retained.
+        let double: Double?
+        if encoding == "d" || encoding == "f" {
+            double = number.doubleValue
+        } else if "SILQ".contains(encoding) {
+            double = UInt64(number.stringValue).flatMap(Double.init(exactly:))
+        } else if "silq".contains(encoding) {
+            double = Int64(number.stringValue).flatMap(Double.init(exactly:))
+        } else {
+            return nil
+        }
+        if let double, double.isFinite, double > 0, double <= 9_007_199_254_740_992 {
+            return double
+        }
+        // Above 2^53, Foundation can decode a large integer spelling as the same
+        // rounded `d` value as a legitimate huge Double. Reject that ambiguous
+        // out-of-domain magnitude instead of inventing its original spelling.
+        return nil
+    }
+
     private static func isEqual(_ lhs: Any?, _ rhs: Any) -> Bool {
         switch rhs {
         case let value as String: return lhs as? String == value
-        case let value as Int: return lhs as? Int == value
+        case let value as Int: return exactInteger(lhs, equals: value)
         case let value as [String: String]: return lhs as? [String: String] == value
         default: return false
         }
@@ -244,11 +279,35 @@ final class RefractBenchUITests: XCTestCase {
     }
 
     func testGeneratedStartupTrace() throws {
-        try runTracedIteration("startup", variant: "generated")
+        try tracedStartupMetric("generated")
     }
 
     func testReferenceStartupTrace() throws {
-        try runTracedIteration("startup", variant: "reference")
+        try tracedStartupMetric("reference")
+    }
+
+    private func tracedStartupMetric(_ variant: String) throws {
+        if ProcessInfo.processInfo.environment["REFRACT_BENCH_TRACE_CONTROL"] == nil {
+            // A throwing measure block cannot preserve XCTSkip. Keep the
+            // original direct-XCTest skip path outside metric collection.
+            try runTracedIteration("startup", variant: variant)
+            return
+        }
+        let options = XCTMeasureOptions()
+        options.iterationCount = 1
+        var iterationError: Error?
+        // The native metric surrounds the unchanged exact trace handshake.
+        // Its single measurement is not an ordinal for traced identity 2...30.
+        measure(metrics: [XCTApplicationLaunchMetric()], options: options) {
+            do {
+                try runTracedIteration("startup", variant: variant)
+            } catch {
+                iterationError = error
+            }
+        }
+        if let iterationError {
+            throw iterationError
+        }
     }
 
     private func launchMetric(_ variant: String) {
