@@ -208,7 +208,8 @@ public struct ComposeBackend: Sendable {
                 context.imports.insert("androidx.compose.runtime.remember")
                 context.imports.insert("androidx.compose.runtime.mutableStateOf")
                 let initialText = try renderExpression(initial ?? defaultInitial(type), context: &context)
-                out.line("var \(name) by remember { mutableStateOf(\(initialText)) }")
+                let storageType = type == .double ? "<Double>" : ""
+                out.line("var \(name) by remember { mutableStateOf\(storageType)(\(initialText)) }")
             }
             if case let .form(.state, declaration, _) = state {
                 context.imports.insert("androidx.compose.runtime.remember")
