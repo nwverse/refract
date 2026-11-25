@@ -49,19 +49,27 @@ supplies:
    ownership. The build manifest is shared by both variants and therefore has `variant=shared`, `scenario=build` and
    sentinel iteration 2; it is not an iteration-2 timing sample. Every other artifact and measurement must match the
    environment's revision and build hash. No evidence can be copied into another revision or build. The reporter parses
-   the retained build JSON and requires its own `source_revision` and configuration to match, plus distinct nonempty
-   generated/reference product file identities. Manifest declarations alone are not build provenance. iOS uses
-   ZIP-copied `.xcresult` bundles, Xcode `xcresulttool` JSON exports and archived `.trace.zip` packages; HarmonyOS
-   uses the vendor's native trace and metric exports. A directory merely named `.trace` is not accepted as a trace file.
-   `bench/ios/archive_trace.py` preserves an already recorded Instruments package without replacing existing evidence;
-   it does not run a profiler or establish native provenance.
+   the retained build JSON and requires its own `source_revision` and configuration to match, plus explicit product
+   identities. On iOS this is the existing `record_build_provenance()` schema: its original xctestrun path/SHA-256 and
+   the complete app/test bundle directory and file records, including byte counts, executable flags and checksums.
+   `build_configuration.name=Release` and `target=iphonesimulator` describe the producer's `Release-iphonesimulator`
+   configuration. That one shared app/test build contains both `REFRACT_BENCH_VARIANT` execution paths; the reporter
+   does not reinterpret it as two different app bundles. Each timing/resource artifact still binds its selected variant,
+   source revision and build hash. Other manifests must declare distinct nonempty generated/reference product file
+   identities. Manifest declarations alone are not build provenance. iOS uses ZIP-copied `.xcresult` bundles, Xcode
+   `xcresulttool` JSON exports and archived `.trace.zip` packages; HarmonyOS uses the vendor's native trace and metric
+   exports. A directory merely named `.trace` is not accepted as a trace file. `bench/ios/archive_trace.py` preserves an
+   already recorded Instruments package without replacing existing evidence; it does not run a profiler or establish
+   native provenance.
 3. `measurements`: one positive finite `value` in milliseconds for every exact variant/scenario/iteration, with a
    declared native `definition`, directly referencing identity-matched raw metric evidence and a profiler trace.
    `startupMs` is an `XCTApplicationLaunchMetric` duration on iOS or a separately identified native
    launch-to-first-frame duration on HarmonyOS. iOS reads the retained native `durationMs` measurement, either directly
    with its canonical `nativeMeasurementSha256` or from a `measurements` array with an index/checksum selector. The
    selected native object must carry the same revision, variant, scenario and iteration; a manifest-only `value` or an
-   unrelated first-display timestamp cannot supply it. HarmonyOS reads native `launchStartTimestamp` and
+   unrelated first-display timestamp cannot supply it. `metric_selector` is supported only by this iOS startup array
+   selection; it is rejected on frame scenarios, on direct iOS launch measurements and on HarmonyOS, including an
+   explicit null selector. HarmonyOS reads native `launchStartTimestamp` and
    `firstFrameTimestamp` from the artifact and subtracts them in milliseconds; it does not accept manifest-supplied
    timestamps. A first-frame timestamp alone is not a launch duration. iOS startup requires that iteration's
    `metrics.json`; `firstDisplay` is a monotonic scene-activation timestamp, **not a launch duration**. iOS

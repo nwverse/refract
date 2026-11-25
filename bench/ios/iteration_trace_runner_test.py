@@ -28,6 +28,13 @@ from iteration_trace_runner import (SAVED_OUTPUT, TARGET_PROBE_FILENAMES, Handsh
                                     record_build_provenance, saved_trace_matches, test_command, traced_test_name,
                                     validate_build_provenance, validate_trace_configuration)
 import iteration_trace_runner as runner
+sys.path.insert(0, str(HERE.parent / "common"))
+from paired_report import EvidenceError, make_report
+from report_test import PairedReportTest
+
+PAIRED_REPORTER_FIXTURE = (PairedReportTest,)
+# A tuple keeps the helper out of unittest's module-level TestCase discovery.
+del PairedReportTest
 
 
 def synthetic_final_samples(**changes):
@@ -1573,6 +1580,74 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         test_executable.write_bytes(b"test products from B")
         with self.assertRaisesRegex(HandshakeError, "digest|identity"):
             validate_build_provenance(self.derived_data, "a" * 40)
+
+    def prepare_reporter_provenance(self, fixture):
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.manifest["environment"]["build_configuration"]["target"] = "iphonesimulator"
+        products = self.derived_data / "Build/Products/Release-iphonesimulator"
+        for executable in ("RefractBench.app/RefractBench",
+                           "RefractBenchUITests-Runner.app/RefractBenchUITests-Runner",
+                           "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest/RefractBenchUITests"):
+            (products / executable).chmod(0o755)
+        destination = fixture.root / "producer" / Path(fixture.build_path).name
+        recorded = record_build_provenance(self.derived_data, "a" * 40, destination=destination)
+        return destination, recorded
+
+    def test_existing_recorded_provenance_feeds_the_complete_paired_reporter(self):
+        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+        destination, recorded = self.prepare_reporter_provenance(fixture)
+        self.assertEqual(recorded["configuration"], "Release-iphonesimulator")
+        self.assertEqual(recorded["source_xctestrun"]["path"], "RefractBench.xctestrun")
+        fixture.replace_bytes(fixture.build_path, destination.read_bytes())
+        report = make_report(fixture.manifest, fixture.root)
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["environment"]["source_revision"], recorded["source_revision"])
+        self.assertEqual(report["environment"]["build_provenance"]["sha256"],
+                         hashlib.sha256(destination.read_bytes()).hexdigest())
+        self.assertEqual(fixture.manifest["environment"]["build_provenance"]["sha256"],
+                         hashlib.sha256((fixture.root / fixture.build_path).read_bytes()).hexdigest())
+        self.assertEqual(json.loads(destination.read_text(encoding="utf-8")),
+                         json.loads((fixture.root / fixture.build_path).read_text(encoding="utf-8")))
+
+    def test_recorded_provenance_still_rejects_an_executable_identity_change(self):
+        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+        destination, _ = self.prepare_reporter_provenance(fixture)
+        payload = json.loads(destination.read_text(encoding="utf-8"))
+        executable = next(entry for entry in payload["products"]["RefractBench.app"]["files"]
+                          if entry["path"] == "RefractBench.app/RefractBench")
+        executable["executable"] = False
+        fixture.replace_json(fixture.build_path, payload)
+        with self.assertRaisesRegex(EvidenceError, "main executable"):
+            make_report(fixture.manifest, fixture.root)
+        payload["products"]["RefractBench.app"]["files"] = [
+            entry for entry in payload["products"]["RefractBench.app"]["files"]
+            if not entry["path"].endswith("/RefractBench")
+        ]
+        fixture.replace_json(fixture.build_path, payload)
+        with self.assertRaisesRegex(EvidenceError, "missing its main executable"):
+            make_report(fixture.manifest, fixture.root)
+
+    def test_recorded_bundle_records_reject_directory_changes_and_removed_files(self):
+        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+        destination, recorded = self.prepare_reporter_provenance(fixture)
+        runner_name = "RefractBenchUITests-Runner.app"
+        nested_test = "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest"
+        self.assertIn(runner_name + "/PlugIns", recorded["products"][runner_name]["directories"])
+        for field, product, mutate, message in (
+                ("directories", runner_name,
+                 lambda values: values.insert(0, "RefractBenchReference.app"), "outside its declared"),
+                ("files", runner_name,
+                 lambda values: values.append({"path": "RefractBenchReference.app/injected", "bytes": 1,
+                                               "executable": False, "sha256": "0" * 64}), "outside its declared"),
+                ("files", nested_test,
+                 lambda values: values.clear(), "complete"),
+        ):
+            payload = json.loads(destination.read_text(encoding="utf-8"))
+            mutate(payload["products"][product][field])
+            fixture.replace_json(fixture.build_path, payload)
+            with self.subTest(field=field, product=product), self.assertRaisesRegex(EvidenceError, message):
+                make_report(fixture.manifest, fixture.root)
 
     def test_a_build_at_b_head_rejects_main_before_any_trace_preparation(self):
         target = self.root / "target.json"

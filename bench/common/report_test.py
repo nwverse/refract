@@ -31,7 +31,7 @@ class PairedReportTest(unittest.TestCase):
                 "source_revision": "a" * 40,
                 "build_provenance": {"path": self.build_path, "sha256": self.build_hash},
                 "toolchain": {"xcode": "test"},
-                "build_configuration": {"name": "Release"},
+                "build_configuration": {"name": "Release", "target": "iphonesimulator"},
                 "target": {"model": "test", "os_version": "test", "architecture": "test"},
                 "commands": ["xcresulttool get test-results metrics"],
             },
@@ -108,7 +108,10 @@ class PairedReportTest(unittest.TestCase):
                 **({"pid": 4242} if metric == "residentMemoryBytes" else {})}
 
     def replace_json(self, path, payload):
-        self.write_json(path, payload)
+        self.replace_bytes(path, json.dumps(payload, allow_nan=False).encode())
+
+    def replace_bytes(self, path, data):
+        (self.root / path).write_bytes(data)
         artifact = next(entry for entry in self.manifest["artifacts"] if entry["path"] == path)
         artifact["bytes"] = (self.root / path).stat().st_size
         artifact["sha256"] = hashlib.sha256((self.root / path).read_bytes()).hexdigest()
@@ -225,6 +228,59 @@ class PairedReportTest(unittest.TestCase):
         self.replace_json(path, {"measurements": [timestamp]})
         measurement["metric_selector"]["value_sha256"] = hashlib.sha256(canonical).hexdigest()
         with self.assertRaisesRegex(EvidenceError, "duration|timestamp"):
+            make_report(self.manifest, self.root)
+
+    def test_existing_ios_build_provenance_is_accepted_without_weakening_its_identity(self):
+        products = {
+            "RefractBench.app": {"directories": [], "files": [
+                {"path": "RefractBench.app/RefractBench", "bytes": 100, "executable": True, "sha256": "1" * 64},
+                {"path": "RefractBench.app/Info.plist", "bytes": 200, "executable": False, "sha256": "2" * 64},
+            ]},
+            "RefractBenchUITests-Runner.app": {"directories": [
+                "RefractBenchUITests-Runner.app/PlugIns",
+            ], "files": [
+                {"path": "RefractBenchUITests-Runner.app/Info.plist", "bytes": 300,
+                 "executable": False, "sha256": "3" * 64},
+                {"path": "RefractBenchUITests-Runner.app/RefractBenchUITests-Runner", "bytes": 400,
+                 "executable": True, "sha256": "4" * 64},
+            ]},
+            "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest": {
+                "directories": [], "files": [
+                    {"path": "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest/Info.plist",
+                     "bytes": 500, "executable": False, "sha256": "5" * 64},
+                    {"path": "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest/RefractBenchUITests",
+                     "bytes": 600, "executable": True, "sha256": "6" * 64},
+                ]},
+        }
+        payload = {"schema": 1, "source_revision": "a" * 40, "configuration": "Release-iphonesimulator",
+                   "source_xctestrun": {"path": "RefractBench.xctestrun", "sha256": "7" * 64}, "products": products}
+        self.replace_json(self.build_path, payload)
+        self.assertEqual(make_report(self.manifest, self.root)["status"], "pass")
+        for key, value in (("source_revision", "b" * 40), ("configuration", "Debug-iphonesimulator")):
+            changed = copy.deepcopy(payload)
+            changed[key] = value
+            self.replace_json(self.build_path, changed)
+            with self.subTest(field=key), self.assertRaisesRegex(EvidenceError, "revision|configuration|destination"):
+                make_report(self.manifest, self.root)
+        changed = copy.deepcopy(payload)
+        changed["source_xctestrun"]["sha256"] = "not-a-checksum"
+        self.replace_json(self.build_path, changed)
+        with self.assertRaisesRegex(EvidenceError, "xctestrun"):
+            make_report(self.manifest, self.root)
+        for key, value in (("executable", False), ("sha256", "not-a-checksum"), ("bytes", 0)):
+            changed = copy.deepcopy(payload)
+            changed["products"]["RefractBench.app"]["files"][0][key] = value
+            self.replace_json(self.build_path, changed)
+            with self.subTest(field=key), self.assertRaisesRegex(EvidenceError, "executable|SHA-256|byte"):
+                make_report(self.manifest, self.root)
+        changed = copy.deepcopy(payload)
+        changed["products"]["RefractBench.app"]["directories"] = ["RefractBenchReference.app"]
+        self.replace_json(self.build_path, changed)
+        with self.assertRaisesRegex(EvidenceError, "outside its declared iOS bundle"):
+            make_report(self.manifest, self.root)
+        self.manifest["environment"]["target_label"] = "DEVICE"
+        self.manifest["environment"]["device_result"] = True
+        with self.assertRaisesRegex(EvidenceError, "producer and build destination"):
             make_report(self.manifest, self.root)
 
     def test_raw_cadinterval_array_drives_p99_not_manifest_source_samples(self):
@@ -453,7 +509,7 @@ class PairedReportTest(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, "disagree"):
             make_report(self.manifest, self.root)
 
-    def test_harmony_uses_vendor_native_metrics_with_explicit_scalar_definitions(self):
+    def use_harmony_native_metrics(self):
         self.manifest["platform"] = "harmonyos"
         self.manifest["environment"]["platform"] = "harmonyos"
         for artifact in self.manifest["artifacts"]:
@@ -469,6 +525,7 @@ class PairedReportTest(unittest.TestCase):
                 measurement["native_pid"] = 4242
         for resource in self.manifest["resources"]:
             resource["platform"] = "harmonyos"
+            resource["native_pid"] = 4242 if resource["metric"] == "residentMemoryBytes" else None
         for artifact in self.manifest["artifacts"]:
             if artifact["role"] == "timing":
                 measurement = next(entry for entry in self.manifest["measurements"]
@@ -485,14 +542,30 @@ class PairedReportTest(unittest.TestCase):
                 else:
                     self.replace_json(artifact["path"], self.timing_payload(artifact["variant"], artifact["scenario"],
                                                                             artifact["iteration"]))
-        for resource in self.manifest["resources"]:
-            resource["native_pid"] = 4242 if resource["metric"] == "residentMemoryBytes" else None
+
+    def test_harmony_uses_vendor_native_metrics_with_explicit_scalar_definitions(self):
+        self.use_harmony_native_metrics()
         report = make_report(self.manifest, self.root)
         self.assertEqual(report["platform"], "harmonyos")
         self.assertEqual(report["comparisons"][1]["metric"], "frameDurationMs")
         startup = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "startup")
         startup["launch_start_timestamp_ms"] = 80.0
         with self.assertRaisesRegex(EvidenceError, "unknown fields|timestamp"):
+            make_report(self.manifest, self.root)
+
+    def test_harmony_rejects_metric_selectors_instead_of_ignoring_them(self):
+        self.use_harmony_native_metrics()
+        for scenario in ("startup", "scroll"):
+            measurement = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == scenario)
+            measurement["metric_selector"] = {"index": 99, "value_sha256": "0" * 64}
+            with self.subTest(scenario=scenario), self.assertRaisesRegex(EvidenceError,
+                                                                         "supported only for an iOS startup"):
+                make_report(self.manifest, self.root)
+            measurement.pop("metric_selector")
+        self.assertEqual(make_report(self.manifest, self.root)["status"], "pass")
+        startup = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "startup")
+        startup["metric_selector"] = None
+        with self.assertRaisesRegex(EvidenceError, "supported only for an iOS startup"):
             make_report(self.manifest, self.root)
 
     def test_harmony_needs_vendor_trace_not_an_ios_trace(self):
