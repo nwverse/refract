@@ -13,5 +13,9 @@
 - Native host tests cannot set content twice on one Compose activity, and a test rule without its own activity-scenario
   rule cannot use `activityRule.scenario`. For Robolectric recreation, retain the actual `ActivityController`, call its
   `recreate()`, and verify native state rather than replacing the controller with a source-owned route list.
+- A qualified link inside a destination initially carries the conventional `path` placeholder. Emit that callback from
+  the destination's checked `NavigationOperation`, not the placeholder, and derive both destination-switch forwarding
+  names from the same path. Cover a non-default path with a full generated-source golden; default-name-only fixtures
+  hide unresolved callback identifiers.
 - A golden fixture's HarmonyOS resource `catalog` is relative to the fixture root; repeat the form used by the existing
   navigation fixtures. Do not skip second-platform resource validation when the first target already generates.

@@ -1,4 +1,6 @@
+import Foundation
 import Testing
+import RefractFrontend
 @testable import RefractCompose
 import RefractIR
 import RefractMapping
@@ -167,6 +169,25 @@ import RefractMapping
     ])
     let output = try ComposeBackend().generate(module: module, mapping: Mapping(android: android))
     #expect(output.contains("Text(text = stringResource(example.app.R.string.settings_enabled))"))
+}
+
+// Regression coverage for #406: destination links carry a conventional path placeholder, which Compose must replace
+// with the enclosing graph's checked operation. Golden source evidence does not bless ArkUI's separate defect (#413).
+@Test func composePreservesCustomDeepNavigationPathCallback() throws {
+    let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Tests/RefractComposeTests/Fixtures/navigation-custom-path")
+    let input = try String(contentsOf: directory.appendingPathComponent("Input.swift"), encoding: .utf8)
+    let mapping = try Mapping.load(contentsOf: directory.appendingPathComponent("refract.json"))
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: input), mapping: mapping)
+    #expect(unit.diagnostics.isEmpty)
+    let output = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    let expected = try String(contentsOf: directory.appendingPathComponent("Expected.kt"), encoding: .utf8)
+    #expect(output == expected)
+    #expect(output.contains("onRoutePathNavigate: (DeepRoute) -> Unit"))
+    #expect(output.contains("onRoutePathNavigate(DeepRoute.editor)"))
+    #expect(output.contains("DeepDetailScreen(model = model, onRoutePathNavigate = onRoutePathNavigate, modifier = modifier)"))
+    #expect(!output.contains("onPathNavigate"))
 }
 
 @Test func composeDeterministicOutput() throws {

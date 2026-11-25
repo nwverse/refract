@@ -22,12 +22,15 @@ extension ComposeBackend {
     func emitNavigationLink(title: Expression, pathName: String, enumName: String, destination: String,
                             location: SourceLocation?, into out: inout KotlinWriter,
                             context: inout Context) throws {
-        guard context.module.enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
+        let operation = context.currentNavigation ?? NavigationOperation(pathName: pathName, enumName: enumName)
+        guard operation.enumName == enumName,
+              (operation.pathName == pathName || pathName == "path"),
+              context.module.enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
             throw Diagnostic(code: "RFNAV003", message: "A NavigationLink destination is not in the declared path enum.",
                              suggestion: "Use a static case of the source destination enum", location: location)
         }
         context.imports.insert("androidx.compose.material3.Button")
-        out.open("Button(onClick = { on\(pathName.uppercasingFirst())Navigate(\(enumName).\(destination)) }, modifier = Modifier)")
+        out.open("Button(onClick = { on\(operation.pathName.uppercasingFirst())Navigate(\(operation.enumName).\(destination)) }, modifier = Modifier)")
         try emit(.text(title, modifiers: [], location: location), into: &out, context: &context)
         out.close()
     }
@@ -82,8 +85,9 @@ extension ComposeBackend {
             }
             out.open("\(stack.enumName).\(destination.caseName) ->")
             var arguments = ["\(model.label) = \(model.expression)"]
-            if context.module.screens.first(where: { $0.name == destination.viewName })?.navigation != nil {
-                arguments.append("onPathNavigate = onPathNavigate")
+            if let navigation = context.module.screens.first(where: { $0.name == destination.viewName })?.navigation {
+                let callback = "on\(navigation.pathName.uppercasingFirst())Navigate"
+                arguments.append("\(callback) = \(callback)")
             }
             arguments.append("modifier = modifier")
             out.line("\(destination.viewName)(\(arguments.joined(separator: ", ")))")
