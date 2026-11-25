@@ -68,6 +68,11 @@ well as text. A convenient extra `frame`, asynchronous callback or dropped nativ
 non-equivalent. Compile the canonical source rather than a copied approximation, then verify actual behavior on a
 named target before claiming equivalence.
 
+A pre-compiler source test must inspect the shared model and both native implementations, not only a generated header
+or unrelated reference fragments. Seed temporary-copy mutations for missing model identity, observation, immutable
+replacement, list/reuse identity, imports and build configuration, and prove the unmodified copy passes first. These
+bounded structural checks reject contract drift but establish neither ArkTS compiler acceptance nor native behavior.
+
 Use an explicit, exclusively owned, already-booted target. Never use `booted`, create or reboot a shared simulator,
 or infer ownership from an existing device name. A physical target discovered as unavailable is a blocker, not an
 invitation to relabel simulator results as device evidence.

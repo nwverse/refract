@@ -20,7 +20,13 @@ existing canonical `bench/android/SettingsScreen.swift`, shared with Android and
 ```sh
 swift build
 python3 -I bench/harmony/generate.py --check
+python3 -I bench/common/source_contract_test.py
 ```
+
+The source-contract test binds the shared model identity, observation/replacement path, stable list and reuse IDs,
+typography/resource/module declarations and Release configuration. Its seeded temporary-copy mutations prove that
+these particular pre-compiler checks reject drift; they do not parse ArkTS, validate vendor API semantics or replace
+native compilation and execution.
 
 `refract.json` retains the Android mapping/resource paths from the shared benchmark and overrides only the HarmonyOS
 token import to the app-owned native typography module. The source and native resource catalogs remain unchanged;
