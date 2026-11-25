@@ -23,9 +23,27 @@ Per-iteration simulator execution, when separately coordinated, is documented be
 
 `build.sh` requires a clean committed checkout before and after compilation. It writes an immutable
 `refract-build-provenance.json` in DerivedData with the exact source revision, original xctestrun SHA-256 and the
-app/UI-test bundle file identities. The trace runner requires this manifest and rechecks every listed file before
-launch. Do not pair a checkout at one revision with products built from another, reuse a generic-device build or
-reuse products without their manifest; rebuild in a new DerivedData directory instead.
+app/UI-test bundle file identities. For the paired reporter, the schema-2 manifest's
+`environment.build_configuration` must contain exactly `name=Release`, `target=iphonesimulator` and `derived_data`.
+The latter is a nonempty relative path from the evidence manifest to the original DerivedData directory; absolute
+paths, `..`, backslashes and symbolic links in any path or ancestor component are rejected. For example:
+
+```json
+{
+  "name": "Release",
+  "target": "iphonesimulator",
+  "derived_data": "products/DerivedData"
+}
+```
+
+Retain that original `Build/Products` tree beside the evidence. The reporter recomputes the source xctestrun and exact
+app/test bundle directory/file records from it, comparing every file byte count, executable flag and SHA-256 with the
+JSON rather than merely checking SHA syntax. Well-formed but incorrect values and malformed entries fail with an
+evidence error. The canonical producer is accepted only for `SIMULATOR`. The single shared app/test build contains both
+variant execution paths; timing and resource artifacts separately retain their selected variant identities. No
+generated/reference app split is invented for reporting. The trace runner requires this manifest and rechecks every
+listed file before launch. Do not pair a checkout at one revision with products built from another, reuse a
+generic-device build or reuse products without their manifest; rebuild in a new DerivedData directory instead.
 
 ## Scenario construction
 
@@ -176,8 +194,12 @@ collection, memory/binary pairing and fail-closed report validation remain requi
 
 ## Regression and evidence policy
 
-Use `bench/common/report.py`. It requires 30 pairs of samples for each scenario, one native profiler trace per
-iteration, exact source/toolchain/target provenance, finite millisecond samples and SHA-256 verification. It does not
-accept a median as p99 or a trace reused across iterations. `CADisplayLink` intervals and Xcode launch metrics are
-reported as distinct native definitions; shell elapsed time is never substituted. Keep installed binary bytes and
-resident memory bytes separate. The physical-device gate remains open even after a labelled simulator result.
+Use `bench/common/report.py` schema 2. It requires the exact iteration identities 2...30, one native profiler trace per
+iteration, source/build/target provenance matching every artifact, finite millisecond scalars and SHA-256 verification.
+The startup scalar comes from `XCTApplicationLaunchMetric`, never the `CACurrentMediaTime` `firstDisplay` timestamp or
+shell elapsed time. Scroll/state-update retain their `CADisplayLink` interval arrays and explicitly reduce each to a
+nearest-rank per-iteration p99 before the outer p50/p99 comparison. The reporter verifies that reduction; it does not
+accept an unlabelled array, a median as p99 or a trace reused across iterations. Resident memory requires a same-
+iteration generated/reference pair with memory-role provenance; installed binary bytes require one pair at the same
+build identity with binary-role provenance. Neither resource can be backfilled from another revision. The physical-
+device gate remains open even after a labelled simulator result.

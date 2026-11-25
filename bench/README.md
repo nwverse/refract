@@ -10,8 +10,10 @@ generated observer registry or business-logic interpreter. These are settings-sh
   one immutable row replacement per toggle. The reference does not call the generated row implementation.
 - Both variants share only the model, data and scenario driver. The same Release-like native build, input script and
   idle boundaries apply. Generated output is never hand-edited.
-- At least 30 iterations for cold start, scroll and local update (eight toggles per update iteration). Preserve native
-  process/launch or frame metrics and one distinct platform profiler trace per variant/scenario/iteration.
+- Exactly the retained traced identities **2...30** for cold start, scroll and local update (eight toggles per update
+  iteration). This is a fixed inclusive ID set, not a renumbered replacement for the protocol's 30 acquisitions. Never
+  renumber it as 0...29 or fill missing pairs from another source revision. Preserve native process/launch or frame
+  metrics and one distinct platform profiler trace per variant/scenario/iteration.
 - Use the existing lower-is-better screening threshold: greater than **5% AND 0.1 ms**, at p50 or p99. Quantiles use
   nearest rank, so p99 is the maximum of 30 samples. This is a screening gate, not permission to accept a reproducible
   regression below the threshold; investigate it with additional measurements instead of raising a baseline.
@@ -35,23 +37,86 @@ scenario source, a passing synthetic report test and a manually constructed mani
 
 ## Provenance manifest
 
-`bench/common/paired_report.py` defines schema 1. Each run supplies:
+`bench/common/paired_report.py` defines schema 2; schema 1 is rejected rather than silently reinterpreted. Each run
+supplies:
 
-1. `environment`: platform, complete source revision, exact acquisition/export commands, Release-like configuration,
-   compiler/SDK/profiler versions, target model/OS/architecture and explicit `DEVICE`, `SIMULATOR` or `EMULATOR`.
-   `device_result` must agree with the label. A simulator or emulator never closes the physical-device gate.
-2. `artifacts`: ordinary raw files below `raw/`, with SHA-256 and exact variant/scenario/iteration ownership. iOS uses
-   ZIP-copied `.xcresult` bundles, Xcode `xcresulttool` JSON exports and archived `.trace.zip` packages; HarmonyOS
-   uses the vendor's native trace and metric exports. A directory merely named `.trace` is not accepted as a trace file.
-   `bench/ios/archive_trace.py` preserves an already recorded Instruments package without replacing existing evidence;
-   it does not run a profiler or establish native provenance.
-3. `measurements`: positive finite millisecond samples, one per iteration, directly referencing that iteration's raw
-   native metric export and profiler trace. Every iOS timing measurement references exactly one identity-matched
-   `xcode-metric-json`; an Instruments trace alone cannot supply an `XCTApplicationLaunchMetric` or labelled
-   `CADisplayLink` export. `startupMs` means the native launch-to-first-frame metric; iOS `frameIntervalMs` is
-   explicitly a `CADisplayLink` target interval, not CPU frame duration. HarmonyOS uses its native frame duration.
-   These metrics are not interchangeable.
-4. `resources`: positive integer bytes for resident memory and installed binary size with native artifact provenance.
+1. `environment`: platform, complete source revision, the retained build-provenance path and SHA-256, exact
+   acquisition/export commands, Release-like configuration, compiler/SDK/profiler versions, target
+   model/OS/architecture and explicit `DEVICE`, `SIMULATOR` or `EMULATOR`. `device_result` must agree with the label.
+   A simulator or emulator never closes the physical-device gate. For canonical iOS evidence,
+   `environment.build_configuration` contains exactly these fields:
+
+   ```json
+   {
+     "name": "Release",
+     "target": "iphonesimulator",
+     "derived_data": "products/DerivedData"
+   }
+   ```
+
+   `derived_data` is a nonempty relative path from the schema-2 evidence manifest to the original DerivedData
+   directory. Absolute paths, `..`, backslashes and symbolic links in any path or ancestor component are rejected. Its
+   `Build/Products/RefractBench.xctestrun` and
+   `Build/Products/Release-iphonesimulator/{RefractBench.app,RefractBenchUITests-Runner.app}` are the original build
+   inputs, with the UI test bundle under `RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest`. Retain
+   that complete directory beside the evidence; it is not replaced by a second manifest declaring the same hashes.
+
+   The referenced build-provenance JSON has exactly `schema=1`, `source_revision`,
+   `configuration=Release-iphonesimulator`, `source_xctestrun={path,sha256}` and `products`. `products` has exactly the
+   three producer bundle keys above. Each value has `directories` (unique sorted bundle-relative paths) and `files`;
+   every file entry has `path`, positive integer `bytes`, Boolean `executable` and lowercase SHA-256. The reporter
+   recomputes this entire object from the retained original inputs and requires exact equality, so a syntactically
+   valid but wrong hash or byte count fails with `EvidenceError`. Invalid XML/binary plists and malformed directory
+   entries are evidence errors, not parser exceptions. Other platforms use an explicit `build_configuration.name` and
+   the generic generated/reference product identity contract below.
+2. `artifacts`: ordinary raw files below `raw/`, with SHA-256, source revision, shared build-provenance SHA-256,
+   an explicit `timing`/`profiler`/`memory`/`binary`/`build-provenance` role, and exact variant/scenario/iteration
+   ownership. The build manifest is shared by both variants and therefore has `variant=shared`, `scenario=build` and
+   sentinel iteration 2; it is not an iteration-2 timing sample. Every other artifact and measurement must match the
+   environment's revision and build hash. No evidence can be copied into another revision or build. The reporter parses
+   the retained build JSON and requires its own `source_revision` and configuration to match, plus explicit product
+   identities. On iOS this is the existing `record_build_provenance()` schema: its original xctestrun path/SHA-256 and
+   the complete app/test bundle directory and file records, including byte counts, executable flags and checksums.
+   `build_configuration.name=Release` and `target=iphonesimulator` are mandatory; `derived_data` names the original
+   DerivedData directory relative to the evidence manifest. The reporter recomputes the source xctestrun and every
+   directory/file/byte/executable/SHA-256 record from those original products and requires exact equality with the
+   retained JSON; a well-formed but different SHA or byte count is rejected. The canonical producer remains
+   `SIMULATOR`-only. That one shared app/test build contains both `REFRACT_BENCH_VARIANT` execution paths; the reporter
+   does not reinterpret it as two different app bundles. Each timing/resource artifact still binds its selected variant,
+   source revision and build hash. Other manifests must declare distinct nonempty generated/reference product file
+   identities. Manifest declarations alone are not build provenance. iOS uses ZIP-copied `.xcresult` bundles, Xcode
+   `xcresulttool` JSON exports and archived `.trace.zip` packages; HarmonyOS uses the vendor's native trace and metric
+   exports. A directory merely named `.trace` is not accepted as a trace file. `bench/ios/archive_trace.py` preserves an
+   already recorded Instruments package without replacing existing evidence; it does not run a profiler or establish
+   native provenance.
+3. `measurements`: one positive finite `value` in milliseconds for every exact variant/scenario/iteration, with a
+   declared native `definition`, directly referencing identity-matched raw metric evidence and a profiler trace.
+   `startupMs` is an `XCTApplicationLaunchMetric` duration on iOS or a separately identified native
+   launch-to-first-frame duration on HarmonyOS. iOS reads the retained native `durationMs` measurement, either directly
+   with its canonical `nativeMeasurementSha256` or from a `measurements` array with an index/checksum selector. The
+   selected native object must carry the same revision, variant, scenario and iteration; a manifest-only `value` or an
+   unrelated first-display timestamp cannot supply it. `metric_selector` is supported only by this iOS startup array
+   selection; it is rejected on frame scenarios, on direct iOS launch measurements and on HarmonyOS, including an
+   explicit null selector. HarmonyOS reads native `launchStartTimestamp` and
+   `firstFrameTimestamp` from the artifact and subtracts them in milliseconds; it does not accept manifest-supplied
+   timestamps. A first-frame timestamp alone is not a launch duration. iOS startup requires that iteration's
+   `metrics.json`; `firstDisplay` is a monotonic scene-activation timestamp, **not a launch duration**. iOS
+   `frameIntervalMs` reads `native-samples.json` itself, including `sourceRevision`, variant/scenario/iteration,
+   `session`, matching `native_pid`, `completedIterations=1`, `recordedIteration`, `iterationByFrame` and its
+   `CADisplayLink` `targetTimestamp - timestamp` array. The reporter recalculates the per-iteration nearest-rank p99
+   from that raw array and requires the manifest `value` to match; it never trusts a manifest `source_samples` array.
+   The array is not itself a scalar and its intervals are not CPU frame duration. HarmonyOS uses its own native frame
+   duration with the same explicit reduction requirement. These metrics are not interchangeable; the outer comparisons
+   still use nearest-rank p50/p99 across the retained iteration scalars.
+4. `resources`: positive integer bytes. Every scroll/state-update iteration requires a generated/reference
+   `residentMemoryBytes` pair with `memory`-role provenance at that same identity. Exactly one generated and one
+   reference `installedBinaryBytes` measurement is required for one scenario, with `binary`-role provenance; these
+   describe the installed product at the shared build identity, not per-iteration timing. Resource provenance must
+   match the environment's revision and build hash. The report emits paired values and generated-minus-reference
+   deltas alongside the raw entries. Each resource JSON carries its own `sourceRevision`, variant/scenario/iteration,
+   `metric`, `unit=bytes` and `bytes`; memory also carries the observed `pid`, matching `native_pid`. The reporter
+   requires the exported bytes to equal the declared resource bytes. The existing regression thresholds apply to timing
+   only, not resource bytes.
 
 The report includes the exact commands and limits; raw evidence is retained beside it. Do not commit a report without
 its referenced artifacts, redact away their provenance, or use another platform's measurements to fill missing pairs.

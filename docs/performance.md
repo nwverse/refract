@@ -249,12 +249,15 @@ same bounded 200-row model, stable lazy-list identity, accessibility and immutab
 calls the generated row or adds a runtime. The shared fail-closed schema and analysis commands are in
 `bench/common/paired_report.py` and `bench/README.md`.
 
-The protocol requires at least 30 iterations of cold start, scroll and eight-toggle local update, paired raw native
-samples, one distinct native profiler trace per variant/scenario/iteration, explicit target labels and SHA-256-bound
-provenance. iOS uses Xcode launch metrics and explicitly named `CADisplayLink` target intervals; those intervals are
-not CPU frame time. HarmonyOS must use its own native launch/frame profiler metrics. A source-prepared scenario, a
-compiler pass or a synthetic report test is not a timing result. Neither platform has an executed paired measurement
-in this change: iOS has compile-only evidence, while HarmonyOS retains its authorized-SDK/target blocker.
+The protocol retains exactly the native identities 2...30 for cold start, scroll and eight-toggle local update,
+paired native timing scalars, one distinct native profiler trace per variant/scenario/iteration, explicit target labels
+and SHA-256-bound source/build provenance. iOS `startupMs` is the distinct `XCTApplicationLaunchMetric` duration;
+`firstDisplay` is only a monotonic scene-activation timestamp. A `CADisplayLink` interval array is explicitly reduced
+to a per-iteration p99 scalar before the outer nearest-rank p50/p99 comparison; it is not CPU frame time. HarmonyOS
+must use its own native launch/frame profiler metrics. Memory pairs retain the same iteration identity, while binary
+pairs bind both variants to the same build. No pair is renumbered or filled from another revision. A source-prepared
+scenario, a compiler pass or a synthetic report test is not a timing result. Neither platform has an executed paired
+measurement in this change: iOS has compile-only evidence, while HarmonyOS retains its authorized-SDK/target blocker.
 
 The common reporter retains the existing greater-than-5% **AND** greater-than-0.1 ms screening threshold at p50/p99,
 using nearest rank. With 30 iterations, p99 is the maximum, not an average or a neighboring percentile. A failing tail
