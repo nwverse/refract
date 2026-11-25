@@ -17,6 +17,7 @@ public struct Frontend {
         let duplicateDiagnostics = resolver.duplicateDiagnostics()
         var units: [TranslationUnit] = []
         var pendingMessageBuilders: [Builder] = []
+        var duplicateRejectedFiles: Set<String> = []
         for file in resolver.files {
             guard file.parserDiagnostics.isEmpty else {
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
@@ -47,6 +48,7 @@ public struct Frontend {
             builder.validateMessageProjection(module)
             let diagnostics = duplicateDiagnostics[file.source.path, default: []] + builder.diagnostics
             if hasDuplicateGeneratedDeclaration || duplicateDiagnostics[file.source.path]?.isEmpty == false {
+                duplicateRejectedFiles.insert(file.source.path)
                 units.append(TranslationUnit(module: Module(sourceFile: file.source.path, screens: []),
                                              diagnostics: diagnostics))
                 continue
@@ -61,15 +63,18 @@ public struct Frontend {
                                          resolvedItemTypes: builder.itemTypes))
         }
         let allScreens = units.flatMap(\.module.screens)
-        for builder in pendingMessageBuilders { builder.linkMessageProjection(siblingScreens: allScreens) }
+        for builder in pendingMessageBuilders where !duplicateRejectedFiles.contains(builder.file) {
+            builder.linkMessageProjection(siblingScreens: allScreens)
+        }
         units = units.map { unit in
-            guard let builder = pendingMessageBuilders.first(where: { $0.file == unit.module.sourceFile }),
-                  !builder.pendingMessageBodies.isEmpty else { return unit }
+            guard !duplicateRejectedFiles.contains(unit.module.sourceFile),
+                  let builder = pendingMessageBuilders.first(where: { $0.file == unit.module.sourceFile }),
+                  !builder.pendingMessageBodies.isEmpty || !builder.messageLinkDiagnostics.isEmpty else { return unit }
             let module = Module(sourceFile: builder.file, screens: builder.screens,
                                 nativeDeclarations: unit.module.nativeDeclarations,
                                 models: unit.module.models, itemTypes: unit.module.itemTypes,
                                 enums: unit.module.enums, nativeHosts: unit.module.nativeHosts)
-            return TranslationUnit(module: module, diagnostics: unit.diagnostics,
+            return TranslationUnit(module: module, diagnostics: unit.diagnostics + builder.messageLinkDiagnostics,
                                    resolvedModels: unit.resolvedModels, resolvedItemTypes: unit.resolvedItemTypes)
         }
         if sources.count > 1, let cycle = CompilationInputResolver.declarationCycleDiagnostic(units: units) {
@@ -108,7 +113,7 @@ final class Builder: SyntaxVisitor {
     var currentMessageBlockNames: (parent: String, block: String)?
     var pendingMessageSources: [(outer: Expression, content: ViewNode, screen: String, modelType: String)] = []
     var pendingMessageBodies: [(screen: String, body: ViewNode)] = []
-    var pendingMessageOwners: [String: Screen] = [:]
+    var messageLinkDiagnostics: [Diagnostic] = []
     var currentBindings: [String: ValueType] = [:]
     var currentModals: [ModalPresentation] = []
     var viewDeclarations: [String: StructDeclSyntax] = [:]

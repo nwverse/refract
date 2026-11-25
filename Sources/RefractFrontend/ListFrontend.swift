@@ -132,10 +132,7 @@ extension Builder {
         }
         if descriptor.itemType == "ChatMessage" {
             guard isMessageCollection(collectionExpression) else { return nil }
-            pendingMessageSources.append((collection, content, currentViewName ?? "", reference.protocolName))
-            pendingMessageOwners[currentViewName ?? ""] = Screen(name: currentViewName ?? "",
-                parameters: parameters, states: currentStates, body: content)
-            return nil
+            return attachMessageSource(collection, to: content)
         }
         if content.containsSwipeArchiveRow, !content.isDirectSwipeArchiveRow {
             diagnostics.append(Diagnostic(code: "RFSWIPE001",
