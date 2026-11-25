@@ -192,6 +192,43 @@ snapshot with `completedIterations == 0` neither replaces nor invalidates the va
 to use its exact native first-display packet and the unchanged cold-start launch metric. Complete native sample
 collection, memory/binary pairing and fail-closed report validation remain required.
 
+## Offline schema-2 export of retained iterations
+
+`export_iteration_manifest.py` transforms a complete set of accepted existing run directories without invoking
+Xcode, Instruments, a simulator or a device. It requires all 174 generated/reference/scenario identities in `2...30`,
+with no missing, duplicate or renumbered member. Each run must retain its exact `accepted-evidence.json`,
+`retained-file-hashes.json`, trace configuration, `iteration-trace.json`, profiler and xcresult archives. Frame runs
+also require `raw/native-samples.json` and a native `raw/exports/resident-memory.json`; each startup run requires
+`raw/exports/xctest-metrics.json`, and the single generated/reference `startup/2` build pair requires
+`raw/exports/installed-binary.json`. Those resource files follow the reporter's explicit revision/identity/PID/bytes
+schema. Absent or mismatched memory or binary evidence is an error before any `manifest.json` is created; the exporter
+never invents or approximates resources.
+
+The environment input has exactly `source_revision`, `target_label`, `device_result`, `target`, `toolchain` and
+`commands`. The target supplies its `udid`, `model`, `os_version` and `architecture`, plus its accepted `name` when
+available. Supply the exact acquisition/export command strings, not a newly invented command. A startup metric export
+may instead contain a `measurements` array with identity-bound `value.duration_ms` objects. In that case a separate
+`--startup-selections` file is required for each such run; it binds `source_revision`, `build_provenance_sha256` and a
+list of `{variant, scenario: "startup", iteration, index, value_sha256}`. `firstDisplay` remains only a monotonic
+completion timestamp and is never used as the startup scalar.
+
+```sh
+python3 -I bench/ios/export_iteration_manifest.py \
+  --run-root <retained-runs-root> --derived-data <original-DerivedData> \
+  --environment <export-environment.json> --startup-selections <startup-selections.json> \
+  --output <previously-absent-evidence-directory>
+python3 -I bench/ios/export_iteration_manifest_test.py
+```
+
+The output gets a deterministic, sorted manifest and checksum-preserved ordinary-file copies under `raw/`, plus the
+original canonical app/test products under `products/DerivedData` for reporter recomputation. Nested test-bundle files
+are staged once and retain executable bits. The exporter validates the complete staged manifest through
+`make_report()` before exclusively creating `manifest.json`; it does not emit a performance report or turn a native
+regression into a passing result. An existing output, a symbolic-link input or a source changing during copying is
+rejected. The tool transforms only evidence belonging to the retained revision/build/target: it cannot backfill a
+new main head or close the physical-device gate. Raw native resource and launch scalar collection is not provided by
+this offline tool.
+
 ## Regression and evidence policy
 
 Use `bench/common/report.py` schema 2. It requires the exact iteration identities 2...30, one native profiler trace per
