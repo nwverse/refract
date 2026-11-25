@@ -397,9 +397,15 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     checked_final_samples({"finalSamples": samples}, session, 4242)
 
     def test_native_packet_and_forwarded_samples_must_be_identical(self):
-        self.recorder.start(session=self.session(), native_samples=synthetic_final_samples(frameIntervalMs=[16.5, 16.5, 16.5]))
+        session = self.launch(native_samples=synthetic_final_samples(frameIntervalMs=[16.5, 16.5, 16.5]))
+        self.assertIsNotNone(session._capture_epoch)
+        deadline = time.monotonic() + 5
+        while not (self.root / "control/request.json").is_file() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        self.assertTrue((self.root / "control/request.json").is_file(),
+                        "the current synthetic request must precede capture")
         with self.assertRaisesRegex(HandshakeError, "exact native final sample"):
-            self.capture(self.session())
+            self.capture(session)
         self.assertFalse((self.root / "raw/native-samples.json").exists())
         self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
 
