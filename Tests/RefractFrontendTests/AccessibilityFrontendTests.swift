@@ -122,6 +122,61 @@ func accessibilityTextRejectsUnlocalizedOrInvalidSource(_ modifier: String) {
     #expect(unit.diagnostics.contains { $0.code == "RFACCESS003" })
 }
 
+@Test func traversalRejectsSelfPredecessorAndPreservesEarlierPredecessor() throws {
+    for platform in ["android", "harmonyOS"] {
+        let branch = """
+                        VStack {
+                            Button("accessibility.sync.now") { }
+                                .accessibilityIdentifier("sync_now")
+                            Button("accessibility.sync.details") { }
+                                .accessibilityIdentifier("sync_details")
+                        }
+                        .accessibilityTraversal([
+                            .accessibility("sync_now"),
+                            .accessibility("sync_details", after: "sync_now"),
+                        ])
+        """
+        let control = "Text(verbatim: \"Control\")"
+        let arguments = platform == "android"
+            ? "ios: { \(control) }, android: { \(branch) }, harmonyOS: { \(control) }"
+            : "ios: { \(control) }, android: { \(control) }, harmonyOS: { \(branch) }"
+        let source = SourceFile(path: "Input.swift", contents: """
+        struct Ordered: View {
+            var body: some View {
+                refractView(\(arguments))
+            }
+        }
+        """)
+        let unit = Frontend.parse(source)
+        #expect(unit.diagnostics.isEmpty)
+        let screen = try #require(unit.module.screens.first)
+        guard case let .platformView(alternatives, _) = screen.body else {
+            Issue.record("Expected explicit platform traversal branches")
+            return
+        }
+        for children in [alternatives.android, alternatives.harmonyOS] {
+            guard case let .stack(_, _, modifiers, _)? = children.first else { continue }
+            let traversal = try #require(modifiers.first(where: { $0.name == "accessibilityTraversal" }))
+            guard case let .accessibilityTraversal(order) = traversal.arguments.first?.value else {
+                Issue.record("Expected typed accessibility traversal IR")
+                continue
+            }
+            #expect(order.steps == [
+                AccessibilityTraversal.Step(name: "sync_now"),
+                AccessibilityTraversal.Step(name: "sync_details", after: "sync_now"),
+            ])
+        }
+
+        let selfPredecessor = source.contents.replacingOccurrences(
+            of: ".accessibility(\"sync_now\"),",
+            with: ".accessibility(\"sync_now\", after: \"sync_now\"),")
+        let rejected = Frontend.parse(SourceFile(path: "Input.swift", contents: selfPredecessor))
+        #expect(rejected.hasErrors)
+        #expect(rejected.module.screens.isEmpty)
+        #expect(rejected.diagnostics.filter { $0.code == "RFACCESS003" }.count == 1)
+    }
+}
+
 @Test func accessibilityRejectsDuplicateAndWrongPlatformModifiers() {
     let source = SourceFile(path: "Input.swift", contents: """
     struct Invalid: View {
