@@ -19,7 +19,8 @@ xcodebuild -project bench/ios/RefractBench.xcodeproj -scheme RefractBench \
 ```
 
 This is native compiler evidence only. The physical-SDK destination does not attach, sign or measure a device.
-Per-iteration simulator execution, when separately coordinated, is documented below and is not a device result.
+The original compile-only change created, started, restarted, used or stopped no simulator and installed no application;
+later, separately coordinated per-iteration simulator execution is recorded below and is not a device result.
 
 `build.sh` requires a clean committed checkout before and after compilation. It writes an immutable
 `refract-build-provenance.json` in DerivedData with the exact source revision, original xctestrun SHA-256 and the
@@ -50,7 +51,10 @@ generic-device build or reuse products without their manifest; rebuild in a new 
 The generated and reference screens have the same explicit `.plain` list style, title/subtitle typography, switch
 accessibility labels and stable `Identifiable` rows. `BenchmarkScrollDriver` wraps both hosts in the same
 `ScrollViewReader`; a shared native task issues identical programmatic scrolls. Local update performs eight toggles
-per iteration through the same model. Thirty iterations are required for each of cold start, scroll and state update.
+per iteration through the same model. The traced protocol uses the fixed inclusive identities 2...30: **29 identities**,
+not 0...29 or 0...30. Twenty-nine traced acquisitions are retained as identities; one iteration-30 pair is one of those
+29 identities, not completion of the matrix. The separate `XCTApplicationLaunchMetric` cold-start suite retains its
+30 non-traced iterations below; its count does not change this traced set.
 
 `XCTApplicationLaunchMetric` supplies launch samples from the platform's performance test infrastructure. The
 `CADisplayLink` helper records the native `targetTimestamp - timestamp` interval during the two other scenarios.
@@ -62,7 +66,12 @@ or state-update iteration, `completeIteration` establishes the final recorder st
 iteration and native PID, `completedIterations == 1`, `recordedIteration == selectedIteration`, and equally sized frame
 interval/tag arrays whose every tag names the selected iteration. Both XCTest and the runner reject missing, partial,
 duplicate, stale or mismatched packets, empty or unbounded arrays, and non-finite or non-positive display intervals
-before completion or archive acceptance. The runner persists this packet directly as `raw/native-samples.json` and
+before completion or archive acceptance. JSON identities use actual integer encodings rather than Boolean coercion.
+Interval samples must be finite, positive and no greater than `2^53` milliseconds, without Boolean coercion or
+lossy large-integer conversion; a Swift `NSNumber` cast alone does not enforce that boundary. Exact integer `2^53`
+and ordinary fractional Double samples remain valid. Larger values fail closed because Foundation can decode a large
+integer spelling as the same rounded `d` value as a legitimate huge Double; the validator cannot recover or infer the
+original spelling. The runner persists this packet directly as `raw/native-samples.json` and
 binds its path and SHA-256 in `raw/iteration-trace.json`; finalizers consume that durable file, not preferences.
 
 `UserDefaults` is diagnostic only. Its asynchronous plist can still contain a periodic snapshot with
@@ -93,9 +102,10 @@ xcrun xcresulttool get test-results metrics --path <run>/results.xcresult --form
 # The runner configures a fresh xctestrun beside Xcode's original test-run,
 # waits for explicit Instruments readiness before XCTest taps the native Begin
 # control, checks identity-matched native completion, gracefully stops xctrace
-# and preserves its package. The #219 traced protocol has thirty exact identities,
+# and preserves its package. The #219 traced protocol has 29 exact identities,
 # 2...30 inclusive; it is not 0...30 (31 identities) and does not renumber the
-# non-traced 0..<30 loops or transfer prior evidence. Repeat for each iteration
+# separate non-traced 0..<30 XCTApplicationLaunchMetric loops or transfer prior
+# evidence. Repeat for each iteration
 # 2...30 with a new run directory. --window bounds deferred work, not the measured
 # iteration window.
 # --template defaults to Animation Hitches. Select SwiftUI explicitly for the
@@ -211,13 +221,15 @@ python3 -I bench/ios/archive_trace_test.py -v
 These use synthetic processes and packages, not Instruments or timing evidence. The native driver requires an
 authorized macOS toolchain, a supported Python version and an explicitly owned, already-running target. Real Xcode
 compilation, XCTest and Instruments acquisition must be recorded separately from these tests. The original cold-start
-test still uses 30 `XCTApplicationLaunchMetric` iterations. The original non-traced scenario entry points remain
-available but the complete 30-iteration traced collection must use the new per-launch driver. Simulator results must
-remain explicitly labelled and cannot close the physical-device gate.
+test still uses 30 non-traced `XCTApplicationLaunchMetric` iterations. The original non-traced scenario entry points
+remain available but the complete 29-iteration traced collection must use the new per-launch driver. Those 29 traced
+acquisitions do not by themselves satisfy issue #219's documented at-least-30-iteration acceptance gate, which remains
+unchanged. Simulator results must remain explicitly labelled and cannot close the physical-device gate.
 
-Partial generated/reference simulator traces have exercised the earlier capture protocol on an earlier integrated
-revision; #219 retains their exact revisions, target/toolchain labels and private-artifact checksums. Those artifacts
-do not belong to a later merge or PR head, and they are not a completed paired benchmark or report PASS.
+Partial generated/reference simulator traces have exercised the earlier capture protocol on earlier integrated
+revisions; #219 retains their exact revisions, target/toolchain labels and private-artifact checksums. Those artifacts
+do not belong to a later merge or PR head, and they are not a completed paired benchmark or report PASS. The final
+new-revision evidence and the separately counted historical inventory are documented below.
 
 For scroll and state update, the runner's retained `raw/native-samples.json` is the durable final sample artifact.
 Its immutable identity and SHA-256 are in `raw/iteration-trace.json`; finalizers must use this packet rather than export
@@ -229,6 +241,32 @@ exporter still consumes the historical `raw/exports/xctest-metrics.json` input; 
 normalized `raw/metrics.json` and its `metric_selector` rather than silently changing inputs in this PR. Its existing
 `selected_duration` validation preserves the added PID field and verifies its selector checksum. Complete native sample
 collection, memory/binary pairing and fail-closed report validation remain required.
+
+## Published partial execution evidence
+
+The final [joint #219 audit](https://github.com/nwverse/refract/issues/219#issuecomment-7148267250) accepts exactly one
+generated/reference pair for each of startup, scroll and stateUpdate at literal iteration 30 and exact revision
+`eb16e22b3232625d52b25f5e08f61eaf603f2bd0`. The target is an existing coordinated iPhone 17 Pro iOS 27.0 **SIMULATOR**
+(arm64, OS build 24A434), using Xcode 27.2 (27B52), Release simulator build provenance, explicit Time Profiler and the
+unchanged 180-second native-completion deadline. The accepted build's manifest SHA-256 is
+`2ea39e4479a5743076ea42dc9bdd153115dd06a2d6809cccfa7b4b1e41067de1` and its original xctestrun SHA-256 is
+`b17d7896b0e6d950cc8fed64ab0c69101e061a9ec39859d4dea73fabc0181048`. The [separate scroll
+reread](https://github.com/nwverse/refract/issues/219#issuecomment-7148285055) and joint audit verify the retained files,
+archives and reports; the raw packages remain retained in their private issue evidence locations, not committed here.
+
+| Scenario / identity | Generated / reference native metric evidence | Raw archives and acceptance | Not established |
+| --- | --- | --- | --- |
+| `startup/30` | Exact `CACurrentMediaTime` firstDisplay `765151.7899704585` / `765183.1509280835`, scene-activation instants rather than launch durations | Independent trace/xcresult archive verification; XCTest 1 passed / 0 failed / 0 skipped per variant; recorder exit 0 | `XCTApplicationLaunchMetric` duration, remaining 28 pairs, complete report, resource pairing or performance/device acceptance |
+| `scroll/30` | 75 / 73 finite positive `CADisplayLink targetTimestamp - timestamp` intervals, all tagged 30; not CPU frame durations | Independent trace/xcresult archive verification; XCTest 1 passed / 0 failed / 0 skipped per variant; recorder exit 0 | Per-iteration native p99 scalar comparison, remaining 28 pairs, memory pairing or performance/device acceptance |
+| `stateUpdate/30` | 153 / 152 finite positive display-target intervals, all tagged 30; not CPU frame durations | Independent trace/xcresult archive verification; XCTest 1 passed / 0 failed / 0 skipped per variant; recorder exit 0 | Per-iteration native p99 scalar comparison, remaining 28 pairs, memory pairing or performance/device acceptance |
+
+Coverage at `eb16e22` is therefore **1/29 accepted pairs per scenario** under the inclusive 2...30 protocol. These are three
+pairs total, not 30 pairs or a performance PASS. The [actual retained-evidence
+inventory](https://github.com/nwverse/refract/issues/219#issuecomment-7155061440) separately records 76 accepted pairs
+at `95a0f37b88ae0eaf5e815554755f3d4771bcfd5a`: startup 21 (2..22), scroll 27 (2..28) and stateUpdate 28 (2..29). Those
+pairs, the rejected old-head iteration-30 attempt and every other historical root are not counted here. No simulator or
+toolchain result is promoted to physical-device evidence, and this build/provenance record does not close the general
+pinned-toolchain or reproducibility gate.
 
 ## Regression and evidence policy
 

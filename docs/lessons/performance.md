@@ -23,6 +23,9 @@ Preserve them with exact source/toolchain/target metadata, acquisition/export co
 Instruments packages when ordinary files are needed for public review; a directory named `.trace` is not a trace file.
 `bench/ios/archive_trace.py` archives only an already completed package, never overwrites output and does not establish
 that capture finished or that a package belongs to a measurement.
+An ordinary artifact leaf is not sufficient containment: a symbolic-link `raw/` or nested parent can redirect unchanged,
+correctly checksummed bytes outside the evidence root. Reject a linked root and every raw-path ancestor before hashing,
+and require resolved parents to stay inside that root.
 Every sample must be directly bound to its variant, scenario and iteration and to the corresponding native trace.
 On iOS, also require exactly one identity-matched `xcode-metric-json` per timing measurement; a profiler trace is
 supporting evidence, not a substitute for the native launch or display-interval export. Do not infer ownership from a
@@ -35,8 +38,12 @@ read. Cover a valid dictionary, malformed XML and legal wrong-type plists throug
 
 JSON integers have arbitrary precision, but benchmark timing scalars are represented as finite binary floats. Convert
 through a guarded boundary so an unrepresentable integer becomes `EvidenceError`, not an `OverflowError` traceback;
-exercise direct and checksum-selected native measurements. Validate artifact role and kind together: a metric JSON file
-cannot satisfy the profiler requirement, whose exact trace kind is `xctrace` on iOS and `vendor-trace` on HarmonyOS.
+exercise direct and checksum-selected native measurements. Match the raw array field to the platform metric as well:
+an identity-valid `frameIntervalMs` packet must not satisfy a declared HarmonyOS `frameDurationMs` measurement. Exercise
+both platform-specific field names and recompute p99 from the actual duration array. Require exact integers for raw
+schema, completion, iteration and PID identities: Python's `True == 1` and `4242 == 4242.0` must not make Boolean or
+floating-point substitutes valid evidence. Validate artifact role and kind together: a metric JSON file cannot satisfy
+the profiler requirement, whose exact trace kind is `xctrace` on iOS and `vendor-trace` on HarmonyOS.
 Route original xctestrun discovery through the shared `BuildProvenanceError` boundary so the recording CLI returns its
 controlled diagnostic and status 2 when the original file is missing or ambiguous.
 
@@ -76,12 +83,49 @@ completion deadline or performance threshold. `raw/exports/` is shared evidence 
 files while reserving the launch metric's own target paths before spawning a child; directory sharing must not weaken
 per-file no-clobber or symbolic-link rejection.
 
+A synthetic XCTest fixture should make its launch boundary and ordering explicit. Use `launch()` to freeze the fresh
+control epoch before starting the fixture, pass that same `Session` to capture, and wait for the current request when
+it is the intended input to a negative check. The baseline helpers already preflight both supplied sessions, including
+when the current request arrives first; this is deterministic clarification, not a race fix. Do not infer a stale-request
+failure from a plausible ordering without reproducing it on the exact base. Never weaken stale-packet rejection to
+make a test pass.
+
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
 handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
 such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a second JSON writer may choose a different
 shortest decimal spelling for the same `Double`. Encode the native floating-point timestamp once as a canonical
 round-trippable string, validate it and compare the typed strings exactly at each hop. Exercise the concrete native
 value through the real control plane and compile the actual Swift comparator, including a mismatch rejection.
+
+## Manifest only stable bytes
+
+A finalizer must not include its caller's still-open stdout/stderr in an integrity manifest. If its buffered receipt is
+printed only after the manifest is written, the retained entry describes the initial empty file, not the later receipt.
+Before manifesting, wait for owned child processes and collector threads, close owned logs and archives, then measure the
+resulting byte count and SHA-256. Exclude caller-owned live diagnostic streams, or write them outside the walked tree,
+and validate their final contents separately after the child exits. If a finalizer owns a receipt that belongs in the
+manifest, write and close that receipt first; `flush()` alone does not close an owned file or make a foreign writer
+stable.
+
+Build the manifest only after all of its members are closed, and publish its complete bytes through a same-directory
+temporary file followed by an exclusive no-clobber link or rename. Flush and `fsync` the temporary file before
+publication, remove only that temporary on failure, and never replace an existing manifest or repair retained evidence
+after the fact. A later hash of a finished log is a new observation, not acquisition-time evidence and not a substitute
+for a valid original manifest. Cover the empty-before-flush ordering, live-stream exclusion, post-exit log validation,
+publication failure and refusal to overwrite with synthetic tests; these tests do not change native evidence thresholds
+or establish a performance result.
+
+## Keep evidence domains and identity counts explicit
+
+An inclusive identity range is not automatically its acquisition count: 2...30 contains **29 identities**. Check the
+actual identity set before writing a coverage denominator, and do not silently renumber native artifacts to make an
+old denominator fit. One accepted pair at iteration 30 is 1/29 of that set, not a completed 30-pair matrix.
+
+Keep source revision, build provenance and target in every coverage statement. The accepted `eb16e22` iteration-30 pairs
+in #219 are not cumulative with `95a0f37` or any other historical capture. A raw Instruments trace proves native
+capture, not a complete paired scalar comparison, resource pairing, report PASS or device performance. In particular,
+startup `firstDisplay` is not launch duration. Index published issue evidence separately from committed reports rather
+than upgrading the production baseline implicitly.
 
 ## Equal inputs need equal native behavior
 
@@ -90,6 +134,16 @@ reference must not call the generated row or share its view implementation. Comp
 well as text. A convenient extra `frame`, asynchronous callback or dropped native token can make the two screens
 non-equivalent. Compile the canonical source rather than a copied approximation, then verify actual behavior on a
 named target before claiming equivalence.
+
+A pre-compiler source test must inspect the shared model and both native implementations, not only a generated header
+or unrelated reference fragments. Bind the model action's delegation and both toggle read/callback paths, paired
+text/typography/accessibility/layout, immutable replacement and list/reuse identity. Validate configuration members
+in their declared objects, not by global substring counts: the checked-in JSON-subset `.json5` files can use the
+standard-library parser with duplicate-key and non-finite-constant rejection while other JSON5 syntax fails closed.
+Seed temporary-copy
+mutations for these identities, imports and build configuration, and prove the unmodified and formatting-only copies
+pass first. These bounded structural checks reject contract drift but establish neither ArkTS compiler acceptance,
+rendered equality nor native behavior.
 
 Use an explicit, exclusively owned, already-booted target. Never use `booted`, create or reboot a shared simulator,
 or infer ownership from an existing device name. A physical target discovered as unavailable is a blocker, not an

@@ -7,10 +7,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from paired_report import EvidenceError, ITERATIONS, checked_iteration, make_report, markdown, percentile
+from paired_report import EvidenceError, ITERATIONS, artifact as validated_artifact, checked_iteration, make_report, markdown, percentile
 from build_provenance import BUNDLE_NAMES, original_build_provenance
 
 
@@ -119,15 +120,16 @@ class PairedReportTest(unittest.TestCase):
     def build_payload(self):
         return original_build_provenance(self.derived_data, "a" * 40)
 
-    def timing_payload(self, variant, scenario, iteration):
+    def timing_payload(self, variant, scenario, iteration, platform="ios"):
         identity = {"sourceRevision": "a" * 40, "variant": variant, "scenario": scenario, "iteration": iteration}
         if scenario == "startup":
             native = {**identity, "metric": "XCTApplicationLaunchMetric", "unit": "ms", "durationMs": 10.0}
             canonical = json.dumps(native, sort_keys=True, separators=(",", ":")).encode()
             return {**native, "nativeMeasurement": native,
                     "nativeMeasurementSha256": hashlib.sha256(canonical).hexdigest()}
+        field = "frameIntervalMs" if platform == "ios" else "frameDurationMs"
         return {**identity, "schema": 1, "session": 1, "pid": 4242, "completedIterations": 1,
-                "recordedIteration": iteration, "frameIntervalMs": [9.0, 10.0],
+                "recordedIteration": iteration, field: [9.0, 10.0],
                 "iterationByFrame": [iteration, iteration]}
 
     def resource_payload(self, variant, scenario, iteration, metric):
@@ -412,6 +414,27 @@ class PairedReportTest(unittest.TestCase):
             with self.subTest(key=key), self.assertRaisesRegex(EvidenceError, "identity|process|tags"):
                 make_report(self.manifest, self.root)
 
+    def test_raw_frame_integer_identities_are_not_numeric_equivalents(self):
+        for platform in ("ios", "harmonyos"):
+            if platform == "harmonyos":
+                self.use_harmony_native_metrics()
+            measurement = next(entry for entry in self.manifest["measurements"]
+                               if entry["variant"] == "generated" and entry["scenario"] == "scroll"
+                               and entry["iteration"] == 2)
+            path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
+            for key, value in (("schema", True), ("schema", 1.0),
+                               ("completedIterations", True), ("completedIterations", 1.0),
+                               ("iteration", 2.0), ("recordedIteration", 2.0),
+                               ("pid", True), ("pid", 4242.0)):
+                with self.subTest(platform=platform, key=key, value=value):
+                    packet = self.timing_payload("generated", "scroll", 2, platform=platform)
+                    packet[key] = value
+                    self.replace_json(path, packet)
+                    with self.assertRaisesRegex(EvidenceError, "integer|identity|process and iteration"):
+                        make_report(self.manifest, self.root)
+            self.replace_json(path, self.timing_payload("generated", "scroll", 2, platform=platform))
+            self.assertEqual(make_report(self.manifest, self.root)["status"], "pass")
+
     def test_raw_binary_identity_must_match_its_resource_artifact(self):
         path = "raw/generated-startup-2-binary.json"
         payload = self.resource_payload("generated", "startup", 2, "installedBinaryBytes")
@@ -472,6 +495,38 @@ class PairedReportTest(unittest.TestCase):
         self.manifest["environment"]["build_provenance"]["sha256"] = "0" * 64
         with self.assertRaisesRegex(EvidenceError, "another revision or build"):
             make_report(self.manifest, self.root)
+
+    def test_raw_directory_cannot_redirect_all_artifacts_outside_the_evidence_root(self):
+        external = self.root.parent / f"{self.root.name}-external"
+        (self.root / "raw").rename(external)
+        (self.root / "raw").symlink_to(external, target_is_directory=True)
+        with mock.patch("paired_report.sha256", side_effect=AssertionError("artifact read escaped the evidence root")), \
+                self.assertRaisesRegex(EvidenceError, "raw artifact path.*symbolic link"):
+            make_report(self.manifest, self.root)
+
+    def test_raw_ancestor_cannot_redirect_an_artifact_outside_the_evidence_root(self):
+        entry = next(item for item in self.manifest["artifacts"] if item["role"] == "profiler")
+        external = self.root.parent / f"{self.root.name}-external"
+        external.mkdir()
+        artifact = self.root / entry["path"]
+        original_path = entry["path"]
+        artifact.rename(external / artifact.name)
+        (self.root / "raw/nested").symlink_to(external, target_is_directory=True)
+        entry["path"] = f"raw/nested/{artifact.name}"
+        measurement = next(item for item in self.manifest["measurements"] if original_path in item["artifacts"])
+        measurement["artifacts"] = [entry["path"] if path == original_path else path
+                                    for path in measurement["artifacts"]]
+        environment = {"source_revision": entry["source_revision"],
+                       "build_provenance": {"path": self.build_path, "sha256": self.build_hash}}
+        with self.assertRaisesRegex(EvidenceError, "raw artifact path.*symbolic link"):
+            validated_artifact(entry, self.root, "ios", environment)
+
+    def test_evidence_root_cannot_be_a_symbolic_link(self):
+        linked = self.root.parent / f"{self.root.name}-linked"
+        linked.symlink_to(self.root, target_is_directory=True)
+        with mock.patch("paired_report.sha256", side_effect=AssertionError("artifact root was read")), \
+                self.assertRaisesRegex(EvidenceError, "root.*symbolic link"):
+            make_report(self.manifest, linked)
 
     def test_missing_one_iteration_is_not_a_pass(self):
         self.manifest["measurements"].pop()
@@ -625,8 +680,8 @@ class PairedReportTest(unittest.TestCase):
                                    launchStartTimestamp=90.0, firstFrameTimestamp=100.0)
                     self.replace_json(path, payload)
                 else:
-                    self.replace_json(artifact["path"], self.timing_payload(artifact["variant"], artifact["scenario"],
-                                                                            artifact["iteration"]))
+                    self.replace_json(artifact["path"], self.timing_payload(
+                        artifact["variant"], artifact["scenario"], artifact["iteration"], platform="harmonyos"))
 
     def test_harmony_uses_vendor_native_metrics_with_explicit_scalar_definitions(self):
         self.use_harmony_native_metrics()
@@ -652,6 +707,36 @@ class PairedReportTest(unittest.TestCase):
         startup["metric_selector"] = None
         with self.assertRaisesRegex(EvidenceError, "supported only for an iOS startup"):
             make_report(self.manifest, self.root)
+
+    def test_harmony_frame_duration_cannot_be_filled_by_display_intervals(self):
+        self.use_harmony_native_metrics()
+        for artifact in self.manifest["artifacts"]:
+            if artifact["role"] == "timing" and artifact["scenario"] != "startup":
+                # The pre-fix packet lacks frameDurationMs and supplies only the
+                # iOS frameIntervalMs field, despite declaring frameDurationMs.
+                self.replace_json(artifact["path"], self.timing_payload(
+                    artifact["variant"], artifact["scenario"], artifact["iteration"]))
+        with self.assertRaisesRegex(EvidenceError, "Native frame duration samples"):
+            make_report(self.manifest, self.root)
+
+    def test_harmony_recalculates_p99_from_native_frame_duration_samples(self):
+        self.use_harmony_native_metrics()
+        measurement = next(entry for entry in self.manifest["measurements"]
+                           if entry["variant"] == "generated" and entry["scenario"] == "scroll"
+                           and entry["iteration"] == 2)
+        path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
+        packet = self.timing_payload("generated", "scroll", 2, platform="harmonyos")
+        packet["frameDurationMs"] = [1.0, 2.0, 3.0]
+        packet["iterationByFrame"] = [2, 2, 2]
+        self.replace_json(path, packet)
+        with self.assertRaisesRegex(EvidenceError, "raw native metric export"):
+            make_report(self.manifest, self.root)
+        measurement["value"] = 3.0
+        report = make_report(self.manifest, self.root)
+        sample = next(sample for sample in report["samples"] if sample["scenario"] == "scroll"
+                      and sample["variant"] == "generated" and sample["iteration"] == 2)
+        self.assertEqual(sample["source_samples"], [1.0, 2.0, 3.0])
+        self.assertEqual(sample["value"], 3.0)
 
     def test_harmony_needs_vendor_trace_not_an_ios_trace(self):
         self.manifest["platform"] = "harmonyos"
