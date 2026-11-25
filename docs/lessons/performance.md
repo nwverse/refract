@@ -90,6 +90,14 @@ when the current request arrives first; this is deterministic clarification, not
 failure from a plausible ordering without reproducing it on the exact base. Never weaken stale-packet rejection to
 make a test pass.
 
+A synthetic recorder must install its graceful SIGINT/SIGTERM handlers before its command log, readiness output or
+package publication becomes observable. Otherwise the runner can legally stop a recorder whose Python default handler
+has not yet been replaced, producing status -2 instead of the saved package. Pin that startup window with an explicit
+fixture gate, send the signal before the old handler location, and prove graceful finalization rather than relying on
+a hosted retry. This fixture correction does not diagnose a separate saved-path rejection: its runner status 2 and empty
+XCTest stderr need the retained recorder output and command log. Keep the production reader join and exact saved-path
+check intact, and do not claim that an unrelated hosted failure is fixed without reproducing its actual output.
+
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
 handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
 such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a second JSON writer may choose a different

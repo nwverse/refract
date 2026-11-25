@@ -17,7 +17,7 @@ import tempfile
 import threading
 import time
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -121,7 +121,8 @@ class RecorderFixture:
                 final_samples: dict | None | str = "default",
                 stale_periodic_plist: bool = False, duplicate_native_completion: bool = False,
                 native_samples: dict | None | str = "default", first_display: dict | None = None,
-                resources: list | str = "default", forwarded_resources: list | str = "default"):
+                resources: list | str = "default", forwarded_resources: list | str = "default",
+                signal_setup_gate: Path | None = None):
         if resources == "default":
             resources = synthetic_native_resources(self.root, memory_scenario=app_scenario,
                                                    memory_iteration=app_iteration, binary_scenario=app_scenario,
@@ -184,8 +185,6 @@ while not (control / "recorder-finished.json").exists():
 ''')
         recorder_script = self.work / "fake_xcrun.py"
         recorder_script.write_text(f'''import json, os, pathlib, signal, sys, time
-with open(os.environ["REFRACT_SYNTHETIC_XCRUN"], "a") as stream:
-    stream.write(json.dumps(sys.argv[1:]) + "\\n")
 output = sys.argv[sys.argv.index("--output") + 1]
 control = pathlib.Path(sys.argv[sys.argv.index("--control-directory") + 1])
 def finish(status):
@@ -196,11 +195,19 @@ def finish(status):
         for _ in range({saved_lines!r}):
             print({saved_spelling!r} + ": " + ({saved_path!r} or output), flush=True)
     os._exit(status)
+# Install graceful termination before command logging, readiness or package
+# publication. The gate below is the original handler-installation window.
 signal.signal(signal.SIGINT, lambda *_: finish(0))
 signal.signal(signal.SIGTERM, lambda *_: finish(143))
-import json, os, pathlib, time
+if {signal_setup_gate is not None!r}:
+    gate = pathlib.Path({str(signal_setup_gate)!r})
+    gate.with_name("recorder-before-signal-setup").write_text("ready", encoding="utf-8")
+    while not gate.exists():
+        time.sleep(0.001)
+with open(os.environ["REFRACT_SYNTHETIC_XCRUN"], "a") as stream:
+    stream.write(json.dumps(sys.argv[1:]) + "\\n")
 
-if {ready!r} is None:
+if {ready is None!r}:
     sys.exit(7)
 print({ready!r}.format(trace=output), flush=True)
 if {recorder_after_ready_exit!r}:
@@ -350,7 +357,16 @@ class IterationTraceRunnerTest(unittest.TestCase):
             # the explicit launch boundary used by the real CLI.
             session.record_capture_start_epoch()
         with mock.patch("iteration_trace_runner.subprocess.run", side_effect=self.read_synthetic_environment):
-            return session.capture(fixture.process, fixture.recorder_factory)
+            try:
+                return session.capture(fixture.process, fixture.recorder_factory)
+            except HandshakeError as error:
+                # main() returns status 2 without stderr; retain the two logs
+                # that distinguish a recorder exit from a saved-path failure.
+                for label, path in (("output", session.raw / "recorder.log"),
+                                    ("command log", fixture.commands)):
+                    content = path.read_text(encoding="utf-8") if path.is_file() else "<not written>"
+                    error.add_note(f"Synthetic recorder {label}:\n{content}")
+                raise
 
     def launch(self, session=None, fixture=None, session_kwargs=None, **recorder_kwargs):
         """Mirror main(): preflight the fresh control epoch before launching
@@ -403,6 +419,34 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(archived_samples, synthetic_final_samples())
         self.assertEqual(result["native_samples"]["sha256"], hashlib.sha256(
             (self.root / "raw/native-samples.json").read_bytes()).hexdigest())
+
+    def test_early_sigint_before_readiness_finishes_the_exact_package(self):
+        for signal_number, expected_status in ((signal.SIGINT, 0), (signal.SIGTERM, 143)):
+            with self.subTest(signal=signal_number):
+                root = self.root / f"early-stop-{signal_number}"
+                recorder = RecorderFixture(root)
+                self.addCleanup(recorder.stop)
+                gate = recorder.work / "allow-signal-setup"
+                before_setup = recorder.work / "recorder-before-signal-setup"
+                recorder.prepare(resources=[], forwarded_resources=[], signal_setup_gate=gate)
+                command = ["xcrun", "xctrace", "record", "--device", "synthetic-target",
+                           "--template", "Animation Hitches", "--attach", "4242",
+                           "--window", "5s", "--output", str(root / "generated-scroll-2.trace")]
+                recorder.recorder_factory(command, mock.Mock())
+                deadline = time.monotonic() + 5
+                while not before_setup.exists() and time.monotonic() < deadline:
+                    time.sleep(0.001)
+                if not before_setup.is_file():
+                    output, _ = recorder.recorder.communicate(timeout=5)
+                    self.fail(f"the recorder exited before its signal-setup gate: {output}")
+                # This is precisely before the original two signal.signal calls
+                # and command-log append. The handler must not die with -signal.
+                recorder.recorder.send_signal(signal_number)
+                status = recorder.recorder.wait(timeout=5)
+                output, _ = recorder.recorder.communicate(timeout=5)
+                self.assertEqual(status, expected_status, output)
+                self.assertEqual(output, f"Output saved: {command[-1]}\n")
+                self.assertTrue((Path(command[-1]) / "Data/samples.bin").is_file())
 
     def test_native_resources_retain_exact_darwin_and_installed_product_content(self):
         result = self.run_success()
@@ -940,7 +984,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                 mock.patch.object(runner.subprocess, "Popen", side_effect=popen), \
                 mock.patch.object(Session, "capture", capture):
             stdout = io.StringIO()
-            with redirect_stdout(stdout):
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()) as stderr:
                 status = runner.main([
                     "--run-directory", str(self.root), "--derived-data", str(derived_data),
                     "--target-udid", "synthetic-target", "--variant", "generated", "--scenario", "scroll",
@@ -948,7 +992,9 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     "--readiness-timeout", "0.5", "--completion-timeout", "0.5",
                 ])
         _, process_stderr = self.recorder.process.communicate(timeout=5)
-        self.assertEqual(status, 0, process_stderr)
+        recorder_output = (self.root / "raw/recorder.log").read_text(encoding="utf-8")
+        commands = self.recorder.commands.read_text(encoding="utf-8")
+        self.assertEqual(status, 0, "\n".join((process_stderr, stderr.getvalue(), recorder_output, commands)))
         self.assertEqual(json.loads(stdout.getvalue())["status"], "complete")
         self.assertEqual(original.read_bytes(), original_bytes)
         self.assertEqual(configured, {
