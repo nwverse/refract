@@ -274,6 +274,11 @@ final class Builder: SyntaxVisitor {
         if members.contains(where: { member in
             member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
         }), statefulWidthClassInput(node) == nil {
+            // Preserve independent state diagnostics without reclassifying the reserved input.
+            let otherMembers = node.with(\.memberBlock.members, members.filter { member in
+                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription != "WidthSizeClass"
+            })
+            _ = localStateDeclarations(otherMembers)
             return .skipChildren
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }

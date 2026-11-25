@@ -53,7 +53,8 @@
   Let the specialized parsers retain their diagnostics for malformed `@State`, `@Binding` and model inputs rather than
   replacing those codes with a generic declaration error. Reserved typed environment inputs also need precedence over
   generic state parsing: a mutable `WidthSizeClass` is wrong native-host ownership (`RFADAPT001`), not a tab selection
-  (`RFNAV402`). Reject its declaration before interpreting it as an ordinary enum-backed state property.
+  (`RFNAV402`). Reject its declaration before interpreting it as an ordinary enum-backed state property, but validate
+  the remaining members separately so this precedence does not suppress their independent, more specific diagnostics.
 - Repeated generated View, model, item or enum names are ambiguous even in one file. Diagnose them before walking
   the tree, but finish the ordinary traversal so independent source errors are retained. Discard partial IR afterward
   rather than returning early, which would suppress valid model-input diagnostics. Keep cross-file resolution separate.

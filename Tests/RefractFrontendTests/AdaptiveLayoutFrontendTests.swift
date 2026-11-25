@@ -84,6 +84,25 @@ func widthClassRejectsWrongOwnershipWithAdaptiveDiagnostic(_ declaration: String
     #expect(unit.diagnostics.map(\.code) == ["RFADAPT001"])
 }
 
+@Test func wrongWidthClassOwnershipRetainsOtherStateDiagnostics() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    struct InvalidAdaptiveOwnership: View {
+        @Binding var widthSizeClass: WidthSizeClass
+        @State private var count: Int
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == ["RFADAPT001", "state.invalid_declaration"])
+}
+
 @Test func widthClassCannotOwnTheNativeNavigationPath() throws {
     let fixture = adaptiveRepository.appendingPathComponent("Fixtures/adaptive-reject-navigation")
     let input = try String(contentsOf: fixture.appendingPathComponent("Input.swift"), encoding: .utf8)
