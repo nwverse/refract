@@ -51,7 +51,9 @@
 - A supported `body` does not make every sibling declaration valid. Before selecting the typed-input or state/model
   parsing path, reject methods, initializers, nested types and arbitrary computed/observed properties with `RFSYN004`.
   Let the specialized parsers retain their diagnostics for malformed `@State`, `@Binding` and model inputs rather than
-  replacing those codes with a generic declaration error.
+  replacing those codes with a generic declaration error. Reserved typed environment inputs also need precedence over
+  generic state parsing: a mutable `WidthSizeClass` is wrong native-host ownership (`RFADAPT001`), not a tab selection
+  (`RFNAV402`). Reject its declaration before interpreting it as an ordinary enum-backed state property.
 - Repeated generated View, model, item or enum names are ambiguous even in one file. Diagnose them before walking
   the tree, but finish the ordinary traversal so independent source errors are retained. Discard partial IR afterward
   rather than returning early, which would suppress valid model-input diagnostics. Keep cross-file resolution separate.

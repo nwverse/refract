@@ -271,6 +271,11 @@ final class Builder: SyntaxVisitor {
         if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
             return .visitChildren
         }
+        if members.contains(where: { member in
+            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
+        }), statefulWidthClassInput(node) == nil {
+            return .skipChildren
+        }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
         if members.contains(where: { member in
             member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
