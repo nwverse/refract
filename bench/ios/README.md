@@ -77,7 +77,7 @@ binds its path and SHA-256 in `raw/iteration-trace.json`; finalizers consume tha
 `UserDefaults` is diagnostic only. Its asynchronous plist can still contain a periodic snapshot with
 `completedIterations == 0` after native completion; no sleep, polling or `UserDefaults.synchronize()` can turn it into
 the completion channel. A stale diagnostic plist never overrides a valid final completion packet. The separate startup
-packet retains its exact `firstDisplay` timestamp, and the 30-iteration cold-start metric remains unchanged.
+packet retains its exact `firstDisplay` timestamp, and the separate 30-iteration cold-start metric remains unchanged.
 The XCUITest target is not part of the app runtime, and the helper adds no Refract library.
 
 ## Running without touching shared targets
@@ -172,12 +172,46 @@ the same revision, variant, scenario, iteration and PID. A string avoids both Fo
 comparison ambiguity and independent JSON number formatting; the UI test and runner require exact string equality,
 round-trip it to the original `Double`, and reject missing, non-canonical, non-finite, non-positive or mismatched
 evidence without a tolerance. The receipt retains the same string in monotonic `native_first_display` evidence, not a
-shell stopwatch duration or an inferred startup time. The separate 30-iteration `XCTApplicationLaunchMetric` suite
-remains unchanged and supplies distinct platform launch samples.
+shell stopwatch duration or an inferred startup time. The selected `*StartupTrace` XCTest measures the same unchanged
+`runTracedIteration` helper once with `XCTApplicationLaunchMetric` and `iterationCount = 1`. The two separate
+30-iteration cold-start tests are unchanged; neither those automatic measurement ordinals nor array indexes supply
+traced identities `2...30`.
+
+After that exact XCTest succeeds, the runner exports `test-results tests` and `test-results metrics --test-id
+<RefractBenchUITests/testGeneratedStartupTrace()-or-testReferenceStartupTrace()>` from its own `results.xcresult`.
+It retains the raw JSON bytes and exact commands in `raw/exports/`. The normalized `raw/metrics.json` selects exactly
+one native `com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration` measurement in explicit seconds, converts it
+once to milliseconds, and carries a checksum-based `metric_selector` for `paired_report.py`. The selected test,
+passing result, target, trace receipt and configuration receipt are bound to the same run. Before invoking either
+xcresult export command, the exporter requires the canonical `control/native-process.json`, retained request,
+`control/native-completion.json` and forwarded completion to agree on session, revision, variant, startup iteration
+and one strictly positive integer native PID; the iteration receipt must match that PID, not supply an unchecked
+identity. Boolean, floating-point, missing, non-positive and unrelated PIDs fail before export. The selected
+measurement contains the exact `pid` inside the selector checksum, and provenance retains each native packet's
+relative path and SHA-256. Receipt/configuration identity and schema fields require exact JSON types, including integer
+schema 1, `device_result is False`, and an exact positive integer PID. Duplicate object keys, nesting beyond 128 levels,
+inexact arbitrary-precision integer conversion, and malformed xctestrun XML are controlled evidence errors. Integer
+seconds are converted only when both the binary-float seconds and millisecond values preserve the exact rational value;
+ordinary exact integer and floating-point durations remain supported. Empty, duplicate, unrelated, non-finite or
+non-positive measurements fail without publishing a duration.
+Each xcresulttool invocation has a separate 60-second local exporter watchdog. It applies only after native acquisition
+and is not a production performance threshold or a replacement for the unchanged XCTest/native completion deadlines.
+A nonblocking selector drains both pipes; stdout is limited to 16 MiB while streaming, stderr retains only a bounded
+diagnostic tail, and an overrun or deadline kills and reaps the exporter's own process group. No partial oversized JSON
+is retained. `raw/exports/` may already contain unrelated `resident-memory.json` or `installed-binary.json` evidence;
+the exporter preserves those files but refuses any existing `xctest-tests.json`, `xctest-metrics.json` or
+`raw/metrics.json` before running xcresulttool. The export directory must be a real directory, never a symbolic link.
+`firstDisplay` remains a separate
+scene-activation instant and is never subtracted from another timestamp or relabelled as elapsed launch time.
+This UI-test source change requires a new build identity. For separately authorized native verification, rebuild the
+exact committed head with `DERIVED_DATA=<fresh-new-head-build> bench/ios/build.sh`, then use the existing traced-runner
+command with that new DerivedData and a fresh run directory. Do not reuse old products, transfer an old cold-start
+result, or treat the old empty metrics exports as backfilled durations.
 
 Run the control-plane and source-wiring tests with:
 
 ```sh
+python3 -I bench/ios/launch_metric_test.py -v
 python3 -I bench/ios/iteration_trace_runner_test.py -v
 python3 -I bench/ios/iteration_trace_source_test.py -v
 python3 -I bench/ios/iteration_startup_trace_test.py -v
@@ -200,8 +234,12 @@ new-revision evidence and the separately counted historical inventory are docume
 For scroll and state update, the runner's retained `raw/native-samples.json` is the durable final sample artifact.
 Its immutable identity and SHA-256 are in `raw/iteration-trace.json`; finalizers must use this packet rather than export
 `refract.bench.frames.v1` from `UserDefaults`. The app may still persist that key for diagnostics, but a periodic plist
-snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup continues
-to use its exact native first-display packet and the unchanged cold-start launch metric. Complete native sample
+snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup retains
+its exact native first-display packet and, on a successful new-head run, its separate selector-bound `raw/metrics.json`
+launch duration. Existing runs whose metrics export is empty cannot be backfilled. The downstream #380/#395 manifest
+exporter still consumes the historical `raw/exports/xctest-metrics.json` input; it must explicitly adapt to this
+normalized `raw/metrics.json` and its `metric_selector` rather than silently changing inputs in this PR. Its existing
+`selected_duration` validation preserves the added PID field and verifies its selector checksum. Complete native sample
 collection, memory/binary pairing and fail-closed report validation remain required.
 
 ## Published partial execution evidence

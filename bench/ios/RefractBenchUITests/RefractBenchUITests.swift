@@ -184,11 +184,35 @@ final class RefractBenchUITests: XCTestCase {
     }
 
     func testGeneratedStartupTrace() throws {
-        try runTracedIteration("startup", variant: "generated")
+        try tracedStartupMetric("generated")
     }
 
     func testReferenceStartupTrace() throws {
-        try runTracedIteration("startup", variant: "reference")
+        try tracedStartupMetric("reference")
+    }
+
+    private func tracedStartupMetric(_ variant: String) throws {
+        if ProcessInfo.processInfo.environment["REFRACT_BENCH_TRACE_CONTROL"] == nil {
+            // A throwing measure block cannot preserve XCTSkip. Keep the
+            // original direct-XCTest skip path outside metric collection.
+            try runTracedIteration("startup", variant: variant)
+            return
+        }
+        let options = XCTMeasureOptions()
+        options.iterationCount = 1
+        var iterationError: Error?
+        // The native metric surrounds the unchanged exact trace handshake.
+        // Its single measurement is not an ordinal for traced identity 2...30.
+        measure(metrics: [XCTApplicationLaunchMetric()], options: options) {
+            do {
+                try runTracedIteration("startup", variant: variant)
+            } catch {
+                iterationError = error
+            }
+        }
+        if let iterationError {
+            throw iterationError
+        }
     }
 
     private func launchMetric(_ variant: String) {

@@ -46,11 +46,17 @@ class StartupTraceRunnerTest(unittest.TestCase):
                 expected = (f"RefractBenchUITests/RefractBenchUITests/"
                             f"test{variant.capitalize()}StartupTrace")
                 self.assertEqual(traced_test_name(variant, "startup"), expected)
-                self.assertIn(f"func {expected.rsplit('/', 1)[-1]}",
+                self.assertIn(f'try tracedStartupMetric("{variant}")',
                               (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text())
         cold_start = (HERE / "RefractBenchUITests/RefractBenchUITests.swift").read_text()
-        self.assertIn("measure(metrics: [XCTApplicationLaunchMetric()]", cold_start)
+        self.assertEqual(cold_start.count("measure(metrics: [XCTApplicationLaunchMetric()]"), 2)
         self.assertIn("options.iterationCount = 30", cold_start)
+        helper = cold_start[cold_start.index("    private func tracedStartupMetric"):
+                            cold_start.index("    private func launchMetric")]
+        self.assertIn("options.iterationCount = 1", helper)
+        self.assertEqual(helper.count('try runTracedIteration("startup", variant: variant)'), 2)
+        self.assertEqual(helper[helper.index("measure(metrics:"):].count(
+            'try runTracedIteration("startup", variant: variant)'), 1)
 
     def test_first_display_rejects_missing_invalid_or_fabricated_values(self):
         valid = {"clock": "CACurrentMediaTime", "timestamp": "12345.25"}

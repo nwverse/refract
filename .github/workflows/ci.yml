@@ -126,8 +126,10 @@ jobs:
         run: python3 -I scripts/test_example_output_transaction.py --self-test
       - name: Verify committed benchmark ArkTS against actual CLI generation
         run: python3 -I bench/harmony/generate.py --check
-      - name: Exercise the exact startup timestamp through the trace control plane
-        run: python3 -I bench/ios/iteration_startup_trace_test.py -v
+      - name: Exercise native launch-metric export and exact startup handshakes
+        run: |
+          python3 -I bench/ios/launch_metric_test.py -v
+          python3 -I bench/ios/iteration_startup_trace_test.py -v
       - name: Regenerate examples and verify resource catalogs
         run: python3 scripts/check_examples.py
       - name: Check the Harmony text-input host source boundary
@@ -282,6 +284,7 @@ jobs:
         run: |
           python3 -I bench/common/source_contract_test.py
           python3 -I bench/common/report_test.py
+          python3 -I bench/ios/launch_metric_test.py
           python3 -I bench/ios/iteration_trace_runner_test.py
           python3 -I bench/ios/iteration_trace_source_test.py
           python3 -I bench/ios/archive_trace_test.py

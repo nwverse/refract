@@ -119,6 +119,8 @@ time.sleep({completion_delay!r})
 packet["state"] = "complete"
 packet["completion"] = {completion!r}
 packet["finalSamples"] = json.loads({json.dumps(final_samples)!r})
+if {app_scenario!r} == "startup":
+    packet["firstDisplay"] = {{"clock": "CACurrentMediaTime", "timestamp": "12345.25"}}
 begin = dict(packet, state="begin")
 if not {missing_begin!r}:
     publish("begin.json", begin)
@@ -569,6 +571,50 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertTrue(all((self.root / name).is_file() for name in TARGET_PROBE_FILENAMES))
         self.assertEqual(json.loads((self.root / "iteration-trace-config.json").read_text())["iteration"], 2)
         self.assertTrue((self.root / "refract-build-provenance.json").is_file())
+
+    def test_startup_export_follows_a_successful_test_and_never_masks_a_failure(self):
+        (self.root / "target.json").write_text(json.dumps({
+            "target_label": "SIMULATOR", "device_result": False, "udid": "synthetic-target",
+        }))
+        expected_export = {"path": "raw/metrics.json", "sha256": "a" * 64, "duration_ms": 1250.0}
+        cases = (("scroll", "generated", 0, False), ("startup", "generated", 0, True),
+                 ("startup", "reference", 0, True), ("startup", "generated", 65, False))
+        for scenario, variant, test_status, exported in cases:
+            with self.subTest(scenario=scenario, variant=variant, test_status=test_status):
+                run = self.root / f"export-order-{variant}-{scenario}-{test_status}"
+                test_run = run / "iteration.xctestrun"
+                process = mock.Mock(returncode=test_status)
+                process.wait.return_value = test_status
+                process.poll.return_value = test_status
+                receipt = {"status": "complete", "iteration": 30,
+                           "native_first_display": {"clock": "CACurrentMediaTime", "timestamp": "12345.25"}}
+                with mock.patch.object(runner.subprocess, "check_output", side_effect=["a" * 40 + "\n", ""]), \
+                        mock.patch.object(runner.subprocess, "Popen", return_value=process) as popen, \
+                        mock.patch.object(runner, "prepare_test_run", return_value=test_run), \
+                        mock.patch.object(runner, "validate_build_provenance"), \
+                        mock.patch.object(runner, "validate_trace_configuration"), \
+                        mock.patch.object(Session, "capture", return_value=receipt), \
+                        mock.patch.object(runner, "export_launch_metric",
+                                          return_value=expected_export) as export:
+                    stdout = io.StringIO()
+                    with redirect_stdout(stdout):
+                        status = runner.main([
+                            "--run-directory", str(run), "--derived-data", str(self.root.parent / "DerivedData"),
+                            "--target-udid", "synthetic-target", "--target-metadata", str(self.root / "target.json"),
+                            "--variant", variant, "--scenario", scenario, "--iteration", "30",
+                            "--source-revision", "a" * 40, "--completion-timeout", "0.5",
+                        ])
+                self.assertEqual(status, 0 if exported or scenario == "scroll" else 2)
+                if exported:
+                    export.assert_called_once_with(
+                        run, variant=variant, revision="a" * 40, iteration=30,
+                        target_udid="synthetic-target")
+                    result = json.loads(stdout.getvalue())
+                    self.assertEqual(result["native_launch_metric"], expected_export)
+                    self.assertNotIn("duration_ms", result["native_first_display"])
+                else:
+                    export.assert_not_called()
+                self.assertEqual(popen.call_count, 1)
 
     def test_reused_run_directory_or_trace_is_never_replaced(self):
         self.run_success()
