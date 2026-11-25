@@ -56,8 +56,10 @@ at run time, are the complete destination identity. `navigationDestination` appl
 and its `{ route in switch route ... }` closure lists every case exactly once. Each branch is either:
 
 - a same-file generated View with exactly one declared `let model: Protocol` input, passed from the root's model.
-  Destination-owned `@State` is local to that native back-stack entry and needs no call-site argument; any other
-  stored input, including a second model or `@Binding`, is rejected rather than omitted from the generated call; or
+  Destination-owned scalar or form `@State` is local to that native back-stack entry and needs no call-site argument;
+  a destination-owned `[Route]` path is rejected as a nested stack with `RFNAV003`, because its native callback would
+  not be supplied. Use a qualified `NavigationLink` registered with the enclosing graph instead. Any other stored
+  input, including a second model or `@Binding`, is rejected rather than omitted from the generated call; or
 - a zero-argument declared `RefractNativeView`, implemented by the application on each target through the existing
   typed mapping contract.
 
@@ -196,7 +198,7 @@ before production use. An unsupported host integration must remain native rather
 | --- | --- | --- |
 | `RFNAV001` | Malformed stack, link or destination registration | Use the explicit bounded forms above |
 | `RFNAV002` | Invalid path ownership, non-Hashable identity or payload destination | Use an empty `[Route]` @State and no-payload `Hashable` enum; pass data through a model |
-| `RFNAV003` | Unknown, duplicate, missing or untyped destination/view/link; a destination input not supplied by its call | Register every case with a same-file View with one model input plus optional destination-owned state, or a declared native component |
+| `RFNAV003` | Unknown, duplicate, missing or untyped destination/view/link; a destination input or path not supplied by its call | Register every case with a same-file View with one model input plus optional destination-owned scalar/form state, or a declared native component; use qualified links in the enclosing graph instead of a destination-owned path |
 
 The golden corpus includes `navigation-native-destination`, `navigation-host`, `navigation-deep-restoration` and
 `navigation-reject-child-untyped`; focused frontend tests cover dynamic links, payload identity, missing or
