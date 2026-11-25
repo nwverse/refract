@@ -215,7 +215,18 @@ directory calculation. `raw/native-binary.json` then contains exactly the schema
 PID. The full native inventory is retained as `raw/native-resources.json`, and `raw/iteration-trace.json` binds the
 resource export SHA-256 values, definitions, build-manifest SHA-256, source revision and explicit target identity.
 The reporter consumes these ordinary JSON artifacts through its existing `memory` and `binary` roles without changing
-its iteration domain, timing definitions, percentile reductions, regression thresholds or target labels.
+its iteration domain, timing definitions, percentile reductions, regression thresholds or target labels. The complete
+matrix retains both native resources for all 174 runs (two variants, three scenarios and iterations `2...30`). For
+schema 2, the runner additionally publishes byte-identical `raw/exports/resident-memory.json` for each of the 116
+scroll/state-update runs and `raw/exports/installed-binary.json` only for each variant's `startup/2` run. These paths
+are the retained-manifest exporter interface; the other 58 startup memory exports and 172 non-selected binary exports
+remain under `raw/native-memory.json` and `raw/native-binary.json`, never silently discarded or substituted into a
+report pair. `raw/iteration-trace.json` records the selected exporter-facing path and its identical SHA-256.
+
+The separate startup scalar interface remains explicit: the traced-startup producer owns selector-bound
+`raw/metrics.json`; this resource PR does not synthesize that artifact. The retained-manifest exporter must read that
+file rather than the historical raw-array `raw/exports/xctest-metrics.json` before the complete 174-run matrix can be
+exported. Resource aliases do not supply, backfill or claim a launch duration.
 
 The installed-file definition intentionally excludes directory-entry and filesystem-allocation overhead. Simulator
 installation and device installation can differ, and an on-device/thinned App Store product needs a separately named

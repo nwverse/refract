@@ -71,6 +71,14 @@ boundary, and reject non-finite JSON values at the Python boundary. A synthetica
 the validation code, never native memory or installed size. Native API compilation and the exact installed bundle
 still need an authorized target run.
 
+Keep the complete retained native-resource inventory separate from schema-2 selection. All traced runs may retain
+memory and installed-file bytes, but the exporter consumes frame-iteration memory only and one same-build `startup/2`
+binary pair. Write byte-identical, explicitly named aliases for those selected artifacts and retain all unselected raw
+snapshots; do not delete native evidence or relabel another iteration's binary. Exercise the committed runner-to-
+reporter integration test itself with actual retained bytes and independent positive/mutation controls, rather than
+leaving its assertions after an early return. Startup launch duration is another interface: a selector-bound normalized
+`raw/metrics.json` is not the historical raw-array `raw/exports/xctest-metrics.json`.
+
 ## Equal inputs need equal native behavior
 
 Both variants should use the same model, data, lazy-list identity, controls, accessibility and input script, but the

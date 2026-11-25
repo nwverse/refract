@@ -230,6 +230,10 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertLess(forwarded, product)
         self.assertLess(product, export)
         self.assertIn('atomic_json(self.raw / filename, export)', RUNNER)
+        self.assertIn('self.raw / "exports/resident-memory.json"', RUNNER)
+        self.assertIn('self.raw / "exports/installed-binary.json"', RUNNER)
+        self.assertIn('metric == "residentMemoryBytes" and self.scenario != "startup"', RUNNER)
+        self.assertIn('and self.iteration == min(TRACED_ITERATIONS)', RUNNER)
         self.assertIn("checked_installed_files(resource) != expected", RUNNER)
         self.assertIn('"build_provenance_sha256": file_sha256(build_provenance["path"])', RUNNER)
 

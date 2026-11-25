@@ -449,8 +449,21 @@ class Session:
                 if metric == "residentMemoryBytes":
                     export["pid"] = pid
                 atomic_json(self.raw / filename, export)
+                # Retain every native snapshot above, while exposing only the
+                # schema-2 memory pairs and one startup/2 binary pair to the
+                # retained-manifest exporter. These are identity-bound aliases,
+                # not replacement measurements or discarded startup resources.
+                export_path = self.raw / filename
+                if metric == "residentMemoryBytes" and self.scenario != "startup":
+                    export_path = self.raw / "exports/resident-memory.json"
+                elif (metric == "installedBinaryBytes" and self.scenario == "startup"
+                      and self.iteration == min(TRACED_ITERATIONS)):
+                    export_path = self.raw / "exports/installed-binary.json"
+                if export_path != self.raw / filename:
+                    atomic_json(export_path, export)
                 resource_exports[metric] = {
-                    "path": f"raw/{filename}", "sha256": file_sha256(self.raw / filename),
+                    "path": export_path.relative_to(self.run_directory).as_posix(),
+                    "sha256": file_sha256(export_path),
                     "definition": resource["definition"],
                 }
 

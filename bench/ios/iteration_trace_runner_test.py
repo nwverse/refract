@@ -9,6 +9,7 @@ import io
 import json
 import os
 import plistlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -117,7 +118,7 @@ class RecorderFixture:
                 saved_spelling: str = "Output saved", saved_lines: int = 1, missing_begin: bool = False,
                 final_samples: dict | None | str = "default",
                 stale_periodic_plist: bool = False, duplicate_native_completion: bool = False,
-                native_samples: dict | None | str = "default",
+                native_samples: dict | None | str = "default", first_display: dict | None = None,
                 resources: list | str = "default", forwarded_resources: list | str = "default"):
         if resources == "default":
             resources = synthetic_native_resources(self.root, memory_scenario=app_scenario,
@@ -157,6 +158,8 @@ packet["state"] = "complete"
 packet["completion"] = {completion!r}
 packet["finalSamples"] = json.loads({json.dumps(final_samples)!r})
 packet["nativeResources"] = json.loads({json.dumps(forwarded_resources)!r})
+if {first_display!r} is not None:
+    packet["firstDisplay"] = {first_display!r}
 begin = dict(packet, state="begin")
 if not {missing_begin!r}:
     publish("begin.json", begin)
@@ -418,10 +421,108 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     "files": [{"path": "member" + chr(8), "bytes": 1, "sha256": "0" * 64}]}
         with self.assertRaisesRegex(HandshakeError, "file paths"):
             runner.checked_installed_files(resource)
+        # The runner retains every snapshot; only schema-2 frame memory and
+        # startup/2 binary roles are projected into the exporter namespace.
+        self.assertEqual(result["native_resources"]["exports"]["residentMemoryBytes"]["path"],
+                         "raw/exports/resident-memory.json")
+        self.assertEqual(result["native_resources"]["exports"]["installedBinaryBytes"]["path"],
+                         "raw/native-binary.json")
         for metric in ("residentMemoryBytes", "installedBinaryBytes"):
             reference = result["native_resources"]["exports"][metric]
-            self.assertEqual(hashlib.sha256((self.root / reference["path"]).read_bytes()).hexdigest(),
-                             reference["sha256"])
+            with self.subTest(metric=metric):
+                self.assertEqual(hashlib.sha256((self.root / reference["path"]).read_bytes()).hexdigest(),
+                                 reference["sha256"])
+                expected = self.root / ("raw/native-memory.json" if metric == "residentMemoryBytes"
+                                        else "raw/native-binary.json")
+                self.assertEqual((self.root / reference["path"]).read_bytes(), expected.read_bytes())
+
+    def test_retained_resource_exports_feed_schema_two_memory_and_binary_roles(self):
+        # Exercise the actual retained runner bytes, not a resource fixture
+        # recreated independently from PairedReportTest.resource_payload.
+        results = {"residentMemoryBytes": self.run_success()}
+        startup_root = self.root / "startup"
+        recorder = RecorderFixture(startup_root)
+        self.addCleanup(recorder.stop)
+        startup_derived_data, _ = self.write_synthetic_configuration(
+            startup_root, "a" * 40, startup_root / "control", 2)
+        startup_resources = synthetic_native_resources(
+            startup_root, derived_data=startup_derived_data, memory_scenario="startup",
+            binary_scenario="startup")
+        startup_session = self.launch(
+            fixture=recorder,
+            session_kwargs={"scenario": "startup", "run_directory": startup_root,
+                            "xcodebuild_log": recorder.output, "control_directory": startup_root / "control",
+                            "derived_data": startup_derived_data},
+            app_scenario="startup", completion="generated startup complete 1", final_samples=None,
+            native_samples=None, first_display={"clock": "CACurrentMediaTime", "timestamp": "12345.25"},
+            resources=startup_resources)
+        results["installedBinaryBytes"] = self.capture(startup_session, recorder)
+        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        # Use the same synthetic original products as the runner captures; do
+        # not rewrite native resource bytes to fit an unrelated fixture bundle.
+        self.assertEqual(json.loads((self.root / "refract-build-provenance.json").read_text()),
+                         json.loads((startup_root / "refract-build-provenance.json").read_text()))
+        producer = fixture.derived_data
+        shutil.rmtree(producer)
+        producer.parent.mkdir(exist_ok=True)
+        shutil.copytree(startup_derived_data, producer)
+        fixture.manifest["environment"]["build_configuration"].update(
+            target="iphonesimulator", derived_data=producer.relative_to(fixture.root).as_posix())
+        shutil.copyfile(startup_root / "refract-build-provenance.json", fixture.root / fixture.build_path)
+        build_hash = hashlib.sha256((fixture.root / fixture.build_path).read_bytes()).hexdigest()
+        fixture.manifest["environment"]["build_provenance"]["sha256"] = build_hash
+        for entry in fixture.manifest["artifacts"]:
+            entry["build_provenance_sha256"] = build_hash
+        fixture.manifest["artifacts"][0]["bytes"] = (fixture.root / fixture.build_path).stat().st_size
+        fixture.manifest["artifacts"][0]["sha256"] = build_hash
+        fixture.build_hash = build_hash
+        retained = {}
+        for metric, role in (("residentMemoryBytes", "memory"), ("installedBinaryBytes", "binary")):
+            result = results[metric]
+            reference = result["native_resources"]["exports"][metric]
+            relative = next(item["artifacts"][0] for item in fixture.manifest["resources"]
+                            if item["metric"] == metric and item["variant"] == "generated")
+            run_root = self.root if metric == "residentMemoryBytes" else startup_root
+            source = run_root / reference["path"]
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), reference["sha256"])
+            payload = json.loads(source.read_text(encoding="utf-8"))
+            resource = next(item for item in fixture.manifest["resources"]
+                            if item["metric"] == metric and item["variant"] == "generated")
+            self.assertEqual((payload["variant"], payload["scenario"], payload["iteration"]),
+                             (resource["variant"], resource["scenario"], resource["iteration"]))
+            resource["bytes"] = payload["bytes"]
+            resource["native_pid"] = payload["pid"] if role == "memory" else None
+            (fixture.root / relative).write_bytes(source.read_bytes())
+            fixture.replace_bytes(relative, source.read_bytes())
+            retained[metric] = (relative, source.read_bytes())
+        report = make_report(fixture.manifest, fixture.root)
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["artifact_integrity"], "verified")
+        self.assertEqual(len(report["resource_pairs"]), 59)
+
+        # Each mutation is made after a passing integration report. Restore the
+        # exact retained bytes and schema-2 checksum before the next control.
+        for metric, mutation, diagnostic in (
+                ("residentMemoryBytes", lambda payload: payload.pop("pid"), "Native memory export PID"),
+                ("residentMemoryBytes", lambda payload: payload.update(iteration=3), "Native export iteration"),
+                ("residentMemoryBytes", lambda payload: payload.update(bytes=payload["bytes"] + 1),
+                 "Declared resource bytes"),
+                ("installedBinaryBytes", lambda payload: payload.update(variant="reference"),
+                 "Native export variant"),
+                ("installedBinaryBytes", lambda payload: payload.update(pid=4242),
+                 "Native resource export requires one explicit identity"),
+        ):
+            with self.subTest(metric=metric, diagnostic=diagnostic):
+                relative, retained_bytes = retained[metric]
+                payload = json.loads(retained_bytes)
+                mutation(payload)
+                fixture.replace_json(relative, payload)
+                with self.assertRaisesRegex(EvidenceError, diagnostic):
+                    make_report(fixture.manifest, fixture.root)
+                fixture.replace_bytes(relative, retained_bytes)
+        self.assertEqual(make_report(fixture.manifest, fixture.root)["status"], "pass")
 
     def test_missing_stale_invalid_and_forwarded_resource_mismatches_fail_closed(self):
         self.session()
@@ -1785,46 +1886,6 @@ class TraceBuildProvenanceTest(unittest.TestCase):
         destination = fixture.root / "producer" / Path(fixture.build_path).name
         recorded = record_build_provenance(producer_copy, "a" * 40, destination=destination)
         return destination, recorded
-
-    def test_retained_resource_exports_feed_schema_two_memory_and_binary_roles(self):
-        return
-        result = self.run_success()
-        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
-
-        result = self.run_success()
-        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
-        build_hash = result["build_provenance_sha256"]
-        originals = {}
-        for metric, filename, role in (("residentMemoryBytes", "native-memory.json", "memory"),
-                                       ("installedBinaryBytes", "native-binary.json", "binary")):
-            relative = f"raw/generated-scroll-2-{role}.json"
-            payload = json.loads((self.root / "raw" / filename).read_text())
-            originals[role] = copy.deepcopy(payload)
-            (fixture.root / relative).write_bytes((self.root / "raw" / filename).read_bytes())
-            resource = next(item for item in fixture.manifest["resources"]
-                            if item["metric"] == metric and item["variant"] == "generated")
-            old_paths = list(resource["artifacts"])
-            resource["scenario"] = payload["scenario"]
-            resource["iteration"] = payload["iteration"]
-            resource["bytes"] = payload["bytes"]
-            resource["artifacts"] = [relative]
-            fixture.manifest["artifacts"] = [entry for entry in fixture.manifest["artifacts"]
-                                             if entry["path"] not in old_paths]
-            entry = fixture.artifact(relative, "generated", resource["scenario"], resource["iteration"],
-                                     "xcode-metric-json", role)
-            entry["build_provenance_sha256"] = build_hash
-            fixture.manifest["artifacts"].append(entry)
-        self.assertEqual(make_report(fixture.manifest, fixture.root)["status"], "pass")
-        for metric, role in (("residentMemoryBytes", "memory"), ("installedBinaryBytes", "binary")):
-            relative = f"raw/generated-scroll-2-{role}.json"
-            payload = {key: originals[role][key] for key in
-                       ("sourceRevision", "variant", "scenario", "iteration", "metric", "bytes", "unit")}
-            fixture.replace_json(relative, payload)
-            with self.assertRaisesRegex(EvidenceError, "resource export|PID|pid"):
-                make_report(fixture.manifest, fixture.root)
-            fixture.replace_json(relative, originals[role])
 
     def test_existing_recorded_provenance_feeds_the_complete_paired_reporter(self):
         fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")

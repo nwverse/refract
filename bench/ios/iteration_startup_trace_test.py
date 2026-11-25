@@ -422,6 +422,26 @@ class StartupTraceSessionTest(unittest.TestCase):
                          {"clock": "CACurrentMediaTime", "timestamp": "12345.25"})
         receipt = json.loads((capture.run / "raw/iteration-trace.json").read_text())
         self.assertEqual(receipt["native_first_display"], result["native_first_display"])
+        exports = receipt["native_resources"]["exports"]
+        self.assertEqual(exports["installedBinaryBytes"]["path"], "raw/exports/installed-binary.json")
+        self.assertEqual(exports["residentMemoryBytes"]["path"], "raw/native-memory.json")
+        self.assertFalse((capture.run / "raw/exports/resident-memory.json").exists())
+        for metric, filename in (("residentMemoryBytes", "native-memory.json"),
+                                 ("installedBinaryBytes", "native-binary.json")):
+            reference = exports[metric]
+            actual = (capture.run / reference["path"]).read_bytes()
+            canonical = (capture.run / "raw" / filename).read_bytes()
+            self.assertEqual(actual, canonical)
+            self.assertEqual(hashlib.sha256(actual).hexdigest(), reference["sha256"])
+
+    def test_startup_after_iteration_two_retains_binary_without_schema_two_export_alias(self):
+        capture = SyntheticStartupSession(self, self.startup_completion(iteration=3), iteration=3)
+        result = capture.capture()
+        exports = result["native_resources"]["exports"]
+        self.assertEqual(exports["installedBinaryBytes"]["path"], "raw/native-binary.json")
+        self.assertTrue((capture.run / "raw/native-binary.json").is_file())
+        self.assertFalse((capture.run / "raw/exports/installed-binary.json").exists())
+        self.assertFalse((capture.run / "raw/exports/resident-memory.json").exists())
 
     def test_startup_capture_retains_concrete_timestamp_string_through_real_control_plane(self):
         expected = {"clock": "CACurrentMediaTime", "timestamp": "600795.5970010418"}
