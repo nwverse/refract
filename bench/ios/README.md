@@ -192,6 +192,44 @@ snapshot with `completedIterations == 0` neither replaces nor invalidates the va
 to use its exact native first-display packet and the unchanged cold-start launch metric. Complete native sample
 collection, memory/binary pairing and fail-closed report validation remain required.
 
+### Native resource snapshots
+
+Every selected traced iteration carries two additional native measurements in `native-completion.json`, after the
+unchanged input script and timing completion have finished. `BenchmarkDisplayRecorder.nativeResources` calls
+`task_info(mach_task_self_, TASK_VM_INFO, ...)` and accepts only a successful result whose
+`task_vm_info_data_t.resident_size` is a positive byte count representable by Swift `Int`. The Darwin SDK declares
+this field as resident memory in bytes. It is not `virtual_size`, `phys_footprint`, resident peak, a timestamp or a
+shell resource summary. The resulting `raw/native-memory.json` has the schema-2 `memory` role: the exact source,
+variant, scenario, iteration and attached PID, `unit=bytes` and the measured `bytes`. The UI test and Python runner
+both reject a missing snapshot, stale identity/PID, non-integral or non-positive value, and any native-versus-
+forwarded difference. JSON booleans and non-finite values are not integers and cannot satisfy this contract.
+
+For installed app bytes, the app recursively enumerates the actual running `Bundle.main` (`RefractBench.app`). It
+rejects bundle symlinks and special files, reads each ordinary file, and retains its normalized bundle-relative path,
+byte count and SHA-256. `installedBinaryBytes` is the sum of those regular-file sizes, not a DerivedData directory
+size, an executable-only size, an allocated-block count or App Store download size. The UI test verifies the unique
+inventory and exact sum before forwarding it. The runner compares every native file path/byte/SHA-256 entry with the
+already validated original `RefractBench.app` product identity and revalidates that original product after capture;
+a build/install mismatch requires rebuilding and reinstalling rather than replacing the native result with a host
+directory calculation. `raw/native-binary.json` then contains exactly the schema-2 `binary` payload, with no process
+PID. The full native inventory is retained as `raw/native-resources.json`, and `raw/iteration-trace.json` binds the
+resource export SHA-256 values, definitions, build-manifest SHA-256, source revision and explicit target identity.
+The reporter consumes these ordinary JSON artifacts through its existing `memory` and `binary` roles without changing
+its iteration domain, timing definitions, percentile reductions, regression thresholds or target labels.
+
+The installed-file definition intentionally excludes directory-entry and filesystem-allocation overhead. Simulator
+installation and device installation can differ, and an on-device/thinned App Store product needs a separately named
+measurement contract rather than relabelling this one. The current benchmark app contains both variants. Therefore
+its generated/reference installed-app pair describes the same shared installed bundle, not two independently linked
+apps; equal bytes alone do not prove isolated per-variant code-size equivalence.
+
+The collector is benchmark-only instrumentation, not a Refract runtime. Reading resources after completion does not
+supply or modify any launch/display timing scalar. Focused Linux Swift tests compile and execute the extracted UI-test
+resource validator, including boolean/floating-point/overflow/path/identity controls, but do not compile the Darwin
+app sampler or execute it on iOS. An authorized native run must still prove Xcode compilation, successful `task_info`
+execution and exact installed-versus-original bundle identity on the selected target. No resource value is native
+proof merely because a synthetic test supplied it.
+
 ## Regression and evidence policy
 
 Use `bench/common/report.py` schema 2. It requires the exact iteration identities 2...30, one native profiler trace per
