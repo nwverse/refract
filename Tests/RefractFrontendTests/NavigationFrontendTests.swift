@@ -89,6 +89,69 @@ func navigationRejectsUntypedDestinationValues(_ declaration: String, _ code: St
     #expect(unit.module.screens.isEmpty)
 }
 
+@Test(arguments: [
+    "let count: Int",
+    "let other: DetailModel",
+    "@Binding var count: Int",
+])
+func navigationRejectsUnforwardedDestinationInputs(_ input: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum Route: Hashable { case detail }
+    protocol DetailModel: RefractModel { var title: String { get } }
+    struct DetailScreen: View {
+        let model: DetailModel
+        \(input)
+        var body: some View { Text(model.title) }
+    }
+    struct NavigationScreen: View {
+        let model: DetailModel
+        @State private var path: [Route] = []
+        var body: some View {
+            NavigationStack(path: $path) {
+                VStack { NavigationLink("navigation.open", value: .detail) }
+                    .navigationDestination(for: Route.self) { route in
+                        switch route { case .detail: DetailScreen(model: model) }
+                    }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.contains {
+        $0.code == "RFNAV003" && $0.message.contains("one declared model input")
+    })
+    #expect(unit.module.screens.contains { $0.name == "NavigationScreen" } == false)
+}
+
+@Test func navigationAllowsDestinationOwnedLocalState() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum Route: Hashable { case detail }
+    protocol DetailModel: RefractModel { var title: String { get } }
+    struct DetailScreen: View {
+        let model: DetailModel
+        @State private var count: Int = 0
+        var body: some View { Text(model.title) }
+    }
+    struct NavigationScreen: View {
+        let model: DetailModel
+        @State private var path: [Route] = []
+        var body: some View {
+            NavigationStack(path: $path) {
+                VStack { NavigationLink("navigation.open", value: .detail) }
+                    .navigationDestination(for: Route.self) { route in
+                        switch route { case .detail: DetailScreen(model: model) }
+                    }
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .navigationStack(stack, _)? = unit.module.screens.last?.body else {
+        Issue.record("Expected a navigation stack with a stateful destination")
+        return
+    }
+    #expect(stack.destinations.map(\.caseName) == ["detail"])
+}
+
 @Test func manuallyConstructedNavigationCannotEmitAnInvalidDestinationModel() {
     let model = ModelReference(propertyName: "model", protocolName: "DetailModel")
     let destination = NavigationDestination(caseName: "detail", viewName: "MissingScreen",

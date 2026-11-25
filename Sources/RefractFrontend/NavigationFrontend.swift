@@ -311,6 +311,21 @@ extension Builder {
               let label = argument.label?.text,
               let reference = argument.expression.as(DeclReferenceExprSyntax.self),
               let model = currentModels.first(where: { $0.propertyName == reference.baseName.text }),
+              declaration.memberBlock.members.allSatisfy({ member in
+                  guard let variable = member.decl.as(VariableDeclSyntax.self),
+                        variable.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body" else {
+                      return true
+                  }
+                  guard variable.attributes.isEmpty else {
+                      return variable.attributes.count == 1 &&
+                          variable.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State"
+                  }
+                  guard variable.bindingSpecifier.tokenKind == .keyword(.let),
+                        let binding = variable.bindings.first,
+                        binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == label,
+                        binding.typeAnnotation?.type.trimmedDescription == model.protocolName else { return false }
+                  return true
+              }),
               declaration.memberBlock.members.contains(where: { member in
                 guard let variable = member.decl.as(VariableDeclSyntax.self),
                       variable.bindingSpecifier.tokenKind == .keyword(.let), variable.attributes.isEmpty,
