@@ -136,6 +136,67 @@ func messageProjectionRejectsInvalidSource(replacement: String, with new: String
     #expect(kotlin.contains("MessageRow(message = message)"))
 }
 
+private func splitProjectionConversationWithSiblings() throws -> [SourceFile] {
+    let input = try String(contentsOf: projectionFixtureURL.appendingPathComponent("Input.swift"), encoding: .utf8)
+    let marker = "protocol ConversationModel: RefractModel {"
+    let parts = input.components(separatedBy: marker)
+    #expect(parts.count == 2)
+    let declarations = parts[0]
+    let rest = marker + parts[1]
+    let screens = rest.components(separatedBy: "struct ConversationScreen: View {")
+    #expect(screens.count == 2)
+    let conversation = screens[1]
+        .replacingOccurrences(of: "List(model.messages) { message in", with: """
+        VStack {
+                    Text(verbatim: "Conversation header")
+                    HStack {
+                        List(model.messages) { message in
+        """)
+        .replacingOccurrences(of: "MessageRow(message: message)\n        }\n    }\n", with: """
+                            MessageRow(message: message)
+                        }
+                    }
+                    Text(verbatim: "Conversation footer")
+                }
+            }
+""")
+    return [
+        SourceFile(path: "ChatMessage.swift", contents: "import SwiftUI\n" + declarations),
+        SourceFile(path: "MessageRow.swift", contents: "import SwiftUI\n" + screens[0]),
+        SourceFile(path: "ConversationScreen.swift", contents: "import SwiftUI\nstruct ConversationScreen: View {" + conversation),
+    ]
+}
+
+@Test func messageProjectionPreservesSiblingsAroundDeferredMessageLists() throws {
+    let units = Frontend.parse(sources: try splitProjectionConversationWithSiblings())
+    for unit in units {
+        #expect(unit.diagnostics.isEmpty, Comment(rawValue: unit.diagnostics.map(\.rendered).joined(separator: "\n")))
+    }
+    let conversation = try #require(units.last)
+    let screen = try #require(conversation.module.screens.first { $0.name == "ConversationScreen" })
+    guard case let .stack(_, children, _, _) = screen.body, children.count == 3,
+          case let .text(header, _, _) = children[0], header.value == .verbatimText("Conversation header"),
+          case let .stack(_, listContainer, _, _) = children[1], listContainer.count == 1,
+          case let .list(listChildren, _, _) = listContainer[0], listChildren.count == 1,
+          case let .forEach(items, _) = listChildren[0],
+          items.messageBlocks?.parent == "message",
+          items.messageBlocks?.blockArgument.expression == "block",
+          case let .text(footer, _, _) = children[2], footer.value == .verbatimText("Conversation footer") else {
+        Issue.record("Expected the deferred message list and both source siblings in their original order")
+        return
+    }
+}
+
+@Test func messageProjectionRejectsUnresolvedDeferredMessageListsWithoutDroppingSiblings() throws {
+    var sources = try splitProjectionConversationWithSiblings()
+    sources[1] = SourceFile(path: sources[1].path, contents: sources[1].contents.replacingOccurrences(
+        of: "ForEach(message.blocks) { block in\n                MessageBlock(message: message, block: block)\n            }",
+        with: "Text(message.id)"))
+    let conversation = try #require(Frontend.parse(sources: sources).last)
+    #expect(conversation.diagnostics.contains { $0.code == "RFMSG001" },
+            Comment(rawValue: conversation.diagnostics.map(\.rendered).joined(separator: "\n")))
+}
+
 @Test func doubleActionsStillAcceptIntegerLiterals() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol Model: RefractModel { func setZoom(_ value: Double) }

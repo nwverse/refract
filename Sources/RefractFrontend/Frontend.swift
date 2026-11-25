@@ -64,12 +64,12 @@ public struct Frontend {
         for builder in pendingMessageBuilders { builder.linkMessageProjection(siblingScreens: allScreens) }
         units = units.map { unit in
             guard let builder = pendingMessageBuilders.first(where: { $0.file == unit.module.sourceFile }),
-                  !builder.pendingMessageBodies.isEmpty else { return unit }
+                  !builder.pendingMessageBodies.isEmpty || !builder.messageLinkDiagnostics.isEmpty else { return unit }
             let module = Module(sourceFile: builder.file, screens: builder.screens,
                                 nativeDeclarations: unit.module.nativeDeclarations,
                                 models: unit.module.models, itemTypes: unit.module.itemTypes,
                                 enums: unit.module.enums, nativeHosts: unit.module.nativeHosts)
-            return TranslationUnit(module: module, diagnostics: unit.diagnostics,
+            return TranslationUnit(module: module, diagnostics: unit.diagnostics + builder.messageLinkDiagnostics,
                                    resolvedModels: unit.resolvedModels, resolvedItemTypes: unit.resolvedItemTypes)
         }
         if sources.count > 1, let cycle = CompilationInputResolver.declarationCycleDiagnostic(units: units) {
@@ -108,7 +108,7 @@ final class Builder: SyntaxVisitor {
     var currentMessageBlockNames: (parent: String, block: String)?
     var pendingMessageSources: [(outer: Expression, content: ViewNode, screen: String, modelType: String)] = []
     var pendingMessageBodies: [(screen: String, body: ViewNode)] = []
-    var pendingMessageOwners: [String: Screen] = [:]
+    var messageLinkDiagnostics: [Diagnostic] = []
     var currentBindings: [String: ValueType] = [:]
     var currentModals: [ModalPresentation] = []
     var viewDeclarations: [String: StructDeclSyntax] = [:]
