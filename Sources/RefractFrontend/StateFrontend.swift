@@ -31,8 +31,19 @@ extension Builder {
         return states
     }
 
-    func localStateDeclarations(_ node: StructDeclSyntax) -> [StateDeclaration]? {
-        var states: [StateDeclaration] = []
+    /// Validates stored view members. When `continueOnError` is true (used to collect
+    /// independent sibling diagnostics beside an already-rejected reserved input), every
+    /// invalid member still records its diagnostic but the loop keeps visiting the rest,
+    /// and the function returns nil at the end if anything failed.
+    func localStateDeclarations(_ node: StructDeclSyntax, continueOnError: Bool = false) -> [StateDeclaration]? {
+        var states: [StateDeclaration]? = []
+        func fail() -> [StateDeclaration]? {
+            if continueOnError {
+                states = nil
+                return nil
+            }
+            return nil
+        }
         for member in node.memberBlock.members {
             guard let declaration = member.decl.as(VariableDeclSyntax.self),
                   declaration.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body"
@@ -45,9 +56,10 @@ extension Builder {
                       let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text else {
                     error("RFHOST001", "A native host input must be an immutable let with its exact typed role protocol.",
                           "Use `let host: YourNotificationHost`; the app supplies the implementation", at: member)
-                    return nil
+                    _ = fail()
+                    if continueOnError { continue } else { return nil }
                 }
-                states.append(.nativeHost(NativeHostReference(propertyName: name, protocolName: typeName,
+                states?.append(.nativeHost(NativeHostReference(propertyName: name, protocolName: typeName,
                                                                capability: host.capability), location: location(of: declaration)))
                 continue
             }
@@ -56,11 +68,15 @@ extension Builder {
             }) {
                 continue
             }
+            let diagnosticCount = diagnostics.count
             if let form = formState(declaration) {
-                states.append(form)
+                states?.append(form)
                 continue
             }
-            if diagnostics.contains(where: { $0.code.hasPrefix("RFFORM") }) { return nil }
+            if diagnostics.dropFirst(diagnosticCount).contains(where: { $0.code.hasPrefix("RFFORM") }) {
+                _ = fail()
+                if continueOnError { continue } else { return nil }
+            }
             if let annotation = declaration.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self) {
                 guard declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.attributes.count == 1,
                       declaration.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State",
@@ -71,9 +87,10 @@ extension Builder {
                       binding.initializer?.value.as(ArrayExprSyntax.self)?.elements.isEmpty == true else {
                     error("RFNAV002", "A navigation path must be `@State private var path: [Route] = []`.",
                           "Use a local no-payload Hashable destination enum and an empty path owned by the native host", at: member)
-                    return nil
+                    _ = fail()
+                    if continueOnError { continue } else { return nil }
                 }
-                states.append(.navigationPath(name: name, enumName: enumName, location: location(of: declaration)))
+                states?.append(.navigationPath(name: name, enumName: enumName, location: location(of: declaration)))
                 continue
             }
             if declaration.bindingSpecifier.tokenKind == .keyword(.let) {
@@ -93,9 +110,10 @@ extension Builder {
                       binding.initializer == nil, binding.accessorBlock == nil else {
                     error("state.invalid_declaration", "A model input must be a let property of a declared RefractModel protocol.",
                           "Use `let model: YourModel` with `protocol YourModel: RefractModel`", at: member)
-                    return nil
+                    _ = fail()
+                    if continueOnError { continue } else { return nil }
                 }
-                states.append(.model(ModelReference(propertyName: name, protocolName: contract.name),
+                states?.append(.model(ModelReference(propertyName: name, protocolName: contract.name),
                                      location: location(of: declaration)))
                 continue
             }
@@ -109,7 +127,8 @@ extension Builder {
                   let typeName = binding.typeAnnotation?.type.trimmedDescription else {
                 error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
                       "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
-                return nil
+                _ = fail()
+                if continueOnError { continue } else { return nil }
             }
             let ownership = attribute.attributeName.trimmedDescription
             if let tabEnum = enums.first(where: { $0.name == typeName }), scalarType(typeName) == nil {
@@ -120,23 +139,26 @@ extension Builder {
                       member.base == nil, tabEnum.cases.contains(member.declName.baseName.text) else {
                     error("RFNAV402", "A tab selection must be `@State private var tab: Tab = .home` over a no-payload Hashable enum.",
                           "Use one static enum case as the initial selection; the native host owns the selected tab", at: member)
-                    return nil
+                    _ = fail()
+                    if continueOnError { continue } else { return nil }
                 }
-                states.append(.tabSelection(name: name, enumName: tabEnum.name, location: location(of: declaration)))
+                states?.append(.tabSelection(name: name, enumName: tabEnum.name, location: location(of: declaration)))
                 continue
             }
             guard let type = scalarType(typeName) else {
                 error("state.invalid_declaration", "Stored View properties require a supported scalar @State or @Binding declaration.",
                       "Use `@State private var count: Int = 0` or `@Binding var isEnabled: Bool`", at: member)
-                return nil
+                _ = fail()
+                if continueOnError { continue } else { return nil }
             }
             if ownership == "Binding" {
                 guard binding.initializer == nil else {
                     error("state.binding_initializer", "@Binding property `\(name)` cannot have an independent initializer.",
                           "Pass the parent value and change callback instead", at: declaration)
-                    return nil
+                    _ = fail()
+                    if continueOnError { continue } else { return nil }
                 }
-                states.append(.binding(name: name, type: type, location: location(of: declaration)))
+                states?.append(.binding(name: name, type: type, location: location(of: declaration)))
                 continue
             }
             guard ownership == "State",
@@ -145,9 +167,10 @@ extension Builder {
                   let value = literal(initial.value, expected: type) else {
                 error("state.invalid_declaration", "Stored View properties require one private @State scalar with a literal initializer.",
                       "Use `@State private var count: Int = 0`; bindings and models are implemented separately", at: member)
-                return nil
+                _ = fail()
+                if continueOnError { continue } else { return nil }
             }
-            states.append(.state(name: name, type: type, initialValue: value, location: location(of: declaration)))
+            states?.append(.state(name: name, type: type, initialValue: value, location: location(of: declaration)))
         }
         return states
     }
