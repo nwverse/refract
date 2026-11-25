@@ -197,6 +197,114 @@ private func splitProjectionConversationWithSiblings() throws -> [SourceFile] {
             Comment(rawValue: conversation.diagnostics.map(\.rendered).joined(separator: "\n")))
 }
 
+@Test func messageProjectionPreservesDeferredListModifiersAndSourceLocation() throws {
+    var sources = try splitProjectionConversationWithSiblings()
+    sources[2] = SourceFile(path: sources[2].path, contents: sources[2].contents.replacingOccurrences(
+        of: "MessageRow(message: message)\n                        }",
+        with: "MessageRow(message: message)\n                        }.padding(8)"))
+    let units = Frontend.parse(sources: sources)
+    #expect(units.allSatisfy { !$0.hasErrors },
+            Comment(rawValue: units.flatMap(\.diagnostics).map(\.rendered).joined(separator: "\n")))
+    let screen = try #require(units.last?.module.screens.first { $0.name == "ConversationScreen" })
+    guard case let .stack(_, children, _, _) = screen.body,
+          case let .stack(_, container, _, _) = children[1],
+          case let .list(listChildren, modifiers, listLocation) = container[0],
+          case let .forEach(items, _) = listChildren[0] else {
+        Issue.record("Expected the original modified message List")
+        return
+    }
+    #expect(modifiers.map(\.name) == ["padding"])
+    #expect(modifiers.first?.arguments.map(\.value) == [.numberLiteral("8")])
+    #expect(listLocation == items.location)
+    #expect(modifiers.first?.location?.file == "ConversationScreen.swift")
+    #expect(modifiers.first?.location?.line == 9)
+
+    let nativeSources = NativeSourceSet(modules: units.map(\.module))
+    let kotlin = try ComposeBackend().generate(module: units.last!.module, sources: nativeSources)
+    #expect(kotlin.contains("LazyColumn(modifier = Modifier.padding(all = 8.dp))"))
+    let ark = try ArkUIBackend().generate(module: units.last!.module, sources: nativeSources)
+    #expect(ark.contains("List() {"))
+    #expect(ark.contains(".padding(8)"))
+    let row = try #require(units.first { $0.module.screens.contains { $0.name == "MessageRow" } })
+    let rowArk = try ArkUIBackend().generate(module: row.module, sources: nativeSources)
+    #expect(rowArk.contains("ForEach(this.message.blocks"))
+    #expect(rowArk.contains("MessageBlock({ message: this.message, block: block })"))
+}
+
+@Test func messageProjectionDoesNotReconstructDuplicateRejectedUnits() throws {
+    var sources = try splitProjectionConversationWithSiblings()
+    let duplicateConversation = sources[2].contents + """
+
+    protocol ConversationModel: RefractModel {
+        var messages: [ChatMessage] { get }
+    }
+    """ + """
+
+    struct ConversationScreen: View {
+        let model: ConversationModel
+        var body: some View { Text(verbatim: "Ambiguous duplicate") }
+    }
+    """
+    sources[2] = SourceFile(path: sources[2].path, contents: duplicateConversation)
+    let units = Frontend.parse(sources: sources)
+    let rejected = try #require(units.last)
+    #expect(rejected.module == Module(sourceFile: "ConversationScreen.swift", screens: []))
+    #expect(rejected.diagnostics.contains { $0.code == "RFVIEW007" })
+    #expect(rejected.diagnostics.filter { $0.code == "RFMSG001" }.isEmpty)
+    #expect(units[1].diagnostics.contains { $0.code == "RFVIEW007" })
+    #expect(!units[1].diagnostics.contains { $0.code == "RFMSG001" })
+    #expect(units[1].module.screens.isEmpty)
+}
+
+@Test func messageProjectionRejectsNestedBlocksInAnUnreferencedMessageRow() throws {
+    let unit = try projectionUnit(replacing: "ForEach(message.blocks) { block in\n                MessageBlock(message: message, block: block)\n            }",
+                                  with: "VStack {\n                ForEach(message.blocks) { block in\n                    MessageBlock(message: message, block: block)\n                }\n            }")
+    #expect(unit.diagnostics.contains { $0.code == "RFMSG001" })
+    #expect(!unit.module.screens.contains { $0.name == "MessageRow" })
+}
+
+@Test func messageProjectionRejectsBlocksNestedBelowTheRowsDirectVStack() throws {
+    var sources = try splitProjectionConversationWithSiblings()
+    sources[1] = SourceFile(path: sources[1].path, contents: sources[1].contents.replacingOccurrences(
+        of: "ForEach(message.blocks) { block in\n                MessageBlock(message: message, block: block)\n            }",
+        with: "VStack {\n                ForEach(message.blocks) { block in\n                    MessageBlock(message: message, block: block)\n                }\n            }"))
+    let units = Frontend.parse(sources: sources)
+    let row = try #require(units.first { $0.module.sourceFile == "MessageRow.swift" })
+    #expect(row.diagnostics.contains { $0.code == "RFMSG001" })
+    #expect(!row.module.screens.contains { $0.name == "MessageRow" })
+    #expect(units.allSatisfy { $0.diagnostics.contains { $0.code == "RFMSG001" } || $0.module.sourceFile == "ChatMessage.swift" },
+            Comment(rawValue: units.flatMap(\.diagnostics).map(\.rendered).joined(separator: "\n")))
+    let conversation = try #require(units.last)
+    #expect(conversation.diagnostics.contains { $0.code == "RFMSG001" })
+}
+
+@Test func messageProjectionPreservesMultipleModifiedListsAndSiblingOrder() throws {
+    var sources = try splitProjectionConversationWithSiblings()
+    sources[2] = SourceFile(path: sources[2].path, contents: sources[2].contents.replacingOccurrences(
+        of: "Text(verbatim: \"Conversation footer\")", with: """
+        List(model.messages) { message in
+                        MessageRow(message: message)
+                    }.padding(4)
+                    Text(verbatim: "Conversation footer")
+        """))
+    let units = Frontend.parse(sources: sources)
+    #expect(units.allSatisfy { !$0.hasErrors },
+            Comment(rawValue: units.flatMap(\.diagnostics).map(\.rendered).joined(separator: "\n")))
+    let screen = try #require(units.last?.module.screens.first { $0.name == "ConversationScreen" })
+    guard case let .stack(_, children, _, _) = screen.body, children.count == 4,
+          case let .text(header, _, _) = children[0], header.value == .verbatimText("Conversation header"),
+          case let .stack(_, firstContainer, _, _) = children[1],
+          case let .list(_, firstModifiers, _) = firstContainer[0],
+          case let .list(_, secondModifiers, _) = children[2],
+          case let .text(footer, _, _) = children[3], footer.value == .verbatimText("Conversation footer") else {
+        Issue.record("Expected both message lists and all source siblings in order")
+        return
+    }
+    #expect(firstModifiers.isEmpty)
+    #expect(secondModifiers.map(\.name) == ["padding"])
+    #expect(secondModifiers.first?.arguments.map(\.value) == [.numberLiteral("4")])
+}
+
 @Test func doubleActionsStillAcceptIntegerLiterals() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol Model: RefractModel { func setZoom(_ value: Double) }

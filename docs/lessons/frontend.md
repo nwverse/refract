@@ -69,7 +69,12 @@
   call twice in different scopes produces misleading duplicate diagnostics. Do not pass arbitrary sibling item values
   through the general single-item `ChildView` path.
 - A deferred frontend link must retain the parsed source tree rather than replacing its owner with the newly resolved
-  subtree. Keep a source-located marker inside the message `List`, replace only that exact marker after the sibling
-  row's identity is checked, and preserve every container and sibling in source order. Diagnostics produced after the
-  initial per-file `TranslationUnit` is constructed must be merged back into that unit; builder-only diagnostics do
-  not reach the caller. Test both a nested positive case and an unresolved-row negative case through `Frontend.parse`.
+  subtree. Keep a source-located marker inside the message `List`, replace only that exact marker's deferred child
+  after the sibling row's identity is checked, and preserve the original List wrapper, modifiers, source location,
+  containers and siblings in source order. Diagnostics produced after the initial per-file `TranslationUnit` is
+  constructed must be merged back into that unit; builder-only diagnostics do not reach the caller. Never run late
+  linking or merge its diagnostics into a unit discarded for duplicate declarations: its rejected module and ordinary
+  diagnostics must remain exactly as constructed. A message row's bounded `ForEach(message.blocks)` must be a direct
+  child of its root VStack, not a recursive descendant; validate that row at parse time as well as during linking.
+  Test nested positives, modified/multiple Lists, duplicate rejection and an unresolved or nested row through
+  `Frontend.parse`.

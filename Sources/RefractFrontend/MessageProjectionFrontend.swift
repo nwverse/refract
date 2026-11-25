@@ -223,34 +223,42 @@ extension Builder {
         messageLinkDiagnostics.append(diagnostic)
     }
 
-    private func resolvedMessageList(outer: Expression, content: ChildView, modelType: String,
-                                     row: Screen, location: RefractIR.SourceLocation?) -> ViewNode? {
+    private func resolvedMessageItems(outer: Expression, content: ChildView, modelType: String,
+                                      row: Screen, location: RefractIR.SourceLocation?) -> ListItems? {
         guard let nested = messageBlocks(in: row.body), let parent = nested.parent, let block = nested.block else {
             return nil
         }
-        let items = ListItems(collection: outer, itemName: content.item?.expression ?? "message", itemType: "ChatMessage",
-                              keyType: .string, content: .child(content, location: location), modelType: modelType,
-                              messageBlocks: MessageBlockIdentity(content: nested.items.content, parent: parent,
-                                                                  blockName: nested.items.itemName,
-                                                                  blockArgument: block),
-                              location: location)
+        return ListItems(collection: outer, itemName: content.item?.expression ?? "message", itemType: "ChatMessage",
+                         keyType: .string, content: .child(content, location: location), modelType: modelType,
+                         messageBlocks: MessageBlockIdentity(content: nested.items.content, parent: parent,
+                                                             blockName: nested.items.itemName,
+                                                             blockArgument: block),
+                         location: location)
+    }
+
+    private func resolvedMessageList(outer: Expression, content: ChildView, modelType: String,
+                                     row: Screen, location: RefractIR.SourceLocation?) -> ViewNode? {
+        guard let items = resolvedMessageItems(outer: outer, content: content, modelType: modelType,
+                                               row: row, location: location) else { return nil }
         return .list(children: [.forEach(items, location: location)], modifiers: [], location: location)
     }
 
     private func replacingDeferredMessageList(in root: ViewNode, outer: Expression, content: ChildView,
                                               modelType: String, row: Screen,
                                               location: RefractIR.SourceLocation?) -> ViewNode? {
-        guard let resolved = resolvedMessageList(outer: outer, content: content, modelType: modelType,
-                                                row: row, location: location) else { return nil }
+        guard let resolved = resolvedMessageItems(outer: outer, content: content, modelType: modelType,
+                                                  row: row, location: location) else { return nil }
         var replaced = false
         func replace(_ node: ViewNode) -> ViewNode {
             if replaced { return node }
-            if case let .list(children, _, _) = node, children.count == 1,
+            if case let .list(children, modifiers, listLocation) = node, children.count == 1,
                case let .forEach(items, _) = children[0], items.itemType == "ChatMessage",
                items.collection == outer, items.messageBlocks == nil, items.location == location,
                case let .child(candidate, _) = items.content, candidate == content {
                 replaced = true
-                return resolved
+                // Replace only the deferred child; the original wrapper owns its modifiers and source location.
+                return .list(children: [.forEach(resolved, location: location)], modifiers: modifiers,
+                             location: listLocation)
             }
             switch node {
             case let .stack(axis, children, modifiers, location):
@@ -324,12 +332,26 @@ extension Builder {
         return replaced ? body : nil
     }
 
+    func validateMessageRowShape(_ root: ViewNode) -> Bool {
+        guard containsMessageBlocks(root), messageBlocks(in: root) == nil else { return true }
+        diagnostics.append(Diagnostic(code: "RFMSG001",
+            message: "ForEach(message.blocks) must be a direct child of the message row's VStack.",
+            suggestion: "Keep the bounded ForEach directly inside the row's non-scrolling VStack",
+            location: root.sourceLocation))
+        return false
+    }
+
+    private func containsMessageBlocks(_ node: ViewNode) -> Bool {
+        if case .messageBlocks = node { return true }
+        return node.children.contains(where: containsMessageBlocks)
+    }
+
     private func messageBlocks(in node: ViewNode) -> NestedListItems? {
-        if case let .messageBlocks(nested, _) = node { return nested }
-        for child in node.children {
-            if let found = messageBlocks(in: child) { return found }
-        }
-        return nil
+        guard case let .stack(axis, children, _, _) = node, axis == .vertical else { return nil }
+        return children.compactMap { child -> NestedListItems? in
+            guard case let .messageBlocks(nested, _) = child else { return nil }
+            return nested
+        }.first
     }
 
     func validateMessageProjection(_ module: Module) {
