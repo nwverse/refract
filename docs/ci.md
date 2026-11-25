@@ -132,6 +132,23 @@ private mirrors, checked-in binaries or test skips without a reproducible reposi
 outside repository configuration, keep the failed check visible and report it rather than changing an unrelated UI
 or claiming that local success proves CI passed.
 
+TestKit uses a separate writable Gradle user home, not the outer build's home restored by `actions/cache`. The test
+task therefore passes the outer `gradle.gradleUserHomeDir/caches` to the TestKit process as `GRADLE_RO_DEP_CACHE`.
+This preserves the public repository declarations and lets the isolated consumer read dependency metadata and
+artifacts already resolved by the outer example and plugin builds. The writable home defaults to
+`tools/gradle/build/test-kit/`; `REFRACT_TESTKIT_DIR` can select a different empty directory for a cache-boundary
+check. Do not make this a shared writable home, copy artifacts into it, or add a second repository.
+
+The original workflow allows normal Gradle dependency resolution; the TestKit consumer is not forced offline. The
+restored cache remains an optimization, and the existing outer example build supplies no guarantee that it contains
+every transitive version selected by the smaller TestKit consumer. An empty cache must retain the same fail-closed
+resolution behavior rather than receiving a test-specific download bypass. In particular, a local fully offline
+experiment reached five passing tests but could not resolve the consumer's selected `androidx.activity` versions for
+the other two; that experiment is a boundary check, not a production failure or a reason to add another prefetch
+task. A normal-resolution run with a fresh TestKit home and the outer cache passed all seven actual tests, including
+CLI generation and Kotlin compilation. This is local TestKit evidence only, not a hosted retry, cold-cache proof or
+device result.
+
 5. Restore `~/.gradle/caches` and `~/.gradle/wrapper` via `actions/cache` keyed by the wrapper and Gradle build
    scripts. The cache is read-only on pull requests from forks. The job never runs `gradlew --write-locks` or
    accepts an untrusted lockfile change as part of the gate.
