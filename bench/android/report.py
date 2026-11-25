@@ -12,7 +12,7 @@ import json
 import math
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -59,6 +59,7 @@ class Measurement:
     repeat_iterations: int
     context: dict[str, Any]
     profiler_outputs: Any
+    retained_json: str | None = None
 
 
 def canonical(value: Any) -> str:
@@ -293,48 +294,81 @@ def validate_macro(measurements: list[Measurement], rows: list[dict[str, Any]],
     """Reject partial macro evidence instead of passing whichever tests survived."""
     if traces is None:
         raise ReportError("Complete macro evidence requires a verified Perfetto trace manifest")
+    retained_json = {entry.get("path") for entry in benchmark_json}
     expected_iterations = {}
     benchmark_identities = {}
+    expected_traces = {}
     for measurement in measurements:
         if measurement.key[0] != "Macro":
             continue
         name = measurement.key[3]
+        source_json = measurement.retained_json
+        if source_json is None and len(retained_json) == 1:
+            # The internal one-file helper has no retained path; the CLI always
+            # binds each measurement through retained_json before this check.
+            source_json = next(iter(retained_json))
+        if source_json is None:
+            raise ReportError("AndroidX benchmark is not bound to its retained source JSON")
+        binding = (name, source_json)
         if not name.startswith("EMULATOR_"):
             raise ReportError(f"Complete macro evidence is missing AndroidX EMULATOR_ prefix: {name}")
-        benchmark_identities[name] = (measurement.key[1], measurement.key[2])
-        expected_iterations[name] = measurement.repeat_iterations
-    for measurement in measurements:
-        if measurement.key[0] != "Macro":
-            continue
+        if binding in expected_iterations and expected_iterations[binding] != measurement.repeat_iterations:
+            raise ReportError("AndroidX benchmark metrics have inconsistent iteration counts")
+        expected_iterations[binding] = measurement.repeat_iterations
+        if binding in benchmark_identities and \
+                benchmark_identities[binding] != (measurement.key[1], measurement.key[2]):
+            raise ReportError("Duplicate AndroidX macro benchmark identity")
+        benchmark_identities[binding] = (measurement.key[1], measurement.key[2])
         outputs = measurement.profiler_outputs
-        # Bind AndroidX's own profiler metadata to the retained trace, rather
-        # than inferring evidence ownership from a filename alone.
+        # Bind the exact AndroidX profiler filename and iteration to this input
+        # JSON, not merely to any retained JSON containing the benchmark name.
         if not isinstance(outputs, list) or not any(
             isinstance(output, dict) and output.get("type") == "PerfettoTrace" and
             isinstance(output.get("filename"), str)
             for output in outputs
         ):
-            raise ReportError(f"AndroidX JSON has no Perfetto filename for {measurement.key[3]}.{measurement.key[2]}")
-    retained_json = {entry.get("path") for entry in benchmark_json}
+            raise ReportError(f"AndroidX JSON has no Perfetto filename for {name}.{measurement.key[2]}")
+        for output in outputs:
+            if not isinstance(output, dict) or output.get("type") != "PerfettoTrace":
+                continue
+            label = output.get("label")
+            filename = output.get("filename")
+            if not isinstance(label, str) or not label.startswith("Trace Iteration ") \
+                    or not isinstance(filename, str) or not filename:
+                raise ReportError("AndroidX Perfetto evidence has an invalid iteration or filename")
+            try:
+                iteration = int(label.removeprefix("Trace Iteration "))
+            except ValueError as error:
+                raise ReportError("AndroidX Perfetto evidence has an invalid iteration label") from error
+            key = (*binding, iteration)
+            if not 0 <= iteration < measurement.repeat_iterations or \
+                    expected_traces.setdefault(key, filename) != filename:
+                raise ReportError("AndroidX Perfetto evidence has a duplicate or invalid iteration")
     bound_iterations = set()
     for trace in traces:
         if not isinstance(trace, dict):
             raise ReportError("Perfetto evidence has an invalid manifest record")
         name = trace.get("androidx_benchmark")
-        if name not in benchmark_identities or trace.get("androidx_json") not in retained_json:
+        source_json = trace.get("androidx_json")
+        if name not in {binding[0] for binding in benchmark_identities} or source_json not in retained_json:
             raise ReportError("Perfetto evidence is not bound to a retained AndroidX benchmark")
-        if (trace.get("variant"), trace.get("scenario")) != benchmark_identities[name]:
+        binding = (name, source_json)
+        if binding not in benchmark_identities:
+            raise ReportError("Perfetto evidence is not bound to its source AndroidX JSON")
+        if (trace.get("variant"), trace.get("scenario")) != benchmark_identities[binding]:
             raise ReportError("Perfetto variant/scenario contradicts its AndroidX benchmark identity")
         iteration = trace.get("iteration")
         if not isinstance(iteration, int) or isinstance(iteration, bool) or \
-                not 0 <= iteration < expected_iterations[name]:
+                not 0 <= iteration < expected_iterations[binding]:
             raise ReportError("Perfetto evidence has an invalid iteration binding")
-        binding = (name, trace["androidx_json"], iteration)
+        binding = (*binding, iteration)
         if binding in bound_iterations:
             raise ReportError("Perfetto evidence has a duplicate iteration binding")
+        if trace.get("source_name") != expected_traces[binding]:
+            raise ReportError("Perfetto filename does not match its AndroidX profiler output")
         bound_iterations.add(binding)
-    if len(bound_iterations) != len(traces):
-        raise ReportError("Perfetto evidence has incomplete iteration bindings")
+    if bound_iterations != expected_traces.keys():
+        raise ReportError("Perfetto evidence needs one trace for every declared iteration")
     for scenario in MACRO_SCENARIOS:
         for variant in ("generated", "reference"):
             selected = [row for row in rows if row["benchmark_kind"] == "Macro"
@@ -444,7 +478,7 @@ def verify_source_provenance(contexts: set[str], metadata: dict[str, Any]) -> No
 
 def make_report(inputs: list[Path], percent: float, absolute_ms: float,
                 environment_metadata: dict[str, Any] | None = None, require_macro: bool = False,
-                evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+                evidence: dict[str, Any] | None = None, output: Path | None = None) -> dict[str, Any]:
     if not inputs:
         raise ReportError("At least one AndroidX JSON result is required")
     if environment_metadata is None:
@@ -463,8 +497,18 @@ def make_report(inputs: list[Path], percent: float, absolute_ms: float,
     if percent < 0 or absolute_ms < 0 or not math.isfinite(percent) or not math.isfinite(absolute_ms):
         raise ReportError("Thresholds must be finite and non-negative")
     measurements = []
+    retained_inputs = {
+        (output / entry["path"]).resolve(): entry["path"]
+        for entry in (evidence or {}).get("benchmark_json", [])
+    } if output is not None else {}
     for path in inputs:
-        measurements.extend(extract(load_json(path), path))
+        extracted = extract(load_json(path), path)
+        if require_macro and output is not None:
+            retained_json = retained_inputs.get(path.resolve())
+            if retained_json is None:
+                raise ReportError("Complete macro evidence needs its retained AndroidX input paths")
+            extracted = [replace(measurement, retained_json=retained_json) for measurement in extracted]
+        measurements.extend(extracted)
     contexts = {canonical(measurement.context) for measurement in measurements}
     if len(contexts) != 1:
         raise ReportError("Refusing to compare different devices or build contexts")
@@ -526,6 +570,7 @@ def main(argv: list[str] | None = None) -> int:
             load_json(environment_path) if environment_path else None,
             require_macro=args.require_macro,
             evidence=evidence,
+            output=args.output,
         )
     except ReportError as error:
         print(f"benchmark-report: ERROR: {error}", file=sys.stderr)

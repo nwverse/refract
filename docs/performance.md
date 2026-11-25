@@ -260,6 +260,9 @@ scenario, a compiler pass or a synthetic report test is not a timing result. Nei
 measurement in this change: iOS has compile-only evidence, while HarmonyOS retains its authorized-SDK/target blocker.
 
 The common reporter retains the existing greater-than-5% **AND** greater-than-0.1 ms screening threshold at p50/p99,
-using nearest rank. With 30 iterations, p99 is the maximum, not an average or a neighboring percentile. A failing tail
-is not hidden by a favorable median or erased by a rerun. Simulator/emulator results never close the physical-device
-gate, and no absolute timing is transferred across platforms.
+using nearest rank. Its fixed traced set 2...30 supplies 29 per-iteration scalars, so outer p99 is their maximum, not an
+average or a neighboring percentile. Each iOS scroll/stateUpdate scalar is separately the nearest-rank p99 of that
+iteration's raw `CADisplayLink` interval array; this is distinct from the separate 30-iteration
+`XCTApplicationLaunchMetric` cold-start suite. The 29 traced acquisitions alone do not satisfy issue #219's documented
+at-least-30-iteration acceptance gate. A failing tail is not hidden by a favorable median or erased by a rerun.
+Simulator/emulator results never close the physical-device gate, and no absolute timing is transferred across platforms.

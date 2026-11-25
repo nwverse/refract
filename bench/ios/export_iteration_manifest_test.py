@@ -22,8 +22,8 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "common"))
 
 from build_provenance import BUNDLE_NAMES, original_build_provenance
-from export_iteration_manifest import (BINARY_PATH, MEMORY_PATH, METRICS_PATH, ExportError, export_manifest,
-                                       main)
+from export_iteration_manifest import (BINARY_PATH, LEGACY_METRICS_PATH, MEMORY_PATH, METRICS_PATH, TESTS_PATH,
+                                       ExportError, export_manifest, main)
 from paired_report import EvidenceError, make_report
 
 
@@ -54,6 +54,10 @@ class IterationManifestExportTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
 
+    def write_producer_packet(self, path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
+
     def write_original_products(self):
         products = self.derived_data / "Build/Products/Release-iphonesimulator"
         for bundle in BUNDLE_NAMES:
@@ -74,17 +78,69 @@ class IterationManifestExportTest(unittest.TestCase):
     def run_path(self, variant, scenario, iteration):
         return self.root / f"{variant}-{scenario}-{iteration}"
 
-    def startup_payload(self, variant, iteration, value=10.0):
+    def xctest_device(self):
+        return {"architecture": self.target["architecture"], "deviceId": self.target["udid"],
+                "deviceName": self.target["name"], "modelName": self.target["model"],
+                "osBuildNumber": "SYNTHETIC1", "osVersion": self.target["os_version"],
+                "platform": "iOS Simulator"}
+
+    def startup_payload(self, variant, iteration, value=10.0, pid=None):
+        identifier = f"RefractBenchUITests/test{variant.capitalize()}StartupTrace()"
         native = {"sourceRevision": self.revision, "variant": variant, "scenario": "startup", "iteration": iteration,
-                  "metric": "XCTApplicationLaunchMetric", "unit": "ms", "durationMs": value}
+                  "pid": 4000 + iteration + (1000 if variant == "reference" else 0) if pid is None else pid,
+                  "metric": "XCTApplicationLaunchMetric",
+                  "nativeMetricIdentifier": "com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration",
+                  "nativeTestIdentifier": identifier,
+                  "nativeValue": {"unitOfMeasurement": "s", "measurements": [value / 1000]},
+                  "value": {"definition": "XCTApplicationLaunchMetric", "unit": "ms", "duration_ms": value}}
         canonical = json.dumps(native, sort_keys=True, separators=(",", ":")).encode()
-        return {**native, "nativeMeasurement": native,
-                "nativeMeasurementSha256": hashlib.sha256(canonical).hexdigest()}
+        return {"measurements": [native], "metric_selector": {
+            "index": 0, "value_sha256": hashlib.sha256(canonical).hexdigest()}}
 
     def resource_payload(self, variant, scenario, iteration, metric, pid):
         return {"sourceRevision": self.revision, "variant": variant, "scenario": scenario, "iteration": iteration,
                 "metric": metric, "bytes": 1024 if metric == "residentMemoryBytes" else 4096,
                 "unit": "bytes", **({"pid": pid} if metric == "residentMemoryBytes" else {})}
+
+    def write_producer_native_inputs(self, run, variant, scenario, iteration, pid):
+        raw = run / "raw"
+        packets = {}
+        for role, relative, state in (("native_process", "control/native-process.json", "ready"),
+                                      ("request", "raw/request.json", "ready"),
+                                      ("native_completion", "control/native-completion.json", "complete"),
+                                      ("completion", "raw/completion.json", "complete")):
+            packet = {"schema": 1, "session": 1, "revision": self.revision, "variant": variant,
+                      "scenario": scenario, "iteration": iteration, "pid": pid, "process": "running", "state": state}
+            if state == "complete":
+                packet["completion"] = f"{variant} {scenario} complete 1"
+            self.write_producer_packet(run / relative, packet)
+            packets[role] = {"path": relative, "sha256": self.file_record(run / relative)["sha256"]}
+        memory = self.resource_payload(variant, scenario, iteration, "residentMemoryBytes", pid)
+        binary = self.resource_payload(variant, scenario, iteration, "installedBinaryBytes", pid)
+        self.write_json(raw / "native-resources.json", [
+            {**memory, "schema": 1, "session": 1, "definition": "task_info.TASK_VM_INFO.resident_size"},
+            {**binary, "schema": 1, "session": 1, "definition": "Bundle.main.regular-file-bytes",
+             "bundle": "RefractBench.app", "files": [{"path": "RefractBench", "bytes": binary["bytes"],
+                                                     "sha256": "0" * 64}]},
+        ])
+        exports = {}
+        for metric, filename, payload, definition in (
+                ("residentMemoryBytes", "native-memory.json", memory, "task_info.TASK_VM_INFO.resident_size"),
+                ("installedBinaryBytes", "native-binary.json", binary, "Bundle.main.regular-file-bytes")):
+            self.write_json(raw / filename, payload)
+            alias = None
+            if metric == "residentMemoryBytes" and scenario != "startup":
+                alias = MEMORY_PATH
+            elif metric == "installedBinaryBytes" and scenario == "startup" and iteration == 2:
+                alias = BINARY_PATH
+            if alias is not None:
+                self.write_json(run / alias, payload)
+            selected = run / (alias or f"raw/{filename}")
+            self.assertEqual(selected.read_bytes(), (raw / filename).read_bytes())
+            exports[metric] = {"path": alias or f"raw/{filename}",
+                               "sha256": hashlib.sha256(selected.read_bytes()).hexdigest(), "definition": definition}
+        return {"path": "raw/native-resources.json",
+                "sha256": self.file_record(raw / "native-resources.json")["sha256"], "exports": exports}, packets
 
     def make_run(self, variant, scenario, iteration):
         run = self.run_path(variant, scenario, iteration)
@@ -114,32 +170,71 @@ class IterationManifestExportTest(unittest.TestCase):
         (raw / trace_name).write_bytes(f"synthetic profiler {variant} {scenario} {iteration}".encode())
         (raw / "results.xcresult.zip").write_bytes(b"synthetic xcresult archive")
         pid = 4000 + iteration + (1000 if variant == "reference" else 0)
+        native_resources, native_packets = self.write_producer_native_inputs(run, variant, scenario, iteration, pid)
         samples = None
+        startup_selector = None
         if scenario == "startup":
-            self.write_json(raw / "exports/xctest-metrics.json", self.startup_payload(variant, iteration))
+            normalized = self.startup_payload(variant, iteration, pid=pid)
+            selector = normalized["metric_selector"]
+            native = normalized["measurements"][0]
+            identifier = native["nativeTestIdentifier"]
+            test_configuration = {"configurationId": "1", "configurationName": "Test Scheme Action"}
+            raw_metrics = [{"testIdentifier": identifier, "testRuns": [{
+                "device": self.xctest_device(), "testPlanConfiguration": test_configuration,
+                "metrics": [{"identifier": native["nativeMetricIdentifier"], **native["nativeValue"]}],
+            }]}]
+            raw_tests = {"testPlanConfigurations": [test_configuration],
+                         "testNodes": [{"nodeType": "Test Case", "nodeIdentifier": identifier, "name": identifier,
+                                        "result": "Passed", "durationInSeconds": 1.0}]}
+            self.write_json(raw / "exports/xctest-metrics.json", raw_metrics)
+            self.write_json(raw / "exports/xctest-tests.json", raw_tests)
+            normalized["provenance"] = {
+                "native_test_identifier_url": "test://com.apple.xcode/RefractBench/RefractBenchUITests/" + identifier[:-2],
+                "trace_receipt_sha256": "", "trace_configuration_receipt_sha256": "",
+                "native_pid": pid, "native_process_packets": native_packets,
+                "export_commands": [
+                    ["xcrun", "xcresulttool", "get", "test-results", "tests", "--path", "results.xcresult",
+                     "--format", "json"],
+                    ["xcrun", "xcresulttool", "get", "test-results", "metrics", "--path", "results.xcresult",
+                     "--format", "json", "--test-id", identifier],
+                ],
+                "raw_exports": {name: {"path": f"raw/exports/{name}",
+                                       "sha256": self.file_record(raw / "exports" / name)["sha256"]}
+                                for name in ("xctest-tests.json", "xctest-metrics.json")},
+            }
+            self.write_json(run / METRICS_PATH, normalized)
+            startup_selector = {"path": METRICS_PATH, "sha256": self.file_record(run / METRICS_PATH)["sha256"],
+                                "duration_ms": native["value"]["duration_ms"], "metric_selector": selector}
         else:
             samples = {"schema": 1, "session": 1, "sourceRevision": self.revision, "variant": variant,
                        "scenario": scenario, "iteration": iteration, "pid": pid, "completedIterations": 1,
                        "recordedIteration": iteration, "frameIntervalMs": [9.0, 10.0, 11.0],
                        "iterationByFrame": [iteration] * 3}
+        if scenario != "startup":
             self.write_json(raw / "native-samples.json", samples)
-            self.write_json(raw / "exports/resident-memory.json",
-                            self.resource_payload(variant, scenario, iteration, "residentMemoryBytes", pid))
-        if scenario == "startup" and iteration == 2:
-            self.write_json(raw / "exports/installed-binary.json",
-                            self.resource_payload(variant, scenario, iteration, "installedBinaryBytes", pid))
         trace = {"schema": 1, "status": "complete", "session": 1, "source_revision": self.revision,
                  "variant": variant, "scenario": scenario, "iteration": iteration, "pid": pid,
                  "target_udid": self.target["udid"], "target_label": "SIMULATOR", "device_result": False,
                  "recorder": "xctrace", "template": "Synthetic template",
                  "native_iteration_completion": f"{variant} {scenario} complete 1",
                  "trace": f"raw/{trace_name}", "archived_package_name": trace_name.removesuffix(".zip"),
-                 "bytes": (raw / trace_name).stat().st_size,
+                 "bytes": (raw / trace_name).stat().st_size, "native_resources": native_resources,
                  "sha256": hashlib.sha256((raw / trace_name).read_bytes()).hexdigest()}
+        if startup_selector is not None:
+            trace["native_launch_metric"] = startup_selector
         if samples is not None:
             trace["native_samples"] = {"path": "raw/native-samples.json",
                                        "sha256": hashlib.sha256((raw / "native-samples.json").read_bytes()).hexdigest()}
-        self.write_json(raw / "iteration-trace.json", trace)
+        normalized_path = run / METRICS_PATH
+        self.write_producer_packet(raw / "iteration-trace.json", trace)
+        if normalized_path.exists():
+            normalized = json.loads(normalized_path.read_text())
+            persisted_trace = dict(trace)
+            persisted_trace.pop("native_launch_metric", None)
+            normalized["provenance"].update(
+                trace_receipt_sha256=self.file_record(raw / "iteration-trace.json")["sha256"],
+                trace_configuration_receipt_sha256=self.file_record(run / "iteration-trace-config.json")["sha256"])
+            self.write_json(normalized_path, normalized)
         (run / "refract-build-provenance.json").write_bytes(
             (self.derived_data / "refract-build-provenance.json").read_bytes())
         files = {}
@@ -162,7 +257,9 @@ class IterationManifestExportTest(unittest.TestCase):
                     "xcresult_zip": self.file_record(raw / "results.xcresult.zip"), "retained_files": files}
         if scenario == "startup":
             accepted["xctest_metrics_sha256"] = hashlib.sha256(
-                (raw / "exports/xctest-metrics.json").read_bytes()).hexdigest()
+                (run / LEGACY_METRICS_PATH).read_bytes()).hexdigest()
+            accepted["normalized_metrics_sha256"] = hashlib.sha256(
+                (run / METRICS_PATH).read_bytes()).hexdigest()
         else:
             accepted["native_samples_sha256"] = trace["native_samples"]["sha256"]
         self.write_json(run / "accepted-evidence.json", accepted)
@@ -249,6 +346,32 @@ class IterationManifestExportTest(unittest.TestCase):
         executable = self.output / ("products/DerivedData/Build/Products/Release-iphonesimulator/"
                                     "RefractBench.app/RefractBench")
         self.assertTrue(executable.stat().st_mode & 0o111)
+        for run in self.root.iterdir():
+            trace = json.loads((run / "raw/iteration-trace.json").read_text())
+            scenario, iteration = trace["scenario"], trace["iteration"]
+            self.assertEqual((run / MEMORY_PATH).exists(), scenario != "startup")
+            self.assertEqual((run / BINARY_PATH).exists(), scenario == "startup" and iteration == 2)
+            self.assertNotIn("native_launch_metric", trace,
+                             "the on-disk producer receipt precedes its stdout-only launch result")
+            if scenario == "startup":
+                metrics = json.loads((run / METRICS_PATH).read_text())
+                self.assertEqual(metrics["provenance"]["trace_receipt_sha256"],
+                                 self.file_record(run / "raw/iteration-trace.json")["sha256"])
+            for metric, alias in (("residentMemoryBytes", MEMORY_PATH), ("installedBinaryBytes", BINARY_PATH)):
+                original = run / ("raw/native-memory.json" if metric == "residentMemoryBytes"
+                                  else "raw/native-binary.json")
+                selected = run / trace["native_resources"]["exports"][metric]["path"]
+                self.assertEqual(selected.read_bytes(), original.read_bytes())
+                self.assertEqual(self.file_record(selected)["sha256"],
+                                 trace["native_resources"]["exports"][metric]["sha256"])
+                if (scenario == "startup" and metric == "residentMemoryBytes") \
+                        or (metric == "installedBinaryBytes" and (scenario != "startup" or iteration != 2)):
+                    self.assertFalse((run / alias).exists())
+        with mock.patch("export_iteration_manifest.checked_frame_samples",
+                        wraps=__import__("paired_report").checked_frame_samples) as checked_frames:
+            self.export(self.base / "platform-checked")
+            self.assertTrue(all(call.kwargs.get("platform") == "ios"
+                                for call in checked_frames.call_args_list))
 
     def rebind_run(self, run):
         control = str(run.resolve() / "control")
@@ -265,6 +388,11 @@ class IterationManifestExportTest(unittest.TestCase):
         receipt.update(path=name, control_directory=control,
                        configuration_sha256=hashlib.sha256(content).hexdigest())
         self.replace_run_json(run, "iteration-trace-config.json", receipt)
+        normalized_path = run / METRICS_PATH
+        if normalized_path.is_file():
+            normalized = json.loads(normalized_path.read_text())
+            normalized["provenance"]["trace_configuration_receipt_sha256"] = self.file_record(receipt_path)["sha256"]
+            self.replace_run_json(run, METRICS_PATH, normalized)
 
     def test_missing_and_duplicate_pair_members_fail_before_manifest_creation(self):
         for scenario in ("startup", "scroll", "stateUpdate"):
@@ -328,52 +456,69 @@ class IterationManifestExportTest(unittest.TestCase):
             self.export()
         self.assertFalse(self.output.exists())
 
-    def test_startup_selector_binds_index_and_native_value_checksum(self):
+    def test_normalized_selector_is_embedded_and_external_override_is_rejected(self):
         run = self.run_path("generated", "startup", 2)
-        selected = self.startup_payload("generated", 2)
-        selected["value"] = {"definition": "XCTApplicationLaunchMetric", "unit": "ms", "duration_ms": 12.5}
-        canonical = json.dumps(selected, sort_keys=True, separators=(",", ":")).encode()
-        selector = {"index": 0, "value_sha256": hashlib.sha256(canonical).hexdigest()}
-        self.replace_run_json(run, METRICS_PATH, {"measurements": [selected]})
-        accepted = json.loads((run / "accepted-evidence.json").read_text())
-        accepted["xctest_metrics_sha256"] = hashlib.sha256((run / METRICS_PATH).read_bytes()).hexdigest()
-        self.replace_run_json(run, "accepted-evidence.json", accepted)
+        original = json.loads((run / METRICS_PATH).read_text())
+        manifest = self.export()
+        measurement = next(entry for entry in manifest["measurements"]
+                           if (entry["variant"], entry["scenario"], entry["iteration"])
+                           == ("generated", "startup", 2))
+        self.assertEqual(measurement["value"], 10.0)
+        self.assertEqual(measurement["metric_selector"], original["metric_selector"])
+        selected = copy.deepcopy(original)
+        selected["measurements"][0]["value"]["duration_ms"] = 12.5
+        canonical = json.dumps(selected["measurements"][0], sort_keys=True, separators=(",", ":")).encode()
+        external_selector = {"index": 0, "value_sha256": hashlib.sha256(canonical).hexdigest()}
         selections_path = self.base / "startup-selections.json"
         self.write_json(selections_path, {"schema": 1, "source_revision": self.revision,
                                           "build_provenance_sha256": self.build_hash,
                                           "selections": [{"variant": "generated", "scenario": "startup",
-                                                          "iteration": 2, **selector}]})
-        manifest = self.export(selections=selections_path)
-        measurement = next(entry for entry in manifest["measurements"]
+                                                          "iteration": 2, **external_selector}]})
+        with self.assertRaisesRegex(ExportError, "external startup selector"):
+            self.export(self.base / "external-selector", selections=selections_path)
+        self.assertFalse((self.base / "external-selector").exists())
+        selected["measurements"][0]["nativeValue"]["measurements"] = [0.0125]
+        canonical = json.dumps(selected["measurements"][0], sort_keys=True, separators=(",", ":")).encode()
+        external_selector = {"index": 0, "value_sha256": hashlib.sha256(canonical).hexdigest()}
+        raw_metrics = json.loads((run / LEGACY_METRICS_PATH).read_text())
+        raw_metrics[0]["testRuns"][0]["metrics"][0]["measurements"] = [0.0125]
+        selected["metric_selector"] = external_selector
+        selected["provenance"]["raw_exports"]["xctest-metrics.json"]["sha256"] = hashlib.sha256(
+            (json.dumps(raw_metrics, indent=2, sort_keys=True) + "\n").encode()).hexdigest()
+        self.replace_run_json(run, METRICS_PATH, selected)
+        self.replace_run_json(run, LEGACY_METRICS_PATH, raw_metrics)
+        measurement = next(entry for entry in self.export(self.base / "updated-native-sample")["measurements"]
                            if (entry["variant"], entry["scenario"], entry["iteration"])
                            == ("generated", "startup", 2))
         self.assertEqual(measurement["value"], 12.5)
-        self.assertEqual(measurement["metric_selector"], selector)
-        report = make_report(manifest, self.output)
-        sample = next(entry for entry in report["samples"] if entry["variant"] == "generated"
-                      and entry["scenario"] == "startup" and entry["iteration"] == 2)
-        self.assertEqual(sample["value"], 12.5)
-        selected["value"]["duration_ms"] = 13.5
-        self.replace_run_json(run, METRICS_PATH, {"measurements": [selected]})
-        with self.assertRaisesRegex(ExportError, "checksum"):
+        selected["measurements"][0]["value"]["duration_ms"] = 13.5
+        self.replace_run_json(run, METRICS_PATH, selected)
+        with self.assertRaisesRegex(EvidenceError, "checksum"):
             self.export(self.base / "tampered-selector")
 
     def test_missing_selector_and_first_display_substitution_fail(self):
         run = self.run_path("generated", "startup", 2)
         native = self.startup_payload("generated", 2)
-        native["value"] = {"definition": "XCTApplicationLaunchMetric", "unit": "ms", "duration_ms": 10.0}
-        self.replace_run_json(run, METRICS_PATH, {"measurements": [native]})
+        native.pop("metric_selector")
+        self.replace_run_json(run, METRICS_PATH, native)
         accepted = json.loads((run / "accepted-evidence.json").read_text())
-        accepted["xctest_metrics_sha256"] = hashlib.sha256((run / METRICS_PATH).read_bytes()).hexdigest()
+        accepted["normalized_metrics_sha256"] = hashlib.sha256((run / METRICS_PATH).read_bytes()).hexdigest()
         self.replace_run_json(run, "accepted-evidence.json", accepted)
-        with self.assertRaisesRegex(EvidenceError, "selection|index"):
+        with self.assertRaisesRegex(KeyError, "provenance"):
             self.export()
         self.assertFalse(self.output.exists())
-        self.replace_run_json(run, METRICS_PATH, {"sourceRevision": self.revision, "variant": "generated",
-                                                  "scenario": "startup", "iteration": 2,
-                                                  "firstDisplay": {"clock": "CACurrentMediaTime",
-                                                                   "timestamp": "12345.25"}})
-        accepted["xctest_metrics_sha256"] = hashlib.sha256((run / METRICS_PATH).read_bytes()).hexdigest()
+        normalized_path = run / METRICS_PATH
+        normalized_path.unlink()
+        self.refresh_retained(run)
+        self.replace_run_json(run, LEGACY_METRICS_PATH, {"sourceRevision": self.revision, "variant": "generated",
+                                                         "scenario": "startup", "iteration": 2,
+                                                         "firstDisplay": {"clock": "CACurrentMediaTime",
+                                                                          "timestamp": "12345.25"}})
+        accepted["xctest_metrics_sha256"] = hashlib.sha256((run / LEGACY_METRICS_PATH).read_bytes()).hexdigest()
+        self.replace_run_json(run, "accepted-evidence.json", accepted)
+        self.replace_run_json(run, TESTS_PATH, {"devices": [self.xctest_device()]})
+        accepted = json.loads((run / "accepted-evidence.json").read_text())
+        accepted["xctest_tests_sha256"] = self.file_record(run / TESTS_PATH)["sha256"]
         self.replace_run_json(run, "accepted-evidence.json", accepted)
         with self.assertRaisesRegex(ExportError, "firstDisplay timestamp is not"):
             self.export()

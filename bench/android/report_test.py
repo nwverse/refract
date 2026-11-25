@@ -244,7 +244,8 @@ class ReportTest(unittest.TestCase):
                 traces.extend({
                     "variant": variant.lower(), "scenario": scenario, "iteration": iteration,
                     "androidx_benchmark": value["name"], "androidx_json": "raw/001-benchmarkData.json",
-                } for iteration in range(10))
+                    "source_name": output["filename"],
+                } for iteration, output in enumerate(value["profilerOutputs"]))
         metadata = complete_metadata()
         return values, traces, metadata
 
@@ -436,6 +437,43 @@ class ReportTest(unittest.TestCase):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
         invalid = complete_evidence([{**trace, "iteration": "0"} for trace in traces])
         with self.assertRaisesRegex(report.ReportError, "invalid iteration binding"):
+            report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
+
+    def test_macro_rejects_cross_json_trace_ownership(self):
+        root = Path(self.directory.name)
+        values, traces, metadata = self.complete_macro()
+        paths = []
+        for index, variant in enumerate(("generated", "reference"), 1):
+            path = root / f"raw/{index:03d}-benchmarkData.json"
+            path.parent.mkdir(exist_ok=True)
+            selected = [value for value in values if f"SettingsMacrobenchmark.{variant}" in value["name"]]
+            path.write_text(json.dumps({"context": selected[0]["context"], "benchmarks": selected}))
+            paths.append(path)
+            for trace in traces:
+                if trace["variant"] == variant:
+                    trace["androidx_json"] = f"raw/{index:03d}-benchmarkData.json"
+        evidence = complete_evidence(traces, [
+            {"path": f"raw/{index:03d}-benchmarkData.json"} for index in (1, 2)
+        ])
+        result = report.make_report(paths, 5.0, 0.1, metadata, require_macro=True,
+                                    evidence=evidence, output=root)
+        self.assertEqual(result["status"], "pass")
+
+        crossed = [dict(trace) for trace in evidence["traces"]]
+        for trace in crossed:
+            trace["androidx_json"] = "raw/002-benchmarkData.json" \
+                if trace["variant"] == "generated" else "raw/001-benchmarkData.json"
+        with self.assertRaisesRegex(report.ReportError, "source AndroidX JSON"):
+            report.make_report(paths, 5.0, 0.1, metadata, require_macro=True,
+                               evidence=complete_evidence(crossed, evidence["benchmark_json"]), output=root)
+
+    def test_macro_rejects_a_trace_not_named_by_androidx(self):
+        path = Path(self.directory.name) / "input.json"
+        values, traces, metadata = self.complete_macro()
+        path.write_text(json.dumps(values))
+        invalid = complete_evidence([{**trace, "source_name": "substituted.perfetto-trace"}
+                                    for trace in traces])
+        with self.assertRaisesRegex(report.ReportError, "AndroidX profiler output"):
             report.make_report([path], 5.0, 0.1, metadata, require_macro=True, evidence=invalid)
 
     def test_macro_rejects_incomplete_iteration_samples_and_traces(self):

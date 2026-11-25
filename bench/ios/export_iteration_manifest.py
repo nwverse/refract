@@ -38,7 +38,8 @@ class ExportError(ValueError):
 
 
 BUILD_NAME = "refract-build-provenance.json"
-METRICS_PATH = "raw/exports/xctest-metrics.json"
+METRICS_PATH = "raw/metrics.json"
+LEGACY_METRICS_PATH = "raw/exports/xctest-metrics.json"
 MEMORY_PATH = "raw/exports/resident-memory.json"
 BINARY_PATH = "raw/exports/installed-binary.json"
 SUMMARY_PATH = "raw/exports/xctest-summary.json"
@@ -264,6 +265,151 @@ def checked_archive(run: Path, accepted: dict[str, Any], key: str) -> tuple[str,
     return record["path"], size, checksum
 
 
+def checked_file_reference(run: Path, record: Any, relative: str, label: str) -> str:
+    if not isinstance(record, dict) or set(record) != {"path", "sha256"} \
+            or record.get("path") != relative:
+        raise ExportError(f"{label} must bind exactly {relative} and its SHA-256")
+    checksum = checked_sha256(record.get("sha256"), label)
+    if file_metadata(safe_member(run, relative))[1] != checksum:
+        raise ExportError(f"{label} checksum does not match retained bytes")
+    return checksum
+
+
+def checked_native_packets(run: Path, result: dict[str, Any], identity: tuple[str, str, int],
+                           revision: str, pid: int) -> dict[str, dict[str, str]]:
+    variant, scenario, iteration = identity
+    packets = {"native_process": "control/native-process.json", "request": "raw/request.json",
+               "native_completion": "control/native-completion.json", "completion": "raw/completion.json"}
+    references = {}
+    for role, relative in packets.items():
+        packet = read_object(safe_member(run, relative))
+        expected = {"schema": 1, "session": result.get("session"), "revision": revision,
+                    "variant": variant, "scenario": scenario, "iteration": iteration, "pid": pid,
+                    "process": "running",
+                    "state": "complete" if role.endswith("completion") else "ready"}
+        require_fields(packet, expected, f"Startup {role}")
+        for key, value in expected.items():
+            if type(packet.get(key)) is not type(value):
+                raise ExportError(f"Startup {role} has an incorrectly typed {key}")
+        if role.endswith("completion") \
+                and packet.get("completion") != f"{variant} {scenario} complete 1":
+            raise ExportError(f"Startup {role} does not match this iteration")
+        references[role] = {"path": relative, "sha256": file_metadata(safe_member(run, relative))[1]}
+    return references
+
+
+def checked_producer_startup(run: Path, result: dict[str, Any], identity: tuple[str, str, int],
+                             revision: str, build_sha256: str, pid: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    raw = read_object(safe_member(run, METRICS_PATH))
+    provenance = raw.get("provenance")
+    if set(raw) != {"measurements", "metric_selector", "provenance"} \
+            or not isinstance(provenance, dict) \
+            or set(provenance) != {"native_test_identifier_url", "trace_receipt_sha256",
+                                   "trace_configuration_receipt_sha256", "native_pid", "native_process_packets",
+                                   "export_commands", "raw_exports"} \
+            or provenance.get("native_pid") != pid or type(provenance.get("native_pid")) is not int:
+        raise ExportError("Normalized startup metrics require complete native-PID provenance")
+    expected = {key: value for key, value in (("path", "raw/iteration-trace.json"),
+                                              ("sha256", provenance["trace_receipt_sha256"]))}
+    checked_file_reference(run, expected, "raw/iteration-trace.json", "Startup trace receipt")
+    expected = {key: value for key, value in (("path", "iteration-trace-config.json"),
+                                              ("sha256", provenance["trace_configuration_receipt_sha256"]))}
+    checked_file_reference(run, expected, "iteration-trace-config.json", "Startup configuration receipt")
+    packets = checked_native_packets(run, result, identity, revision, pid)
+    if provenance["native_process_packets"] != packets:
+        raise ExportError("Normalized startup native-process packets differ from their retained identities")
+    measurements = raw["measurements"]
+    if not isinstance(measurements, list) or len(measurements) != 1 \
+            or not isinstance(measurements[0], dict) \
+            or measurements[0].get("pid") != pid or type(measurements[0].get("pid")) is not int:
+        raise ExportError("Normalized startup metrics require exactly one exact positive native PID")
+    measurement = measurements[0]
+    identifier = f"RefractBenchUITests/test{identity[0].capitalize()}StartupTrace()"
+    expected_url = ("test://com.apple.xcode/RefractBench/RefractBenchUITests/"
+                    f"RefractBenchUITests/test{identity[0].capitalize()}StartupTrace")
+    require_fields(measurement, {"nativeMetricIdentifier":
+                                 "com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration",
+                                 "nativeTestIdentifier": identifier}, "Normalized startup metric")
+    if provenance["native_test_identifier_url"] != expected_url:
+        raise ExportError("Normalized startup selector URL does not match its exact XCTest")
+    native_value = measurement.get("nativeValue")
+    if not isinstance(native_value, dict) or set(native_value) != {"unitOfMeasurement", "measurements"} \
+            or native_value["unitOfMeasurement"] not in ("s", "seconds") \
+            or not isinstance(native_value["measurements"], list) \
+            or len(native_value["measurements"]) != 1:
+        raise ExportError("Normalized startup metrics require exactly one native second sample")
+    exports = provenance["raw_exports"]
+    if not isinstance(exports, dict) or set(exports) != {"xctest-tests.json", "xctest-metrics.json"}:
+        raise ExportError("Normalized startup metrics require exact raw tests/metrics exports")
+    for name, record in exports.items():
+        checked_file_reference(run, record, f"raw/exports/{name}", f"Startup raw export {name}")
+    commands = provenance["export_commands"]
+    if not isinstance(commands, list) or len(commands) != 2:
+        raise ExportError("Normalized startup metrics require both retained export commands")
+    metric_command = next((command for command in commands if isinstance(command, list)
+                           and "metrics" in command), None)
+    if metric_command is None or metric_command[-2:] != ["--test-id", identifier] \
+            or any(not isinstance(value, str) or any(character in value for character in "\r\n\x00")
+                   for command in commands for value in command):
+        raise ExportError("Normalized startup metrics lack their exact selector-bound export command")
+    return raw, raw["metric_selector"]
+
+
+def checked_resource_receipt(run: Path, result: dict[str, Any], identity: tuple[str, str, int],
+                             metric: str, alias: str | None) -> None:
+    record = result.get("native_resources")
+    if not isinstance(record, dict) or set(record) != {"path", "sha256", "exports"}:
+        raise ExportError("Iteration receipt lacks its native-resource identity")
+    checked_file_reference(run, {"path": record["path"], "sha256": record["sha256"]},
+                           "raw/native-resources.json", "Native resource packet")
+    exports = record["exports"]
+    if not isinstance(exports, dict) or set(exports) != {"residentMemoryBytes", "installedBinaryBytes"}:
+        raise ExportError("Iteration receipt must retain both original native-resource exports")
+    definitions = {"residentMemoryBytes": "task_info.TASK_VM_INFO.resident_size",
+                   "installedBinaryBytes": "Bundle.main.regular-file-bytes"}
+    original = "raw/native-memory.json" if metric == "residentMemoryBytes" else "raw/native-binary.json"
+    for resource_metric, reference in exports.items():
+        if not isinstance(reference, dict) or set(reference) != {"path", "sha256", "definition"} \
+                or reference.get("definition") != definitions.get(resource_metric):
+            raise ExportError("Native-resource export lacks its exact definition and retained identity")
+        resource_original = "raw/native-memory.json" if resource_metric == "residentMemoryBytes" \
+            else "raw/native-binary.json"
+        original_checksum = file_metadata(safe_member(run, resource_original))[1]
+        reference_checksum = checked_file_reference(
+            run, {"path": reference.get("path"), "sha256": reference.get("sha256")},
+            reference.get("path") if isinstance(reference.get("path"), str) else "",
+            f"Native-resource {resource_metric} export")
+        if original_checksum != reference_checksum \
+                or file_metadata(safe_member(run, resource_original))[0] \
+                != file_metadata(safe_member(run, reference["path"]))[0] \
+                or bounded_file_bytes(safe_member(run, resource_original)) \
+                != bounded_file_bytes(safe_member(run, reference["path"])):
+            raise ExportError("Selected native-resource alias differs byte-for-byte from its original")
+    expected_alias = alias if alias is not None else original
+    if exports[metric]["path"] != expected_alias:
+        raise ExportError(f"Native-resource {metric} must expose only its selected schema-2 alias")
+
+
+def checked_resource_packet(run: Path, result: dict[str, Any], identity: tuple[str, str, int],
+                            revision: str, pid: int, metric: str, alias: str | None) -> None:
+    packet = read_json(safe_member(run, "raw/native-resources.json"))
+    if not isinstance(packet, list) or len(packet) != 2:
+        raise ExportError("The original native-resource packet must retain both snapshots")
+    expected = {"schema": 1, "session": result.get("session"), "sourceRevision": revision,
+                "variant": identity[0], "scenario": identity[1], "iteration": identity[2],
+                "metric": metric, "unit": "bytes",
+                "definition": "task_info.TASK_VM_INFO.resident_size"
+                if metric == "residentMemoryBytes" else "Bundle.main.regular-file-bytes"}
+    matches = [resource for resource in packet if isinstance(resource, dict)
+               and resource.get("metric") == metric]
+    if len(matches) != 1:
+        raise ExportError("Native-resource packet must have unique memory and binary snapshots")
+    require_fields(matches[0], expected, "Original native resource")
+    if metric == "residentMemoryBytes" and matches[0].get("pid") != pid:
+        raise ExportError("Original resident-memory packet has an unrelated native PID")
+    checked_resource_receipt(run, result, identity, metric, alias)
+
+
 def resource_bytes(run: Path, relative: str, identity: tuple[str, str, int], metric: str,
                    revision: str, pid: int | None) -> int:
     artifact = {"resolved_path": safe_member(run, relative), "path": relative,
@@ -329,14 +475,16 @@ def device_identity(device: Any, label: str) -> dict[str, str]:
     return identity
 
 
-def checked_target_evidence(run: Path, accepted: dict[str, Any], target: dict[str, Any]) -> None:
+def checked_target_evidence(run: Path, accepted: dict[str, Any], target: dict[str, Any], *,
+                            startup: bool = False) -> None:
     expected = {key: value for key, value in target.items() if key != "model"}
     summary_hash = checked_sha256(accepted.get("xctest_summary_sha256"), "Accepted summary export")
     tests_hash = checked_sha256(accepted.get("xctest_tests_sha256"), "Accepted tests export")
-    if file_metadata(safe_member(run, SUMMARY_PATH))[1] != summary_hash \
-            or file_metadata(safe_member(run, TESTS_PATH))[1] != tests_hash:
+    summary_path = safe_member(run, SUMMARY_PATH)
+    tests_path = safe_member(run, TESTS_PATH)
+    if file_metadata(summary_path)[1] != summary_hash or file_metadata(tests_path)[1] != tests_hash:
         raise ExportError("Accepted XCTest target-export checksums do not match retained bytes")
-    summary = read_object(safe_member(run, SUMMARY_PATH))
+    summary = read_object(summary_path)
     configurations = summary.get("devicesAndConfigurations")
     if not isinstance(configurations, list) or len(configurations) != 1 \
             or not isinstance(configurations[0], dict):
@@ -344,11 +492,40 @@ def checked_target_evidence(run: Path, accepted: dict[str, Any], target: dict[st
     summary_device = device_identity(configurations[0].get("device"), "XCTest summary")
     require_fields(summary, {"result": "Passed", "passedTests": 1, "failedTests": 0, "skippedTests": 0},
                    "XCTest summary")
-    tests = read_object(safe_member(run, TESTS_PATH))
-    devices = tests.get("devices")
-    if not isinstance(devices, list) or len(devices) != 1:
-        raise ExportError("XCTest tests must retain exactly one device record")
-    tests_device = device_identity(devices[0], "XCTest tests")
+    tests = read_object(tests_path)
+    if startup:
+        raw = read_object(safe_member(run, METRICS_PATH))
+        metrics = read_json(safe_member(run, LEGACY_METRICS_PATH))
+        measurement = raw["measurements"][0]
+        identifier = measurement["nativeTestIdentifier"]
+        expected_url = raw["provenance"]["native_test_identifier_url"]
+        cases = [node for node in tests.get("testNodes", []) if isinstance(node, dict)
+                 and node.get("nodeType") == "Test Case"] if isinstance(tests.get("testNodes"), list) else []
+        if len(cases) != 1 or cases[0].get("nodeIdentifier") != identifier \
+                or cases[0].get("name") != identifier or cases[0].get("result") != "Passed":
+            raise ExportError("Normalized startup requires its exact passing XCTest case")
+        if not isinstance(metrics, list) or len(metrics) != 1 or not isinstance(metrics[0], dict):
+            raise ExportError("Normalized startup requires one exact-selector raw metrics export")
+        runs = metrics[0].get("testRuns")
+        if metrics[0].get("testIdentifier") != identifier \
+                or metrics[0].get("testIdentifierURL", expected_url) != expected_url \
+                or not isinstance(runs, list) or len(runs) != 1 or not isinstance(runs[0], dict):
+            raise ExportError("Normalized startup raw metrics do not bind the exact selector")
+        configurations = tests.get("testPlanConfigurations")
+        if not isinstance(configurations, list) or len(configurations) != 1 \
+                or runs[0].get("testPlanConfiguration") != configurations[0]:
+            raise ExportError("Normalized startup test and metrics configurations differ")
+        native_metrics = runs[0].get("metrics")
+        if not isinstance(native_metrics, list) or len(native_metrics) != 1 \
+                or native_metrics[0] != {"identifier": measurement["nativeMetricIdentifier"],
+                                         **measurement["nativeValue"]}:
+            raise ExportError("Normalized startup duration differs from its selector-bound raw metric")
+        tests_device = device_identity(runs[0].get("device"), "XCTest selector metrics")
+    else:
+        devices = tests.get("devices")
+        if not isinstance(devices, list) or len(devices) != 1:
+            raise ExportError("XCTest tests must retain exactly one device record")
+        tests_device = device_identity(devices[0], "XCTest tests")
     if summary_device != tests_device or any(summary_device[key] != value for key, value in expected.items()):
         raise ExportError("XCTest device records differ from the export environment")
     if "name" not in target and summary_device["name"] != accepted.get("target_name"):
@@ -420,7 +597,9 @@ def load_run(run: Path, derived_data: Path, context: RunContext, source_xctestru
             or accepted.get("xcode_version") != context.toolchain["xcode"] \
             or ("name" in context.target and accepted.get("target_name") != context.target["name"]):
         raise ExportError("Accepted target or toolchain differs from the export environment")
-    checked_target_evidence(run, accepted, context.target)
+    normalized_metrics = os.path.lexists(safe_member(run, METRICS_PATH))
+    checked_target_evidence(run, accepted, context.target,
+                            startup=scenario == "startup" and normalized_metrics)
 
     prefix = f"raw/{variant}-{scenario}-{iteration}"
     trace_source, trace_size, trace_hash = checked_archive(run, accepted, "trace_zip")
@@ -442,17 +621,33 @@ def load_run(run: Path, derived_data: Path, context: RunContext, source_xctestru
                    "unit": "ms", "artifacts": []}
     resources = []
     if scenario == "startup":
-        raw = read_object(safe_member(run, METRICS_PATH))
-        if accepted.get("xctest_metrics_sha256") != file_metadata(safe_member(run, METRICS_PATH))[1]:
-            raise ExportError("Accepted startup metric export checksum does not match")
-        selector = context.selections.get((variant, iteration))
+        if normalized_metrics:
+            raw, selector = checked_producer_startup(run, result, identity, context.revision,
+                                                     context.build_sha256, pid)
+            supplied_selector = context.selections.get((variant, iteration))
+            if supplied_selector is not None and supplied_selector != selector:
+                raise ExportError("An external startup selector cannot override normalized embedded selection")
+            timing_source = METRICS_PATH
+            if os.path.lexists(safe_member(run, LEGACY_METRICS_PATH)):
+                # The producer's exact-selector raw array remains retained for
+                # provenance; it is not an interchangeable normalized scalar.
+                legacy = read_json(safe_member(run, LEGACY_METRICS_PATH))
+                if isinstance(legacy, dict) and ("measurements" in legacy or "nativeMeasurement" in legacy):
+                    raise ExportError("Legacy normalized and producer-shaped startup inputs are mutually exclusive")
+        else:
+            # Explicit compatibility for older already-accepted runs. New
+            # producer-shaped runs never fall back to the historical raw array.
+            timing_source = LEGACY_METRICS_PATH
+            raw = read_object(safe_member(run, timing_source))
+            if accepted.get("xctest_metrics_sha256") != file_metadata(safe_member(run, timing_source))[1]:
+                raise ExportError("Accepted startup metric export checksum does not match")
+            selector = context.selections.get((variant, iteration))
         if "firstDisplay" in raw or "timestamp" in raw:
             raise ExportError("A firstDisplay timestamp is not an application launch duration")
         value = checked_startup_value(raw, identity, context.revision, selector)
         measurement.update(metric="startupMs", value=value, definition="XCTApplicationLaunchMetric")
         if selector is not None:
             measurement["metric_selector"] = selector
-        timing_source = METRICS_PATH
         timing_destination = prefix + "-metrics.json"
     else:
         raw = read_object(safe_member(run, "raw/native-samples.json"))
@@ -466,7 +661,7 @@ def load_run(run: Path, derived_data: Path, context: RunContext, source_xctestru
             raise ExportError("Iteration receipt does not bind the retained native sample packet")
         if raw.get("session") != result.get("session"):
             raise ExportError("Native sample session differs from the iteration receipt")
-        intervals = checked_frame_samples(raw, identity, context.revision, pid)
+        intervals = checked_frame_samples(raw, identity, context.revision, pid, platform="ios")
         measurement.update(metric="frameIntervalMs", value=percentile(intervals, 0.99),
                            definition="CADisplayLink.targetTimestamp-timestamp", aggregation="p99", native_pid=pid)
         timing_source = "raw/native-samples.json"
@@ -501,8 +696,17 @@ def load_run(run: Path, derived_data: Path, context: RunContext, source_xctestru
     jobs.append(timing_job)
     artifacts.append(timing_artifact)
     measurement["artifacts"] = sorted([timing_artifact["path"], artifacts[0]["path"]])
-    if os.path.lexists(safe_member(run, MEMORY_PATH)) and scenario == "startup":
-        raise ExportError("Startup cannot supply a frame-iteration resident-memory measurement")
+    if os.path.lexists(safe_member(run, METRICS_PATH)) and scenario != "startup":
+        raise ExportError("Normalized launch metrics belong only to startup")
+    if os.path.lexists(safe_member(run, LEGACY_METRICS_PATH)) and scenario != "startup":
+        raise ExportError("Launch metric exports belong only to startup")
+    if os.path.lexists(safe_member(run, MEMORY_PATH)):
+        if scenario == "startup":
+            raise ExportError("Startup cannot supply a frame-iteration resident-memory measurement")
+        checked_resource_packet(run, result, identity, context.revision, pid, "residentMemoryBytes", MEMORY_PATH)
+    if scenario == "startup":
+        alias = BINARY_PATH if identity == (variant, "startup", 2) else None
+        checked_resource_packet(run, result, identity, context.revision, pid, "installedBinaryBytes", alias)
     return jobs, artifacts, measurement, resources
 
 
