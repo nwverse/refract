@@ -22,8 +22,8 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "common"))
 
 from build_provenance import BUNDLE_NAMES, original_build_provenance
-from export_iteration_manifest import (BINARY_PATH, LEGACY_METRICS_PATH, MEMORY_PATH, METRICS_PATH, TESTS_PATH,
-                                       ExportError, export_manifest, main)
+from export_iteration_manifest import (BINARY_PATH, JSON_DEPTH_LIMIT, LEGACY_METRICS_PATH, MEMORY_PATH, METRICS_PATH,
+                                       TESTS_PATH, ExportError, checked_xctest_case, export_manifest, main)
 from paired_report import EvidenceError, make_report
 
 
@@ -184,8 +184,11 @@ class IterationManifestExportTest(unittest.TestCase):
                 "metrics": [{"identifier": native["nativeMetricIdentifier"], **native["nativeValue"]}],
             }]}]
             raw_tests = {"testPlanConfigurations": [test_configuration],
-                         "testNodes": [{"nodeType": "Test Case", "nodeIdentifier": identifier, "name": identifier,
-                                        "result": "Passed", "durationInSeconds": 1.0}]}
+                         "testNodes": [{"nodeType": "Test Plan", "result": "Passed", "children": [
+                             {"nodeType": "UI test bundle", "children": [
+                                 {"nodeType": "Test Suite", "children": [
+                                     {"nodeType": "Test Case", "nodeIdentifier": identifier, "name": identifier,
+                                      "result": "Passed", "durationInSeconds": 1.0}]}]}]}]}
             self.write_json(raw / "exports/xctest-metrics.json", raw_metrics)
             self.write_json(raw / "exports/xctest-tests.json", raw_tests)
             normalized["provenance"] = {
@@ -493,6 +496,55 @@ class IterationManifestExportTest(unittest.TestCase):
         self.replace_run_json(run, METRICS_PATH, selected)
         with self.assertRaisesRegex(EvidenceError, "checksum"):
             self.export(self.base / "tampered-selector")
+
+    def test_nested_xctest_case_is_unique_and_exact_without_flattening_containers(self):
+        run = self.run_path("generated", "startup", 2)
+        tests = json.loads((run / TESTS_PATH).read_text())
+        identifier = "RefractBenchUITests/testGeneratedStartupTrace()"
+        case = tests["testNodes"][0]["children"][0]["children"][0]["children"][0]
+        self.assertEqual(checked_xctest_case(tests, identifier), case)
+        with self.assertRaisesRegex(ExportError, "exact passing XCTest case"):
+            checked_xctest_case(tests, "RefractBenchUITests/testUnrelatedStartupTrace()")
+        nested_tests = [copy.deepcopy(tests), {"testNodes": [{"children": copy.deepcopy(tests["testNodes"])}]}]
+        for nested in nested_tests:
+            with self.subTest(shape="actual-producer-or-testNodes-container"):
+                self.assertEqual(checked_xctest_case(nested, identifier)["result"], "Passed")
+        for change in ({"name": "unrelated"}, {"result": "Failed"}, {"nodeIdentifier": "unrelated"}):
+            changed = copy.deepcopy(tests)
+            changed["testNodes"][0]["children"][0]["children"][0]["children"][0].update(change)
+            with self.subTest(change=change), self.assertRaisesRegex(ExportError, "exact passing XCTest case"):
+                checked_xctest_case(changed, identifier)
+        for description, changed in (
+                ("duplicate", copy.deepcopy(tests)),
+                ("parent-and-child-duplicate", copy.deepcopy(tests))):
+            duplicate = copy.deepcopy(case)
+            if description == "duplicate":
+                changed["testNodes"][0]["children"][0]["children"].append(duplicate)
+            else:
+                changed["testNodes"][0]["children"][0]["children"][0]["children"][0]["children"] = [duplicate]
+            with self.subTest(description=description), self.assertRaisesRegex(ExportError, "exact passing XCTest case"):
+                checked_xctest_case(changed, identifier)
+        deep = copy.deepcopy(tests)
+        parent = deep["testNodes"][0]
+        for _ in range(JSON_DEPTH_LIMIT):
+            parent["children"] = [{"nodeType": "Test Suite"}]
+            parent = parent["children"][0]
+        parent["children"] = [case]
+        with self.assertRaisesRegex(ExportError, "bounded depth"):
+            checked_xctest_case(deep, identifier)
+
+    def test_nested_producer_startup_and_resource_aliases_export_together(self):
+        # The default complete matrix combines the actual #400 nested children
+        # shape, its strict raw/metrics.json selector, and #402's resource aliases.
+        manifest = self.export()
+        self.assertEqual(len(manifest["measurements"]), 174)
+        self.assertEqual(len(manifest["resources"]), 118)
+        measurement = next(item for item in manifest["measurements"]
+                           if (item["variant"], item["scenario"], item["iteration"])
+                           == ("generated", "startup", 2))
+        self.assertEqual(measurement["value"], 10.0)
+        self.assertEqual(measurement["definition"], "XCTApplicationLaunchMetric")
+        self.assertNotIn("firstDisplay", measurement)
 
     def test_missing_selector_and_first_display_substitution_fail(self):
         run = self.run_path("generated", "startup", 2)

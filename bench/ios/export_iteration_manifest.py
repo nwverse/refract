@@ -46,6 +46,8 @@ SUMMARY_PATH = "raw/exports/xctest-summary.json"
 TESTS_PATH = "raw/exports/xctest-tests.json"
 DERIVED_DATA_DESTINATION = "products/DerivedData"
 CONFIGURATION_NAME_PATTERN = r"iteration-trace-config-[0-9a-f]{24}\.xctestrun"
+JSON_DEPTH_LIMIT = 128
+XCTEST_NODE_LIMIT = 4096
 
 
 @dataclass(frozen=True)
@@ -82,14 +84,29 @@ def object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def bounded_json_containers(value: Any, depth: int = 1) -> None:
+    """Bound direct callers as well as JSON decoded by the standard parser."""
+    pending = [(value, depth)]
+    while pending:
+        current, level = pending.pop()
+        if level > JSON_DEPTH_LIMIT:
+            raise ExportError(f"Retained JSON exceeds its {JSON_DEPTH_LIMIT}-level nesting bound")
+        if isinstance(current, dict):
+            pending.extend((child, level + 1) for child in current.values())
+        elif isinstance(current, list):
+            pending.extend((child, level + 1) for child in current)
+
+
 def read_json(path: Path) -> Any:
     try:
         data = bounded_file_bytes(path)
-        return json.loads(data, object_pairs_hook=object_without_duplicates,
-                          parse_constant=lambda value: (_ for _ in ()).throw(
-                              ExportError(f"Non-finite JSON value in {path.name}: {value}")))
-    except (OSError, UnicodeError, json.JSONDecodeError, BuildProvenanceError) as error:
+        value = json.loads(data, object_pairs_hook=object_without_duplicates,
+                           parse_constant=lambda value: (_ for _ in ()).throw(
+                               ExportError(f"Non-finite JSON value in {path.name}: {value}")))
+    except (OSError, UnicodeError, json.JSONDecodeError, BuildProvenanceError, RecursionError) as error:
         raise ExportError(f"Cannot read retained JSON {path.name}: {error}") from error
+    bounded_json_containers(value)
+    return value
 
 
 def read_object(path: Path) -> dict[str, Any]:
@@ -475,6 +492,37 @@ def device_identity(device: Any, label: str) -> dict[str, str]:
     return identity
 
 
+def checked_xctest_case(tests: dict[str, Any], identifier: str) -> dict[str, Any]:
+    """Find one selector in XCTest's nested containers, not arbitrary JSON fields."""
+    containers = tests.get("testNodes")
+    if not isinstance(containers, list):
+        raise ExportError("Normalized startup requires its exact passing XCTest case")
+    pending = [(node, 1) for node in containers]
+    matches = []
+    visited = 0
+    while pending:
+        node, depth = pending.pop()
+        visited += 1
+        if visited > XCTEST_NODE_LIMIT or depth > JSON_DEPTH_LIMIT:
+            raise ExportError("XCTest node traversal exceeds its bounded depth or node count")
+        if not isinstance(node, dict):
+            continue
+        children = node.get("children", [])
+        if not isinstance(children, list):
+            raise ExportError("XCTest node children must be arrays")
+        pending.extend((child, depth + 1) for child in children)
+        # A test-case container is counted once; its child summaries are not
+        # another execution of the same selector.
+        if node.get("nodeType") == "Test Case" and node.get("nodeIdentifier") == identifier:
+            matches.append(node)
+    if len(matches) != 1:
+        raise ExportError("Normalized startup requires its exact passing XCTest case")
+    case = matches[0]
+    if case.get("name") != identifier or case.get("result") != "Passed":
+        raise ExportError("Normalized startup requires its exact passing XCTest case")
+    return case
+
+
 def checked_target_evidence(run: Path, accepted: dict[str, Any], target: dict[str, Any], *,
                             startup: bool = False) -> None:
     expected = {key: value for key, value in target.items() if key != "model"}
@@ -499,11 +547,7 @@ def checked_target_evidence(run: Path, accepted: dict[str, Any], target: dict[st
         measurement = raw["measurements"][0]
         identifier = measurement["nativeTestIdentifier"]
         expected_url = raw["provenance"]["native_test_identifier_url"]
-        cases = [node for node in tests.get("testNodes", []) if isinstance(node, dict)
-                 and node.get("nodeType") == "Test Case"] if isinstance(tests.get("testNodes"), list) else []
-        if len(cases) != 1 or cases[0].get("nodeIdentifier") != identifier \
-                or cases[0].get("name") != identifier or cases[0].get("result") != "Passed":
-            raise ExportError("Normalized startup requires its exact passing XCTest case")
+        checked_xctest_case(tests, identifier)
         if not isinstance(metrics, list) or len(metrics) != 1 or not isinstance(metrics[0], dict):
             raise ExportError("Normalized startup requires one exact-selector raw metrics export")
         runs = metrics[0].get("testRuns")
