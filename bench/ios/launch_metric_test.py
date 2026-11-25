@@ -13,14 +13,17 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "common"))
 
-from launch_metric import (LAUNCH_METRIC, LaunchMetricError, export_launch_metric,
+from launch_metric import (JSON_BYTE_LIMIT, JSON_DEPTH_LIMIT, LAUNCH_METRIC,
+                           LaunchMetricError, bounded_export_output, export_launch_metric,
                            selected_launch_measurement, traced_test_identifier)
 from paired_report import selected_duration
 
@@ -114,6 +117,15 @@ class LaunchMetricSelectionTest(unittest.TestCase):
         for value in (0, -1, True, "1.25", None, 10**400):
             with self.subTest(value=value), self.assertRaises(LaunchMetricError):
                 self.select(metrics=synthetic_metrics(metric_changes={"measurements": [value]}))
+        for value in (2**53 + 1, 2**54 + 2):
+            with self.subTest(lossy_integer=value), self.assertRaisesRegex(LaunchMetricError, "exact|precision"):
+                self.select(metrics=synthetic_metrics(metric_changes={"measurements": [value]}))
+        for value, milliseconds in ((1, 1000.0), (9007199254740, 9007199254740000.0), (0.125, 125.0)):
+            with self.subTest(exact_native_value=value):
+                selected, duration = self.select(
+                    metrics=synthetic_metrics(metric_changes={"measurements": [value]}))
+                self.assertEqual(duration, milliseconds)
+                self.assertEqual(selected["measurements"][0]["nativeValue"]["measurements"], [value])
         for value in ("NaN", "Infinity"):
             with self.subTest(value=value), self.assertRaises(LaunchMetricError):
                 self.select(metrics=json.loads('[' + value + ']'))
@@ -161,7 +173,7 @@ class LaunchMetricExportTest(unittest.TestCase):
         }))
         (self.run / "refract-build-provenance.json").write_bytes(b"synthetic build provenance")
         self.receipt = {
-            "status": "complete", "source_revision": REVISION, "variant": "generated",
+            "schema": 1, "status": "complete", "source_revision": REVISION, "variant": "generated",
             "scenario": "startup", "iteration": 30, "session": 1, "pid": NATIVE_PID,
             "target_udid": TARGET, "target_label": "SIMULATOR", "device_result": False,
             "native_iteration_completion": "generated startup complete 1",
@@ -202,12 +214,24 @@ class LaunchMetricExportTest(unittest.TestCase):
     def export(self, metrics=None, tests=None):
         metrics = synthetic_metrics() if metrics is None else metrics
         tests = synthetic_tests() if tests is None else tests
-        def native_export(command, check, capture_output):
-            self.assertTrue(check)
-            self.assertTrue(capture_output)
+        return self.export_raw(json.dumps(tests).encode(), json.dumps(metrics).encode())
+
+    def export_raw(self, tests: bytes, metrics: bytes = b""):
+        if not metrics:
+            metrics = json.dumps(synthetic_metrics()).encode()
+        def native_export(command, **popen_options):
+            # A small Popen adapter keeps command injection while exercising the
+            # real selector, pipe, process-group and deadline implementation.
+            self.assertEqual(popen_options, {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
+                                             "start_new_session": True})
             self.commands.append(command)
             payload = tests if " tests " in " ".join(command) else metrics
-            return subprocess.CompletedProcess(command, 0, json.dumps(payload).encode(), b"")
+            script = "import os,sys; data=sys.stdin.buffer.read(); os.write(1,data); os.write(2,b'diagnostic')"
+            process = subprocess.Popen([sys.executable, "-I", "-c", script], stdin=subprocess.PIPE,
+                                       **popen_options)
+            process.stdin.write(payload)
+            process.stdin.close()
+            return process
         return export_launch_metric(self.run, variant="generated", revision=REVISION, iteration=30,
                                     target_udid=TARGET, run_command=native_export)
 
@@ -240,8 +264,234 @@ class LaunchMetricExportTest(unittest.TestCase):
                          self.hash(self.run / "iteration-trace-config.json"))
         for name in ("xctest-tests.json", "xctest-metrics.json"):
             self.assertEqual(provenance["raw_exports"][name]["sha256"], self.hash(self.run / "raw/exports" / name))
-        with self.assertRaisesRegex(LaunchMetricError, "Refusing to reuse"):
+        with self.assertRaisesRegex(LaunchMetricError, "Refusing to replace"):
             self.export()
+
+    def test_duplicate_json_keys_fail_before_export_or_publication(self):
+        for role in self.packet_paths:
+            with self.subTest(role=role, field="pid"):
+                case = LaunchMetricExportTest(
+                    "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+                case.setUp()
+                try:
+                    path = case.packet_paths[role]
+                    original = path.read_text()
+                    changed = original.replace('"pid": 4242', '"pid": 4243, "pid": 4242', 1)
+                    self.assertNotEqual(changed, original)
+                    path.write_text(changed)
+                    with self.assertRaisesRegex(LaunchMetricError, "duplicate JSON object key.*pid"):
+                        case.export()
+                    self.assertEqual(case.commands, [])
+                    self.assertFalse((case.run / "raw/metrics.json").exists())
+                finally:
+                    case.doCleanups()
+        with self.subTest(field="iteration"):
+            case = LaunchMetricExportTest(
+                "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+            case.setUp()
+            try:
+                path = case.packet_paths["native_process"]
+                path.write_text(path.read_text().replace('"iteration": 30', '"iteration": 29, "iteration": 30'))
+                with self.assertRaisesRegex(LaunchMetricError, "duplicate JSON object key.*iteration"):
+                    case.export()
+                self.assertEqual(case.commands, [])
+            finally:
+                case.doCleanups()
+        with self.subTest(field="selector"):
+            original = json.dumps(synthetic_tests())
+            duplicate = original.replace(f'"name": "{IDENTIFIER}"',
+                                         f'"name": "other", "name": "{IDENTIFIER}"', 1).encode()
+            with self.assertRaisesRegex(LaunchMetricError, "duplicate JSON object key.*name"):
+                self.export_raw(duplicate, json.dumps(synthetic_metrics()).encode())
+            self.assertFalse((self.run / "raw/metrics.json").exists())
+
+    def test_deep_json_is_bounded_and_xml_errors_are_controlled(self):
+        for depth in (JSON_DEPTH_LIMIT + 1, 1200):
+            with self.subTest(depth=depth):
+                case = LaunchMetricExportTest(
+                    "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+                case.setUp()
+                try:
+                    nested = b"[" * depth + b"0" + b"]" * depth
+                    with self.assertRaisesRegex(LaunchMetricError, "Cannot decode|nesting bound") as raised:
+                        case.export_raw(nested)
+                    self.assertNotIsInstance(raised.exception, RecursionError)
+                    self.assertFalse((case.run / "raw/metrics.json").exists())
+                finally:
+                    case.doCleanups()
+        # Iterative traversal also protects direct callers from Python containers
+        # that were not decoded through the JSON parser.
+        deep_object = current = {}
+        for _ in range(JSON_DEPTH_LIMIT + 20):
+            current["child"] = {}
+            current = current["child"]
+        from launch_metric import test_cases
+        self.assertEqual(test_cases(deep_object), [])
+        path = self.run / "iteration-trace-config.xctestrun"
+        path.write_bytes(b"<plist><dict><key>broken</key>")
+        receipt = self.run / "iteration-trace-config.json"
+        configuration = json.loads(receipt.read_text())
+        configuration["configuration_sha256"] = self.hash(path)
+        receipt.write_text(json.dumps(configuration))
+        self.commands.clear()
+        with self.assertRaisesRegex(LaunchMetricError, "decode the retained trace xctestrun"):
+            self.export()
+        self.assertEqual(self.commands, [])
+
+    def test_receipt_schema_and_every_typed_identity_field_are_exact(self):
+        for field, value in (("schema", 2), ("schema", True), ("schema", 1.0),
+                             ("device_result", 0), ("iteration", 30.0), ("iteration", True),
+                             ("session", True), ("target_label", 1)):
+            with self.subTest(receipt_field=field, value=value):
+                original = self.receipt[field]
+                self.receipt[field] = value
+                (self.run / "raw/iteration-trace.json").write_text(json.dumps(self.receipt))
+                with self.assertRaises(LaunchMetricError):
+                    self.export()
+                self.assertEqual(self.commands, [])
+                self.receipt[field] = original
+                (self.run / "raw/iteration-trace.json").write_text(json.dumps(self.receipt))
+        for field, value in (("schema", True), ("schema", 1.0), ("schema", 2),
+                             ("iteration", True), ("iteration", 30.0)):
+            with self.subTest(configuration_field=field, value=value):
+                path = self.run / "iteration-trace-config.json"
+                configuration = json.loads(path.read_text())
+                original = configuration[field]
+                configuration[field] = value
+                path.write_text(json.dumps(configuration))
+                with self.assertRaises(LaunchMetricError):
+                    self.export()
+                self.assertEqual(self.commands, [])
+                configuration[field] = original
+                path.write_text(json.dumps(configuration))
+
+    def test_resource_then_startup_and_same_name_conflicts_preserve_every_file(self):
+        exports = self.run / "raw/exports"
+        exports.mkdir()
+        resources = {}
+        for name in ("resident-memory.json", "installed-binary.json"):
+            path = exports / name
+            path.write_bytes(f"existing {name}\n".encode())
+            resources[name] = path.read_bytes()
+        self.export()
+        for name, retained in resources.items():
+            self.assertEqual((exports / name).read_bytes(), retained)
+        self.assertTrue((self.run / "raw/metrics.json").is_file())
+        for relative in ("raw/exports/xctest-tests.json", "raw/exports/xctest-metrics.json", "raw/metrics.json"):
+            with self.subTest(conflict=relative):
+                case = LaunchMetricExportTest(
+                    "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+                case.setUp()
+                try:
+                    path = case.run / relative
+                    path.parent.mkdir(exist_ok=True)
+                    retained = b"pre-existing native evidence\n"
+                    path.write_bytes(retained)
+                    with self.assertRaisesRegex(LaunchMetricError, "Refusing to replace"):
+                        case.export()
+                    self.assertEqual(case.commands, [])
+                    self.assertEqual(path.read_bytes(), retained)
+                finally:
+                    case.doCleanups()
+        replacement = self.root / "real-exports"
+        replacement.mkdir()
+        symlink_case = LaunchMetricExportTest(
+            "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+        symlink_case.setUp()
+        try:
+            (symlink_case.run / "raw/exports").symlink_to(replacement, target_is_directory=True)
+            with self.assertRaisesRegex(LaunchMetricError, "real directory"):
+                symlink_case.export()
+            self.assertEqual(symlink_case.commands, [])
+        finally:
+            symlink_case.doCleanups()
+
+    def test_real_stdout_limit_kills_the_child_without_partial_retention(self):
+        script = textwrap.dedent("""
+            import os
+            for _ in range(300):
+                os.write(1, b' ' * 65536)
+            """)
+        with self.assertRaisesRegex(LaunchMetricError, "stdout exceeds its 16 MiB bound"):
+            bounded_export_output(["synthetic-overflow"],
+                                  lambda command, **options: subprocess.Popen(
+                                      [sys.executable, "-I", "-c", script], **options))
+        # Exercise the full no-publication path with a genuine streaming child.
+        def oversized(command, **options):
+            self.commands.append(command)
+            return subprocess.Popen([sys.executable, "-I", "-c", script], **options)
+        started = time.monotonic()
+        with self.assertRaisesRegex(LaunchMetricError, "stdout exceeds its 16 MiB bound"):
+            export_launch_metric(self.run, variant="generated", revision=REVISION, iteration=30,
+                                 target_udid=TARGET, run_command=oversized)
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual(len(self.commands), 1)
+        self.assertFalse((self.run / "raw/exports/xctest-tests.json").exists())
+        self.assertFalse((self.run / "raw/metrics.json").exists())
+
+    def test_both_real_export_invocations_have_deadlines_and_kill_their_process_group(self):
+        for blocked_index in (0, 1):
+            with self.subTest(blocked_index=blocked_index):
+                case = LaunchMetricExportTest(
+                    "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+                case.setUp()
+                processes = []
+                marker = case.root / "descendant-must-not-survive"
+                descendant = f"import time;time.sleep(0.8);open({str(marker)!r},'x').close()"
+                child_script = (f"import subprocess,sys,time\n"
+                                f"subprocess.Popen([sys.executable,'-I','-c',{descendant!r}])\n"
+                                "time.sleep(30)\n")
+                valid_script = ("import os,sys; data=sys.stdin.buffer.read(); "
+                                "os.write(1,data); os.write(2,b'diagnostic')")
+                def export(command, **options):
+                    index = len(processes)
+                    if index == blocked_index:
+                        process = subprocess.Popen([sys.executable, "-I", "-c", child_script], **options)
+                    else:
+                        payload = synthetic_tests() if index == 0 else synthetic_metrics()
+                        process = subprocess.Popen([sys.executable, "-I", "-c", valid_script],
+                                                   stdin=subprocess.PIPE, **options)
+                        process.stdin.write(json.dumps(payload).encode())
+                        process.stdin.close()
+                    processes.append(process)
+                    return process
+                try:
+                    started = time.monotonic()
+                    with mock.patch("launch_metric.EXPORT_TIMEOUT_SECONDS", 0.15), \
+                            self.assertRaisesRegex(LaunchMetricError, "deadline"):
+                        export_launch_metric(case.run, variant="generated", revision=REVISION,
+                                             iteration=30, target_udid=TARGET, run_command=export)
+                    self.assertLess(time.monotonic() - started, 5)
+                    self.assertEqual(len(processes), blocked_index + 1)
+                    self.assertIsNotNone(processes[-1].poll())
+                    time.sleep(0.9)
+                    self.assertFalse(marker.exists(), "a descendant escaped the exporter process group")
+                    self.assertFalse((case.run / "raw/metrics.json").exists())
+                    if blocked_index == 0:
+                        self.assertFalse((case.run / "raw/exports/xctest-tests.json").exists())
+                finally:
+                    for process in processes:
+                        if process.poll() is None:
+                            process.kill()
+                            process.wait(timeout=5)
+                    case.doCleanups()
+
+    def test_streaming_stderr_is_drained_but_only_a_bounded_tail_is_retained(self):
+        script = "import os; os.write(2, b'x' * 1048576); os.write(1, b'{}')"
+        self.assertEqual(bounded_export_output(
+            ["synthetic-stderr"], lambda command, **options: subprocess.Popen(
+                [sys.executable, "-I", "-c", script], **options)), b"{}")
+
+    def test_cli_normalizes_deep_json_to_status_two_without_traceback(self):
+        nested = b"[" * 1200 + b"0" + b"]" * 1200
+        self.packet_paths["native_process"].write_bytes(nested)
+        result = subprocess.run([sys.executable, "-I", str(HERE / "launch_metric.py"),
+                                 "--run-directory", str(self.run), "--variant", "generated",
+                                 "--iteration", "30", "--source-revision", REVISION,
+                                 "--target-udid", TARGET], capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertNotIn(b"Traceback", result.stderr)
+        self.assertIn(b"launch-metric: ERROR", result.stderr)
 
     def test_missing_invalid_unrelated_and_wrong_typed_pids_fail_before_export(self):
         for role in (*self.packet_paths, "receipt"):

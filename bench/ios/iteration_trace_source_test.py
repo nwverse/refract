@@ -153,7 +153,9 @@ class TraceSourceContractTest(unittest.TestCase):
         exporter = (HERE / "launch_metric.py").read_text()
         self.assertIn('"--test-id", identifier', exporter)
         self.assertIn('com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration', exporter)
-        self.assertIn('write_once(destination / name, completed.stdout)', exporter)
+        self.assertIn("data = bounded_export_output(command, run_command)", exporter)
+        self.assertIn("write_once(destination / name, data)", exporter)
+        self.assertNotIn("capture_output=True", exporter)
         self.assertNotIn("firstDisplay", exporter[exporter.index("def selected_launch_measurement"):
                                                   exporter.index("def export_launch_metric")])
 

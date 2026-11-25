@@ -65,6 +65,17 @@ missing, non-positive, Boolean, floating-point and unrelated PIDs before invokin
 fail; `CACurrentMediaTime firstDisplay`
 remains a scene-activation instant, not a duration or a substitute for a missing native measurement.
 
+Treat xcresult export as an untrusted evidence decoder, even when the result bundle was acquired successfully. Reject
+duplicate JSON object keys before identity validation, bound JSON depth and traverse containers iteratively, require
+exact receipt field types, and normalize parser recursion and malformed XML into the public evidence error. An
+arbitrary-precision integer must survive both its float conversion and unit scaling exactly; accepting a rounded
+`duration_ms` beside the original `nativeValue` contradicts retained evidence. Use a nonblocking child-pipe pump rather
+than `capture_output=True`: stop at 16 MiB before writing partial JSON, drain stderr with a bounded diagnostic tail,
+and give every export its own local watchdog and owned process-group cleanup. This exporter watchdog is not a native
+completion deadline or performance threshold. `raw/exports/` is shared evidence storage, so allow unrelated resource
+files while reserving the launch metric's own target paths before spawning a child; directory sharing must not weaken
+per-file no-clobber or symbolic-link rejection.
+
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
 handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
 such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a second JSON writer may choose a different

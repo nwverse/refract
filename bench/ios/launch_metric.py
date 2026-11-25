@@ -13,11 +13,17 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import plistlib
 import re
+import selectors
+import signal
 import subprocess
 import sys
+import time
+from fractions import Fraction
 from pathlib import Path
+from xml.parsers import expat
 
 
 class LaunchMetricError(ValueError):
@@ -26,6 +32,12 @@ class LaunchMetricError(ValueError):
 
 LAUNCH_METRIC = "com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration"
 UNIT_TO_MILLISECONDS = {"s": 1000.0, "seconds": 1000.0}
+JSON_BYTE_LIMIT = 16 * 1024 * 1024
+JSON_DEPTH_LIMIT = 128
+# This local watchdog bounds only xcresulttool after native acquisition. It is
+# independent of the 180-second XCTest/native completion deadlines and is not
+# a launch-performance threshold. Each of the two exports gets its own budget.
+EXPORT_TIMEOUT_SECONDS = 60.0
 
 
 def traced_test_identifier(variant: str) -> str:
@@ -34,20 +46,44 @@ def traced_test_identifier(variant: str) -> str:
     return f"RefractBenchUITests/test{variant.capitalize()}StartupTrace()"
 
 
+def unique_json_object(pairs, label: str) -> dict:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise LaunchMetricError(f"{label} contains duplicate JSON object key: {key!r}")
+        result[key] = value
+    return result
+
+
 def decoded_json(data: bytes, label: str):
     try:
-        return json.loads(data, parse_constant=lambda value: (_ for _ in ()).throw(
-            LaunchMetricError(f"{label} contains a non-finite JSON number")))
-    except (UnicodeError, json.JSONDecodeError, ValueError) as error:
+        payload = json.loads(
+            data,
+            object_pairs_hook=lambda pairs: unique_json_object(pairs, label),
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                LaunchMetricError(f"{label} contains a non-finite JSON number")))
+    except (UnicodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
         raise LaunchMetricError(f"Cannot decode {label}: {error}") from error
+    # json.loads can recurse before raising RecursionError. Validate every
+    # accepted payload iteratively as well, including direct synthetic callers.
+    pending = [(payload, 1)]
+    while pending:
+        value, depth = pending.pop()
+        if depth > JSON_DEPTH_LIMIT:
+            raise LaunchMetricError(f"{label} exceeds its {JSON_DEPTH_LIMIT}-level nesting bound")
+        if isinstance(value, dict):
+            pending.extend((child, depth + 1) for child in value.values())
+        elif isinstance(value, list):
+            pending.extend((child, depth + 1) for child in value)
+    return payload
 
 
 def file_bytes(path: Path) -> bytes:
     if not path.is_file() or path.is_symlink():
         raise LaunchMetricError(f"Expected an ordinary retained file: {path.name}")
     with path.open("rb") as stream:
-        data = stream.read(16 * 1024 * 1024 + 1)
-    if len(data) > 16 * 1024 * 1024:
+        data = stream.read(JSON_BYTE_LIMIT + 1)
+    if len(data) > JSON_BYTE_LIMIT:
         raise LaunchMetricError(f"Retained JSON exceeds its 16 MiB bound: {path.name}")
     return data
 
@@ -64,22 +100,29 @@ def write_once(path: Path, data: bytes) -> None:
 
 
 def test_cases(payload) -> list[dict]:
-    if isinstance(payload, dict):
-        if payload.get("nodeType") == "Test Case":
-            return [payload]
-        return [case for value in payload.values() for case in test_cases(value)]
-    if isinstance(payload, list):
-        return [case for value in payload for case in test_cases(value)]
-    return []
+    cases = []
+    pending = [payload]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            if value.get("nodeType") == "Test Case":
+                cases.append(value)
+            else:
+                pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+    return cases
 
 
 def finite_positive(value, label: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if type(value) not in (int, float):
         raise LaunchMetricError(f"{label} must be a finite positive native number")
     try:
         result = float(value)
     except (OverflowError, ValueError) as error:
         raise LaunchMetricError(f"{label} must be a finite positive native number") from error
+    if type(value) is int and int(result) != value:
+        raise LaunchMetricError(f"{label} must convert to a finite float without losing integer precision")
     if not math.isfinite(result) or result <= 0:
         raise LaunchMetricError(f"{label} must be a finite positive native number")
     return result
@@ -148,28 +191,34 @@ def trace_identity(run: Path, variant: str, revision: str, iteration: int,
     if not target_udid or any(character in target_udid for character in ("\x00", "\r", "\n")):
         raise LaunchMetricError("A bounded target UDID is required")
     trace = decoded_json(file_bytes(run / "raw/iteration-trace.json"), "the trace receipt")
-    expected = {"source_revision": revision, "variant": variant, "scenario": "startup",
+    expected = {"schema": 1, "source_revision": revision, "variant": variant, "scenario": "startup",
                 "iteration": iteration, "target_udid": target_udid, "status": "complete",
                 "target_label": "SIMULATOR", "device_result": False,
                 "native_iteration_completion": f"{variant} startup complete 1"}
-    if not isinstance(trace, dict) or any(trace.get(key) != value for key, value in expected.items()):
+    if (not isinstance(trace, dict)
+            or any(type(trace.get(key)) is not type(value) or trace.get(key) != value
+                   for key, value in expected.items())):
         raise LaunchMetricError("The native trace receipt does not match this exact startup iteration")
     configuration = decoded_json(file_bytes(run / "iteration-trace-config.json"),
                                  "the trace configuration receipt")
     configuration_path = run / "iteration-trace-config.xctestrun"
-    if (not isinstance(configuration, dict) or configuration.get("schema") != 1
-            or configuration.get("source_revision") != revision
-            or configuration.get("iteration") != iteration
-            or configuration.get("archive") != "iteration-trace-config.xctestrun"
-            or configuration.get("control_directory") != str(run / "control")
+    expected_configuration = {"schema": 1, "source_revision": revision, "iteration": iteration,
+                              "archive": "iteration-trace-config.xctestrun",
+                              "control_directory": str(run / "control")}
+    if (not isinstance(configuration, dict)
+            or any(type(configuration.get(key)) is not type(value) or configuration.get(key) != value
+                   for key, value in expected_configuration.items())
+            or type(configuration.get("configuration_sha256")) is not str
             or configuration.get("configuration_sha256") != file_sha256(configuration_path)
+            or type(configuration.get("build_provenance_sha256")) is not str
             or configuration.get("build_provenance_sha256")
             != file_sha256(run / "refract-build-provenance.json")):
         raise LaunchMetricError("The retained trace configuration does not match this startup iteration")
     try:
         xctestrun = plistlib.loads(file_bytes(configuration_path))
         environment = xctestrun["RefractBenchUITests"]["TestingEnvironmentVariables"]
-    except (OSError, KeyError, TypeError, ValueError, plistlib.InvalidFileException) as error:
+    except (OSError, KeyError, TypeError, ValueError, plistlib.InvalidFileException,
+            expat.ExpatError) as error:
         raise LaunchMetricError("Cannot decode the retained trace xctestrun") from error
     expected_environment = {"REFRACT_BENCH_REVISION": revision,
                             "REFRACT_BENCH_TRACE_CONTROL": str(run / "control"),
@@ -227,6 +276,11 @@ def selected_launch_measurement(metrics, tests, *, variant: str, revision: str, 
         raise LaunchMetricError("Exactly one native launch-duration sample is required; empty or repeated values fail")
     seconds = finite_positive(samples[0], "The native launch duration")
     duration_ms = finite_positive(seconds * multiplier, "The converted launch duration")
+    if type(samples[0]) is int:
+        milliseconds = Fraction(samples[0]) * 1000
+        if (Fraction.from_float(seconds) * 1000 != milliseconds
+                or Fraction.from_float(duration_ms) != milliseconds):
+            raise LaunchMetricError("The converted launch duration must preserve the exact native integer")
     measurement = {
         "sourceRevision": revision, "variant": variant, "scenario": "startup", "iteration": iteration,
         "pid": native_pid,
@@ -248,8 +302,82 @@ def selected_launch_measurement(metrics, tests, *, variant: str, revision: str, 
             "provenance": provenance}, duration_ms
 
 
+def _kill_export_process_group(process) -> None:
+    """Kill only the new session created for this exporter invocation."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        if process.poll() is None:
+            process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def bounded_export_output(command: list[str], run_command) -> bytes:
+    """Pump both pipes; never invoke an unbounded capture_output operation."""
+    process = run_command(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          start_new_session=True)
+    selector = selectors.DefaultSelector()
+    stdout_chunks = []
+    stdout_size = 0
+    stderr_tail = b""
+    deadline = time.monotonic() + EXPORT_TIMEOUT_SECONDS
+    streams = {}
+    try:
+        for name, stream in (("stdout", process.stdout), ("stderr", process.stderr)):
+            if stream is None:
+                raise LaunchMetricError(f"The native export must provide a {name} pipe")
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ, name)
+            streams[name] = stream
+        while streams:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise LaunchMetricError(
+                    f"The native xcresult export exceeded its {EXPORT_TIMEOUT_SECONDS:g}-second deadline")
+            for key, _ in selector.select(remaining):
+                stream = key.fileobj
+                name = key.data
+                try:
+                    chunk = os.read(stream.fileno(), 64 * 1024)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    selector.unregister(stream)
+                    stream.close()
+                    del streams[name]
+                    continue
+                if name == "stdout":
+                    stdout_size += len(chunk)
+                    if stdout_size > JSON_BYTE_LIMIT:
+                        raise LaunchMetricError("The native xcresult stdout exceeds its 16 MiB bound")
+                    stdout_chunks.append(chunk)
+                else:
+                    # Drain stderr without allowing an unbounded diagnostic buffer.
+                    stderr_tail = (stderr_tail + chunk)[-64 * 1024:]
+        remaining = deadline - time.monotonic()
+        try:
+            status = process.wait(timeout=max(0.0, remaining))
+        except subprocess.TimeoutExpired as error:
+            raise LaunchMetricError(
+                f"The native xcresult export exceeded its {EXPORT_TIMEOUT_SECONDS:g}-second deadline") from error
+        if status != 0:
+            raise subprocess.CalledProcessError(status, command, stderr=stderr_tail)
+        return b"".join(stdout_chunks)
+    finally:
+        if process.poll() is None:
+            _kill_export_process_group(process)
+        selector.close()
+        for stream in (process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+
+
 def export_launch_metric(run: Path, *, variant: str, revision: str, iteration: int,
-                         target_udid: str, run_command=subprocess.run) -> dict:
+                         target_udid: str, run_command=subprocess.Popen) -> dict:
     """Export and preserve only the same result bundle selected by the runner."""
     trace, configuration, native_pid, native_packets = trace_identity(
         run, variant, revision, iteration, target_udid)
@@ -269,18 +397,25 @@ def export_launch_metric(run: Path, *, variant: str, revision: str, iteration: i
     if not raw.is_dir() or raw.is_symlink():
         raise LaunchMetricError("The retained raw directory must be a real directory")
     destination = raw / "exports"
+    output = raw / "metrics.json"
+    reserved = [destination / name for name in commands] + [output]
+    for path in reserved:
+        if path.exists() or path.is_symlink():
+            raise LaunchMetricError(f"Refusing to replace existing native export evidence: {path.name}")
+    if destination.exists() and (not destination.is_dir() or destination.is_symlink()):
+        raise LaunchMetricError("The export directory must be a real directory")
     try:
-        destination.mkdir(exist_ok=False)
+        # Other benchmark roles may already have retained unrelated resource
+        # evidence here. Only this exporter's three target paths are exclusive.
+        destination.mkdir(exist_ok=True)
     except FileExistsError as error:
-        raise LaunchMetricError("Refusing to reuse an existing export directory") from error
+        raise LaunchMetricError("The export directory must be a real directory") from error
     if not destination.is_dir() or destination.is_symlink():
         raise LaunchMetricError("The export directory must be a real directory")
     for name, command in commands.items():
-        completed = run_command(command, check=True, capture_output=True)
-        if not isinstance(completed.stdout, bytes):
-            raise LaunchMetricError("The native export must retain its exact JSON bytes")
-        write_once(destination / name, completed.stdout)
-        exports[name] = completed.stdout
+        data = bounded_export_output(command, run_command)
+        write_once(destination / name, data)
+        exports[name] = data
     trace["path"] = run / "raw/iteration-trace.json"
     configuration["path"] = run / "iteration-trace-config.json"
     tests = decoded_json(exports["xctest-tests.json"], "the XCTest tests export")
@@ -294,7 +429,6 @@ def export_launch_metric(run: Path, *, variant: str, revision: str, iteration: i
         name: {"path": f"raw/exports/{name}", "sha256": hashlib.sha256(data).hexdigest()}
         for name, data in exports.items()
     }
-    output = raw / "metrics.json"
     write_once(output, (json.dumps(selected, indent=2, sort_keys=True, allow_nan=False) + "\n").encode())
     return {"path": "raw/metrics.json", "sha256": file_sha256(output), "duration_ms": duration_ms,
             "metric_selector": selected["metric_selector"]}
@@ -311,7 +445,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = export_launch_metric(args.run_directory, variant=args.variant, revision=args.source_revision,
                                       iteration=args.iteration, target_udid=args.target_udid)
-    except (LaunchMetricError, OSError, subprocess.CalledProcessError) as error:
+    except (LaunchMetricError, OSError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired) as error:
         print(f"launch-metric: ERROR: {error}", file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))

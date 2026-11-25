@@ -178,8 +178,20 @@ xcresult export command, the exporter requires the canonical `control/native-pro
 and one strictly positive integer native PID; the iteration receipt must match that PID, not supply an unchecked
 identity. Boolean, floating-point, missing, non-positive and unrelated PIDs fail before export. The selected
 measurement contains the exact `pid` inside the selector checksum, and provenance retains each native packet's
-relative path and SHA-256. Empty, duplicate, unrelated, non-finite or non-positive measurements fail without publishing
-a duration. `firstDisplay` remains a separate
+relative path and SHA-256. Receipt/configuration identity and schema fields require exact JSON types, including integer
+schema 1, `device_result is False`, and an exact positive integer PID. Duplicate object keys, nesting beyond 128 levels,
+inexact arbitrary-precision integer conversion, and malformed xctestrun XML are controlled evidence errors. Integer
+seconds are converted only when both the binary-float seconds and millisecond values preserve the exact rational value;
+ordinary exact integer and floating-point durations remain supported. Empty, duplicate, unrelated, non-finite or
+non-positive measurements fail without publishing a duration.
+Each xcresulttool invocation has a separate 60-second local exporter watchdog. It applies only after native acquisition
+and is not a production performance threshold or a replacement for the unchanged XCTest/native completion deadlines.
+A nonblocking selector drains both pipes; stdout is limited to 16 MiB while streaming, stderr retains only a bounded
+diagnostic tail, and an overrun or deadline kills and reaps the exporter's own process group. No partial oversized JSON
+is retained. `raw/exports/` may already contain unrelated `resident-memory.json` or `installed-binary.json` evidence;
+the exporter preserves those files but refuses any existing `xctest-tests.json`, `xctest-metrics.json` or
+`raw/metrics.json` before running xcresulttool. The export directory must be a real directory, never a symbolic link.
+`firstDisplay` remains a separate
 scene-activation instant and is never subtracted from another timestamp or relabelled as elapsed launch time.
 This UI-test source change requires a new build identity. For separately authorized native verification, rebuild the
 exact committed head with `DERIVED_DATA=<fresh-new-head-build> bench/ios/build.sh`, then use the existing traced-runner
