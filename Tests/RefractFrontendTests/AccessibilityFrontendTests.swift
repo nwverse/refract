@@ -231,6 +231,53 @@ func accessibilityTextRejectsUnlocalizedOrInvalidSource(_ modifier: String) {
     #expect(unit.diagnostics.contains { $0.code == "RFACCESS002" })
 }
 
+@Test(arguments: [
+    (".accessibilityLabel(Text(\"settings.password\"))", "RFACCESS004"),
+    (".accessibilityHint(Text(\"settings.password\"))", "RFACCESS004"),
+    (".accessibilityValue(Text(\"settings.password\"))", "RFACCESS004"),
+    (".accessibilityAction(named: Text(\"settings.password\")) { accepted = true }", "RFACCESS002"),
+])
+func secureFieldRejectsDuplicateAccessibilityModifiers(_ modifier: String, _ code: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Invalid: View {
+        @Binding var password: String
+        @State private var accepted: Bool = false
+        var body: some View {
+            SecureField("settings.password", text: $password)
+                \(modifier)
+                \(modifier)
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == [code])
+}
+
+@Test func secureFieldRetainsOneOfEachAccessibilityModifier() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Valid: View {
+        @Binding var password: String
+        @State private var accepted: Bool = false
+        var body: some View {
+            SecureField("settings.password", text: $password)
+                .accessibilityLabel(Text("settings.password"))
+                .accessibilityHint(Text("settings.password"))
+                .accessibilityValue(Text("settings.password"))
+                .accessibilityAction(named: Text("settings.password")) { accepted = true }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .secureInput(_, _, _, modifiers, _) = unit.module.screens.first?.body else {
+        Issue.record("Expected a SecureField with typed accessibility modifiers")
+        return
+    }
+    #expect(modifiers.map(\.name) == [
+        "accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction",
+    ])
+}
+
 @Test func minimumAPIMappingRejectsInvalidLevels() throws {
     let mapping = try String(contentsOfFile: "Fixtures/accessibility-actions-traversal/refract.json", encoding: .utf8)
         .replacingOccurrences(of: "\"minimumAPI\": 26", with: "\"minimumAPI\": 11")

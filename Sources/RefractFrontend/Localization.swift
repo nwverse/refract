@@ -177,6 +177,7 @@ extension Builder {
             currentListItemType = itemInput.type
         }
         guard let root = viewStatements(items, body: binding) else { return nil }
+        if itemInput?.type.name == "ChatMessage", !validateMessageRowShape(root) { return nil }
         return Screen(name: node.name.text, parameters: parameters, states: states, modals: currentModals,
                       body: root, nativeValues: native.values, lifecycle: native.lifecycle,
                       location: location(of: node.name))
