@@ -171,16 +171,21 @@ extension Builder {
             return nil
         }
         guard let row = screens.first(where: { $0.name == child.name }),
-              let nested = messageBlocks(in: row.body), let parent = nested.parent, let block = nested.block else {
-            pendingMessageSources.append((outer, content, currentViewName ?? "", modelType.name))
-            return nil
+              let resolved = resolvedMessageList(outer: outer, content: child, modelType: modelType.name,
+                                                row: row, location: location) else {
+            return deferredMessageList(outer: outer, content: child, modelType: modelType.name, location: location)
         }
-        let items = ListItems(collection: outer, itemName: child.item?.expression ?? "message", itemType: "ChatMessage",
-                              keyType: .string, content: content, modelType: modelType.name,
-                              messageBlocks: MessageBlockIdentity(content: nested.items.content, parent: parent,
-                                                                  blockName: nested.items.itemName,
-                                                                  blockArgument: block),
-                              location: location)
+        return resolved
+    }
+
+    private func deferredMessageList(outer: Expression, content: ChildView, modelType: String,
+                                     location: RefractIR.SourceLocation?) -> ViewNode {
+        pendingMessageSources.append((outer, .child(content, location: location), currentViewName ?? "", modelType))
+        // This marker remains inside the parsed source tree until the sibling row is checked.
+        // The linker either replaces it or reports RFMSG001; no backend can receive it as valid input.
+        let items = ListItems(collection: outer, itemName: content.item?.expression ?? "message",
+                              itemType: "ChatMessage", keyType: .string, content: .child(content, location: location),
+                              modelType: modelType, location: location)
         return .list(children: [.forEach(items, location: location)], modifiers: [], location: location)
     }
 
@@ -188,42 +193,165 @@ extension Builder {
         guard !pendingMessageSources.isEmpty else { return }
         for (outer, content, owner, modelType) in pendingMessageSources {
             guard case let .child(child, location) = content,
-                  let row = siblingScreens.first(where: { $0.name == child.name }),
-                  let nested = messageBlocks(in: row.body), let parent = nested.parent, let block = nested.block else {
-                diagnostics.append(Diagnostic(code: "RFMSG001",
-                    message: "A ChatMessage list requires a generated MessageRow with bounded block content.",
-                    suggestion: "Use MessageRow(message: message) directly in List(model.messages)", location: content.sourceLocation))
+                  let row = siblingScreens.first(where: { $0.name == child.name }) else {
+                rejectMessageLink("A ChatMessage list requires a generated MessageRow with bounded block content.",
+                                  suggestion: "Use MessageRow(message: message) directly in List(model.messages)",
+                                  location: content.sourceLocation)
                 continue
             }
-            let items = ListItems(collection: outer, itemName: child.item?.expression ?? "message", itemType: "ChatMessage",
-                                  keyType: .string, content: content, modelType: modelType,
-                                  messageBlocks: MessageBlockIdentity(content: nested.items.content, parent: parent,
-                                                                      blockName: nested.items.itemName,
-                                                                      blockArgument: block),
-                                  location: location)
-            pendingMessageBodies.append((owner, .list(children: [.forEach(items, location: location)], modifiers: [], location: location)))
-        }
-        for pending in pendingMessageBodies {
-            if let index = screens.firstIndex(where: { $0.name == pending.screen }) {
-                let original = screens[index]
-                screens[index] = Screen(name: original.name, parameters: original.parameters, states: original.states,
-                                        modals: original.modals, navigation: original.navigation, body: pending.body,
-                                        nativeValues: original.nativeValues, lifecycle: original.lifecycle,
-                                        location: original.location)
-            } else if let original = pendingMessageOwners[pending.screen] {
-                screens.append(Screen(name: original.name, parameters: original.parameters, states: original.states,
-                                      navigation: original.navigation, body: pending.body, location: original.location))
+            guard let index = screens.firstIndex(where: { $0.name == owner }),
+                  let body = replacingDeferredMessageList(in: screens[index].body, outer: outer, content: child,
+                                                          modelType: modelType, row: row, location: location) else {
+                rejectMessageLink("A deferred ChatMessage list could not be linked to its checked source position.",
+                                  suggestion: "Keep List(model.messages) in one generated screen with its checked MessageRow",
+                                  location: content.sourceLocation)
+                continue
             }
+            let original = screens[index]
+            screens[index] = Screen(name: original.name, parameters: original.parameters, states: original.states,
+                                    modals: original.modals, navigation: original.navigation, body: body,
+                                    nativeValues: original.nativeValues, lifecycle: original.lifecycle,
+                                    location: original.location)
+            pendingMessageBodies.append((owner, body))
         }
         pendingMessageSources.removeAll()
     }
 
-    private func messageBlocks(in node: ViewNode) -> NestedListItems? {
-        if case let .messageBlocks(nested, _) = node { return nested }
-        for child in node.children {
-            if let found = messageBlocks(in: child) { return found }
+    private func rejectMessageLink(_ message: String, suggestion: String, location: RefractIR.SourceLocation?) {
+        let diagnostic = Diagnostic(code: "RFMSG001", message: message, suggestion: suggestion, location: location)
+        diagnostics.append(diagnostic)
+        messageLinkDiagnostics.append(diagnostic)
+    }
+
+    private func resolvedMessageItems(outer: Expression, content: ChildView, modelType: String,
+                                      row: Screen, location: RefractIR.SourceLocation?) -> ListItems? {
+        guard let nested = messageBlocks(in: row.body), let parent = nested.parent, let block = nested.block else {
+            return nil
         }
-        return nil
+        return ListItems(collection: outer, itemName: content.item?.expression ?? "message", itemType: "ChatMessage",
+                         keyType: .string, content: .child(content, location: location), modelType: modelType,
+                         messageBlocks: MessageBlockIdentity(content: nested.items.content, parent: parent,
+                                                             blockName: nested.items.itemName,
+                                                             blockArgument: block),
+                         location: location)
+    }
+
+    private func resolvedMessageList(outer: Expression, content: ChildView, modelType: String,
+                                     row: Screen, location: RefractIR.SourceLocation?) -> ViewNode? {
+        guard let items = resolvedMessageItems(outer: outer, content: content, modelType: modelType,
+                                               row: row, location: location) else { return nil }
+        return .list(children: [.forEach(items, location: location)], modifiers: [], location: location)
+    }
+
+    private func replacingDeferredMessageList(in root: ViewNode, outer: Expression, content: ChildView,
+                                              modelType: String, row: Screen,
+                                              location: RefractIR.SourceLocation?) -> ViewNode? {
+        guard let resolved = resolvedMessageItems(outer: outer, content: content, modelType: modelType,
+                                                  row: row, location: location) else { return nil }
+        var replaced = false
+        func replace(_ node: ViewNode) -> ViewNode {
+            if replaced { return node }
+            if case let .list(children, modifiers, listLocation) = node, children.count == 1,
+               case let .forEach(items, _) = children[0], items.itemType == "ChatMessage",
+               items.collection == outer, items.messageBlocks == nil, items.location == location,
+               case let .child(candidate, _) = items.content, candidate == content {
+                replaced = true
+                // Replace only the deferred child; the original wrapper owns its modifiers and source location.
+                return .list(children: [.forEach(resolved, location: location)], modifiers: modifiers,
+                             location: listLocation)
+            }
+            switch node {
+            case let .stack(axis, children, modifiers, location):
+                return .stack(axis: axis, children: children.map(replace), modifiers: modifiers, location: location)
+            case let .layout(layout, children, modifiers, location):
+                return .layout(layout, children: children.map(replace), modifiers: modifiers, location: location)
+            case let .list(children, modifiers, location):
+                return .list(children: children.map(replace), modifiers: modifiers, location: location)
+            case let .scroll(axis, child, modifiers, location):
+                return .scroll(axis: axis, child: replace(child), modifiers: modifiers, location: location)
+            case let .listItem(child, location):
+                return .listItem(child: replace(child), location: location)
+            case let .nativeModifier(child, operations, location):
+                return .nativeModifier(child: replace(child), operations: operations, location: location)
+            case let .button(label, action, modifiers, location):
+                return .button(label: replace(label), action: action, modifiers: modifiers, location: location)
+            case let .section(header, children, location):
+                return .section(header: header, children: children.map(replace), location: location)
+            case let .component(component, location):
+                return .component(ComponentReference(name: component.name, arguments: component.arguments,
+                    children: component.children.map(replace), modifiers: component.modifiers), location: location)
+            case let .forEach(items, location):
+                let updated = ListItems(collection: items.collection, itemName: items.itemName, itemType: items.itemType,
+                                        key: items.key, keyType: items.keyType, content: replace(items.content),
+                                        contentType: items.contentType, projection: items.projection,
+                                        modelType: items.modelType, messageBlocks: items.messageBlocks,
+                                        location: items.location)
+                return .forEach(updated, location: location)
+            case let .messageBlocks(nested, location):
+                let items = nested.items
+                let updated = ListItems(collection: items.collection, itemName: items.itemName, itemType: items.itemType,
+                                        key: items.key, keyType: items.keyType, content: replace(items.content),
+                                        contentType: items.contentType, projection: items.projection,
+                                        modelType: items.modelType, messageBlocks: items.messageBlocks,
+                                        location: items.location)
+                return .messageBlocks(NestedListItems(updated, parent: nested.parent, message: nested.message,
+                                                      block: nested.block), location: location)
+            case let .horizontalSections(sections, location):
+                let rows = sections.rows
+                let updated = HorizontalItemCollection(property: rows.property, itemName: rows.itemName,
+                    itemType: rows.itemType, key: rows.key, keyType: rows.keyType, content: replace(rows.content),
+                    location: rows.location)
+                return .horizontalSections(HorizontalSectionCollection(collection: sections.collection,
+                    modelType: sections.modelType, sectionName: sections.sectionName, sectionType: sections.sectionType,
+                    sectionKey: sections.sectionKey, sectionKeyType: sections.sectionKeyType,
+                    titleProperty: sections.titleProperty, rows: updated, location: sections.location), location: location)
+            case let .conditional(branches, location):
+                return .conditional(conditions: branches.map {
+                    ViewNode.ConditionBranch(condition: $0.condition, children: $0.children.map(replace))
+                }, location: location)
+            case let .optionalBinding(subject, binding, children, otherwise, location):
+                return .optionalBinding(subject: subject, binding: binding, children: children.map(replace),
+                                        otherwise: otherwise.map(replace), location: location)
+            case let .switchExpression(subject, enumName, cases, location):
+                return .switchExpression(subject: subject, enumName: enumName, cases: cases.map {
+                    SwitchCase(name: $0.name, binding: $0.binding, children: $0.children.map(replace))
+                }, location: location)
+            case let .navigationStack(stack, location):
+                return .navigationStack(NavigationStackNode(pathName: stack.pathName, rootName: stack.rootName,
+                    enumName: stack.enumName, content: stack.content.map(replace), destinations: stack.destinations,
+                    models: stack.models), location: location)
+            case let .platformView(alternatives, location):
+                return .platformView(PlatformAlternatives(ios: alternatives.ios.map(replace),
+                    android: alternatives.android.map(replace), harmonyOS: alternatives.harmonyOS.map(replace)),
+                    location: location)
+            default:
+                return node
+            }
+        }
+        let body = replace(root)
+        return replaced ? body : nil
+    }
+
+    func validateMessageRowShape(_ root: ViewNode) -> Bool {
+        guard containsMessageBlocks(root), messageBlocks(in: root) == nil else { return true }
+        diagnostics.append(Diagnostic(code: "RFMSG001",
+            message: "ForEach(message.blocks) must be a direct child of the message row's VStack.",
+            suggestion: "Keep the bounded ForEach directly inside the row's non-scrolling VStack",
+            location: root.sourceLocation))
+        return false
+    }
+
+    private func containsMessageBlocks(_ node: ViewNode) -> Bool {
+        if case .messageBlocks = node { return true }
+        return node.children.contains(where: containsMessageBlocks)
+    }
+
+    private func messageBlocks(in node: ViewNode) -> NestedListItems? {
+        guard case let .stack(axis, children, _, _) = node, axis == .vertical else { return nil }
+        return children.compactMap { child -> NestedListItems? in
+            guard case let .messageBlocks(nested, _) = child else { return nil }
+            return nested
+        }.first
     }
 
     func validateMessageProjection(_ module: Module) {
