@@ -230,7 +230,7 @@ extension Builder {
             case let .stack(_, _, modifiers, _), let .text(_, modifiers, _), let .button(_, _, modifiers, _),
                  let .layout(_, _, modifiers, _), let .scroll(_, _, modifiers, _), let .list(_, modifiers, _),
                  let .image(_, modifiers, _), let .toggle(_, _, modifiers, _, _, _), let .textInput(_, _, modifiers, _),
-                 let .label(_, _, modifiers, _), let .divider(modifiers, _):
+                 let .secureInput(_, _, _, modifiers, _), let .label(_, _, modifiers, _), let .divider(modifiers, _):
                 return modifiers
             default: return []
         }

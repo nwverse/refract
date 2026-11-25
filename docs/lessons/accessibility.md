@@ -17,6 +17,9 @@
 - Reordering accessibility metadata is not the same as reordering drawing, keyboard focus or screen-reader speech.
   Compose Native JVM metadata and captures are useful local evidence but cannot establish TalkBack/VoiceOver/ArkUI
   device behavior. Preserve those limits in docs and PRs.
+- Keep duplicate-semantic and traversal-name lookups exhaustive over modifier-bearing view cases. A new control such
+  as `SecureField` can retain accessibility modifiers in IR while an incomplete lookup reports no existing modifiers,
+  allowing repeated labels and actions to reach native output. Test each receiver family through `Frontend.parse`.
 - Native test helpers must use the platform's actual semantics key types: Compose content descriptions are
   `List<String>` (not `AnnotatedString`), and custom actions use `SemanticsActions.CustomActions`, not the similarly
   named `SemanticsProperties` key. Locale qualifiers in Robolectric use resource order such as `en-rES-...`.
