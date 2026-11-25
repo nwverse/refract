@@ -57,7 +57,12 @@ A traced startup selector does not export `XCTApplicationLaunchMetric` merely be
 measures 30 launches: the selected selector itself must call `measure(metrics:)`. One measurement around the unchanged
 trace handshake supplies one native duration for that exact launch; those 30 automatic measurement ordinals must never
 be renamed as traced identities `2...30`. Export the same xcresult with the exact test ID, retain raw JSON and checksums,
-and bind the chosen scalar to the trace/configuration identity. Empty exports fail; `CACurrentMediaTime firstDisplay`
+and bind the chosen scalar to the trace/configuration identity. Before exporting that scalar, validate the actual
+native-process, request, native-completion and forwarded-completion packets against the exact run identity and one
+strictly positive integer PID; do not infer it from a filename or trust the iteration receipt's self-declaration alone.
+Carry the exact PID inside the checksum-selected measurement and bind native-packet checksums in provenance. Reject
+missing, non-positive, Boolean, floating-point and unrelated PIDs before invoking xcresult commands. Empty exports
+fail; `CACurrentMediaTime firstDisplay`
 remains a scene-activation instant, not a duration or a substitute for a missing native measurement.
 
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only

@@ -85,8 +85,60 @@ def finite_positive(value, label: str) -> float:
     return result
 
 
+def native_process_identity(run: Path, *, variant: str, revision: str, iteration: int,
+                            trace: dict) -> tuple[int, dict[str, dict]]:
+    """Match the traced process packets; a receipt PID alone is not native identity."""
+    if type(trace.get("session")) is not int:
+        raise LaunchMetricError("The trace receipt session must be an integer")
+    control = run / "control"
+    if not control.is_dir() or control.is_symlink():
+        raise LaunchMetricError("The retained native-process control directory must be a real directory")
+    paths = {
+        "native_process": control / "native-process.json",
+        "request": run / "raw/request.json",
+        "native_completion": control / "native-completion.json",
+        "completion": run / "raw/completion.json",
+    }
+    packets = {}
+    for role, path in paths.items():
+        packet = decoded_json(file_bytes(path), f"the {role.replace('_', ' ')} packet")
+        if not isinstance(packet, dict):
+            raise LaunchMetricError(f"The {role.replace('_', ' ')} packet must be a JSON object")
+        packets[role] = packet
+    identity = {
+        "schema": 1, "session": trace["session"], "revision": revision,
+        "variant": variant, "scenario": "startup", "iteration": iteration,
+    }
+    states = {"native_process": "ready", "request": "ready",
+              "native_completion": "complete", "completion": "complete"}
+    for role, packet in packets.items():
+        for field, value in identity.items():
+            if type(packet.get(field)) is not type(value) or packet.get(field) != value:
+                raise LaunchMetricError(
+                    f"The {role.replace('_', ' ')} packet {field} does not match this startup iteration")
+        if packet.get("state") != states[role]:
+            raise LaunchMetricError(f"The {role.replace('_', ' ')} packet has the wrong native state")
+    native_pid = packets["native_process"].get("pid")
+    if type(native_pid) is not int or native_pid <= 0:
+        raise LaunchMetricError("The native process PID must be one positive integer")
+    for role, packet in packets.items():
+        if type(packet.get("pid")) is not int or packet.get("pid") != native_pid:
+            raise LaunchMetricError(f"The {role.replace('_', ' ')} packet PID is invalid or unrelated")
+        if packet.get("process") != "running":
+            raise LaunchMetricError(f"The {role.replace('_', ' ')} packet does not identify a running process")
+    if type(trace.get("pid")) is not int or trace.get("pid") != native_pid:
+        raise LaunchMetricError("The trace receipt PID must match the native process packet exactly")
+    expected_completion = f"{variant} startup complete 1"
+    for role in ("native_completion", "completion"):
+        if packets[role].get("completion") != expected_completion:
+            raise LaunchMetricError(f"The {role.replace('_', ' ')} completion does not match this startup iteration")
+    retained = {role: {"path": str(path.relative_to(run)), "sha256": file_sha256(path)}
+                for role, path in paths.items()}
+    return native_pid, retained
+
+
 def trace_identity(run: Path, variant: str, revision: str, iteration: int,
-                   target_udid: str) -> tuple[dict, dict]:
+                   target_udid: str) -> tuple[dict, dict, int, dict[str, dict]]:
     if not run.is_dir() or run.is_symlink():
         raise LaunchMetricError("The iteration run must be a real retained directory")
     if type(iteration) is not int or iteration not in range(2, 31):
@@ -125,11 +177,14 @@ def trace_identity(run: Path, variant: str, revision: str, iteration: int,
     if (not isinstance(environment, dict)
             or any(environment.get(key) != value for key, value in expected_environment.items())):
         raise LaunchMetricError("The retained xctestrun environment does not match the traced identity")
-    return trace, configuration
+    native_pid, native_packets = native_process_identity(
+        run, variant=variant, revision=revision, iteration=iteration, trace=trace)
+    return trace, configuration, native_pid, native_packets
 
 
 def selected_launch_measurement(metrics, tests, *, variant: str, revision: str, iteration: int,
-                                target_udid: str, trace: dict, configuration: dict) -> tuple[dict, float]:
+                                target_udid: str, trace: dict, configuration: dict,
+                                native_pid: int, native_packets: dict[str, dict]) -> tuple[dict, float]:
     identifier = traced_test_identifier(variant)
     cases = test_cases(tests)
     if len(cases) != 1:
@@ -174,6 +229,7 @@ def selected_launch_measurement(metrics, tests, *, variant: str, revision: str, 
     duration_ms = finite_positive(seconds * multiplier, "The converted launch duration")
     measurement = {
         "sourceRevision": revision, "variant": variant, "scenario": "startup", "iteration": iteration,
+        "pid": native_pid,
         "metric": "XCTApplicationLaunchMetric", "nativeMetricIdentifier": LAUNCH_METRIC,
         "nativeTestIdentifier": identifier,
         "nativeValue": {"unitOfMeasurement": native_metric["unitOfMeasurement"], "measurements": samples},
@@ -184,6 +240,8 @@ def selected_launch_measurement(metrics, tests, *, variant: str, revision: str, 
         "native_test_identifier_url": expected_url,
         "trace_receipt_sha256": file_sha256(trace["path"]),
         "trace_configuration_receipt_sha256": file_sha256(configuration["path"]),
+        "native_pid": native_pid,
+        "native_process_packets": native_packets,
     }
     return {"measurements": [measurement],
             "metric_selector": {"index": 0, "value_sha256": hashlib.sha256(canonical).hexdigest()},
@@ -193,7 +251,8 @@ def selected_launch_measurement(metrics, tests, *, variant: str, revision: str, 
 def export_launch_metric(run: Path, *, variant: str, revision: str, iteration: int,
                          target_udid: str, run_command=subprocess.run) -> dict:
     """Export and preserve only the same result bundle selected by the runner."""
-    trace, configuration = trace_identity(run, variant, revision, iteration, target_udid)
+    trace, configuration, native_pid, native_packets = trace_identity(
+        run, variant, revision, iteration, target_udid)
     results = run / "results.xcresult"
     if (not results.is_dir() or results.is_symlink()
             or not (results / "Info.plist").is_file() or (results / "Info.plist").is_symlink()):
@@ -228,7 +287,8 @@ def export_launch_metric(run: Path, *, variant: str, revision: str, iteration: i
     metrics = decoded_json(exports["xctest-metrics.json"], "the XCTest metrics export")
     selected, duration_ms = selected_launch_measurement(
         metrics, tests, variant=variant, revision=revision, iteration=iteration,
-        target_udid=target_udid, trace=trace, configuration=configuration)
+        target_udid=target_udid, trace=trace, configuration=configuration,
+        native_pid=native_pid, native_packets=native_packets)
     selected["provenance"]["export_commands"] = list(commands.values())
     selected["provenance"]["raw_exports"] = {
         name: {"path": f"raw/exports/{name}", "sha256": hashlib.sha256(data).hexdigest()}

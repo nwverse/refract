@@ -26,6 +26,7 @@ from paired_report import selected_duration
 
 REVISION = "a" * 40
 TARGET = "synthetic-target"
+NATIVE_PID = 4242
 IDENTIFIER = "RefractBenchUITests/testGeneratedStartupTrace()"
 IDENTIFIER_URL = ("test://com.apple.xcode/RefractBench/RefractBenchUITests/"
                   "RefractBenchUITests/testGeneratedStartupTrace")
@@ -64,7 +65,8 @@ class LaunchMetricSelectionTest(unittest.TestCase):
             synthetic_tests() if tests is None else tests,
             variant="generated", revision=REVISION, iteration=30, target_udid=TARGET,
             trace={"path": HERE / "iteration_trace_runner.py"},
-            configuration={"path": HERE / "iteration_trace_runner.py"})
+            configuration={"path": HERE / "iteration_trace_runner.py"},
+            native_pid=NATIVE_PID, native_packets={})
 
     def test_one_exact_selector_native_second_becomes_one_millisecond_duration(self):
         selected, duration = self.select()
@@ -73,6 +75,7 @@ class LaunchMetricSelectionTest(unittest.TestCase):
         self.assertEqual(measurement["nativeValue"], {"unitOfMeasurement": "s", "measurements": [1.25]})
         self.assertEqual(measurement["nativeTestIdentifier"], IDENTIFIER)
         self.assertEqual(measurement["iteration"], 30)
+        self.assertEqual(measurement["pid"], NATIVE_PID)
         self.assertNotIn("firstDisplay", measurement)
         self.assertNotIn("timestamp", measurement)
         self.assertNotIn("durationInSeconds", measurement)
@@ -159,11 +162,28 @@ class LaunchMetricExportTest(unittest.TestCase):
         (self.run / "refract-build-provenance.json").write_bytes(b"synthetic build provenance")
         self.receipt = {
             "status": "complete", "source_revision": REVISION, "variant": "generated",
-            "scenario": "startup", "iteration": 30, "target_udid": TARGET,
-            "target_label": "SIMULATOR", "device_result": False,
+            "scenario": "startup", "iteration": 30, "session": 1, "pid": NATIVE_PID,
+            "target_udid": TARGET, "target_label": "SIMULATOR", "device_result": False,
             "native_iteration_completion": "generated startup complete 1",
             "native_first_display": {"clock": "CACurrentMediaTime", "timestamp": "12345.25"},
         }
+        self.packet_paths = {
+            "native_process": self.run / "control/native-process.json",
+            "request": self.run / "raw/request.json",
+            "native_completion": self.run / "control/native-completion.json",
+            "completion": self.run / "raw/completion.json",
+        }
+        self.packets = {}
+        for role, path in self.packet_paths.items():
+            packet = {
+                "schema": 1, "session": 1, "revision": REVISION, "variant": "generated",
+                "scenario": "startup", "iteration": 30, "pid": NATIVE_PID, "process": "running",
+                "state": "complete" if role.endswith("completion") else "ready",
+            }
+            if role.endswith("completion"):
+                packet["completion"] = "generated startup complete 1"
+            self.packets[role] = packet
+            path.write_text(json.dumps(packet))
         (self.run / "raw/iteration-trace.json").write_text(json.dumps(self.receipt))
         configuration = {
             "schema": 1, "archive": "iteration-trace-config.xctestrun",
@@ -209,6 +229,11 @@ class LaunchMetricExportTest(unittest.TestCase):
         self.assertEqual(selected_duration(payload, ("generated", "startup", 30), REVISION,
                                            payload["metric_selector"]), 1250.0)
         provenance = payload["provenance"]
+        self.assertEqual(payload["measurements"][0]["pid"], NATIVE_PID)
+        self.assertEqual(provenance["native_pid"], NATIVE_PID)
+        for role, path in self.packet_paths.items():
+            self.assertEqual(provenance["native_process_packets"][role], {
+                "path": str(path.relative_to(self.run)), "sha256": self.hash(path)})
         self.assertEqual(provenance["native_test_identifier_url"], IDENTIFIER_URL)
         self.assertEqual(provenance["trace_receipt_sha256"], self.hash(self.run / "raw/iteration-trace.json"))
         self.assertEqual(provenance["trace_configuration_receipt_sha256"],
@@ -217,6 +242,77 @@ class LaunchMetricExportTest(unittest.TestCase):
             self.assertEqual(provenance["raw_exports"][name]["sha256"], self.hash(self.run / "raw/exports" / name))
         with self.assertRaisesRegex(LaunchMetricError, "Refusing to reuse"):
             self.export()
+
+    def test_missing_invalid_unrelated_and_wrong_typed_pids_fail_before_export(self):
+        for role in (*self.packet_paths, "receipt"):
+            for marker, value in (("missing", None), ("negative", -1), ("zero", 0),
+                                  ("boolean", True), ("float", float(NATIVE_PID)),
+                                  ("unrelated", NATIVE_PID + 1)):
+                with self.subTest(role=role, marker=marker):
+                    case = LaunchMetricExportTest(
+                        "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+                    case.setUp()
+                    try:
+                        if role == "receipt":
+                            if value is None:
+                                case.receipt.pop("pid")
+                            else:
+                                case.receipt["pid"] = value
+                            (case.run / "raw/iteration-trace.json").write_text(json.dumps(case.receipt))
+                        else:
+                            if value is None:
+                                case.packets[role].pop("pid")
+                            else:
+                                case.packets[role]["pid"] = value
+                            case.packet_paths[role].write_text(json.dumps(case.packets[role]))
+                        with self.assertRaisesRegex(LaunchMetricError, "PID|pid"):
+                            case.export()
+                        self.assertEqual(case.commands, [])
+                        self.assertFalse((case.run / "raw/exports").exists())
+                        self.assertFalse((case.run / "raw/metrics.json").exists())
+                    finally:
+                        case.doCleanups()
+
+    def test_missing_or_stale_native_process_packets_fail_before_export(self):
+        for role in self.packet_paths:
+            with self.subTest(role=role, change="missing-packet"):
+                case = LaunchMetricExportTest(
+                    "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+                case.setUp()
+                try:
+                    case.packet_paths[role].unlink()
+                    with self.assertRaisesRegex(LaunchMetricError, "ordinary retained file"):
+                        case.export()
+                    self.assertEqual(case.commands, [])
+                finally:
+                    case.doCleanups()
+        for role in self.packet_paths:
+            for field, value in (("revision", "b" * 40), ("variant", "reference"),
+                                 ("scenario", "scroll"), ("iteration", 29), ("session", 2)):
+                with self.subTest(role=role, field=field):
+                    case = LaunchMetricExportTest(
+                        "test_success_retains_raw_selector_commands_and_checksum_bound_scalar")
+                    case.setUp()
+                    try:
+                        case.packets[role][field] = value
+                        case.packet_paths[role].write_text(json.dumps(case.packets[role]))
+                        with self.assertRaisesRegex(LaunchMetricError, "packet|iteration"):
+                            case.export()
+                        self.assertEqual(case.commands, [])
+                        self.assertFalse((case.run / "raw/exports").exists())
+                    finally:
+                        case.doCleanups()
+
+    def test_native_identity_rejection_does_not_clobber_an_existing_metric(self):
+        retained = b"existing native metric evidence\n"
+        (self.run / "raw/metrics.json").write_bytes(retained)
+        self.receipt["pid"] = NATIVE_PID + 1
+        (self.run / "raw/iteration-trace.json").write_text(json.dumps(self.receipt))
+        with self.assertRaisesRegex(LaunchMetricError, "PID|pid"):
+            self.export()
+        self.assertEqual(self.commands, [])
+        self.assertEqual((self.run / "raw/metrics.json").read_bytes(), retained)
+        self.assertFalse((self.run / "raw/exports").exists())
 
     def test_empty_or_invalid_exports_retain_raw_bytes_but_never_publish_a_duration(self):
         for metrics in ([], synthetic_metrics(metric_changes={"measurements": []}),
