@@ -413,6 +413,27 @@ class PairedReportTest(unittest.TestCase):
             with self.subTest(key=key), self.assertRaisesRegex(EvidenceError, "identity|process|tags"):
                 make_report(self.manifest, self.root)
 
+    def test_raw_frame_integer_identities_are_not_numeric_equivalents(self):
+        for platform in ("ios", "harmonyos"):
+            if platform == "harmonyos":
+                self.use_harmony_native_metrics()
+            measurement = next(entry for entry in self.manifest["measurements"]
+                               if entry["variant"] == "generated" and entry["scenario"] == "scroll"
+                               and entry["iteration"] == 2)
+            path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
+            for key, value in (("schema", True), ("schema", 1.0),
+                               ("completedIterations", True), ("completedIterations", 1.0),
+                               ("iteration", 2.0), ("recordedIteration", 2.0),
+                               ("pid", True), ("pid", 4242.0)):
+                with self.subTest(platform=platform, key=key, value=value):
+                    packet = self.timing_payload("generated", "scroll", 2, platform=platform)
+                    packet[key] = value
+                    self.replace_json(path, packet)
+                    with self.assertRaisesRegex(EvidenceError, "integer|identity|process and iteration"):
+                        make_report(self.manifest, self.root)
+            self.replace_json(path, self.timing_payload("generated", "scroll", 2, platform=platform))
+            self.assertEqual(make_report(self.manifest, self.root)["status"], "pass")
+
     def test_raw_binary_identity_must_match_its_resource_artifact(self):
         path = "raw/generated-startup-2-binary.json"
         payload = self.resource_payload("generated", "startup", 2, "installedBinaryBytes")

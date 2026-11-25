@@ -102,11 +102,13 @@ supplies:
    timestamps. A first-frame timestamp alone is not a launch duration. iOS startup requires that iteration's
    `metrics.json`; `firstDisplay` is a monotonic scene-activation timestamp, **not a launch duration**. iOS
    `frameIntervalMs` reads `native-samples.json` itself, including `sourceRevision`, variant/scenario/iteration,
-   `session`, matching `native_pid`, `completedIterations=1`, `recordedIteration`, `iterationByFrame` and its
-   `CADisplayLink` `targetTimestamp - timestamp` array. The reporter recalculates the per-iteration nearest-rank p99
-   from that raw array and requires the manifest `value` to match; it never trusts a manifest `source_samples` array.
-   The array is not itself a scalar and its intervals are not CPU frame duration. HarmonyOS reads its own native
-   `frameDurationMs` array with the same identity, session, process, completion and iteration-tag checks; an iOS
+   `session`, matching `native_pid`, integer `schema=1` and `completedIterations=1`, integer `recordedIteration`,
+   `iterationByFrame` and its `CADisplayLink` `targetTimestamp - timestamp` array. Raw iteration and PID identities are
+   exact integers, not Boolean or floating-point numeric equivalents. The reporter recalculates the per-iteration
+   nearest-rank p99 from that raw array and requires the manifest `value` to match; it never trusts a manifest
+   `source_samples` array. The array is not itself a scalar and its intervals are not CPU frame duration. HarmonyOS
+   reads its own native `frameDurationMs` array with the same identity, session, process, completion and iteration-tag
+   checks; an iOS
    `frameIntervalMs` array cannot satisfy that distinct duration contract. Both frame arrays use the same explicit
    nearest-rank p99 reduction. These metrics are not interchangeable; the outer comparisons still use nearest-rank
    p50/p99 across the retained iteration scalars.

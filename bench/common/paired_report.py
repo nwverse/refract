@@ -100,6 +100,8 @@ def raw_identity(payload: dict[str, Any], identity: tuple[str, str, int], revisi
     variant, scenario, iteration = identity
     expected = {"variant": variant, "scenario": scenario, "iteration": iteration, "sourceRevision": revision}
     for key, wanted in expected.items():
+        if key == "iteration":
+            checked_iteration(payload.get(key), "Native export iteration")
         if payload.get(key) != wanted:
             raise EvidenceError(f"Native export {key} does not match its artifact identity")
 
@@ -170,9 +172,12 @@ def checked_startup_value(payload: dict[str, Any], identity: tuple[str, str, int
 def checked_frame_samples(payload: dict[str, Any], identity: tuple[str, str, int], revision: str,
                           pid: Any, platform: str) -> list[float]:
     raw_identity(payload, identity, revision)
-    if (payload.get("schema") != 1 or type(payload.get("session")) is not int
-            or type(pid) is not int or pid <= 0 or payload.get("pid") != pid
-            or payload.get("completedIterations") != 1 or payload.get("recordedIteration") != identity[2]):
+    if (type(payload.get("schema")) is not int or payload["schema"] != 1
+            or type(payload.get("session")) is not int or type(pid) is not int or pid <= 0
+            or type(payload.get("pid")) is not int or payload["pid"] <= 0 or payload["pid"] != pid
+            or type(payload.get("completedIterations")) is not int or payload["completedIterations"] != 1
+            or type(payload.get("recordedIteration")) is not int
+            or payload["recordedIteration"] != identity[2]):
         raise EvidenceError("Native frame packet does not bind its selected session, process and iteration")
     field = "frameIntervalMs" if platform == "ios" else "frameDurationMs"
     label = "CADisplayLink interval" if platform == "ios" else "frame duration"

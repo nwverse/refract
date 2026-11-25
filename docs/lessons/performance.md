@@ -37,9 +37,10 @@ JSON integers have arbitrary precision, but benchmark timing scalars are represe
 through a guarded boundary so an unrepresentable integer becomes `EvidenceError`, not an `OverflowError` traceback;
 exercise direct and checksum-selected native measurements. Match the raw array field to the platform metric as well:
 an identity-valid `frameIntervalMs` packet must not satisfy a declared HarmonyOS `frameDurationMs` measurement. Exercise
-both platform-specific field names and recompute p99 from the actual duration array. Validate artifact role and kind
-together: a metric JSON file cannot satisfy the profiler requirement, whose exact trace kind is `xctrace` on iOS and
-`vendor-trace` on HarmonyOS.
+both platform-specific field names and recompute p99 from the actual duration array. Require exact integers for raw
+schema, completion, iteration and PID identities: Python's `True == 1` and `4242 == 4242.0` must not make Boolean or
+floating-point substitutes valid evidence. Validate artifact role and kind together: a metric JSON file cannot satisfy
+the profiler requirement, whose exact trace kind is `xctrace` on iOS and `vendor-trace` on HarmonyOS.
 Route original xctestrun discovery through the shared `BuildProvenanceError` boundary so the recording CLI returns its
 controlled diagnostic and status 2 when the original file is missing or ambiguous.
 
