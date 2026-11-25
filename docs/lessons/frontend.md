@@ -55,6 +55,9 @@
   generic state parsing: a mutable `WidthSizeClass` is wrong native-host ownership (`RFADAPT001`), not a tab selection
   (`RFNAV402`). Reject its declaration before interpreting it as an ordinary enum-backed state property, but validate
   the remaining members separately so this precedence does not suppress their independent, more specific diagnostics.
+  A failed `formState` has the same optional nil result as a non-Form declaration. Detect only the diagnostics added by
+  that member's Form attempt, mark the collect-all result failed and continue; do not scan earlier Form diagnostics or
+  add a generic declaration error that replaces or duplicates the specific `RFFORM` error.
 - Repeated generated View, model, item or enum names are ambiguous even in one file. Diagnose them before walking
   the tree, but finish the ordinary traversal so independent source errors are retained. Discard partial IR afterward
   rather than returning early, which would suppress valid model-input diagnostics. Keep cross-file resolution separate.

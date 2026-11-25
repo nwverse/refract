@@ -208,6 +208,94 @@ func wrongWidthClassOwnershipPreservesTabAndScalarStateDiagnostics(_ declaration
     #expect(unit.diagnostics.map(\.code) == ["RFADAPT001", "RFNAV402", "state.invalid_declaration"])
 }
 
+// Regression: an invalid form must not hide the next sibling's state diagnostic
+// when the reserved width input is already rejected in collect-all mode.
+@Test(arguments: [
+    "@State private var widthSizeClass: WidthSizeClass = .compact",
+    "@Binding var widthSizeClass: WidthSizeClass",
+])
+func wrongWidthClassOwnershipPreservesFormAndScalarStateDiagnostics(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    struct InvalidAdaptiveOwnership: View {
+        \(declaration)
+        @State private var form = refractForm { Field("email", rules: .nonEmpty) }
+        @State private var count: Int
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == ["RFADAPT001", "RFFORM001", "state.invalid_declaration"])
+}
+
+// Positive control: the same scalar sibling without a form retains its own diagnostic.
+@Test(arguments: [
+    "@State private var widthSizeClass: WidthSizeClass = .compact",
+    "@Binding var widthSizeClass: WidthSizeClass",
+])
+func wrongWidthClassOwnershipPreservesScalarStateDiagnosticWithoutForm(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    struct InvalidAdaptiveOwnership: View {
+        \(declaration)
+        @State private var count: Int
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == ["RFADAPT001", "state.invalid_declaration"])
+}
+
+// Positive control: valid let widthSizeClass with a form, scalar state and model
+// retains the ordinary screen without changing the collect-only error path.
+@Test func validWidthClassWithFormScalarStateAndModelProducesScreen() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    protocol SettingsModel: RefractModel {
+        @refractAsync func save(email: String)
+    }
+    struct ValidAdaptiveScreen: View {
+        let widthSizeClass: WidthSizeClass
+        let model: SettingsModel
+        @State private var form = refractForm {
+            Field("email", initial: "", rules: .nonEmpty)
+        }
+        @State private var count: Int = 0
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact \\(count)")
+            case .expanded:
+                Form {
+                    TextField("settings.email", text: $form.email)
+                    Button("settings.submit") { form.submit(model.save) }
+                } (form: $form)
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let screen = try #require(unit.module.screens.first { $0.name == "ValidAdaptiveScreen" })
+    #expect(screen.parameters.map(\.name) == ["widthSizeClass"])
+    let formNames = screen.states.compactMap { state -> String? in
+        guard case let .form(_, declaration, _) = state else { return nil }
+        return declaration.name
+    }
+    #expect(formNames == ["form"])
+    #expect(screen.states.count == 3)
+}
+
 // Positive control: valid let widthSizeClass with model and bindings keeps working.
 @Test func validWidthClassWithModelAndBindingsProducesScreen() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """

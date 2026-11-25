@@ -68,12 +68,14 @@ extension Builder {
             }) {
                 continue
             }
+            let diagnosticCount = diagnostics.count
             if let form = formState(declaration) {
                 states?.append(form)
                 continue
             }
-            if diagnostics.contains(where: { $0.code.hasPrefix("RFFORM") }) {
-                if continueOnError { states = nil; continue } else { return nil }
+            if diagnostics.dropFirst(diagnosticCount).contains(where: { $0.code.hasPrefix("RFFORM") }) {
+                _ = fail()
+                if continueOnError { continue } else { return nil }
             }
             if let annotation = declaration.bindings.first?.typeAnnotation?.type.as(ArrayTypeSyntax.self) {
                 guard declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.attributes.count == 1,
