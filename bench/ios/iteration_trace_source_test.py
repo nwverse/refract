@@ -2,6 +2,8 @@
 """Source wiring checks, not Swift compilation or native performance evidence."""
 
 from pathlib import Path
+import copy
+import json
 import os
 import shutil
 import subprocess
@@ -29,7 +31,7 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn("let iteration = TraceHandshake.tracedIteration(iterationValue)", TESTS)
         self.assertIn('application.launchEnvironment["REFRACT_BENCH_ITERATION"] = String(iteration)', TESTS)
         self.assertEqual(APP.count("BenchmarkDisplayRecorder.tracedIterations.contains(iteration)"), 3)
-        self.assertEqual(RECORDER.count("Self.tracedIterations.contains(iteration)"), 3)
+        self.assertEqual(RECORDER.count("Self.tracedIterations.contains(iteration)"), 4)
         self.assertIn("iteration == completedIterations, (0..<30).contains(iteration)", RECORDER)
         self.assertIn("TRACED_ITERATIONS = range(2, 31)", RUNNER)
         self.assertEqual(RUNNER.count("iteration not in TRACED_ITERATIONS"), 2)
@@ -126,7 +128,7 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn("Self.tracedIterations.contains(iteration), let firstDisplay", RECORDER)
         self.assertIn("let firstDisplay, firstDisplay.isFinite, firstDisplay > 0", RECORDER)
         self.assertIn('firstDisplay = ["clock": "CACurrentMediaTime", "timestamp": String(timestamp)]', APP)
-        self.assertIn("firstDisplay: firstDisplay, finalSamples: finalSamples)", APP)
+        self.assertIn("firstDisplay: firstDisplay, finalSamples: finalSamples,", APP)
         self.assertIn('let firstDisplay = scenario == "startup" ? try TraceHandshake.firstDisplay(in: completionPacket) : nil',
                       TESTS)
         self.assertIn('if let firstDisplay {', TESTS)
@@ -179,7 +181,7 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertLess(APP.index("await runUpdates(variant: variant, model: model)"), completion_call)
         self.assertLess(APP.index("await runScroll(variant: variant, model: model)"), completion_call)
         self.assertLess(completion_call, publish)
-        self.assertIn("firstDisplay: firstDisplay, finalSamples: finalSamples)", APP)
+        self.assertIn("firstDisplay: firstDisplay, finalSamples: finalSamples,", APP)
         self.assertIn('packet["finalSamples"] = finalSamples', APP)
         self.assertIn("func finalSamples(iteration: Int) -> [String: Any]?", RECORDER)
         for condition in (
@@ -229,6 +231,38 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('parser.add_argument("--readiness-timeout", type=float, default=60)', RUNNER)
         self.assertIn('parser.add_argument("--completion-timeout", type=float, default=180)', RUNNER)
         self.assertIn('"-only-testing:{test}"', RUNNER)
+    def test_native_resources_follow_completion_and_precede_validated_exports(self):
+        self.assertIn("import CryptoKit", RECORDER)
+        self.assertIn("import Darwin", RECORDER)
+        sample = RECORDER.index("func nativeResources(iteration: Int)")
+        memory = RECORDER.index("task_info(mach_task_self_, TASK_VM_INFO", sample)
+        binary = RECORDER.index("let bundle = Bundle.main.bundleURL", memory)
+        self.assertLess(sample, memory)
+        self.assertLess(memory, binary)
+        self.assertIn('resource["definition"] as? String == "task_info.TASK_VM_INFO.resident_size"', TESTS)
+        self.assertIn('resource["definition"] as? String == "Bundle.main.regular-file-bytes"', TESTS)
+        self.assertIn("integer(resource[\"pid\"]) == pid", TESTS)
+        self.assertIn("info.resident_size <= UInt64(Int.max)", RECORDER)
+        self.assertNotIn("phys_footprint\",", RECORDER)
+        call = APP.index("nativeResources(iteration: iteration)")
+        publish = APP.index('publishTracePacket(named: "native-completion.json"', call)
+        self.assertLess(APP.index("if scenario != \"startup\""), call)
+        self.assertLess(call, publish)
+        self.assertIn("nativeResources: resources)", APP)
+        native = RUNNER.index("checked_native_resources(native_completion, self, pid)")
+        forwarded = RUNNER.index("checked_native_resources(completion, self, pid)", native)
+        product = RUNNER.index("checked_installed_product(native_resources", forwarded)
+        export = RUNNER.index('atomic_json(self.raw / "native-resources.json"', product)
+        self.assertLess(native, forwarded)
+        self.assertLess(forwarded, product)
+        self.assertLess(product, export)
+        self.assertIn('atomic_json(self.raw / filename, export)', RUNNER)
+        self.assertIn('self.raw / "exports/resident-memory.json"', RUNNER)
+        self.assertIn('self.raw / "exports/installed-binary.json"', RUNNER)
+        self.assertIn('metric == "residentMemoryBytes" and self.scenario != "startup"', RUNNER)
+        self.assertIn('and self.iteration == min(TRACED_ITERATIONS)', RUNNER)
+        self.assertIn("checked_installed_files(resource) != expected", RUNNER)
+        self.assertIn('"build_provenance_sha256": file_sha256(build_provenance["path"])', RUNNER)
 
 
 class SwiftTracedIterationDomainTest(unittest.TestCase):
@@ -302,7 +336,8 @@ class SwiftFinalSamplesContractTest(unittest.TestCase):
         start = TESTS.index("    static func finalSamples(")
         end = TESTS.index("\n}\n\n@MainActor\nfinal class", start)
         validation = TESTS[start:end]
-        script = '''import Foundation
+        script = '''import CoreFoundation
+import Foundation
 
 enum ContractFailure: Error { case mismatch }
 enum TraceHandshake {
@@ -448,6 +483,103 @@ print("exact Swift final sample validation passed")
                                     capture_output=True, text=True, timeout=30, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("exact Swift final sample validation passed", result.stdout)
+
+
+class SwiftNativeResourcesContractTest(unittest.TestCase):
+    def test_actual_resource_validator_round_trips_and_rejects_corruption(self):
+        swift = os.environ.get("REFRACT_SWIFTC") or shutil.which("swiftc")
+        if swift is None:
+            self.fail("The focused Swift source regression requires a Swift toolchain")
+        start = TESTS.index("    static func nativeResources(")
+        validation = TESTS[start:TESTS.index("    private static func isEqual", start)]
+        original = [
+            {"schema": 1, "session": 1, "sourceRevision": "a" * 40, "variant": "generated",
+             "scenario": "scroll", "iteration": 2, "metric": "residentMemoryBytes", "bytes": 1024,
+             "unit": "bytes", "pid": 42, "definition": "task_info.TASK_VM_INFO.resident_size"},
+            {"schema": 1, "session": 1, "sourceRevision": "a" * 40, "variant": "generated",
+             "scenario": "scroll", "iteration": 2, "metric": "installedBinaryBytes", "bytes": 3,
+             "unit": "bytes", "definition": "Bundle.main.regular-file-bytes", "bundle": "RefractBench.app",
+             "files": [{"path": "RefractBench", "bytes": 3, "sha256": "0" * 64}]},
+        ]
+        invalid = []
+        changed = copy.deepcopy(original)
+        changed[1]["files"][0]["bytes"] = 1.5
+        changed[1]["bytes"] = 1.5
+        invalid.append(changed)
+        for index in range(2):
+            for key in original[index]:
+                changed = copy.deepcopy(original)
+                changed[index].pop(key)
+                invalid.append(changed)
+        for index, key, value in (
+                (0, "pid", 43), (0, "pid", True), (0, "bytes", True), (0, "bytes", 0),
+                (0, "schema", True), (0, "iteration", 3), (0, "sourceRevision", "b" * 40),
+                (0, "definition", "phys_footprint"), (1, "definition", "DerivedData.directory-size"),
+                (1, "files", []), (1, "bytes", 4),
+        ):
+            changed = copy.deepcopy(original)
+            changed[index][key] = value
+            invalid.append(changed)
+        for path in ("/RefractBench", "../RefractBench", "Frameworks//Support.dylib", "", "a\\b", "a\b"):
+            changed = copy.deepcopy(original)
+            changed[1]["files"][0]["path"] = path
+            invalid.append(changed)
+        for index, key, value in ((0, "schema", True), (0, "session", True), (0, "iteration", True),
+                                  (0, "pid", True), (0, "bytes", True), (1, "bytes", True)):
+            changed = copy.deepcopy(original)
+            changed[index][key] = value
+            invalid.append(changed)
+        for bytes_value in (-1, True, (1 << 63) - 1, 1 << 63):
+            changed = copy.deepcopy(original)
+            changed[1]["files"][0]["bytes"] = bytes_value
+            invalid.append(changed)
+        script = '''import CoreFoundation
+import Foundation
+
+enum TraceHandshake {
+@VALIDATION@
+}
+func XCTFail(_ message: String) {}
+let originalData = #"""
+@ORIGINAL@
+"""#
+let original = try! JSONSerialization.jsonObject(with: Data(originalData.utf8)) as! [[String: Any]]
+precondition(original[1]["bytes"] as? Int == 3, "JSON integer must decode as an integer")
+let packet: [String: Any] = ["nativeResources": original]
+let revision = String(repeating: "a", count: 40)
+_ = try TraceHandshake.nativeResources(in: packet, revision: revision, variant: "generated",
+                                      scenario: "scroll", iteration: 2, pid: 42)
+let encoded = try JSONSerialization.data(withJSONObject: packet, options: [.sortedKeys])
+let decoded = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+_ = try TraceHandshake.nativeResources(in: decoded, revision: revision, variant: "generated",
+                                      scenario: "scroll", iteration: 2, pid: 42)
+let invalidData = #"""
+@INVALID@
+"""#
+for (index, resources) in ((try! JSONSerialization.jsonObject(with: Data(invalidData.utf8)) as! [[[String: Any]]]).enumerated()) {
+    do {
+        _ = try TraceHandshake.nativeResources(in: ["nativeResources": resources], revision: revision,
+                                              variant: "generated", scenario: "scroll", iteration: 2, pid: 42)
+        preconditionFailure("accepted invalid resource fixture \\(index): \\(resources)")
+    } catch let error as NSError where error.domain == "RefractBench.TraceHandshake" && error.code == 4 {
+        // Every malformed packet fails at the explicit resource boundary.
+    } catch {
+        preconditionFailure("unexpected error for resource fixture \\(index): \\(error)")
+    }
+}
+print("exact Swift native resource validation passed")
+'''.replace("@VALIDATION@", validation).replace("@ORIGINAL@", json.dumps(original)).replace(
+            "@INVALID@", json.dumps(invalid))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "main.swift"
+            path.write_text(script)
+            result = subprocess.run([swift, str(path), "-o", str(Path(temporary) / "resources-check")],
+                                    capture_output=True, text=True, timeout=60, check=False)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = subprocess.run([str(Path(temporary) / "resources-check")],
+                                    capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("exact Swift native resource validation passed", result.stdout)
 
 
 if __name__ == "__main__":

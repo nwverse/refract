@@ -73,7 +73,9 @@ def bounded_file_bytes(path: Path) -> bytes:
 
 def read_json(path: Path) -> dict:
     try:
-        payload = json.loads(bounded_file_bytes(path))
+        payload = json.loads(bounded_file_bytes(path),
+                             parse_constant=lambda constant: (_ for _ in ()).throw(
+                                 ValueError(f"Non-finite JSON value: {constant}")))
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
         raise HandshakeError(f"Cannot read handshake {path.name}: {error}") from error
     if not isinstance(payload, dict):
@@ -175,6 +177,81 @@ def checked_final_samples(packet: dict, session: "Session", pid: int) -> dict:
     return samples
 
 
+def checked_native_resources(packet: dict, session: "Session", pid: int) -> dict[str, dict]:
+    """Validate native Darwin memory and actual installed-app file contents."""
+    resources = packet.get("nativeResources")
+    if not isinstance(resources, list) or len(resources) != 2:
+        raise HandshakeError("Native completion requires one resident-memory and one installed-app snapshot")
+    identity = {"schema": 1, "session": session.session_id, "sourceRevision": session.revision,
+                "variant": session.variant, "scenario": session.scenario, "iteration": session.iteration}
+    common = set(identity) | {"metric", "bytes", "unit", "definition"}
+    checked = {}
+    for resource in resources:
+        if not isinstance(resource, dict) or any(
+                type(resource.get(key)) is not type(value) or resource.get(key) != value
+                for key, value in identity.items()):
+            raise HandshakeError("Native resource identity does not match the selected iteration")
+        metric = resource.get("metric")
+        if metric not in ("residentMemoryBytes", "installedBinaryBytes") or metric in checked:
+            raise HandshakeError("Native resource metrics must be unique and supported")
+        if resource.get("unit") != "bytes":
+            raise HandshakeError("Native resource bytes must use the bytes unit")
+        if type(resource.get("bytes")) is not int or resource["bytes"] <= 0:
+            raise HandshakeError("Native resource bytes must be one positive integer")
+        if metric == "residentMemoryBytes":
+            if (set(resource) != common | {"pid"} or resource.get("pid") != pid
+                    or type(resource.get("pid")) is not int
+                    or resource.get("definition") != "task_info.TASK_VM_INFO.resident_size"):
+                raise HandshakeError("Resident memory requires the attached PID and Darwin resident_size bytes")
+        else:
+            if (set(resource) != common | {"bundle", "files"} or resource.get("bundle") != "RefractBench.app"
+                    or resource.get("definition") != "Bundle.main.regular-file-bytes"):
+                raise HandshakeError("Installed binary bytes require the running RefractBench.app file inventory")
+            checked_installed_files(resource)
+        checked[metric] = resource
+    return checked
+
+
+def checked_installed_files(resource: dict) -> list[dict]:
+    files = resource.get("files")
+    if not isinstance(files, list) or not 0 < len(files) <= 10000:
+        raise HandshakeError("Installed app requires a bounded nonempty regular-file inventory")
+    paths = set()
+    total = 0
+    for entry in files:
+        if not isinstance(entry, dict) or set(entry) != {"path", "bytes", "sha256"}:
+            raise HandshakeError("Installed app files require exact relative path, bytes and SHA-256 fields")
+        path = entry["path"]
+        if (not isinstance(path, str) or not 0 < len(path) <= 4096
+                or Path(path).is_absolute() or "\\" in path or "\x00" in path
+                or any(ord(character) < 32 for character in path)
+                or any(part in ("", ".", "..") for part in path.split("/"))):
+            raise HandshakeError("Installed app file paths must be relative, normalized bundle members")
+        if type(entry["bytes"]) is not int or entry["bytes"] < 0:
+            raise HandshakeError("Installed app file bytes must be non-negative integers")
+        if not isinstance(entry["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):
+            raise HandshakeError("Installed app files require lowercase SHA-256 identities")
+        if path in paths:
+            raise HandshakeError("Installed app file paths must be unique")
+        paths.add(path)
+        total += entry["bytes"]
+    if total != resource["bytes"]:
+        raise HandshakeError("Installed app bytes must equal the sum of its regular files")
+    return sorted(files, key=lambda entry: entry["path"])
+
+
+def checked_installed_product(resource: dict, build_provenance: dict) -> None:
+    """The running bundle must match the retained original app, not DerivedData size."""
+    product = build_provenance.get("products", {}).get("RefractBench.app")
+    if not isinstance(product, dict) or not isinstance(product.get("files"), list):
+        raise HandshakeError("Validated build provenance does not identify the original app bundle")
+    expected = sorted(({"path": entry["path"].removeprefix("RefractBench.app/"),
+                        "bytes": entry["bytes"], "sha256": entry["sha256"]}
+                       for entry in product["files"]), key=lambda entry: entry["path"])
+    if checked_installed_files(resource) != expected:
+        raise HandshakeError("Installed app files differ from the validated original build; rebuild and reinstall")
+
+
 class Session:
     """One non-reusable variant/scenario/iteration/recorder binding."""
 
@@ -269,8 +346,9 @@ class Session:
                 raise HandshakeError(
                     "Refusing a reused or stale control directory: "
                     "capture start epoch was not recorded before launch")
-        if self.derived_data is not None:
-            validate_build_provenance(self.derived_data, self.revision)
+        if self.derived_data is None:
+            raise HandshakeError("Exact validated build provenance is required for native resource evidence")
+        build_provenance = validate_build_provenance(self.derived_data, self.revision)
         validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
         # With a frozen epoch, the current test may have published identity,
@@ -343,6 +421,12 @@ class Session:
                              if self.scenario in ("scroll", "stateUpdate") else None)
             if final_samples != native_final_samples:
                 raise HandshakeError("Forwarded completion must retain the exact native final sample packet")
+            native_resources = checked_native_resources(native_completion, self, pid)
+            forwarded_resources = checked_native_resources(completion, self, pid)
+            if (json.dumps(forwarded_resources, sort_keys=True, allow_nan=False)
+                    != json.dumps(native_resources, sort_keys=True, allow_nan=False)):
+                raise HandshakeError("Forwarded completion must retain the exact native resource packets")
+            checked_installed_product(native_resources["installedBinaryBytes"], build_provenance)
             # Accessibility reports this launch's native completion count (one),
             # not a cumulative count from the retired single-launch task.
             expected_completion = f"{self.variant} {self.scenario} complete 1"
@@ -354,6 +438,35 @@ class Session:
             atomic_json(self.raw / "completion.json", completion)
             if final_samples is not None:
                 atomic_json(self.raw / "native-samples.json", final_samples)
+            atomic_json(self.raw / "native-resources.json", native_completion["nativeResources"])
+            resource_exports = {}
+            for metric, filename in (("residentMemoryBytes", "native-memory.json"),
+                                     ("installedBinaryBytes", "native-binary.json")):
+                # Keep schema-2's native JSON contract: one identity, one byte
+                # value and a PID only for the process-owned memory snapshot.
+                resource = native_resources[metric]
+                export = {key: resource[key] for key in
+                          ("sourceRevision", "variant", "scenario", "iteration", "metric", "bytes", "unit")}
+                if metric == "residentMemoryBytes":
+                    export["pid"] = pid
+                atomic_json(self.raw / filename, export)
+                # Retain every native snapshot above, while exposing only the
+                # schema-2 memory pairs and one startup/2 binary pair to the
+                # retained-manifest exporter. These are identity-bound aliases,
+                # not replacement measurements or discarded startup resources.
+                export_path = self.raw / filename
+                if metric == "residentMemoryBytes" and self.scenario != "startup":
+                    export_path = self.raw / "exports/resident-memory.json"
+                elif (metric == "installedBinaryBytes" and self.scenario == "startup"
+                      and self.iteration == min(TRACED_ITERATIONS)):
+                    export_path = self.raw / "exports/installed-binary.json"
+                if export_path != self.raw / filename:
+                    atomic_json(export_path, export)
+                resource_exports[metric] = {
+                    "path": export_path.relative_to(self.run_directory).as_posix(),
+                    "sha256": file_sha256(export_path),
+                    "definition": resource["definition"],
+                }
 
             # Ask only our xctrace child to stop gracefully (SIGINT is the
             # Instruments interrupt path), flush its package, then release XCTest.
@@ -393,10 +506,14 @@ class Session:
                 "time_limit": self.window, "trace": f"raw/{self.archive.name}",
                 "archived_package_name": self.trace.name, "bytes": size, "sha256": checksum,
                 "native_iteration_completion": expected_completion,
+                "build_provenance_sha256": file_sha256(build_provenance["path"]),
             }
             validate_trace_configuration(self.run_directory, self.revision, self.control_directory, self.iteration,
                                      self.derived_data)
             if self.derived_data is not None:
+                if (file_sha256(build_provenance["path"])
+                        != file_sha256(self.run_directory / BUILD_PROVENANCE_NAME)):
+                    raise HandshakeError("Native resources and archived build provenance no longer match")
                 validate_build_provenance(self.derived_data, self.revision)
             if first_display is not None:
                 result["native_first_display"] = first_display
@@ -405,6 +522,11 @@ class Session:
                     "path": "raw/native-samples.json",
                     "sha256": file_sha256(self.raw / "native-samples.json"),
                 }
+            result["native_resources"] = {
+                "path": "raw/native-resources.json",
+                "sha256": file_sha256(self.raw / "native-resources.json"),
+                "exports": resource_exports,
+            }
             atomic_json(self.raw / "iteration-trace.json", result)
             return result
         finally:

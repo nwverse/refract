@@ -23,6 +23,22 @@ from iteration_trace_runner import (HandshakeError, Session, checked_first_displ
                                     traced_test_name, unique_packet)
 
 
+def synthetic_startup_resources(derived_data: Path, iteration: int = 2):
+    app = derived_data / "Build/Products/Release-iphonesimulator/RefractBench.app"
+    files = [{"path": path.relative_to(app).as_posix(), "bytes": path.stat().st_size,
+              "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+             for path in sorted(app.rglob("*")) if path.is_file()]
+    identity = {"schema": 1, "session": 1, "sourceRevision": "a" * 40, "variant": "generated",
+                "scenario": "startup", "iteration": iteration}
+    return [
+        {**identity, "metric": "residentMemoryBytes", "bytes": 1024, "unit": "bytes", "pid": 4242,
+         "definition": "task_info.TASK_VM_INFO.resident_size"},
+        {**identity, "metric": "installedBinaryBytes", "bytes": sum(entry["bytes"] for entry in files),
+         "unit": "bytes", "definition": "Bundle.main.regular-file-bytes", "bundle": "RefractBench.app",
+         "files": files},
+    ]
+
+
 class StartupTraceRunnerTest(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -119,7 +135,17 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
         comparator = source[source.index("    private static func isEqual"):source.index("\n}\n\n@MainActor\nfinal class")]
         comparator = """
     static func ready(in packet: [String: Any], expected: [String: Any]) -> [String: Any]? {
-        for (key, value) in expected where !isEqual(packet[key], value) { return nil }
+        for (key, value) in expected {
+            if key == "nativeResources",
+               let lhs = packet[key], JSONSerialization.isValidJSONObject(lhs),
+               JSONSerialization.isValidJSONObject(value),
+               let left = try? JSONSerialization.data(withJSONObject: lhs, options: [.sortedKeys]),
+               let right = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) {
+                if left != right { return nil }
+            } else if !isEqual(packet[key], value) {
+                return nil
+            }
+        }
         return packet
     }
 
@@ -139,6 +165,7 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                           source.index("            let finished = XCTNSPredicateExpectation(")]
         startup = (completion + write + expected).replace("try TraceHandshake.write(", "try writeCompletion(")
         script = textwrap.dedent("""
+            import CoreFoundation
             import Foundation
 
             enum ContractFailure: Error {
@@ -152,7 +179,10 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
 
             func XCTFail(_ message: String) {}
             func writeCompletion(_ packet: [String: Any], named: String, in directory: URL) throws {}
-            let control = URL(fileURLWithPath: "/unused")
+            let control = FileManager.default.temporaryDirectory
+                .appendingPathComponent("refract-startup-resources-\\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: control, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: control) }
 
             func validate(_ decoded: [String: Any], selectedIteration: Int = 30) throws {
                 let scenario = "startup"
@@ -174,6 +204,17 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                 precondition(Double(canonical) == original)
                 let encoded = try JSONSerialization.data(withJSONObject: [
                     "firstDisplay": ["clock": "CACurrentMediaTime", "timestamp": canonical],
+                    "nativeResources": [
+                        ["schema": 1, "session": 1, "sourceRevision": "revision", "variant": "generated",
+                         "scenario": "startup", "iteration": 30, "metric": "residentMemoryBytes",
+                         "bytes": 1, "unit": "bytes", "pid": 4242,
+                         "definition": "task_info.TASK_VM_INFO.resident_size"],
+                        ["schema": 1, "session": 1, "sourceRevision": "revision", "variant": "generated",
+                         "scenario": "startup", "iteration": 30, "metric": "installedBinaryBytes",
+                         "bytes": 1, "unit": "bytes", "definition": "Bundle.main.regular-file-bytes",
+                         "bundle": "RefractBench.app", "files": [["path": "RefractBench", "bytes": 1,
+                                                                  "sha256": String(repeating: "0", count: 64)]]],
+                    ],
                 ])
                 var decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
                 for (key, value) in [("schema", 1), ("session", 1), ("revision", "revision"),
@@ -181,6 +222,8 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                                      ("pid", 4242), ("process", "running"), ("state", "complete")] as [(String, Any)] {
                     decoded[key] = value
                 }
+                try JSONSerialization.data(withJSONObject: decoded, options: [.sortedKeys])
+                    .write(to: control.appendingPathComponent("native-completion.json"))
                 try validate(decoded, selectedIteration: 30)
                 let expected: [String: String] = ["clock": "CACurrentMediaTime", "timestamp": canonical]
                 let firstDisplay = try TraceHandshake.firstDisplay(in: decoded)
@@ -192,6 +235,8 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                         evidence[field] = changed
                         var invalid = decoded
                         invalid["firstDisplay"] = evidence
+                        try JSONSerialization.data(withJSONObject: invalid, options: [.sortedKeys])
+                            .write(to: control.appendingPathComponent("native-completion.json"))
                         precondition(TraceHandshake.ready(in: invalid, expected: ["firstDisplay": expected]) == nil)
                         do {
                             _ = try TraceHandshake.firstDisplay(in: invalid)
@@ -214,6 +259,8 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                     evidence["timestamp"] = different
                     var changed = decoded
                     changed["firstDisplay"] = evidence
+                    try JSONSerialization.data(withJSONObject: changed, options: [.sortedKeys])
+                        .write(to: control.appendingPathComponent("native-completion.json"))
                     try validate(changed, selectedIteration: 30)
                     let changedFirstDisplay = try TraceHandshake.firstDisplay(in: changed)
                     precondition(changedFirstDisplay == evidence)
@@ -231,7 +278,9 @@ class SwiftFirstDisplayContractTest(unittest.TestCase):
                 return value
             }
             """).lstrip()
-        script = script.replace("@COMPARATOR@", comparator).replace(
+        canonical = source[source.index("    static func canonicalJSON"):source.index(
+            "    private static func integer")]
+        script = script.replace("@COMPARATOR@", comparator + canonical).replace(
             "@VALIDATION@", validation).replace("@STARTUP@", startup)
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "main.swift"
@@ -263,6 +312,8 @@ class SyntheticStartupSession:
         self.native_first_display = native_first_display
         self.test = test
         self.prepare_provenance()
+        if self.packet is not None and "nativeResources" not in self.packet:
+            self.packet["nativeResources"] = synthetic_startup_resources(self.derived_data, iteration)
         self.session = Session(target="synthetic-target", variant="generated", scenario="startup", iteration=iteration,
                                revision="a" * 40, run_directory=self.run, xcodebuild_log=self.log,
                                control_directory=self.control, readiness_timeout=0.5,
@@ -293,7 +344,7 @@ class SyntheticStartupSession:
         archived = self.run / "iteration-trace-config.xctestrun"
         archived.write_bytes(destination.read_bytes())
         manifest = self.run / "refract-build-provenance.json"
-        manifest.write_bytes(b'{"synthetic": "provenance"}\n')
+        manifest.write_bytes((self.derived_data / "refract-build-provenance.json").read_bytes())
         (self.run / "iteration-trace-config.json").write_text(json.dumps({
             "schema": 1, "path": destination.name, "archive": archived.name,
             "configuration_sha256": hashlib.sha256(archived.read_bytes()).hexdigest(),
@@ -377,6 +428,26 @@ class StartupTraceSessionTest(unittest.TestCase):
                          {"clock": "CACurrentMediaTime", "timestamp": "12345.25"})
         receipt = json.loads((capture.run / "raw/iteration-trace.json").read_text())
         self.assertEqual(receipt["native_first_display"], result["native_first_display"])
+        exports = receipt["native_resources"]["exports"]
+        self.assertEqual(exports["installedBinaryBytes"]["path"], "raw/exports/installed-binary.json")
+        self.assertEqual(exports["residentMemoryBytes"]["path"], "raw/native-memory.json")
+        self.assertFalse((capture.run / "raw/exports/resident-memory.json").exists())
+        for metric, filename in (("residentMemoryBytes", "native-memory.json"),
+                                 ("installedBinaryBytes", "native-binary.json")):
+            reference = exports[metric]
+            actual = (capture.run / reference["path"]).read_bytes()
+            canonical = (capture.run / "raw" / filename).read_bytes()
+            self.assertEqual(actual, canonical)
+            self.assertEqual(hashlib.sha256(actual).hexdigest(), reference["sha256"])
+
+    def test_startup_after_iteration_two_retains_binary_without_schema_two_export_alias(self):
+        capture = SyntheticStartupSession(self, self.startup_completion(iteration=3), iteration=3)
+        result = capture.capture()
+        exports = result["native_resources"]["exports"]
+        self.assertEqual(exports["installedBinaryBytes"]["path"], "raw/native-binary.json")
+        self.assertTrue((capture.run / "raw/native-binary.json").is_file())
+        self.assertFalse((capture.run / "raw/exports/installed-binary.json").exists())
+        self.assertFalse((capture.run / "raw/exports/resident-memory.json").exists())
 
     def test_startup_capture_retains_concrete_timestamp_string_through_real_control_plane(self):
         expected = {"clock": "CACurrentMediaTime", "timestamp": "600795.5970010418"}

@@ -1,3 +1,5 @@
+import CryptoKit
+import Darwin
 import QuartzCore
 
 /// App-owned native sampling only; it does not measure wall-clock UI gestures
@@ -102,6 +104,99 @@ final class BenchmarkDisplayRecorder: ObservableObject {
         payload["iteration"] = iteration
         payload["pid"] = Int(ProcessInfo.processInfo.processIdentifier)
         return payload
+    }
+
+    /// Sample resources only after the selected native input has completed.
+    /// These are Darwin bytes, not timestamps, virtual size or phys_footprint.
+    func nativeResources(iteration: Int) throws -> [[String: Any]] {
+        guard selectedIteration == iteration, Self.tracedIterations.contains(iteration),
+              completedIterations == 1, recordedIteration == iteration,
+              completion?.count == 1, !revision.isEmpty, !variant.isEmpty, !scenario.isEmpty else {
+            throw resourceError("The selected native iteration is not complete")
+        }
+        guard (revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil),
+              ["generated", "reference"].contains(variant),
+              ["scroll", "stateUpdate", "startup"].contains(scenario) else {
+            throw resourceError("The native resource identity is incomplete")
+        }
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let status = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(mach_task_self_, TASK_VM_INFO, rebound, &count)
+            }
+        }
+        guard status == KERN_SUCCESS, info.resident_size > 0, info.resident_size <= UInt64(Int.max) else {
+            throw resourceError("Darwin TASK_VM_INFO did not return positive resident_size bytes")
+        }
+        let identity: [String: Any] = [
+            "schema": 1, "session": 1, "sourceRevision": revision, "variant": variant,
+            "scenario": scenario, "iteration": iteration,
+        ]
+        let memory: [String: Any] = identity.merging([
+            "metric": "residentMemoryBytes", "bytes": Int(info.resident_size), "unit": "bytes",
+            "pid": Int(ProcessInfo.processInfo.processIdentifier),
+            "definition": "task_info.TASK_VM_INFO.resident_size",
+        ]) { _, _ in fatalError("Duplicate native memory identity") }
+        let bundle = Bundle.main.bundleURL
+        guard bundle.lastPathComponent == "RefractBench.app" else {
+            throw resourceError("The running app bundle is not RefractBench.app")
+        }
+        var files: [[String: Any]] = []
+        var installedBytes = 0
+        for url in try installedFiles(in: bundle) {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isRegularFile == true, values.isSymbolicLink == false else {
+                throw resourceError("An installed app member changed type during enumeration")
+            }
+            let data = try Data(contentsOf: url, options: [.uncached])
+            let path = String(url.path.dropFirst(bundle.path.count + 1))
+            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            files.append(["path": path, "bytes": data.count, "sha256": digest])
+            installedBytes = try adding(installedBytes, data.count)
+        }
+        guard !files.isEmpty, installedBytes > 0 else {
+            throw resourceError("The installed app bundle has no regular-file bytes")
+        }
+        let binary: [String: Any] = identity.merging([
+            "metric": "installedBinaryBytes", "bytes": installedBytes, "unit": "bytes",
+            "definition": "Bundle.main.regular-file-bytes", "bundle": bundle.lastPathComponent,
+            "files": files,
+        ]) { _, _ in fatalError("Duplicate native binary identity") }
+        return [memory, binary]
+    }
+
+    private func installedFiles(in directory: URL) throws -> [URL] {
+        let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard values.isSymbolicLink == false else {
+            throw resourceError("Installed app bundles and members must not be symbolic links")
+        }
+        if values.isDirectory != true {
+            return [directory]
+        }
+        var files: [URL] = []
+        for name in try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted() {
+            let child = directory.appendingPathComponent(name)
+            let childValues = try child.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey,
+                                                                  .isSymbolicLinkKey])
+            guard childValues.isSymbolicLink == false,
+                  childValues.isDirectory == true || childValues.isRegularFile == true else {
+                throw resourceError("Installed app contains a symbolic link or special file")
+            }
+            files.append(contentsOf: try installedFiles(in: child))
+        }
+        return files
+    }
+
+    private func adding(_ left: Int, _ right: Int) throws -> Int {
+        let (sum, overflow) = left.addingReportingOverflow(right)
+        guard !overflow else { throw resourceError("Installed app byte count overflowed") }
+        return sum
+    }
+
+    private func resourceError(_ message: String) -> NSError {
+        NSError(domain: "RefractBench.NativeResources", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: message])
     }
 
     private func startLinkIfNeeded() {

@@ -236,11 +236,64 @@ Its immutable identity and SHA-256 are in `raw/iteration-trace.json`; finalizers
 `refract.bench.frames.v1` from `UserDefaults`. The app may still persist that key for diagnostics, but a periodic plist
 snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup retains
 its exact native first-display packet and, on a successful new-head run, its separate selector-bound `raw/metrics.json`
-launch duration. Existing runs whose metrics export is empty cannot be backfilled. The downstream #380/#395 manifest
-exporter still consumes the historical `raw/exports/xctest-metrics.json` input; it must explicitly adapt to this
-normalized `raw/metrics.json` and its `metric_selector` rather than silently changing inputs in this PR. Its existing
-`selected_duration` validation preserves the added PID field and verifies its selector checksum. Complete native sample
-collection, memory/binary pairing and fail-closed report validation remain required.
+launch duration. Existing runs whose metrics export is empty cannot be backfilled. The merged #395 retained-manifest
+exporter normally consumes this normalized `raw/metrics.json` and its `metric_selector`; its explicit legacy path is
+only for older already-accepted inputs and never treats a historical raw array or firstDisplay as the missing launch
+measurement. Its existing `selected_duration` validation preserves the added PID field and verifies the selector
+checksum. Complete native sample collection, memory/binary pairing and fail-closed report validation remain required.
+
+### Native resource snapshots
+
+Every selected traced iteration carries two additional native measurements in `native-completion.json`, after the
+unchanged input script and timing completion have finished. `BenchmarkDisplayRecorder.nativeResources` calls
+`task_info(mach_task_self_, TASK_VM_INFO, ...)` and accepts only a successful result whose
+`task_vm_info_data_t.resident_size` is a positive byte count representable by Swift `Int`. The Darwin SDK declares
+this field as resident memory in bytes. It is not `virtual_size`, `phys_footprint`, resident peak, a timestamp or a
+shell resource summary. The resulting `raw/native-memory.json` has the schema-2 `memory` role: the exact source,
+variant, scenario, iteration and attached PID, `unit=bytes` and the measured `bytes`. The UI test and Python runner
+both reject a missing snapshot, stale identity/PID, non-integral or non-positive value, and any native-versus-
+forwarded difference. JSON booleans and non-finite values are not integers and cannot satisfy this contract.
+
+For installed app bytes, the app recursively enumerates the actual running `Bundle.main` (`RefractBench.app`). It
+rejects bundle symlinks and special files, reads each ordinary file, and retains its normalized bundle-relative path,
+byte count and SHA-256. `installedBinaryBytes` is the sum of those regular-file sizes, not a DerivedData directory
+size, an executable-only size, an allocated-block count or App Store download size. The UI test verifies the unique
+inventory and exact sum before forwarding it. The runner compares every native file path/byte/SHA-256 entry with the
+already validated original `RefractBench.app` product identity and revalidates that original product after capture;
+a build/install mismatch requires rebuilding and reinstalling rather than replacing the native result with a host
+directory calculation. `raw/native-binary.json` then contains exactly the schema-2 `binary` payload, with no process
+PID. The full native inventory is retained as `raw/native-resources.json`, and `raw/iteration-trace.json` binds the
+resource export SHA-256 values, definitions, build-manifest SHA-256, source revision and explicit target identity.
+The reporter consumes these ordinary JSON artifacts through its existing `memory` and `binary` roles without changing
+its iteration domain, timing definitions, percentile reductions, regression thresholds or target labels. The complete
+matrix retains both native resources for all 174 runs (two variants, three scenarios and iterations `2...30`). For
+schema 2, the runner additionally publishes byte-identical `raw/exports/resident-memory.json` for each of the 116
+scroll/state-update runs and `raw/exports/installed-binary.json` only for each variant's `startup/2` run. These paths
+are the retained-manifest exporter interface; the other 58 startup memory exports and 172 non-selected binary exports
+remain under `raw/native-memory.json` and `raw/native-binary.json`, never silently discarded or substituted into a
+report pair. `raw/iteration-trace.json` records the selected exporter-facing path and its identical SHA-256.
+
+The separate startup scalar interface remains explicit: the traced-startup producer owns selector-bound
+`raw/metrics.json`; this resource PR does not synthesize that artifact. The merged retained-manifest exporter normally
+reads that file, with its explicit legacy compatibility limited to older already-accepted inputs, before a complete
+174-run matrix can be exported. Resource aliases do not supply, backfill or claim a launch duration. The #400
+launch-metric exporter shares `raw/exports` after resource capture while reserving its own two raw export targets and
+`raw/metrics.json`; existing targets or a symbolic-link directory fail before either xcresult command. A synthetic
+same-run startup/2 regression executes the actual resource writer followed by the actual launch exporter and proves
+both aliases unchanged. That composition remains synthetic evidence, not a native launch measurement.
+
+The installed-file definition intentionally excludes directory-entry and filesystem-allocation overhead. Simulator
+installation and device installation can differ, and an on-device/thinned App Store product needs a separately named
+measurement contract rather than relabelling this one. The current benchmark app contains both variants. Therefore
+its generated/reference installed-app pair describes the same shared installed bundle, not two independently linked
+apps; equal bytes alone do not prove isolated per-variant code-size equivalence.
+
+The collector is benchmark-only instrumentation, not a Refract runtime. Reading resources after completion does not
+supply or modify any launch/display timing scalar. Focused Linux Swift tests compile and execute the extracted UI-test
+resource validator, including boolean/floating-point/overflow/path/identity controls, but do not compile the Darwin
+app sampler or execute it on iOS. An authorized native run must still prove Xcode compilation, successful `task_info`
+execution and exact installed-versus-original bundle identity on the selected target. No resource value is native
+proof merely because a synthetic test supplied it.
 
 ## Offline schema-2 export of retained iterations
 
@@ -300,6 +353,7 @@ or a source changing during copying is rejected. The tool transforms only eviden
 revision/build/target: it cannot backfill a
 new main head or close the physical-device gate. Raw native resource and launch scalar collection is not provided by
 this offline tool.
+
 ## Published partial execution evidence
 
 The final [joint #219 audit](https://github.com/nwverse/refract/issues/219#issuecomment-7148267250) accepts exactly one

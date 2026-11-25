@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
 import os
 import plistlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -23,8 +25,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from archive_trace import ArchiveError
+from launch_metric import LaunchMetricError, export_launch_metric
+from launch_metric_test import synthetic_metrics, synthetic_tests
 from iteration_trace_runner import (SAVED_OUTPUT, TARGET_PROBE_FILENAMES, HandshakeError, Session,
-                                    checked_final_samples, main, original_test_run, prepare_test_run,
+                                    checked_final_samples, checked_native_resources, main, original_test_run, prepare_test_run,
                                     record_build_provenance, saved_trace_matches, test_command, traced_test_name,
                                     validate_build_provenance, validate_trace_configuration)
 import iteration_trace_runner as runner
@@ -47,6 +51,32 @@ def synthetic_final_samples(**changes):
     }
     samples.update(changes)
     return samples
+
+
+def synthetic_native_resources(root: Path, derived_data: Path | None = None, **changes):
+    if derived_data is None:
+        derived_data = root.parent / f"{root.name}-derived-data"
+    manifest = json.loads((derived_data / "refract-build-provenance.json").read_text())
+    files = [{"path": entry["path"].removeprefix("RefractBench.app/"),
+              "bytes": entry["bytes"], "sha256": entry["sha256"]}
+             for entry in manifest["products"]["RefractBench.app"]["files"]]
+    identity = {"schema": 1, "session": 1, "sourceRevision": "a" * 40, "variant": "generated",
+                "scenario": "scroll", "iteration": 2}
+    resources = [
+        {**identity, "metric": "residentMemoryBytes", "bytes": 1024, "unit": "bytes", "pid": 4242,
+         "definition": "task_info.TASK_VM_INFO.resident_size"},
+        {**identity, "metric": "installedBinaryBytes", "bytes": sum(entry["bytes"] for entry in files),
+         "unit": "bytes", "definition": "Bundle.main.regular-file-bytes", "bundle": "RefractBench.app",
+         "files": files},
+    ]
+    for key, value in changes.items():
+        if key.startswith("memory_"):
+            resources[0][key.removeprefix("memory_")] = value
+        elif key.startswith("binary_"):
+            resources[1][key.removeprefix("binary_")] = value
+        else:
+            raise ValueError(f"Unknown synthetic resource field: {key}")
+    return resources
 
 
 class RecorderFixture:
@@ -90,7 +120,17 @@ class RecorderFixture:
                 saved_spelling: str = "Output saved", saved_lines: int = 1, missing_begin: bool = False,
                 final_samples: dict | None | str = "default",
                 stale_periodic_plist: bool = False, duplicate_native_completion: bool = False,
-                native_samples: dict | None | str = "default"):
+                native_samples: dict | None | str = "default", first_display: dict | None = None,
+                resources: list | str = "default", forwarded_resources: list | str = "default"):
+        if resources == "default":
+            resources = synthetic_native_resources(self.root, memory_scenario=app_scenario,
+                                                   memory_iteration=app_iteration, binary_scenario=app_scenario,
+                                                   binary_iteration=app_iteration)
+        if app_revision is not None:
+            for resource in resources:
+                resource["sourceRevision"] = app_revision
+        if forwarded_resources == "default":
+            forwarded_resources = resources
         if final_samples == "default":
             final_samples = synthetic_final_samples(iteration=app_iteration, recordedIteration=app_iteration,
                                                     scenario=app_scenario, iterationByFrame=[app_iteration] * 3,
@@ -110,6 +150,7 @@ packet = {{"schema": 1, "session": {session}, "revision": {app_revision or ("a" 
           "variant": "generated", "scenario": {app_scenario!r}, "iteration": {app_iteration},
           "pid": {pid!r}, "process": {process_state!r}, "state": "ready"}}
 time.sleep(0.02)
+publish("native-process.json", packet)
 (control / "request.json").write_text(json.dumps(packet))
 if {duplicate_request!r}:
     (control / "request-2.json").write_text(json.dumps(dict(packet, pid=4243)))
@@ -119,12 +160,16 @@ time.sleep({completion_delay!r})
 packet["state"] = "complete"
 packet["completion"] = {completion!r}
 packet["finalSamples"] = json.loads({json.dumps(final_samples)!r})
-if {app_scenario!r} == "startup":
+packet["nativeResources"] = json.loads({json.dumps(forwarded_resources)!r})
+if {first_display!r} is not None:
+    packet["firstDisplay"] = {first_display!r}
+elif {app_scenario!r} == "startup":
     packet["firstDisplay"] = {{"clock": "CACurrentMediaTime", "timestamp": "12345.25"}}
 begin = dict(packet, state="begin")
 if not {missing_begin!r}:
     publish("begin.json", begin)
-    native = dict(packet, finalSamples=json.loads({json.dumps(native_samples)!r}))
+    native = dict(packet, finalSamples=json.loads({json.dumps(native_samples)!r}),
+                  nativeResources=json.loads({json.dumps(resources)!r}))
     publish("native-completion.json", native)
 if {duplicate_native_completion!r}:
     (control / "native-completion-2.json").write_text(json.dumps(packet))
@@ -248,13 +293,6 @@ class IterationTraceRunnerTest(unittest.TestCase):
         destination.write_bytes(plistlib.dumps({"RefractBenchUITests": {"TestingEnvironmentVariables": values}}))
         configuration = run / "iteration-trace-config.xctestrun"
         configuration.write_bytes(destination.read_bytes())
-        manifest = run / "refract-build-provenance.json"
-        manifest.write_bytes(b'{"synthetic": "provenance"}\n')
-        receipt = {"schema": 1, "path": destination.name, "archive": configuration.name,
-                   "configuration_sha256": hashlib.sha256(configuration.read_bytes()).hexdigest(),
-                   "build_provenance_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-                   "source_revision": revision, "control_directory": str(control), "iteration": iteration}
-        (run / "iteration-trace-config.json").write_text(json.dumps(receipt))
         products = derived_data / "Build/Products/Release-iphonesimulator"
         test_bundle = products / "RefractBenchUITests-Runner.app/PlugIns/RefractBenchUITests.xctest"
         test_bundle.mkdir(parents=True, exist_ok=True)
@@ -266,6 +304,13 @@ class IterationTraceRunnerTest(unittest.TestCase):
             (bundle / "Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": executable}))
         if not (derived_data / "refract-build-provenance.json").exists():
             record_build_provenance(derived_data, revision)
+        manifest = run / "refract-build-provenance.json"
+        manifest.write_bytes((derived_data / "refract-build-provenance.json").read_bytes())
+        receipt = {"schema": 1, "path": destination.name, "archive": configuration.name,
+                   "configuration_sha256": hashlib.sha256(configuration.read_bytes()).hexdigest(),
+                   "build_provenance_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                   "source_revision": revision, "control_directory": str(control), "iteration": iteration}
+        (run / "iteration-trace-config.json").write_text(json.dumps(receipt))
         return derived_data, destination
 
     def read_synthetic_environment(self, command, check, capture_output, text):
@@ -359,6 +404,351 @@ class IterationTraceRunnerTest(unittest.TestCase):
         self.assertEqual(result["native_samples"]["sha256"], hashlib.sha256(
             (self.root / "raw/native-samples.json").read_bytes()).hexdigest())
 
+    def test_native_resources_retain_exact_darwin_and_installed_product_content(self):
+        result = self.run_success()
+        native = json.loads((self.root / "raw/native-resources.json").read_text())
+        self.assertEqual(native, synthetic_native_resources(self.root))
+        memory = json.loads((self.root / "raw/native-memory.json").read_text())
+        self.assertEqual(memory, {"sourceRevision": "a" * 40, "variant": "generated", "scenario": "scroll",
+                                  "iteration": 2, "metric": "residentMemoryBytes", "bytes": 1024,
+                                  "unit": "bytes", "pid": 4242})
+        binary = json.loads((self.root / "raw/native-binary.json").read_text())
+        self.assertEqual(binary["metric"], "installedBinaryBytes")
+        self.assertEqual(binary["bytes"], native[1]["bytes"])
+        self.assertNotIn("pid", binary)
+        self.assertEqual(result["native_resources"]["exports"]["residentMemoryBytes"]["definition"],
+                         "task_info.TASK_VM_INFO.resident_size")
+        self.assertEqual(result["native_resources"]["exports"]["installedBinaryBytes"]["definition"],
+                         "Bundle.main.regular-file-bytes")
+        self.assertEqual(result["build_provenance_sha256"], hashlib.sha256(
+            (self.root / "refract-build-provenance.json").read_bytes()).hexdigest())
+        resource = {"metric": "installedBinaryBytes", "bytes": 1,
+                    "files": [{"path": "member" + chr(8), "bytes": 1, "sha256": "0" * 64}]}
+        with self.assertRaisesRegex(HandshakeError, "file paths"):
+            runner.checked_installed_files(resource)
+        # The runner retains every snapshot; only schema-2 frame memory and
+        # startup/2 binary roles are projected into the exporter namespace.
+        self.assertEqual(result["native_resources"]["exports"]["residentMemoryBytes"]["path"],
+                         "raw/exports/resident-memory.json")
+        self.assertEqual(result["native_resources"]["exports"]["installedBinaryBytes"]["path"],
+                         "raw/native-binary.json")
+        for metric in ("residentMemoryBytes", "installedBinaryBytes"):
+            reference = result["native_resources"]["exports"][metric]
+            with self.subTest(metric=metric):
+                self.assertEqual(hashlib.sha256((self.root / reference["path"]).read_bytes()).hexdigest(),
+                                 reference["sha256"])
+                expected = self.root / ("raw/native-memory.json" if metric == "residentMemoryBytes"
+                                        else "raw/native-binary.json")
+                self.assertEqual((self.root / reference["path"]).read_bytes(), expected.read_bytes())
+
+    def test_retained_resource_exports_feed_schema_two_memory_and_binary_roles(self):
+        # Exercise the actual retained runner bytes, not a resource fixture
+        # recreated independently from PairedReportTest.resource_payload.
+        results = {"residentMemoryBytes": self.run_success()}
+        startup_root = self.root / "startup"
+        recorder = RecorderFixture(startup_root)
+        self.addCleanup(recorder.stop)
+        startup_derived_data, _ = self.write_synthetic_configuration(
+            startup_root, "a" * 40, startup_root / "control", 2)
+        startup_resources = synthetic_native_resources(
+            startup_root, derived_data=startup_derived_data, memory_scenario="startup",
+            binary_scenario="startup")
+        startup_session = self.launch(
+            fixture=recorder,
+            session_kwargs={"scenario": "startup", "run_directory": startup_root,
+                            "xcodebuild_log": recorder.output, "control_directory": startup_root / "control",
+                            "derived_data": startup_derived_data},
+            app_scenario="startup", completion="generated startup complete 1", final_samples=None,
+            native_samples=None, first_display={"clock": "CACurrentMediaTime", "timestamp": "12345.25"},
+            resources=startup_resources)
+        results["installedBinaryBytes"] = self.capture(startup_session, recorder)
+        fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        # Use the same synthetic original products as the runner captures; do
+        # not rewrite native resource bytes to fit an unrelated fixture bundle.
+        self.assertEqual(json.loads((self.root / "refract-build-provenance.json").read_text()),
+                         json.loads((startup_root / "refract-build-provenance.json").read_text()))
+        producer = fixture.derived_data
+        shutil.rmtree(producer)
+        producer.parent.mkdir(exist_ok=True)
+        shutil.copytree(startup_derived_data, producer)
+        fixture.manifest["environment"]["build_configuration"].update(
+            target="iphonesimulator", derived_data=producer.relative_to(fixture.root).as_posix())
+        shutil.copyfile(startup_root / "refract-build-provenance.json", fixture.root / fixture.build_path)
+        build_hash = hashlib.sha256((fixture.root / fixture.build_path).read_bytes()).hexdigest()
+        fixture.manifest["environment"]["build_provenance"]["sha256"] = build_hash
+        for entry in fixture.manifest["artifacts"]:
+            entry["build_provenance_sha256"] = build_hash
+        fixture.manifest["artifacts"][0]["bytes"] = (fixture.root / fixture.build_path).stat().st_size
+        fixture.manifest["artifacts"][0]["sha256"] = build_hash
+        fixture.build_hash = build_hash
+        retained = {}
+        for metric, role in (("residentMemoryBytes", "memory"), ("installedBinaryBytes", "binary")):
+            result = results[metric]
+            reference = result["native_resources"]["exports"][metric]
+            relative = next(item["artifacts"][0] for item in fixture.manifest["resources"]
+                            if item["metric"] == metric and item["variant"] == "generated")
+            run_root = self.root if metric == "residentMemoryBytes" else startup_root
+            source = run_root / reference["path"]
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), reference["sha256"])
+            payload = json.loads(source.read_text(encoding="utf-8"))
+            resource = next(item for item in fixture.manifest["resources"]
+                            if item["metric"] == metric and item["variant"] == "generated")
+            self.assertEqual((payload["variant"], payload["scenario"], payload["iteration"]),
+                             (resource["variant"], resource["scenario"], resource["iteration"]))
+            resource["bytes"] = payload["bytes"]
+            resource["native_pid"] = payload["pid"] if role == "memory" else None
+            (fixture.root / relative).write_bytes(source.read_bytes())
+            fixture.replace_bytes(relative, source.read_bytes())
+            retained[metric] = (relative, source.read_bytes())
+        report = make_report(fixture.manifest, fixture.root)
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["artifact_integrity"], "verified")
+        self.assertEqual(len(report["resource_pairs"]), 59)
+
+        # Each mutation is made after a passing integration report. Restore the
+        # exact retained bytes and schema-2 checksum before the next control.
+        for metric, mutation, diagnostic in (
+                ("residentMemoryBytes", lambda payload: payload.pop("pid"), "Native memory export PID"),
+                ("residentMemoryBytes", lambda payload: payload.update(iteration=3), "Native export iteration"),
+                ("residentMemoryBytes", lambda payload: payload.update(bytes=payload["bytes"] + 1),
+                 "Declared resource bytes"),
+                ("installedBinaryBytes", lambda payload: payload.update(variant="reference"),
+                 "Native export variant"),
+                ("installedBinaryBytes", lambda payload: payload.update(pid=4242),
+                 "Native resource export requires one explicit identity"),
+        ):
+            with self.subTest(metric=metric, diagnostic=diagnostic):
+                relative, retained_bytes = retained[metric]
+                payload = json.loads(retained_bytes)
+                mutation(payload)
+                fixture.replace_json(relative, payload)
+                with self.assertRaisesRegex(EvidenceError, diagnostic):
+                    make_report(fixture.manifest, fixture.root)
+                fixture.replace_bytes(relative, retained_bytes)
+        self.assertEqual(make_report(fixture.manifest, fixture.root)["status"], "pass")
+
+    def capture_startup_resources(self):
+        # XCTest creates its result after the runner's fresh-directory
+        # admission, not as unexplained pre-existing evidence.
+        resources = synthetic_native_resources(self.root, derived_data=self.session().derived_data,
+                                               memory_scenario="startup", binary_scenario="startup")
+        original_validate = runner.validate_trace_configuration
+
+        def create_result_during_test(*args, **kwargs):
+            results = self.root / "results.xcresult"
+            results.mkdir(exist_ok=True)
+            (results / "Info.plist").write_bytes(b"synthetic retained xcresult")
+            return original_validate(*args, **kwargs)
+
+        with mock.patch.object(runner, "validate_trace_configuration", side_effect=create_result_during_test):
+            session = self.launch(app_scenario="startup", completion="generated startup complete 1",
+                                  session_kwargs={"scenario": "startup"},
+                                  final_samples=None, native_samples=None, resources=resources,
+                                  first_display={"clock": "CACurrentMediaTime", "timestamp": "12345.25"})
+            captured = self.capture(session)
+        self.recorder.process.wait(timeout=5)
+        return captured
+
+    def test_actual_startup_resource_capture_composes_with_launch_export(self):
+        # Use the real resource writer and the real launch exporter on one
+        # startup/2 run. Only the already-acquired xcresult command is replaced
+        # with genuine bounded subprocess pipes carrying synthetic export JSON.
+        captured = self.capture_startup_resources()
+        alias = self.root / "raw/exports/installed-binary.json"
+        original = self.root / "raw/native-binary.json"
+        self.assertEqual(alias.read_bytes(), original.read_bytes())
+        self.assertEqual(captured["native_resources"]["exports"]["installedBinaryBytes"]["path"],
+                         "raw/exports/installed-binary.json")
+        self.assertEqual(captured["native_resources"]["exports"]["residentMemoryBytes"]["path"],
+                         "raw/native-memory.json")
+        retained = {name: (self.root / name).read_bytes() for name in
+                    ("raw/native-resources.json", "raw/native-memory.json", "raw/native-binary.json",
+                     "raw/exports/installed-binary.json", "raw/iteration-trace.json")}
+        self.assertFalse((self.root / "raw/exports/resident-memory.json").exists())
+        commands = []
+
+        def export_pipe(command, **options):
+            self.assertEqual(options, {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
+                                       "start_new_session": True})
+            commands.append(command)
+            payload = synthetic_tests() if " tests " in " ".join(command) else synthetic_metrics()
+            script = ("import os,sys; data=sys.stdin.buffer.read(); "
+                      "os.write(1,data); os.write(2,b'synthetic export diagnostic')")
+            process = subprocess.Popen([sys.executable, "-I", "-c", script], stdin=subprocess.PIPE, **options)
+            process.stdin.write(json.dumps(payload).encode())
+            process.stdin.close()
+            return process
+
+        exported = export_launch_metric(
+            self.root, variant="generated", revision="a" * 40, iteration=2,
+            target_udid="synthetic-target", run_command=export_pipe)
+        self.assertEqual(exported["duration_ms"], 1250.0)
+        self.assertEqual(len(commands), 2)
+        self.assertEqual([command[4] for command in commands], ["tests", "metrics"])
+        for name, expected in (("xctest-tests.json", synthetic_tests()),
+                               ("xctest-metrics.json", synthetic_metrics())):
+            path = self.root / "raw/exports" / name
+            self.assertTrue(path.is_file())
+            self.assertEqual(json.loads(path.read_text()), expected)
+        normalized = json.loads((self.root / exported["path"]).read_text())
+        self.assertEqual(normalized["measurements"][0]["pid"], 4242)
+        self.assertEqual(normalized["measurements"][0]["value"]["duration_ms"], 1250.0)
+        self.assertNotIn("firstDisplay", normalized["measurements"][0])
+        self.assertNotIn("nativeResources", normalized["measurements"][0])
+        self.assertNotIn("bytes", normalized["measurements"][0])
+        self.assertNotIn("residentMemoryBytes", normalized["measurements"][0])
+        self.assertNotIn("installedBinaryBytes", normalized["measurements"][0])
+        self.assertNotIn("duration_ms", captured["native_first_display"])
+        for name, content in retained.items():
+            self.assertEqual((self.root / name).read_bytes(), content, name)
+
+        for relative in ("raw/exports/xctest-tests.json", "raw/exports/xctest-metrics.json", "raw/metrics.json"):
+            with self.subTest(conflicting_target=relative):
+                case = IterationTraceRunnerTest("test_actual_startup_resource_capture_composes_with_launch_export")
+                case.setUp()
+                try:
+                    case.capture_startup_resources()
+                    target = case.root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(b"pre-existing launch export evidence\n")
+                    before = {name: (case.root / name).read_bytes() for name in
+                              ("raw/exports/installed-binary.json", relative)}
+                    conflict_commands = []
+                    with self.assertRaisesRegex(LaunchMetricError, "Refusing to replace"):
+                        export_launch_metric(
+                            case.root, variant="generated", revision="a" * 40, iteration=2,
+                            target_udid="synthetic-target",
+                            run_command=lambda *args, **kwargs: conflict_commands.append(args))
+                    self.assertEqual(conflict_commands, [])
+                    for name, content in before.items():
+                        self.assertEqual((case.root / name).read_bytes(), content)
+                finally:
+                    case.doCleanups()
+
+        case = IterationTraceRunnerTest("test_actual_startup_resource_capture_composes_with_launch_export")
+        case.setUp()
+        try:
+            case.capture_startup_resources()
+            exports = case.root / "raw/exports"
+            retained_binary = (exports / "installed-binary.json").read_bytes()
+            elsewhere = case.root / "elsewhere"
+            elsewhere.mkdir()
+            (exports / "installed-binary.json").unlink()
+            exports.rmdir()
+            exports.symlink_to(elsewhere, target_is_directory=True)
+            conflict_commands = []
+            with self.assertRaisesRegex(LaunchMetricError, "real directory"):
+                export_launch_metric(
+                    case.root, variant="generated", revision="a" * 40, iteration=2,
+                    target_udid="synthetic-target",
+                    run_command=lambda *args, **kwargs: conflict_commands.append(args))
+            self.assertEqual(conflict_commands, [])
+            self.assertEqual(retained_binary, (case.root / "raw/native-binary.json").read_bytes())
+            self.assertFalse((elsewhere / "installed-binary.json").exists())
+            self.assertFalse((case.root / "raw/metrics.json").exists())
+        finally:
+            case.doCleanups()
+
+    def test_missing_stale_invalid_and_forwarded_resource_mismatches_fail_closed(self):
+        self.session()
+        cases = [
+            ([], "memory"), (None, "memory"),
+            (synthetic_native_resources(self.root, memory_pid=4243), "resident|PID"),
+            (synthetic_native_resources(self.root, memory_definition="phys_footprint"), "resident_size"),
+            (synthetic_native_resources(self.root, memory_bytes=True), "positive integer"),
+            (synthetic_native_resources(self.root, memory_bytes=0), "positive integer"),
+            (synthetic_native_resources(self.root, memory_schema=True), "identity"),
+            (synthetic_native_resources(self.root, memory_session=True), "identity"),
+            (synthetic_native_resources(self.root, memory_sourceRevision="b" * 40), "identity"),
+            (synthetic_native_resources(self.root, memory_iteration=30), "identity"),
+            (synthetic_native_resources(self.root, memory_variant="reference"), "identity"),
+            (synthetic_native_resources(self.root, memory_scenario="stateUpdate"), "identity"),
+            (synthetic_native_resources(self.root, binary_definition="DerivedData.directory-size"), "inventory|positive integer"),
+            (synthetic_native_resources(self.root, binary_files=[]), "inventory|positive integer"),
+            (synthetic_native_resources(self.root, binary_bytes=1), "inventory|sum|positive integer"),
+        ]
+        for index, (resources, diagnostic) in enumerate(cases):
+            with self.subTest(index=index):
+                root = self.root / f"invalid-resource-{index}"
+                recorder = RecorderFixture(root)
+                self.addCleanup(recorder.stop)
+                session = self.launch(fixture=recorder,
+                                      session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                                      "control_directory": root / "control"}, resources=resources)
+                with self.assertRaisesRegex(HandshakeError, diagnostic):
+                    self.capture(session, recorder)
+                self.assertFalse((root / "raw/iteration-trace.json").exists())
+                self.assertFalse((root / "raw/native-memory.json").exists())
+                self.assertFalse((root / "raw/native-binary.json").exists())
+        root = self.root / "forwarded-resource-mismatch"
+        recorder = RecorderFixture(root)
+        self.addCleanup(recorder.stop)
+        resources = synthetic_native_resources(self.root)
+        forwarded = copy.deepcopy(resources)
+        forwarded[0]["bytes"] = 2048
+        forwarded[1]["bytes"] += 1
+        forwarded[1]["files"][0]["bytes"] += 1
+        session = self.launch(fixture=recorder,
+                              session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                              "control_directory": root / "control"},
+                              resources=resources, forwarded_resources=forwarded)
+        with self.assertRaisesRegex(HandshakeError, "exact native resource"):
+            self.capture(session, recorder)
+        self.assertFalse((root / "raw/native-memory.json").exists())
+
+    def test_installed_file_identity_is_recomputed_not_a_directory_size_substitute(self):
+        self.session()
+        original = synthetic_native_resources(self.root)
+        for index, mutation in enumerate(("path", "bytes", "sha256", "duplicate", "absolute", "traversal",
+                                          "empty-component", "float", "digest-case", "extra")):
+            with self.subTest(mutation=mutation):
+                resources = copy.deepcopy(original)
+                files = resources[1]["files"]
+                if mutation == "path":
+                    files[0]["path"] = "renamed"
+                elif mutation == "bytes":
+                    files[0]["bytes"] += 1
+                elif mutation == "sha256":
+                    files[0]["sha256"] = "0" * 64
+                elif mutation == "duplicate":
+                    files.append(copy.deepcopy(files[0]))
+                    resources[1]["bytes"] += files[0]["bytes"]
+                elif mutation == "absolute":
+                    files[0]["path"] = "/RefractBench"
+                elif mutation == "traversal":
+                    files[0]["path"] = "../RefractBench"
+                elif mutation == "empty-component":
+                    files[0]["path"] = "Frameworks//Support.dylib"
+                elif mutation == "float":
+                    files[0]["bytes"] = 1.5
+                elif mutation == "digest-case":
+                    files[0]["sha256"] = files[0]["sha256"].upper()
+                else:
+                    files[0]["executable"] = True
+                recorder = RecorderFixture(self.root / mutation)
+                self.addCleanup(recorder.stop)
+                with self.assertRaisesRegex(HandshakeError, "Installed|installed|file|path|SHA|unique"):
+                    self.capture(self.launch(session_kwargs={"run_directory": self.root / mutation},
+                                             fixture=recorder, resources=resources), recorder)
+
+    def test_nonfinite_native_resource_is_rejected_before_equality(self):
+        root = self.root / "nonfinite-resource"
+        recorder = RecorderFixture(root)
+        self.addCleanup(recorder.stop)
+        session = self.launch(fixture=recorder,
+                              session_kwargs={"run_directory": root, "xcodebuild_log": recorder.output,
+                                              "control_directory": root / "control"}, resources=None)
+        # Write a raw NaN token rather than relying on JSON model equality.
+        packet = {"schema": 1, "session": 1, "revision": "a" * 40, "variant": "generated",
+                  "scenario": "scroll", "iteration": 2, "pid": 4242, "process": "running", "state": "complete",
+                  "completion": "generated scroll complete 1",
+                  "nativeResources": [{"metric": "residentMemoryBytes", "bytes": float("nan")}]}
+        (root / "control/native-completion.json").write_text(json.dumps(packet))
+        with self.assertRaisesRegex(HandshakeError, "Non-finite JSON"):
+            runner.unique_packet(root / "control", "native-completion", session)
+
     def test_stale_periodic_plist_cannot_override_the_valid_final_packet(self):
         self.recorder.start(session=self.session(), stale_periodic_plist=True)
         result = self.capture(self.session())
@@ -436,7 +826,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                     recorder.start(session=session, final_samples=None)
                 else:
                     recorder.start(session=session, final_samples=synthetic_final_samples(**change))
-                with self.assertRaisesRegex(HandshakeError, "sample|frame|display|interval|Ambiguous"):
+                with self.assertRaisesRegex(HandshakeError, "sample|frame|display|interval|Ambiguous|Non-finite"):
                     self.capture(session, recorder)
                 self.assertFalse((root / "raw/generated-scroll-2.trace.zip").exists())
                 self.assertFalse((root / "raw/native-samples.json").exists())
@@ -533,7 +923,8 @@ class IterationTraceRunnerTest(unittest.TestCase):
             if command[0] == "xcodebuild":
                 # main() has created and preflighted the fresh control epoch
                 # before reaching Popen; only now may the fake XCTest publish.
-                self.recorder.prepare()
+                self.recorder.prepare(resources=synthetic_native_resources(
+                    self.root, derived_data=derived_data))
                 return self.recorder.process
             return original_popen(command, **kwargs)
 
@@ -810,6 +1201,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
     def test_stale_or_premature_packets_are_rejected_before_provenance(self):
         # No fresh control epoch is recorded: pre-existing packets before the
         # synthetic XCTest is launched must still fail closed.
+        self.session()
         self.recorder.prepare()
         self.recorder.output.write_text("current synthetic test\n")
         self.recorder.process.terminate()
@@ -870,6 +1262,7 @@ class IterationTraceRunnerTest(unittest.TestCase):
                   "pid": 4242, "process": "running", "state": "ready"}
         complete = dict(packet, state="complete", completion="generated scroll complete 1")
         complete["finalSamples"] = synthetic_final_samples(frameIntervalMs=[16.5], iterationByFrame=[2])
+        complete["nativeResources"] = synthetic_native_resources(self.root)
         begin = dict(packet, state="begin")
         launch_gate = self.recorder.work / "launch-gate"
         published_gate = self.recorder.work / "published-gate"
@@ -1539,7 +1932,8 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                           control_directory=run / "control", readiness_timeout=0.5, completion_timeout=0.5,
                           derived_data=self.derived_data)
         # Freeze the epoch before the synthetic XCTest publishes any packets.
-        recorder.start(preflight=session.record_capture_start_epoch)
+        recorder.start(preflight=session.record_capture_start_epoch,
+                       resources=synthetic_native_resources(run, derived_data=self.derived_data))
         original_validation = validate_trace_configuration
 
         def replace_products_after_final_configuration_check(*args, **kwargs):
