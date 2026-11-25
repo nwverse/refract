@@ -53,6 +53,13 @@ newline-delimited synthetic fixture is not enough; include an end-to-end duplica
 these control-plane corrections permits a skipped test, incomplete scenario or failed recorder to become a passing
 trace.
 
+A traced startup selector does not export `XCTApplicationLaunchMetric` merely because a separate cold-start test
+measures 30 launches: the selected selector itself must call `measure(metrics:)`. One measurement around the unchanged
+trace handshake supplies one native duration for that exact launch; those 30 automatic measurement ordinals must never
+be renamed as traced identities `2...30`. Export the same xcresult with the exact test ID, retain raw JSON and checksums,
+and bind the chosen scalar to the trace/configuration identity. Empty exports fail; `CACurrentMediaTime firstDisplay`
+remains a scene-activation instant, not a duration or a substitute for a missing native measurement.
+
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
 handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
 such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a second JSON writer may choose a different

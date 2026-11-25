@@ -68,7 +68,7 @@ binds its path and SHA-256 in `raw/iteration-trace.json`; finalizers consume tha
 `UserDefaults` is diagnostic only. Its asynchronous plist can still contain a periodic snapshot with
 `completedIterations == 0` after native completion; no sleep, polling or `UserDefaults.synchronize()` can turn it into
 the completion channel. A stale diagnostic plist never overrides a valid final completion packet. The separate startup
-packet retains its exact `firstDisplay` timestamp, and the 30-iteration cold-start metric remains unchanged.
+packet retains its exact `firstDisplay` timestamp, and the separate 30-iteration cold-start metric remains unchanged.
 The XCUITest target is not part of the app runtime, and the helper adds no Refract library.
 
 ## Running without touching shared targets
@@ -162,12 +162,28 @@ the same revision, variant, scenario, iteration and PID. A string avoids both Fo
 comparison ambiguity and independent JSON number formatting; the UI test and runner require exact string equality,
 round-trip it to the original `Double`, and reject missing, non-canonical, non-finite, non-positive or mismatched
 evidence without a tolerance. The receipt retains the same string in monotonic `native_first_display` evidence, not a
-shell stopwatch duration or an inferred startup time. The separate 30-iteration `XCTApplicationLaunchMetric` suite
-remains unchanged and supplies distinct platform launch samples.
+shell stopwatch duration or an inferred startup time. The selected `*StartupTrace` XCTest measures the same unchanged
+`runTracedIteration` helper once with `XCTApplicationLaunchMetric` and `iterationCount = 1`. The two separate
+30-iteration cold-start tests are unchanged; neither those automatic measurement ordinals nor array indexes supply
+traced identities `2...30`.
+
+After that exact XCTest succeeds, the runner exports `test-results tests` and `test-results metrics --test-id
+<RefractBenchUITests/testGeneratedStartupTrace()-or-testReferenceStartupTrace()>` from its own `results.xcresult`.
+It retains the raw JSON bytes and exact commands in `raw/exports/`. The normalized `raw/metrics.json` selects exactly
+one native `com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration` measurement in explicit seconds, converts it
+once to milliseconds, and carries a checksum-based `metric_selector` for `paired_report.py`. The selected test,
+passing result, target, trace receipt and configuration receipt are bound to the same run. Empty, duplicate, unrelated,
+non-finite or non-positive measurements fail without publishing a duration. `firstDisplay` remains a separate
+scene-activation instant and is never subtracted from another timestamp or relabelled as elapsed launch time.
+This UI-test source change requires a new build identity. For separately authorized native verification, rebuild the
+exact committed head with `DERIVED_DATA=<fresh-new-head-build> bench/ios/build.sh`, then use the existing traced-runner
+command with that new DerivedData and a fresh run directory. Do not reuse old products, transfer an old cold-start
+result, or treat the old empty metrics exports as backfilled durations.
 
 Run the control-plane and source-wiring tests with:
 
 ```sh
+python3 -I bench/ios/launch_metric_test.py -v
 python3 -I bench/ios/iteration_trace_runner_test.py -v
 python3 -I bench/ios/iteration_trace_source_test.py -v
 python3 -I bench/ios/iteration_startup_trace_test.py -v
@@ -188,9 +204,10 @@ do not belong to a later merge or PR head, and they are not a completed paired b
 For scroll and state update, the runner's retained `raw/native-samples.json` is the durable final sample artifact.
 Its immutable identity and SHA-256 are in `raw/iteration-trace.json`; finalizers must use this packet rather than export
 `refract.bench.frames.v1` from `UserDefaults`. The app may still persist that key for diagnostics, but a periodic plist
-snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup continues
-to use its exact native first-display packet and the unchanged cold-start launch metric. Complete native sample
-collection, memory/binary pairing and fail-closed report validation remain required.
+snapshot with `completedIterations == 0` neither replaces nor invalidates the validated final packet. Startup retains
+its exact native first-display packet and, on a successful new-head run, its separate selector-bound `raw/metrics.json`
+launch duration. Existing runs whose metrics export is empty cannot be backfilled. Complete native sample collection,
+memory/binary pairing and fail-closed report validation remain required.
 
 ## Regression and evidence policy
 

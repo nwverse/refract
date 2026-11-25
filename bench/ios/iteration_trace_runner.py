@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from archive_trace import ArchiveError, archive_trace
+from launch_metric import LaunchMetricError, export_launch_metric
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
 from build_provenance import MAX_EVIDENCE_FILE_BYTES, BuildProvenanceError, generated_test_runs
 from build_provenance import original_build_provenance as canonical_build_provenance
@@ -755,9 +756,16 @@ def main(argv: list[str] | None = None) -> int:
             status = process.wait(timeout=args.completion_timeout)
             if status != 0:
                 raise HandshakeError(f"Xcode test failed with status {status}; captured trace is not passing evidence")
+        if args.scenario == "startup":
+            # Only a successful exact selector supplies a launch duration. An
+            # empty or ambiguous native metric export fails instead of falling
+            # back to firstDisplay, timestamps or shell elapsed time.
+            result["native_launch_metric"] = export_launch_metric(
+                run, variant=args.variant, revision=args.source_revision,
+                iteration=args.iteration, target_udid=args.target_udid)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
-    except (HandshakeError, ArchiveError, OSError, subprocess.CalledProcessError,
+    except (HandshakeError, LaunchMetricError, ArchiveError, OSError, subprocess.CalledProcessError,
             subprocess.TimeoutExpired) as error:
         print(f"iteration-trace: ERROR: {error}", file=sys.stderr)
         return 2

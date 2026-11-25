@@ -133,6 +133,30 @@ class TraceSourceContractTest(unittest.TestCase):
         self.assertIn('expectedFinished["firstDisplay"] = firstDisplay', TESTS)
         self.assertNotIn("CACurrentMediaTime()", TESTS)
 
+    def test_startup_duration_is_exported_only_after_the_exact_test_succeeds(self):
+        helper = TESTS[TESTS.index("    private func tracedStartupMetric"):
+                       TESTS.index("    private func launchMetric")]
+        self.assertIn("options.iterationCount = 1", helper)
+        self.assertEqual(helper.count('try runTracedIteration("startup", variant: variant)'), 2)
+        self.assertEqual(helper[helper.index("measure(metrics:"):].count(
+            'try runTracedIteration("startup", variant: variant)'), 1)
+        self.assertIn("A throwing measure block cannot preserve XCTSkip", helper)
+        self.assertIn("var iterationError: Error?", helper)
+        self.assertIn("throw iterationError", helper)
+        self.assertEqual(TESTS.count("options.iterationCount = 30"), 1)
+        self.assertEqual(TESTS.count("options.iterationCount = 1"), 1)
+        completed = RUNNER.index("if status != 0:")
+        export = RUNNER.index("result[\"native_launch_metric\"] = export_launch_metric(", completed)
+        self.assertLess(completed, export)
+        self.assertLess(export, RUNNER.index("print(json.dumps(result", export))
+        self.assertIn('if args.scenario == "startup":', RUNNER[completed:export])
+        exporter = (HERE / "launch_metric.py").read_text()
+        self.assertIn('"--test-id", identifier', exporter)
+        self.assertIn('com.apple.dt.XCTMetric_ApplicationLaunch-AppLaunch.duration', exporter)
+        self.assertIn('write_once(destination / name, completed.stdout)', exporter)
+        self.assertNotIn("firstDisplay", exporter[exporter.index("def selected_launch_measurement"):
+                                                  exporter.index("def export_launch_metric")])
+
     def test_first_display_is_compared_as_one_exact_string_not_an_unsupported_dictionary(self):
         forward = TESTS.index('try TraceHandshake.write(completionPacket')
         expected = TESTS.index('var expectedFinished = completionPacket', forward)
