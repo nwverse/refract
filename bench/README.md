@@ -84,7 +84,9 @@ supplies:
    the generic generated/reference product identity contract below.
 2. `artifacts`: ordinary raw files below `raw/`, with SHA-256, source revision, shared build-provenance SHA-256,
    an explicit `timing`/`profiler`/`memory`/`binary`/`build-provenance` role, and exact variant/scenario/iteration
-   ownership. The build manifest is shared by both variants and therefore has `variant=shared`, `scenario=build` and
+   ownership. The evidence root, `raw/` and every artifact parent must be real, non-symbolic-link directories; their
+   resolved paths remain inside the evidence root. A linked ancestor cannot redirect an otherwise valid artifact
+   outside that root. The build manifest is shared by both variants and therefore has `variant=shared`, `scenario=build` and
    sentinel iteration 2; it is not an iteration-2 timing sample. Every other artifact and measurement must match the
    environment's revision and build hash. No evidence can be copied into another revision or build. The reporter parses
    the retained build JSON and requires its own `source_revision` and configuration to match, plus explicit product

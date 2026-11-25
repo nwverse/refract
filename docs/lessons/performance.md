@@ -23,6 +23,9 @@ Preserve them with exact source/toolchain/target metadata, acquisition/export co
 Instruments packages when ordinary files are needed for public review; a directory named `.trace` is not a trace file.
 `bench/ios/archive_trace.py` archives only an already completed package, never overwrites output and does not establish
 that capture finished or that a package belongs to a measurement.
+An ordinary artifact leaf is not sufficient containment: a symbolic-link `raw/` or nested parent can redirect unchanged,
+correctly checksummed bytes outside the evidence root. Reject a linked root and every raw-path ancestor before hashing,
+and require resolved parents to stay inside that root.
 Every sample must be directly bound to its variant, scenario and iteration and to the corresponding native trace.
 On iOS, also require exactly one identity-matched `xcode-metric-json` per timing measurement; a profiler trace is
 supporting evidence, not a substitute for the native launch or display-interval export. Do not infer ownership from a
@@ -71,6 +74,24 @@ shortest decimal spelling for the same `Double`. Encode the native floating-poin
 round-trippable string, validate it and compare the typed strings exactly at each hop. Exercise the concrete native
 value through the real control plane and compile the actual Swift comparator, including a mismatch rejection.
 
+## Manifest only stable bytes
+
+A finalizer must not include its caller's still-open stdout/stderr in an integrity manifest. If its buffered receipt is
+printed only after the manifest is written, the retained entry describes the initial empty file, not the later receipt.
+Before manifesting, wait for owned child processes and collector threads, close owned logs and archives, then measure the
+resulting byte count and SHA-256. Exclude caller-owned live diagnostic streams, or write them outside the walked tree,
+and validate their final contents separately after the child exits. If a finalizer owns a receipt that belongs in the
+manifest, write and close that receipt first; `flush()` alone does not close an owned file or make a foreign writer
+stable.
+
+Build the manifest only after all of its members are closed, and publish its complete bytes through a same-directory
+temporary file followed by an exclusive no-clobber link or rename. Flush and `fsync` the temporary file before
+publication, remove only that temporary on failure, and never replace an existing manifest or repair retained evidence
+after the fact. A later hash of a finished log is a new observation, not acquisition-time evidence and not a substitute
+for a valid original manifest. Cover the empty-before-flush ordering, live-stream exclusion, post-exit log validation,
+publication failure and refusal to overwrite with synthetic tests; these tests do not change native evidence thresholds
+or establish a performance result.
+
 ## Keep evidence domains and identity counts explicit
 
 An inclusive identity range is not automatically its acquisition count: 2...30 contains **29 identities**. Check the
@@ -90,6 +111,16 @@ reference must not call the generated row or share its view implementation. Comp
 well as text. A convenient extra `frame`, asynchronous callback or dropped native token can make the two screens
 non-equivalent. Compile the canonical source rather than a copied approximation, then verify actual behavior on a
 named target before claiming equivalence.
+
+A pre-compiler source test must inspect the shared model and both native implementations, not only a generated header
+or unrelated reference fragments. Bind the model action's delegation and both toggle read/callback paths, paired
+text/typography/accessibility/layout, immutable replacement and list/reuse identity. Validate configuration members
+in their declared objects, not by global substring counts: the checked-in JSON-subset `.json5` files can use the
+standard-library parser with duplicate-key and non-finite-constant rejection while other JSON5 syntax fails closed.
+Seed temporary-copy
+mutations for these identities, imports and build configuration, and prove the unmodified and formatting-only copies
+pass first. These bounded structural checks reject contract drift but establish neither ArkTS compiler acceptance,
+rendered equality nor native behavior.
 
 Use an explicit, exclusively owned, already-booted target. Never use `booted`, create or reboot a shared simulator,
 or infer ownership from an existing device name. A physical target discovered as unavailable is a blocker, not an
