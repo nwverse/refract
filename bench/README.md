@@ -48,7 +48,9 @@ supplies:
    an explicit `timing`/`profiler`/`memory`/`binary`/`build-provenance` role, and exact variant/scenario/iteration
    ownership. The build manifest is shared by both variants and therefore has `variant=shared`, `scenario=build` and
    sentinel iteration 2; it is not an iteration-2 timing sample. Every other artifact and measurement must match the
-   environment's revision and build hash. No evidence can be copied into another revision or build. iOS uses
+   environment's revision and build hash. No evidence can be copied into another revision or build. The reporter parses
+   the retained build JSON and requires its own `source_revision` and configuration to match, plus distinct nonempty
+   generated/reference product file identities. Manifest declarations alone are not build provenance. iOS uses
    ZIP-copied `.xcresult` bundles, Xcode `xcresulttool` JSON exports and archived `.trace.zip` packages; HarmonyOS
    uses the vendor's native trace and metric exports. A directory merely named `.trace` is not accepted as a trace file.
    `bench/ios/archive_trace.py` preserves an already recorded Instruments package without replacing existing evidence;
@@ -56,21 +58,29 @@ supplies:
 3. `measurements`: one positive finite `value` in milliseconds for every exact variant/scenario/iteration, with a
    declared native `definition`, directly referencing identity-matched raw metric evidence and a profiler trace.
    `startupMs` is an `XCTApplicationLaunchMetric` duration on iOS or a separately identified native
-   launch-to-first-frame duration on HarmonyOS, explicitly checked as `first_frame_timestamp_ms -
-   launch_start_timestamp_ms` with `timestamp_unit=ms`. A first-frame timestamp alone is not a launch duration.
-   iOS startup requires that iteration's `metrics.json`; `firstDisplay`
-   is a monotonic scene-activation timestamp, **not a launch duration**, and cannot supply this scalar. iOS
-   `frameIntervalMs` requires `native-samples.json` with its `CADisplayLink` `targetTimestamp - timestamp` array,
-   `iterationByFrame` identity and an explicit per-iteration `aggregation=p99`; `value` must equal the nearest-rank
-   p99 of `source_samples`. The array is not itself a scalar and its intervals are not CPU frame duration. HarmonyOS
-   uses its own native frame duration with the same explicit reduction requirement. These metrics are not
-   interchangeable; the outer comparisons still use nearest-rank p50/p99 across the 30 iteration scalars.
+   launch-to-first-frame duration on HarmonyOS. iOS reads the retained native `durationMs` measurement, either directly
+   with its canonical `nativeMeasurementSha256` or from a `measurements` array with an index/checksum selector. The
+   selected native object must carry the same revision, variant, scenario and iteration; a manifest-only `value` or an
+   unrelated first-display timestamp cannot supply it. HarmonyOS reads native `launchStartTimestamp` and
+   `firstFrameTimestamp` from the artifact and subtracts them in milliseconds; it does not accept manifest-supplied
+   timestamps. A first-frame timestamp alone is not a launch duration. iOS startup requires that iteration's
+   `metrics.json`; `firstDisplay` is a monotonic scene-activation timestamp, **not a launch duration**. iOS
+   `frameIntervalMs` reads `native-samples.json` itself, including `sourceRevision`, variant/scenario/iteration,
+   `session`, matching `native_pid`, `completedIterations=1`, `recordedIteration`, `iterationByFrame` and its
+   `CADisplayLink` `targetTimestamp - timestamp` array. The reporter recalculates the per-iteration nearest-rank p99
+   from that raw array and requires the manifest `value` to match; it never trusts a manifest `source_samples` array.
+   The array is not itself a scalar and its intervals are not CPU frame duration. HarmonyOS uses its own native frame
+   duration with the same explicit reduction requirement. These metrics are not interchangeable; the outer comparisons
+   still use nearest-rank p50/p99 across the retained iteration scalars.
 4. `resources`: positive integer bytes. Every scroll/state-update iteration requires a generated/reference
    `residentMemoryBytes` pair with `memory`-role provenance at that same identity. Exactly one generated and one
    reference `installedBinaryBytes` measurement is required for one scenario, with `binary`-role provenance; these
    describe the installed product at the shared build identity, not per-iteration timing. Resource provenance must
    match the environment's revision and build hash. The report emits paired values and generated-minus-reference
-   deltas alongside the raw entries. The existing regression thresholds apply to timing only, not resource bytes.
+   deltas alongside the raw entries. Each resource JSON carries its own `sourceRevision`, variant/scenario/iteration,
+   `metric`, `unit=bytes` and `bytes`; memory also carries the observed `pid`, matching `native_pid`. The reporter
+   requires the exported bytes to equal the declared resource bytes. The existing regression thresholds apply to timing
+   only, not resource bytes.
 
 The report includes the exact commands and limits; raw evidence is retained beside it. Do not commit a report without
 its referenced artifacts, redact away their provenance, or use another platform's measurements to fill missing pairs.

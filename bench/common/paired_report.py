@@ -75,6 +75,127 @@ def checked_iteration(value: Any, label: str = "iteration") -> int:
     return value
 
 
+def native_json(artifact: dict[str, Any]) -> dict[str, Any]:
+    """Read a bounded JSON export only after its ordinary-file checksum passed."""
+    try:
+        if artifact["resolved_path"].stat().st_size > 16 * 1024 * 1024:
+            raise EvidenceError(f"Native JSON export exceeds its size bound: {artifact['path']}")
+        value = json.loads(artifact["resolved_path"].read_text(encoding="utf-8"),
+                           parse_constant=lambda constant: (_ for _ in ()).throw(
+                               EvidenceError(f"Non-finite native JSON value: {constant}")))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise EvidenceError(f"Cannot read native JSON export {artifact['path']}: {error}") from error
+    if not isinstance(value, dict):
+        raise EvidenceError(f"Native JSON export must be an object: {artifact['path']}")
+    return value
+
+
+def raw_identity(payload: dict[str, Any], identity: tuple[str, str, int], revision: str) -> None:
+    variant, scenario, iteration = identity
+    expected = {"variant": variant, "scenario": scenario, "iteration": iteration, "sourceRevision": revision}
+    for key, wanted in expected.items():
+        if payload.get(key) != wanted:
+            raise EvidenceError(f"Native export {key} does not match its artifact identity")
+
+
+def duration_value(value: Any, label: str, unit: str = "ms") -> float:
+    if not isinstance(value, dict):
+        raise EvidenceError(f"{label} must be a duration object, not a timestamp")
+    if value.get("unit") != unit or value.get("definition") != "XCTApplicationLaunchMetric":
+        raise EvidenceError("iOS startup requires a native XCTApplicationLaunchMetric duration in milliseconds")
+    if value.get("timestamp") is not None or "firstDisplay" in value:
+        raise EvidenceError("A firstDisplay timestamp is not an application launch duration")
+    return finite_number(value.get("duration_ms"), "native launch duration", positive=True)
+
+
+def selected_duration(payload: dict[str, Any], identity: tuple[str, str, int], revision: str,
+                      selector: Any) -> float:
+    if identity[1] != "startup":
+        raise EvidenceError("The selected launch metric must belong to startup")
+    measurements = payload.get("measurements")
+    if not isinstance(measurements, list) or not measurements:
+        raise EvidenceError("Native metrics export contains no measurements")
+    if type(selector) is not dict or set(selector) != {"index", "value_sha256"} \
+            or type(selector["index"]) is not int:
+        raise EvidenceError("Native startup selection requires an explicit measurement index and SHA-256")
+    for entry in measurements:
+        if not isinstance(entry, dict):
+            raise EvidenceError("Native metric measurements must be objects")
+        raw_identity(entry, identity, revision)
+    if selector["index"] not in range(len(measurements)):
+        raise EvidenceError("Native startup measurement index is outside the retained export")
+    selected = measurements[selector["index"]]
+    canonical = json.dumps(selected, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    if hashlib.sha256(canonical).hexdigest() != sha256_text(selector["value_sha256"], "metric_selector.value_sha256"):
+        raise EvidenceError("Native startup selector checksum does not match the retained measurement")
+    if selected.get("metric") != "XCTApplicationLaunchMetric":
+        raise EvidenceError("The selected native metric is not XCTApplicationLaunchMetric")
+    return duration_value(selected.get("value"), "native startup duration")
+
+
+def checked_startup_value(payload: dict[str, Any], identity: tuple[str, str, int], revision: str,
+                          selector: Any) -> float:
+    if "measurements" in payload:
+        return selected_duration(payload, identity, revision, selector)
+    if "firstDisplay" in payload or "timestamp" in payload:
+        raise EvidenceError("A firstDisplay timestamp is not an application launch duration")
+    required = {"sourceRevision", "variant", "scenario", "iteration", "metric", "unit", "durationMs",
+                "nativeMeasurement", "nativeMeasurementSha256"}
+    if selector is not None or set(payload) != required:
+        raise EvidenceError("Startup requires a checksummed native XCTApplicationLaunchMetric measurement")
+    raw_identity(payload, identity, revision)
+    if payload.get("metric") != "XCTApplicationLaunchMetric" or payload.get("unit") != "ms":
+        raise EvidenceError("iOS startup requires the actual XCTApplicationLaunchMetric millisecond duration")
+    native = payload["nativeMeasurement"]
+    if not isinstance(native, dict) or set(native) != {"sourceRevision", "variant", "scenario", "iteration",
+                                                        "metric", "unit", "durationMs"}:
+        raise EvidenceError("The retained native launch measurement must be explicit")
+    canonical = json.dumps(native, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    if hashlib.sha256(canonical).hexdigest() != sha256_text(payload["nativeMeasurementSha256"],
+                                                            "nativeMeasurementSha256"):
+        raise EvidenceError("The retained native launch measurement checksum does not match")
+    raw_identity(native, identity, revision)
+    value = finite_number(native.get("durationMs"), "native launch duration", positive=True)
+    if value != finite_number(payload.get("durationMs"), "extracted launch duration", positive=True):
+        raise EvidenceError("Extracted launch duration differs from the retained native measurement")
+    return value
+
+
+def checked_frame_samples(payload: dict[str, Any], identity: tuple[str, str, int], revision: str,
+                          pid: Any) -> list[float]:
+    raw_identity(payload, identity, revision)
+    if (payload.get("schema") != 1 or type(payload.get("session")) is not int
+            or type(pid) is not int or pid <= 0 or payload.get("pid") != pid
+            or payload.get("completedIterations") != 1 or payload.get("recordedIteration") != identity[2]):
+        raise EvidenceError("Native frame packet does not bind its selected session, process and iteration")
+    intervals = payload.get("frameIntervalMs")
+    tags = payload.get("iterationByFrame")
+    if (not isinstance(intervals, list) or not 0 < len(intervals) <= 4096
+            or not isinstance(tags, list) or len(tags) != len(intervals)
+            or any(type(tag) is not int or tag != identity[2] for tag in tags)):
+        raise EvidenceError("Native CADisplayLink intervals and iteration tags must be complete and bounded")
+    values = [finite_number(value, "native CADisplayLink interval", positive=True) for value in intervals]
+    return values
+
+
+def checked_resource_value(artifact: dict[str, Any], metric: str, revision: str, pid: Any) -> int:
+    payload = native_json(artifact)
+    raw_identity(payload, (artifact["variant"], artifact["scenario"], artifact["iteration"]), revision)
+    required = {"sourceRevision", "variant", "scenario", "iteration", "metric", "bytes", "unit"}
+    if metric == "residentMemoryBytes":
+        required |= {"pid"}
+        if type(payload.get("pid")) is not int or payload["pid"] != pid:
+            raise EvidenceError("Native memory export PID does not match its iteration")
+    if set(payload) != required or payload.get("unit") != "bytes":
+        raise EvidenceError("Native resource export requires one explicit identity and byte value")
+    if payload.get("metric") != metric:
+        raise EvidenceError("Native resource export metric does not match its declared resource")
+    value = payload.get("bytes")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise EvidenceError("Native resource export requires positive integer bytes")
+    return value
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -182,16 +303,52 @@ def artifact(entry: Any, root: Path, platform: str, environment: dict[str, Any])
     return entry, relative
 
 
+def checked_build_provenance(artifact: dict[str, Any], environment: dict[str, Any]) -> None:
+    payload = native_json(artifact)
+    if (payload.get("schema") != 1 or payload.get("source_revision") != environment["source_revision"]
+            or payload.get("configuration") != environment["build_configuration"].get("name")
+            or set(payload) != {"schema", "source_revision", "configuration", "products"}):
+        raise EvidenceError("Build provenance's internal revision or configuration does not match the environment")
+    products = payload.get("products")
+    if not isinstance(products, dict):
+        raise EvidenceError("Build provenance must contain variant product identities")
+    for variant in VARIANTS:
+        product = products.get(variant)
+        if not isinstance(product, dict):
+            raise EvidenceError(f"Build provenance is missing the {variant} product identity")
+        if set(product) != {"bundle", "files"} or not isinstance(product["files"], list) or not product["files"]:
+            raise EvidenceError(f"Build provenance requires {variant} bundle files")
+        text(product["bundle"], "product.bundle")
+        for entry in product["files"]:
+            if not isinstance(entry, dict) or set(entry) != {"path", "bytes", "sha256"}:
+                raise EvidenceError("Build product files need bounded path, byte and checksum identities")
+            bounded_text(entry["path"], "product.path", path=True)
+            if Path(entry["path"]).is_absolute() or ".." in Path(entry["path"]).parts:
+                raise EvidenceError("Build product file paths must be bundle-relative")
+            if type(entry["bytes"]) is not int or entry["bytes"] <= 0:
+                raise EvidenceError("Build product files require positive byte sizes")
+            sha256_text(entry["sha256"], "product.sha256")
+    for variant in VARIANTS:
+        product = products[variant]
+        prefix = f"{variant}/"
+        if any(not entry["path"].startswith(prefix) for entry in product["files"]):
+            raise EvidenceError("Build product identity is not owned by its declared variant")
+    if any(products[first]["files"] == products[second]["files"]
+           for first in VARIANTS for second in VARIANTS if first != second):
+        raise EvidenceError("Generated and reference products cannot share the same product identity")
+
+
 def samples_for(measurement: dict[str, Any], artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if set(measurement) - {"platform", "variant", "scenario", "iteration", "metric", "unit", "value", "definition",
-                           "aggregation", "source_samples", "launch_start_timestamp_ms", "first_frame_timestamp_ms",
-                           "timestamp_unit", "artifacts"}:
+                           "aggregation", "native_pid", "metric_selector", "artifacts"}:
         raise EvidenceError("Measurement contains unknown fields; choose an explicit schema")
     if measurement.get("platform") not in ("ios", "harmonyos"):
         raise EvidenceError("Measurement has an unsupported platform")
     platform = measurement["platform"]
     variant = measurement.get("variant")
     scenario = measurement.get("scenario")
+    if variant not in VARIANTS or scenario not in SCENARIOS:
+        raise EvidenceError("Measurement has an invalid variant/scenario")
     iteration = checked_iteration(measurement.get("iteration"), "Measurement iteration")
     metric = measurement.get("metric")
     if metric not in GATED_METRICS:
@@ -212,28 +369,16 @@ def samples_for(measurement: dict[str, Any], artifacts: list[dict[str, Any]]) ->
         raise EvidenceError(f"{platform}.{scenario} requires the declared {definitions[platform][metric]} definition; "
                             "firstDisplay is not a launch duration")
     aggregation = measurement.get("aggregation")
-    raw = measurement.get("source_samples")
     if scenario == "startup":
-        if aggregation is not None or raw is not None:
+        forbidden = ("aggregation", "source_samples", "native_pid")
+        if any(measurement.get(key) is not None for key in forbidden):
             raise EvidenceError("Startup requires one scalar native launch duration, not a frame-series reduction")
-        if platform == "harmonyos":
-            start = finite_number(measurement.get("launch_start_timestamp_ms"), "launch start timestamp", positive=True)
-            first_frame = finite_number(measurement.get("first_frame_timestamp_ms"), "first frame timestamp",
-                                        positive=True)
-            if measurement.get("timestamp_unit") != "ms" or value != first_frame - start:
-                raise EvidenceError("HarmonyOS startup must explicitly subtract native first-frame and launch timestamps")
-        elif any(key in measurement for key in ("launch_start_timestamp_ms", "first_frame_timestamp_ms", "timestamp_unit")):
-            raise EvidenceError("iOS launch duration comes from XCTApplicationLaunchMetric, not a firstDisplay timestamp")
     else:
-        if any(key in measurement for key in ("launch_start_timestamp_ms", "first_frame_timestamp_ms", "timestamp_unit")):
-            raise EvidenceError("Frame scenarios cannot mix launch timestamps with display intervals")
         if aggregation != "p99":
             raise EvidenceError("Frame intervals require an explicit per-iteration p99 reduction")
-        if not isinstance(raw, list) or not 0 < len(raw) <= 4096:
-            raise EvidenceError("CADisplayLink arrays need 1...4096 source samples and a declared reduction")
-        intervals = [finite_number(sample, "source interval", positive=True) for sample in raw]
-        if value != percentile(intervals, 0.99):
-            raise EvidenceError("Timing value must be the declared p99 of its CADisplayLink source samples")
+        if any(measurement.get(key) is not None for key in ("launch_start_timestamp_ms", "first_frame_timestamp_ms",
+                                                            "timestamp_unit", "metric_selector")):
+            raise EvidenceError("Frame scenarios cannot mix launch timestamps with display intervals")
     referenced = measurement.get("artifacts")
     if not isinstance(referenced, list) or not referenced or not all(isinstance(value, str) for value in referenced):
         raise EvidenceError("Every timing measurement must reference raw native evidence")
@@ -243,6 +388,33 @@ def samples_for(measurement: dict[str, Any], artifacts: list[dict[str, Any]]) ->
     for artifact in matches:
         if (artifact["variant"], artifact["scenario"], artifact["iteration"]) != (variant, scenario, iteration):
             raise EvidenceError("Timing sample is not bound to its variant/scenario/iteration")
+    timing = [match for match in matches if match["role"] == "timing"]
+    if len(timing) != 1:
+        raise EvidenceError("Timing requires exactly one native metric export")
+    raw = native_json(timing[0])
+    identity = (variant, scenario, iteration)
+    revision = timing[0]["source_revision"]
+    if platform == "ios" and scenario == "startup":
+        value = checked_startup_value(raw, identity, revision, measurement.get("metric_selector"))
+    elif scenario == "startup":
+        if set(raw) != {"sourceRevision", "variant", "scenario", "iteration", "metric", "timestampUnit",
+                        "launchStartTimestamp", "firstFrameTimestamp"}:
+            raise EvidenceError("HarmonyOS startup requires explicit native launch and first-frame timestamps")
+        raw_identity(raw, identity, revision)
+        if raw["metric"] != "native-launch-duration" or raw["timestampUnit"] != "ms":
+            raise EvidenceError("HarmonyOS startup timestamps must use native milliseconds")
+        start = finite_number(raw["launchStartTimestamp"], "native launch timestamp", positive=True)
+        first_frame = finite_number(raw["firstFrameTimestamp"], "native first-frame timestamp", positive=True)
+        value = finite_number(first_frame - start, "native launch duration", positive=True)
+    else:
+        raw = checked_frame_samples(raw, identity, revision, measurement.get("native_pid"))
+        if aggregation != "p99":
+            raise EvidenceError("Frame intervals require an explicit per-iteration p99 reduction")
+        value = percentile(raw, 0.99)
+    if value != finite_number(measurement.get("value"), "timing value", positive=True):
+        raise EvidenceError("Declared timing value does not match the raw native metric export")
+    if scenario == "startup" and measurement.get("native_pid") is not None:
+        raise EvidenceError("A native PID is required for frame packets, not an XCTest launch metric")
     if platform == "ios":
         expected = "native-samples" if scenario != "startup" else "metrics"
         if sum(Path(match["path"]).name.endswith(expected + ".json") and match["kind"] == "xcode-metric-json"
@@ -252,7 +424,8 @@ def samples_for(measurement: dict[str, Any], artifacts: list[dict[str, Any]]) ->
             raise EvidenceError("A CADisplayLink array cannot supply an iOS startup scalar")
     return [{
         "variant": variant, "scenario": scenario, "iteration": iteration, "metric": metric, "value": value,
-        "definition": definition, "aggregation": aggregation, "source_samples": raw, "artifacts": sorted(referenced),
+        "definition": definition, "aggregation": aggregation, "source_samples": raw if scenario != "startup" else None,
+        "artifacts": sorted(referenced),
     }]
 
 
@@ -263,7 +436,8 @@ def validate_resources(measurements: Any, artifacts: list[dict[str, Any]], platf
     seen = set()
     for entry in measurements:
         if (not isinstance(entry, dict) or entry.get("platform") != platform
-                or set(entry) != {"platform", "variant", "scenario", "iteration", "metric", "bytes", "artifacts"}):
+                or set(entry) != {"platform", "variant", "scenario", "iteration", "metric", "bytes", "native_pid",
+                                  "artifacts"}):
             raise EvidenceError("Resource measurement has the wrong platform or an incomplete schema 2 identity")
         identity = (entry.get("variant"), entry.get("scenario"),
                     checked_iteration(entry.get("iteration"), "Resource iteration"), entry.get("metric"))
@@ -277,6 +451,11 @@ def validate_resources(measurements: Any, artifacts: list[dict[str, Any]], platf
         value = entry.get("bytes")
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise EvidenceError("Memory and binary size require positive integer bytes")
+        pid = entry.get("native_pid")
+        if identity[3] == "residentMemoryBytes" and (type(pid) is not int or pid <= 0):
+            raise EvidenceError("Resident memory requires its observed native process identity")
+        if identity[3] == "installedBinaryBytes" and pid is not None:
+            raise EvidenceError("Installed binary size is a build product, not a process measurement")
         paths = entry.get("artifacts")
         if not isinstance(paths, list) or not paths or len(set(paths)) != len(paths):
             raise EvidenceError("Resource measurement requires unique native artifact references")
@@ -288,6 +467,9 @@ def validate_resources(measurements: Any, artifacts: list[dict[str, Any]], platf
             if (len(matches) != 1 or (matches[0]["variant"], matches[0]["scenario"], matches[0]["iteration"]) != identity[:3]
                     or matches[0]["role"] != expected_role):
                 raise EvidenceError("Resource measurement has mismatched native provenance")
+            raw_value = checked_resource_value(matches[0], identity[3], matches[0]["source_revision"], pid)
+            if raw_value != value:
+                raise EvidenceError("Declared resource bytes do not match the native resource export")
         output.append({"variant": identity[0], "scenario": identity[1], "iteration": identity[2],
                        "metric": identity[3], "bytes": value, "artifacts": sorted(paths),
                        "source_revision": matches[0]["source_revision"],
@@ -351,9 +533,12 @@ def make_report(manifest: Any, root: Path) -> dict[str, Any]:
     build_path = environment["build_provenance"]["path"]
     if build_path not in paths:
         raise EvidenceError("Build provenance must be a checksummed raw artifact")
-    if next(artifact for artifact in artifacts if artifact["path"] == build_path)["sha256"] \
-            != environment["build_provenance"]["sha256"]:
+    build_artifact = next(artifact for artifact in artifacts if artifact["path"] == build_path)
+    if build_artifact["sha256"] != environment["build_provenance"]["sha256"]:
         raise EvidenceError("Build provenance identity does not match its artifact bytes")
+    if build_artifact["role"] != "build-provenance":
+        raise EvidenceError("Build provenance path must have the build-provenance role")
+    checked_build_provenance(build_artifact, environment)
     measurements = manifest.get("measurements")
     if not isinstance(measurements, list) or not measurements:
         raise EvidenceError("No raw measurements")
@@ -409,6 +594,7 @@ def make_report(manifest: Any, root: Path) -> dict[str, Any]:
         "artifact_integrity": "verified",
         "threshold": {"relative_percent": 5.0, "absolute_ms": 0.1, "conjunction": "AND"},
         "comparisons": comparisons,
+        "samples": samples,
         "resources": resources,
         "resource_pairs": paired_resources,
         "status": "fail" if any(row["p50"]["regressed"] or row["p99"]["regressed"] for row in comparisons) else "pass",

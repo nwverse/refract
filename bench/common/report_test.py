@@ -19,7 +19,7 @@ class PairedReportTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         (self.root / "raw").mkdir()
         self.build_path = "raw/refract-build-provenance.json"
-        (self.root / self.build_path).write_bytes(b"synthetic build identity")
+        self.write_json(self.build_path, self.build_payload())
         self.build_hash = hashlib.sha256((self.root / self.build_path).read_bytes()).hexdigest()
         self.manifest = {
             "schema": 2,
@@ -48,17 +48,18 @@ class PairedReportTest(unittest.TestCase):
                                               "metrics.json" if scenario == "startup" else "native-samples.json",
                                               "timing")):
                         path = f"raw/{variant}-{scenario}-{iteration}-{name}"
-                        (self.root / path).write_bytes(b"synthetic native evidence")
+                        (self.root / path).write_bytes(b"synthetic profiler package") if role == "profiler" \
+                            else self.write_json(path, self.timing_payload(variant, scenario, iteration))
                         self.manifest["artifacts"].append(self.artifact(path, variant, scenario, iteration, kind, role))
                     if scenario != "startup":
                         path = f"raw/{variant}-{scenario}-{iteration}-memory.json"
-                        (self.root / path).write_bytes(b"synthetic memory export")
+                        self.write_json(path, self.resource_payload(variant, scenario, iteration, "residentMemoryBytes"))
                         self.manifest["artifacts"].append(self.artifact(path, variant, scenario, iteration,
                                                                        "xcode-metric-json", "memory"))
                         self.manifest["resources"].append({
                             "platform": "ios", "variant": variant, "scenario": scenario,
                             "iteration": iteration, "metric": "residentMemoryBytes", "bytes": 1024,
-                            "artifacts": [path],
+                            "native_pid": 4242, "artifacts": [path],
                         })
                     definition = ("XCTApplicationLaunchMetric" if scenario == "startup"
                                   else "CADisplayLink.targetTimestamp-timestamp")
@@ -68,16 +69,65 @@ class PairedReportTest(unittest.TestCase):
                         "platform": "ios", "variant": variant, "scenario": scenario,
                         "iteration": iteration, "metric": metric, "unit": "ms", "value": 10.0,
                         "definition": definition,
-                        **({} if scenario == "startup" else {"aggregation": "p99", "source_samples": [9.0, 10.0]}),
+                        **({} if scenario == "startup" else {"aggregation": "p99", "native_pid": 4242}),
                         "artifacts": [metric_path, f"raw/{variant}-{scenario}-{iteration}-{scenario}.trace.zip"],
                     })
             path = f"raw/{variant}-startup-2-binary.json"
-            (self.root / path).write_bytes(b"synthetic installed binary export")
+            self.write_json(path, self.resource_payload(variant, "startup", 2, "installedBinaryBytes"))
             self.manifest["artifacts"].append(self.artifact(path, variant, "startup", 2, "xcode-metric-json", "binary"))
             self.manifest["resources"].append({
                 "platform": "ios", "variant": variant, "scenario": "startup", "iteration": 2,
-                "metric": "installedBinaryBytes", "bytes": 4096, "artifacts": [path],
+                "metric": "installedBinaryBytes", "bytes": 4096, "native_pid": None, "artifacts": [path],
             })
+
+    def write_json(self, path, payload):
+        (self.root / path).write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
+
+    def build_payload(self):
+        products = {}
+        for variant in ("generated", "reference"):
+            data = f"{variant} product".encode()
+            products[variant] = {"bundle": variant, "files": [{"path": f"{variant}/RefractBench", "bytes": len(data),
+                                                                 "sha256": hashlib.sha256(data).hexdigest()}]}
+        return {"schema": 1, "source_revision": "a" * 40, "configuration": "Release", "products": products}
+
+    def timing_payload(self, variant, scenario, iteration):
+        identity = {"sourceRevision": "a" * 40, "variant": variant, "scenario": scenario, "iteration": iteration}
+        if scenario == "startup":
+            native = {**identity, "metric": "XCTApplicationLaunchMetric", "unit": "ms", "durationMs": 10.0}
+            canonical = json.dumps(native, sort_keys=True, separators=(",", ":")).encode()
+            return {**native, "nativeMeasurement": native,
+                    "nativeMeasurementSha256": hashlib.sha256(canonical).hexdigest()}
+        return {**identity, "schema": 1, "session": 1, "pid": 4242, "completedIterations": 1,
+                "recordedIteration": iteration, "frameIntervalMs": [9.0, 10.0],
+                "iterationByFrame": [iteration, iteration]}
+
+    def resource_payload(self, variant, scenario, iteration, metric):
+        return {"sourceRevision": "a" * 40, "variant": variant, "scenario": scenario, "iteration": iteration,
+                "metric": metric, "bytes": 1024 if metric == "residentMemoryBytes" else 4096, "unit": "bytes",
+                **({"pid": 4242} if metric == "residentMemoryBytes" else {})}
+
+    def replace_json(self, path, payload):
+        self.write_json(path, payload)
+        artifact = next(entry for entry in self.manifest["artifacts"] if entry["path"] == path)
+        artifact["bytes"] = (self.root / path).stat().st_size
+        artifact["sha256"] = hashlib.sha256((self.root / path).read_bytes()).hexdigest()
+        if path == self.build_path:
+            self.build_hash = artifact["sha256"]
+            self.manifest["environment"]["build_provenance"]["sha256"] = self.build_hash
+            for entry in self.manifest["artifacts"]:
+                entry["build_provenance_sha256"] = self.build_hash
+
+    def set_startup_duration(self, measurement, value):
+        measurement["value"] = value
+        path = next(path for path in measurement["artifacts"] if path.endswith("metrics.json"))
+        native = self.timing_payload(measurement["variant"], "startup", measurement["iteration"])["nativeMeasurement"]
+        native["durationMs"] = value
+        payload = self.timing_payload(measurement["variant"], "startup", measurement["iteration"])
+        payload.update(durationMs=value, nativeMeasurement=native,
+                       nativeMeasurementSha256=hashlib.sha256(
+                           json.dumps(native, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+        self.replace_json(path, payload)
 
     def artifact(self, path, variant, scenario, iteration, kind, role):
         raw = self.root / path
@@ -125,7 +175,7 @@ class PairedReportTest(unittest.TestCase):
             with self.subTest(definition=definition), self.assertRaisesRegex(EvidenceError, "firstDisplay is not"):
                 make_report(manifest, self.root)
         measurement["artifacts"] = [path for path in measurement["artifacts"] if "metrics" not in path]
-        with self.assertRaisesRegex(EvidenceError, "metrics.json"):
+        with self.assertRaisesRegex(EvidenceError, "native metric export|metrics.json"):
             make_report(self.manifest, self.root)
 
     def test_display_array_cannot_be_passed_off_as_an_unreduced_timing_scalar(self):
@@ -136,13 +186,109 @@ class PairedReportTest(unittest.TestCase):
             make_report(manifest, self.root)
         measurement = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "scroll")
         measurement["artifacts"] = [path for path in measurement["artifacts"] if "native-samples" not in path]
-        with self.assertRaisesRegex(EvidenceError, "native-samples.json"):
+        with self.assertRaisesRegex(EvidenceError, "native metric export|native-samples.json"):
             make_report(self.manifest, self.root)
 
     def test_inconsistent_frame_reduction_is_rejected(self):
         measurement = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "scroll")
         measurement["value"] = 9.5
-        with self.assertRaisesRegex(EvidenceError, "declared p99"):
+        with self.assertRaisesRegex(EvidenceError, "raw native metric export"):
+            make_report(self.manifest, self.root)
+
+    def test_raw_first_display_timestamp_cannot_impersonate_startup_duration(self):
+        measurement = self.manifest["measurements"][0]
+        measurement["value"] = 12345.25
+        path = next(path for path in measurement["artifacts"] if path.endswith("metrics.json"))
+        self.replace_json(path, {"sourceRevision": "a" * 40, "variant": "generated", "scenario": "startup",
+                                 "iteration": 2, "firstDisplay": {"clock": "CACurrentMediaTime",
+                                                                  "timestamp": 12345.25}})
+        with self.assertRaisesRegex(EvidenceError, "launch-duration schema|firstDisplay timestamp"):
+            make_report(self.manifest, self.root)
+
+    def test_selected_native_launch_measurement_requires_its_checksum_and_duration(self):
+        measurement = self.manifest["measurements"][0]
+        native = self.timing_payload("generated", "startup", 2)["nativeMeasurement"]
+        path = next(path for path in measurement["artifacts"] if path.endswith("metrics.json"))
+        selected = native | {"value": {"definition": "XCTApplicationLaunchMetric", "unit": "ms", "duration_ms": 10.0}}
+        canonical = json.dumps(selected, sort_keys=True, separators=(",", ":")).encode()
+        self.replace_json(path, {"measurements": [selected]})
+        measurement["metric_selector"] = {"index": 0, "value_sha256": hashlib.sha256(canonical).hexdigest()}
+        report = make_report(self.manifest, self.root)
+        self.assertEqual(report["samples"][0]["value"], 10.0)
+        measurement["metric_selector"]["value_sha256"] = "0" * 64
+        with self.assertRaisesRegex(EvidenceError, "selector checksum"):
+            make_report(self.manifest, self.root)
+        measurement["metric_selector"]["value_sha256"] = hashlib.sha256(canonical).hexdigest()
+        timestamp = selected | {"value": {"definition": "XCTApplicationLaunchMetric", "unit": "ms",
+                                          "timestamp": 12345.25}}
+        canonical = json.dumps(timestamp, sort_keys=True, separators=(",", ":")).encode()
+        self.replace_json(path, {"measurements": [timestamp]})
+        measurement["metric_selector"]["value_sha256"] = hashlib.sha256(canonical).hexdigest()
+        with self.assertRaisesRegex(EvidenceError, "duration|timestamp"):
+            make_report(self.manifest, self.root)
+
+    def test_raw_cadinterval_array_drives_p99_not_manifest_source_samples(self):
+        measurement = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "scroll")
+        path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
+        packet = self.timing_payload("generated", "scroll", 2)
+        packet.update(frameIntervalMs=[1.0, 2.0, 3.0], iterationByFrame=[2, 2, 2])
+        self.replace_json(path, packet)
+        with self.assertRaisesRegex(EvidenceError, "raw native metric export"):
+            make_report(self.manifest, self.root)
+        measurement["value"] = 3.0
+        report = make_report(self.manifest, self.root)
+        sample = next(sample for sample in report["samples"] if sample["scenario"] == "scroll"
+                      and sample["variant"] == "generated" and sample["iteration"] == 2)
+        self.assertEqual(sample["source_samples"], [1.0, 2.0, 3.0])
+        self.assertEqual(sample["value"], 3.0)
+
+    def test_manifest_source_samples_cannot_replace_the_raw_display_array(self):
+        self.manifest["measurements"][1]["source_samples"] = [10.0]
+        with self.assertRaisesRegex(EvidenceError, "unknown fields"):
+            make_report(self.manifest, self.root)
+
+    def test_raw_memory_and_binary_values_must_match_declared_resources(self):
+        for metric, path, value in (
+                ("residentMemoryBytes", "raw/generated-scroll-2-memory.json", 999999),
+                ("installedBinaryBytes", "raw/generated-startup-2-binary.json", 888888)):
+            with self.subTest(metric=metric):
+                manifest = copy.deepcopy(self.manifest)
+                resource = next(entry for entry in manifest["resources"] if entry["metric"] == metric
+                                and entry["variant"] == "generated")
+                self.manifest["resources"] = manifest["resources"]
+                payload = self.resource_payload("generated", resource["scenario"], resource["iteration"], metric)
+                payload["bytes"] = value
+                self.replace_json(path, payload)
+                with self.assertRaisesRegex(EvidenceError, "resource bytes do not match"):
+                    make_report(self.manifest, self.root)
+
+    def test_raw_frame_revision_and_process_must_match_selected_iteration(self):
+        measurement = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "scroll")
+        path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))
+        for key, value in (("sourceRevision", "b" * 40), ("pid", 9999), ("iterationByFrame", [2, 3])):
+            packet = self.timing_payload("generated", "scroll", 2)
+            packet[key] = value
+            self.replace_json(path, packet)
+            with self.subTest(key=key), self.assertRaisesRegex(EvidenceError, "identity|process|tags"):
+                make_report(self.manifest, self.root)
+
+    def test_raw_binary_identity_must_match_its_resource_artifact(self):
+        path = "raw/generated-startup-2-binary.json"
+        payload = self.resource_payload("generated", "startup", 2, "installedBinaryBytes")
+        payload["sourceRevision"] = "b" * 40
+        self.replace_json(path, payload)
+        with self.assertRaisesRegex(EvidenceError, "identity"):
+            make_report(self.manifest, self.root)
+
+        payload = self.build_payload()
+        payload["source_revision"] = "b" * 40
+        self.replace_json(self.build_path, payload)
+        with self.assertRaisesRegex(EvidenceError, "internal revision"):
+            make_report(self.manifest, self.root)
+        payload["source_revision"] = "a" * 40
+        payload["products"].pop("reference")
+        self.replace_json(self.build_path, payload)
+        with self.assertRaisesRegex(EvidenceError, "reference product identity"):
             make_report(self.manifest, self.root)
 
     def test_frame_reduction_uses_nearest_rank_and_preserves_thresholds(self):
@@ -150,11 +296,11 @@ class PairedReportTest(unittest.TestCase):
         self.assertEqual(percentile([1.0, 8.0, 30.0], 0.5), 8.0)
         startup = [entry for entry in self.manifest["measurements"] if entry["scenario"] == "startup"]
         for entry in startup:
-            entry["value"] = 20.0
+            self.set_startup_duration(entry, 20.0)
         for entry in startup:
             if entry["variant"] == "generated":
-                entry["value"] = 20.6
-        next(entry for entry in reversed(startup) if entry["variant"] == "generated")["value"] = 40.0
+                self.set_startup_duration(entry, 20.6)
+        self.set_startup_duration(next(entry for entry in reversed(startup) if entry["variant"] == "generated"), 40.0)
         report = make_report(self.manifest, self.root)
         self.assertEqual(report["status"], "fail")
         self.assertEqual(report["threshold"], {"relative_percent": 5.0, "absolute_ms": 0.1, "conjunction": "AND"})
@@ -241,7 +387,7 @@ class PairedReportTest(unittest.TestCase):
     def test_small_absolute_change_does_not_fail_at_the_same_quantile(self):
         for entry in self.manifest["measurements"]:
             if entry["variant"] == "generated" and entry["scenario"] == "startup":
-                entry["value"] = 10.06
+                self.set_startup_duration(entry, 10.06)
         self.assertEqual(make_report(self.manifest, self.root)["status"], "pass")
 
     def test_memory_and_binary_are_paired_in_bytes_with_role_provenance(self):
@@ -279,6 +425,9 @@ class PairedReportTest(unittest.TestCase):
         other_artifact = next(artifact for artifact in self.manifest["artifacts"]
                               if artifact["path"] == reference_binary["artifacts"][0])
         other_artifact["iteration"] = 3
+        other_artifact["scenario"] = "startup"
+        self.replace_json(reference_binary["artifacts"][0], self.resource_payload("reference", "startup", 3,
+                                                                                 "installedBinaryBytes"))
         self.manifest["resources"].append(other_iteration)
         with self.assertRaisesRegex(EvidenceError, "same iteration's build identity"):
             make_report(self.manifest, self.root)
@@ -286,6 +435,8 @@ class PairedReportTest(unittest.TestCase):
         other_iteration["iteration"] = 2
         other_artifact["scenario"] = "scroll"
         other_iteration["scenario"] = "scroll"
+        self.replace_json(reference_binary["artifacts"][0], self.resource_payload("reference", "scroll", 2,
+                                                                                 "installedBinaryBytes"))
         with self.assertRaisesRegex(EvidenceError, "one scenario"):
             make_report(self.manifest, self.root)
 
@@ -313,15 +464,35 @@ class PairedReportTest(unittest.TestCase):
             measurement["definition"] = ("native-launch-duration" if measurement["scenario"] == "startup"
                                          else "native-frame-duration")
             if measurement["scenario"] == "startup":
-                measurement.update(launch_start_timestamp_ms=90.0, first_frame_timestamp_ms=100.0, timestamp_unit="ms")
+                measurement.update(native_pid=None)
+            else:
+                measurement["native_pid"] = 4242
         for resource in self.manifest["resources"]:
             resource["platform"] = "harmonyos"
+        for artifact in self.manifest["artifacts"]:
+            if artifact["role"] == "timing":
+                measurement = next(entry for entry in self.manifest["measurements"]
+                                   if (entry["variant"], entry["scenario"], entry["iteration"])
+                                   == (artifact["variant"], artifact["scenario"], artifact["iteration"]))
+                if artifact["scenario"] == "startup":
+                    path = artifact["path"]
+                    payload = self.timing_payload(artifact["variant"], "startup", artifact["iteration"])
+                    payload = {key: value for key, value in payload.items()
+                               if key not in ("nativeMeasurement", "nativeMeasurementSha256", "unit", "durationMs")}
+                    payload.update(metric="native-launch-duration", timestampUnit="ms",
+                                   launchStartTimestamp=90.0, firstFrameTimestamp=100.0)
+                    self.replace_json(path, payload)
+                else:
+                    self.replace_json(artifact["path"], self.timing_payload(artifact["variant"], artifact["scenario"],
+                                                                            artifact["iteration"]))
+        for resource in self.manifest["resources"]:
+            resource["native_pid"] = 4242 if resource["metric"] == "residentMemoryBytes" else None
         report = make_report(self.manifest, self.root)
         self.assertEqual(report["platform"], "harmonyos")
         self.assertEqual(report["comparisons"][1]["metric"], "frameDurationMs")
         startup = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "startup")
-        startup["launch_start_timestamp_ms"] = 110.0
-        with self.assertRaisesRegex(EvidenceError, "subtract native first-frame and launch timestamps"):
+        startup["launch_start_timestamp_ms"] = 80.0
+        with self.assertRaisesRegex(EvidenceError, "unknown fields|timestamp"):
             make_report(self.manifest, self.root)
 
     def test_harmony_needs_vendor_trace_not_an_ios_trace(self):

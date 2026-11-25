@@ -23,21 +23,21 @@ class ArchiveTraceTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name) / "raw"
         self.root.mkdir()
-        self.source = self.root / "generated-scroll-0.trace"
+        self.source = self.root / "generated-scroll-2.trace"
         (self.source / "nested").mkdir(parents=True)
         (self.source / "trace.xml").write_bytes(b"<synthetic-trace/>\n")
         (self.source / "nested" / "samples.bin").write_bytes(bytes(range(256)))
-        self.output = self.root / "generated-scroll-0.trace.zip"
+        self.output = self.root / "generated-scroll-2.trace.zip"
 
     def test_nested_package_round_trip_and_manifest_metadata(self):
         size, checksum = archive_trace(self.source, self.output)
         self.assertEqual(size, self.output.stat().st_size)
         self.assertEqual(checksum, hashlib.sha256(self.output.read_bytes()).hexdigest())
         with zipfile.ZipFile(self.output) as archive:
-            self.assertEqual(archive.namelist(), ["generated-scroll-0.trace/nested/samples.bin",
-                                                   "generated-scroll-0.trace/trace.xml"])
-            self.assertEqual(archive.read("generated-scroll-0.trace/trace.xml"), b"<synthetic-trace/>\n")
-            self.assertEqual(archive.read("generated-scroll-0.trace/nested/samples.bin"), bytes(range(256)))
+            self.assertEqual(archive.namelist(), ["generated-scroll-2.trace/nested/samples.bin",
+                                                   "generated-scroll-2.trace/trace.xml"])
+            self.assertEqual(archive.read("generated-scroll-2.trace/trace.xml"), b"<synthetic-trace/>\n")
+            self.assertEqual(archive.read("generated-scroll-2.trace/nested/samples.bin"), bytes(range(256)))
             self.assertTrue(all(info.date_time == (1980, 1, 1, 0, 0, 0) for info in archive.infolist()))
 
         second = self.root / "second.trace.zip"
@@ -110,13 +110,15 @@ class ArchiveTraceTest(unittest.TestCase):
         from paired_report import EvidenceError, artifact
 
         archive_trace(self.source, self.output)
-        entry = {"path": "raw/generated-scroll-0.trace.zip", "kind": "xctrace", "variant": "generated",
-                 "scenario": "scroll", "iteration": 0, "bytes": self.output.stat().st_size,
-                 "sha256": hashlib.sha256(self.output.read_bytes()).hexdigest()}
-        result, path = artifact(dict(entry), self.root.parent, "ios")
+        entry = {"path": "raw/generated-scroll-2.trace.zip", "kind": "xctrace", "role": "profiler",
+                 "variant": "generated", "scenario": "scroll", "iteration": 2, "bytes": self.output.stat().st_size,
+                 "sha256": hashlib.sha256(self.output.read_bytes()).hexdigest(), "source_revision": "a" * 40,
+                 "build_provenance_sha256": "b" * 64}
+        environment = {"source_revision": "a" * 40, "build_provenance": {"path": "raw/build.json", "sha256": "b" * 64}}
+        result, path = artifact(dict(entry), self.root.parent, "ios", environment)
         self.assertEqual(path, entry["path"])
         with self.assertRaisesRegex(EvidenceError, "Missing, linked or empty"):
-            artifact(dict(entry, path="raw/generated-scroll-0.trace"), self.root.parent, "ios")
+            artifact(dict(entry, path="raw/generated-scroll-2.trace"), self.root.parent, "ios", environment)
 
 
 if __name__ == "__main__":
