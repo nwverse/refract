@@ -13,9 +13,11 @@ import argparse
 import hashlib
 import json
 import os
+import plistlib
 import re
 import stat
 import sys
+import xml.parsers.expat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -28,6 +30,7 @@ from build_provenance import (BUNDLE_NAMES, BuildProvenanceError, bounded_file_b
 from paired_report import (ITERATIONS, SCENARIOS, VARIANTS, EvidenceError, checked_frame_samples,
                            checked_iteration, checked_resource_value, checked_startup_value,
                            make_report, percentile, validate_environment)
+from probe_target import find_simulator_targets
 
 
 class ExportError(ValueError):
@@ -38,7 +41,10 @@ BUILD_NAME = "refract-build-provenance.json"
 METRICS_PATH = "raw/exports/xctest-metrics.json"
 MEMORY_PATH = "raw/exports/resident-memory.json"
 BINARY_PATH = "raw/exports/installed-binary.json"
+SUMMARY_PATH = "raw/exports/xctest-summary.json"
+TESTS_PATH = "raw/exports/xctest-tests.json"
 DERIVED_DATA_DESTINATION = "products/DerivedData"
+CONFIGURATION_NAME_PATTERN = r"iteration-trace-config-[0-9a-f]{24}\.xctestrun"
 
 
 @dataclass(frozen=True)
@@ -96,6 +102,26 @@ def real_directory(path: Path, label: str) -> Path:
     if not path.is_dir() or path.is_symlink():
         raise ExportError(f"{label} must be a real directory")
     return path
+
+
+def real_build_directories(derived_data: Path) -> None:
+    """Check every ancestor later used by the producer and the staged copy."""
+    real_directory(derived_data, "Original DerivedData")
+    for relative in ("Build", "Build/Products", "Build/Products/Release-iphonesimulator"):
+        real_directory(derived_data / relative, f"Original DerivedData ancestor {relative}")
+
+
+def bounded_text(value: Any, label: str, limit: int = 1024) -> str:
+    if not isinstance(value, str) or not 0 < len(value) <= limit \
+            or any(character in value for character in "\r\n\x00"):
+        raise ExportError(f"{label} must be bounded single-line text")
+    return value
+
+
+def checked_sha256(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ExportError(f"{label} requires a SHA-256 digest")
+    return value
 
 
 def safe_member(root: Path, relative: str) -> Path:
@@ -164,8 +190,16 @@ def load_environment(path: Path) -> dict[str, Any]:
             or set(target) - {"udid", "name", "model", "os_version", "architecture"}:
         raise ExportError("Target input requires UDID, model, OS and architecture, with an optional name")
     for key, value in target.items():
-        if not isinstance(value, str) or not value or any(character in value for character in "\r\n\x00"):
-            raise ExportError(f"Target {key} must be bounded text")
+        bounded_text(value, f"Target {key}")
+    toolchain = payload["toolchain"]
+    if not isinstance(toolchain, dict) or set(toolchain) != {"xcode"}:
+        raise ExportError("Toolchain input requires exactly its retained xcode version")
+    bounded_text(toolchain["xcode"], "Toolchain xcode")
+    commands = payload["commands"]
+    if not isinstance(commands, list) or not 0 < len(commands) <= 32:
+        raise ExportError("Externally asserted commands must be a nonempty bounded list")
+    for command in commands:
+        bounded_text(command, "Externally asserted command", 4096)
     return payload
 
 
@@ -195,7 +229,7 @@ def load_selections(path: Path | None, revision: str, build_sha256: str) -> dict
 
 
 def canonical_build(derived_data: Path, revision: str) -> tuple[dict[str, Any], str]:
-    real_directory(derived_data, "Original DerivedData")
+    real_build_directories(derived_data)
     try:
         original = original_build_provenance(derived_data, revision)
     except (OSError, TypeError, ValueError, KeyError) as error:
@@ -240,8 +274,117 @@ def resource_bytes(run: Path, relative: str, identity: tuple[str, str, int], met
     return checked_resource_value(artifact, metric, revision, pid)
 
 
-def load_run(run: Path, context: RunContext) -> tuple[list[CopyJob], list[dict[str, Any]], dict[str, Any],
-                                                    list[dict[str, Any]]]:
+def checked_configuration(run: Path, derived_data: Path, receipt: dict[str, Any], revision: str,
+                          iteration: int, build_sha256: str, source_xctestrun: str) -> None:
+    control = str(run.resolve(strict=True) / "control")
+    expected = {"schema": 1, "source_revision": revision, "iteration": iteration,
+                "control_directory": control, "build_provenance_sha256": build_sha256,
+                "archive": "iteration-trace-config.xctestrun", "source_xctestrun": source_xctestrun}
+    require_fields(receipt, expected, "Trace configuration")
+    identity = hashlib.sha256(f"{revision}\0{control}\0{iteration}".encode()).hexdigest()[:24]
+    name = f"iteration-trace-config-{identity}.xctestrun"
+    if receipt.get("path") != name or not re.fullmatch(CONFIGURATION_NAME_PATTERN, name):
+        raise ExportError("Trace configuration name is not the canonical revision/control/iteration identity")
+    checksum = checked_sha256(receipt.get("configuration_sha256"), "Trace configuration")
+    archived = safe_member(run, "iteration-trace-config.xctestrun")
+    if file_metadata(archived)[1] != checksum:
+        raise ExportError("Archived trace configuration differs from its receipt")
+    destination = safe_member(derived_data, f"Build/Products/{name}")
+    if file_metadata(destination)[1] != checksum:
+        raise ExportError("Executed trace configuration differs from its retained archive")
+    try:
+        plist = plistlib.loads(bounded_file_bytes(archived))
+    except (OSError, BuildProvenanceError, plistlib.InvalidFileException,
+            xml.parsers.expat.ExpatError) as error:
+        raise ExportError(f"Cannot read archived trace configuration: {error}") from error
+    if not isinstance(plist, dict) or set(plist) != {"__xctestrun_metadata__", "RefractBenchUITests"}:
+        raise ExportError("Archived trace configuration must contain exactly its metadata and hosted test")
+    test = plist["RefractBenchUITests"]
+    if not isinstance(test, dict) or not isinstance(test.get("TestingEnvironmentVariables"), dict):
+        raise ExportError("Archived trace configuration lacks its hosted-test environment")
+    environment = test["TestingEnvironmentVariables"]
+    expected_environment = {"REFRACT_BENCH_REVISION": revision, "REFRACT_BENCH_TRACE_CONTROL": control,
+                            "REFRACT_BENCH_TRACE_ITERATION": str(iteration)}
+    for key, value in expected_environment.items():
+        if environment.get(key) != value:
+            raise ExportError(f"Archived hosted-test environment has a missing or mismatched {key}")
+
+
+def normalized_os_version(value: Any) -> str:
+    text = bounded_text(value, "XCTest device OS version", 128)
+    return text[4:] if text.startswith("iOS ") else text
+
+
+def device_identity(device: Any, label: str) -> dict[str, str]:
+    if not isinstance(device, dict):
+        raise ExportError(f"{label} device record must be an object")
+    fields = {"deviceId": "udid", "deviceName": "name", "modelName": "model",
+              "osVersion": "os_version", "architecture": "architecture"}
+    identity = {}
+    for key, output in fields.items():
+        identity[output] = bounded_text(device.get(key), f"{label} device {key}", 128)
+    identity["os_version"] = normalized_os_version(identity["os_version"])
+    if device.get("platform") != "iOS Simulator":
+        raise ExportError(f"{label} device is not explicitly an iOS Simulator")
+    return identity
+
+
+def checked_target_evidence(run: Path, accepted: dict[str, Any], target: dict[str, Any]) -> None:
+    expected = {key: value for key, value in target.items() if key != "model"}
+    summary_hash = checked_sha256(accepted.get("xctest_summary_sha256"), "Accepted summary export")
+    tests_hash = checked_sha256(accepted.get("xctest_tests_sha256"), "Accepted tests export")
+    if file_metadata(safe_member(run, SUMMARY_PATH))[1] != summary_hash \
+            or file_metadata(safe_member(run, TESTS_PATH))[1] != tests_hash:
+        raise ExportError("Accepted XCTest target-export checksums do not match retained bytes")
+    summary = read_object(safe_member(run, SUMMARY_PATH))
+    configurations = summary.get("devicesAndConfigurations")
+    if not isinstance(configurations, list) or len(configurations) != 1 \
+            or not isinstance(configurations[0], dict):
+        raise ExportError("XCTest summary must retain exactly one device configuration")
+    summary_device = device_identity(configurations[0].get("device"), "XCTest summary")
+    require_fields(summary, {"result": "Passed", "passedTests": 1, "failedTests": 0, "skippedTests": 0},
+                   "XCTest summary")
+    tests = read_object(safe_member(run, TESTS_PATH))
+    devices = tests.get("devices")
+    if not isinstance(devices, list) or len(devices) != 1:
+        raise ExportError("XCTest tests must retain exactly one device record")
+    tests_device = device_identity(devices[0], "XCTest tests")
+    if summary_device != tests_device or any(summary_device[key] != value for key, value in expected.items()):
+        raise ExportError("XCTest device records differ from the export environment")
+    if "name" not in target and summary_device["name"] != accepted.get("target_name"):
+        raise ExportError("XCTest device name differs from accepted evidence")
+
+    probe = read_object(safe_member(run, "target.json"))
+    require_fields(probe, {"target_label": "SIMULATOR", "device_result": False, "state": "Booted",
+                           "udid": target["udid"], "model": target["model"]}, "Retained target probe")
+    simulators = read_object(safe_member(run, "simulators.json"))
+    simulator_devices = simulators.get("devices")
+    if not isinstance(simulator_devices, dict):
+        raise ExportError("Retained simulator probe requires a devices object")
+    matches = [device for records in simulator_devices.values() if isinstance(records, list)
+               for device in records if isinstance(device, dict) and device.get("udid") == target["udid"]]
+    if len(matches) != 1 or any(matches[0].get(key) != value for key, value in (
+            ("deviceTypeIdentifier", target["model"]), ("name", summary_device["name"]), ("state", "Booted"))):
+        raise ExportError("Retained simulator probe does not bind the requested model, name and UDID")
+    raw_targets = read_object(safe_member(run, "targets.json"))
+    try:
+        target_matches = find_simulator_targets(raw_targets, target["udid"])
+    except (AttributeError, RecursionError) as error:
+        raise ExportError("Malformed retained target probe") from error
+    if len(target_matches) != 1:
+        raise ExportError("Retained devicectl probe does not confirm one booted simulated target")
+    hardware = target_matches[0].get("hardwareProperties")
+    properties = target_matches[0].get("deviceProperties")
+    if not isinstance(hardware, dict) or not isinstance(properties, dict) \
+            or hardware.get("marketingName") != summary_device["model"] \
+            or hardware.get("cpuType", {}).get("name") != summary_device["architecture"] \
+            or properties.get("osVersionNumber") != summary_device["os_version"] \
+            or properties.get("name") != summary_device["name"]:
+        raise ExportError("Retained devicectl probe differs from the XCTest device records")
+
+
+def load_run(run: Path, derived_data: Path, context: RunContext, source_xctestrun: str) -> tuple[
+        list[CopyJob], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     real_directory(run, "Iteration run")
     receipt = read_object(run / "iteration-trace-config.json")
     result = read_object(run / "raw/iteration-trace.json")
@@ -257,6 +400,8 @@ def load_run(run: Path, context: RunContext) -> tuple[list[CopyJob], list[dict[s
     archived_build = safe_member(run, BUILD_NAME)
     if file_metadata(archived_build)[1] != context.build_sha256:
         raise ExportError("An iteration cannot use a different build provenance manifest")
+    checked_configuration(run, derived_data, receipt, context.revision, iteration, context.build_sha256,
+                          source_xctestrun)
     require_fields(result, {"schema": 1, "status": "complete", "session": 1,
                             "source_revision": context.revision, "variant": variant, "scenario": scenario,
                             "iteration": iteration, "target_label": "SIMULATOR", "device_result": False,
@@ -271,10 +416,11 @@ def load_run(run: Path, context: RunContext) -> tuple[list[CopyJob], list[dict[s
     pid = result.get("pid")
     if type(pid) is not int or pid <= 0 or accepted.get("native_pid") != pid:
         raise ExportError("Iteration and accepted evidence must retain one positive native PID")
-    if accepted.get("target_os_version") != context.target["os_version"] \
-            or accepted.get("xcode_version") != context.toolchain.get("xcode") \
+    if accepted.get("target_os_version") not in {context.target["os_version"], "iOS " + context.target["os_version"]} \
+            or accepted.get("xcode_version") != context.toolchain["xcode"] \
             or ("name" in context.target and accepted.get("target_name") != context.target["name"]):
         raise ExportError("Accepted target or toolchain differs from the export environment")
+    checked_target_evidence(run, accepted, context.target)
 
     prefix = f"raw/{variant}-{scenario}-{iteration}"
     trace_source, trace_size, trace_hash = checked_archive(run, accepted, "trace_zip")
@@ -318,6 +464,8 @@ def load_run(run: Path, context: RunContext) -> tuple[list[CopyJob], list[dict[s
         if result.get("native_samples") != {"path": "raw/native-samples.json",
                                             "sha256": accepted["native_samples_sha256"]}:
             raise ExportError("Iteration receipt does not bind the retained native sample packet")
+        if raw.get("session") != result.get("session"):
+            raise ExportError("Native sample session differs from the iteration receipt")
         intervals = checked_frame_samples(raw, identity, context.revision, pid)
         measurement.update(metric="frameIntervalMs", value=percentile(intervals, 0.99),
                            definition="CADisplayLink.targetTimestamp-timestamp", aggregation="p99", native_pid=pid)
@@ -396,7 +544,7 @@ def plan_export(run_roots: list[Path], derived_data: Path, environment_path: Pat
         identity = (result.get("variant"), result.get("scenario"), result.get("iteration"))
         if identity in loaded:
             raise ExportError(f"Duplicate retained iteration pair member: {identity}")
-        loaded[identity] = load_run(run, context)
+        loaded[identity] = load_run(run, derived_data, context, build["source_xctestrun"]["path"])
         if identity[1] == "startup" and (identity[0], identity[2]) in context.selections:
             consumed_selectors.add((identity[0], identity[2]))
     if consumed_selectors != set(context.selections):
@@ -420,6 +568,21 @@ def plan_export(run_roots: list[Path], derived_data: Path, environment_path: Pat
         measurements.append(measurement)
         resources.extend(run_resources)
     environment = {"platform": "ios", **environment_input,
+                   # The exporter verifies retained acquisition inputs and its
+                   # deterministic copy, not caller-authored shell history.
+                   "commands": ["offline-export-iteration-manifest"],
+                   "export_command_template": "python3 -I bench/ios/export_iteration_manifest.py "
+                                              "--run-root <retained-runs-root> "
+                                              "--derived-data <original-DerivedData> "
+                                              "--environment <export-environment.json> "
+                                              "--output <previously-absent-evidence-directory>",
+                   "externally_asserted_commands": environment_input["commands"],
+                   "command_provenance": {
+                       "commands": "verified offline export operation, not reconstructed acquisition commands",
+                       "export_command_template": "documentation template for rerunning this exporter with "
+                                                  "explicit caller-supplied paths; not recovered execution history",
+                       "externally_asserted_commands": "caller-supplied acquisition assertions; "
+                                                       "not reconstructed or evidence-verified by this exporter"},
                    "build_provenance": {"path": "raw/refract-build-provenance.json", "sha256": build_sha256},
                    "build_configuration": {"name": "Release", "target": "iphonesimulator",
                                            "derived_data": DERIVED_DATA_DESTINATION}}
@@ -427,6 +590,9 @@ def plan_export(run_roots: list[Path], derived_data: Path, environment_path: Pat
     manifest = {"schema": 2, "platform": "ios", "environment": environment,
                 "artifacts": artifacts, "measurements": measurements, "resources": resources}
 
+    for relative in ("Build/Products", "Build/Products/Release-iphonesimulator",
+                     *(f"Build/Products/Release-iphonesimulator/{name}" for name in BUNDLE_NAMES)):
+        real_directory(derived_data / relative, f"Original product ancestor {relative}")
     products = derived_data / "Build/Products"
     staged_products = Path(DERIVED_DATA_DESTINATION) / "Build/Products"
     source = generated_test_runs(derived_data)[0]
@@ -512,7 +678,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = export_manifest(args.run_root, args.derived_data, args.environment, args.output,
                                    args.startup_selections)
     except (ExportError, EvidenceError, BuildProvenanceError, OSError, UnicodeError,
-            json.JSONDecodeError, TypeError, KeyError) as error:
+            json.JSONDecodeError, TypeError, ValueError, KeyError) as error:
         print(f"iteration-manifest-export: ERROR: {error}; no complete manifest was written", file=sys.stderr)
         return 2
     print(f"manifest={args.output / 'manifest.json'}\nmeasurements={len(manifest['measurements'])}\n"

@@ -197,16 +197,24 @@ collection, memory/binary pairing and fail-closed report validation remain requi
 `export_iteration_manifest.py` transforms a complete set of accepted existing run directories without invoking
 Xcode, Instruments, a simulator or a device. It requires all 174 generated/reference/scenario identities in `2...30`,
 with no missing, duplicate or renumbered member. Each run must retain its exact `accepted-evidence.json`,
-`retained-file-hashes.json`, trace configuration, `iteration-trace.json`, profiler and xcresult archives. Frame runs
-also require `raw/native-samples.json` and a native `raw/exports/resident-memory.json`; each startup run requires
+`retained-file-hashes.json`, the archived/executed trace configuration, `iteration-trace.json`, profiler and xcresult
+archives. Configuration identity includes the canonical `source_xctestrun`, configuration SHA-256, deterministic
+revision/control/iteration filename and those exact values in the archived hosted-test environment. Frame runs also
+require `raw/native-samples.json` with the iteration receipt's session and a native
+`raw/exports/resident-memory.json`; each startup run requires
 `raw/exports/xctest-metrics.json`, and the single generated/reference `startup/2` build pair requires
 `raw/exports/installed-binary.json`. Those resource files follow the reporter's explicit revision/identity/PID/bytes
 schema. Absent or mismatched memory or binary evidence is an error before any `manifest.json` is created; the exporter
 never invents or approximates resources.
 
 The environment input has exactly `source_revision`, `target_label`, `device_result`, `target`, `toolchain` and
-`commands`. The target supplies its `udid`, `model`, `os_version` and `architecture`, plus its accepted `name` when
-available. Supply the exact acquisition/export command strings, not a newly invented command. A startup metric export
+`commands`. The toolchain is exactly the accepted `xcode` version. The target's `udid`, `name`, `modelName`, `os_version`
+and `architecture` must match both checksummed `raw/exports/xctest-summary.json` and `xctest-tests.json`; its
+CoreSimulator model identifier must also match the retained `target.json`/`simulators.json` and `targets.json` probes.
+Input `commands` become `externally_asserted_commands` with an explicit not-reconstructed/not-evidence-verified label.
+The exporter cannot recover acquisition history. `environment.commands` identifies only the verified offline export
+operation; `export_command_template` is a rerun template with caller-supplied paths, not recovered executed command
+text. A startup metric export
 may instead contain a `measurements` array with identity-bound `value.duration_ms` objects. In that case a separate
 `--startup-selections` file is required for each such run; it binds `source_revision`, `build_provenance_sha256` and a
 list of `{variant, scenario: "startup", iteration, index, value_sha256}`. `firstDisplay` remains only a monotonic
@@ -224,8 +232,9 @@ The output gets a deterministic, sorted manifest and checksum-preserved ordinary
 original canonical app/test products under `products/DerivedData` for reporter recomputation. Nested test-bundle files
 are staged once and retain executable bits. The exporter validates the complete staged manifest through
 `make_report()` before exclusively creating `manifest.json`; it does not emit a performance report or turn a native
-regression into a passing result. An existing output, a symbolic-link input or a source changing during copying is
-rejected. The tool transforms only evidence belonging to the retained revision/build/target: it cannot backfill a
+regression into a passing result. An existing output, a symbolic-link input or original DerivedData/product ancestor,
+or a source changing during copying is rejected. The tool transforms only evidence belonging to the retained
+revision/build/target: it cannot backfill a
 new main head or close the physical-device gate. Raw native resource and launch scalar collection is not provided by
 this offline tool.
 
