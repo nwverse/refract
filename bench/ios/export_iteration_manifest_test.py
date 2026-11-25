@@ -220,8 +220,6 @@ class IterationManifestExportTest(unittest.TestCase):
                  "trace": f"raw/{trace_name}", "archived_package_name": trace_name.removesuffix(".zip"),
                  "bytes": (raw / trace_name).stat().st_size, "native_resources": native_resources,
                  "sha256": hashlib.sha256((raw / trace_name).read_bytes()).hexdigest()}
-        if startup_selector is not None:
-            trace["native_launch_metric"] = startup_selector
         if samples is not None:
             trace["native_samples"] = {"path": "raw/native-samples.json",
                                        "sha256": hashlib.sha256((raw / "native-samples.json").read_bytes()).hexdigest()}
