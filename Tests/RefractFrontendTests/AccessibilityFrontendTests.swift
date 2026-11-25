@@ -122,6 +122,71 @@ func accessibilityTextRejectsUnlocalizedOrInvalidSource(_ modifier: String) {
     #expect(unit.diagnostics.contains { $0.code == "RFACCESS003" })
 }
 
+@Test func traversalRejectsSelfPredecessorAndPreservesEarlierPredecessor() throws {
+    for platform in ["android", "harmonyOS"] {
+        let branch = """
+                        VStack {
+                            Button("accessibility.sync.now") { }
+                                .accessibilityIdentifier("sync_now")
+                            Button("accessibility.sync.details") { }
+                                .accessibilityIdentifier("sync_details")
+                        }
+                        .accessibilityTraversal([
+                            .accessibility("sync_now"),
+                            .accessibility("sync_details", after: "sync_now"),
+                        ])
+        """
+        let control = "Text(verbatim: \"Control\")"
+        let arguments = platform == "android"
+            ? "ios: { \(control) }, android: { \(branch) }, harmonyOS: { \(control) }"
+            : "ios: { \(control) }, android: { \(control) }, harmonyOS: { \(branch) }"
+        let source = SourceFile(path: "Input.swift", contents: """
+        struct Ordered: View {
+            var body: some View {
+                refractView(\(arguments))
+            }
+        }
+        """)
+        let unit = Frontend.parse(source)
+        #expect(unit.diagnostics.isEmpty)
+        let screen = try #require(unit.module.screens.first)
+        guard case let .platformView(alternatives, _) = screen.body else {
+            Issue.record("Expected explicit platform traversal branches")
+            return
+        }
+        for children in [alternatives.android, alternatives.harmonyOS] {
+            guard case let .stack(_, _, modifiers, _)? = children.first else { continue }
+            let traversal = try #require(modifiers.first(where: { $0.name == "accessibilityTraversal" }))
+            guard case let .accessibilityTraversal(order) = traversal.arguments.first?.value else {
+                Issue.record("Expected typed accessibility traversal IR")
+                continue
+            }
+            #expect(order.steps == [
+                AccessibilityTraversal.Step(name: "sync_now"),
+                AccessibilityTraversal.Step(name: "sync_details", after: "sync_now"),
+            ])
+        }
+
+        let malformedSequences = [
+            source.contents.replacingOccurrences(
+                of: ".accessibility(\"sync_now\"),",
+                with: ".accessibility(\"sync_now\", after: \"sync_now\"),"),
+            source.contents.replacingOccurrences(
+                of: ".accessibility(\"sync_details\", after: \"sync_now\"),",
+                with: ".accessibility(\"sync_now\"),"),
+            source.contents.replacingOccurrences(
+                of: ".accessibility(\"sync_now\"),",
+                with: ".accessibility(\"sync_now\", after: \"sync_details\"),"),
+        ]
+        for malformed in malformedSequences {
+            let rejected = Frontend.parse(SourceFile(path: "Input.swift", contents: malformed))
+            #expect(rejected.hasErrors)
+            #expect(rejected.module.screens.isEmpty)
+            #expect(rejected.diagnostics.filter { $0.code == "RFACCESS003" }.count == 1)
+        }
+    }
+}
+
 @Test func accessibilityRejectsDuplicateAndWrongPlatformModifiers() {
     let source = SourceFile(path: "Input.swift", contents: """
     struct Invalid: View {
@@ -164,6 +229,53 @@ func accessibilityTextRejectsUnlocalizedOrInvalidSource(_ modifier: String) {
     """))
     #expect(unit.hasErrors)
     #expect(unit.diagnostics.contains { $0.code == "RFACCESS002" })
+}
+
+@Test(arguments: [
+    (".accessibilityLabel(Text(\"settings.password\"))", "RFACCESS004"),
+    (".accessibilityHint(Text(\"settings.password\"))", "RFACCESS004"),
+    (".accessibilityValue(Text(\"settings.password\"))", "RFACCESS004"),
+    (".accessibilityAction(named: Text(\"settings.password\")) { accepted = true }", "RFACCESS002"),
+])
+func secureFieldRejectsDuplicateAccessibilityModifiers(_ modifier: String, _ code: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Invalid: View {
+        @Binding var password: String
+        @State private var accepted: Bool = false
+        var body: some View {
+            SecureField("settings.password", text: $password)
+                \(modifier)
+                \(modifier)
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == [code])
+}
+
+@Test func secureFieldRetainsOneOfEachAccessibilityModifier() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    struct Valid: View {
+        @Binding var password: String
+        @State private var accepted: Bool = false
+        var body: some View {
+            SecureField("settings.password", text: $password)
+                .accessibilityLabel(Text("settings.password"))
+                .accessibilityHint(Text("settings.password"))
+                .accessibilityValue(Text("settings.password"))
+                .accessibilityAction(named: Text("settings.password")) { accepted = true }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    guard case let .secureInput(_, _, _, modifiers, _) = unit.module.screens.first?.body else {
+        Issue.record("Expected a SecureField with typed accessibility modifiers")
+        return
+    }
+    #expect(modifiers.map(\.name) == [
+        "accessibilityLabel", "accessibilityHint", "accessibilityValue", "accessibilityAction",
+    ])
 }
 
 @Test func minimumAPIMappingRejectsInvalidLevels() throws {
