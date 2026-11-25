@@ -62,7 +62,9 @@ or state-update iteration, `completeIteration` establishes the final recorder st
 iteration and native PID, `completedIterations == 1`, `recordedIteration == selectedIteration`, and equally sized frame
 interval/tag arrays whose every tag names the selected iteration. Both XCTest and the runner reject missing, partial,
 duplicate, stale or mismatched packets, empty or unbounded arrays, and non-finite or non-positive display intervals
-before completion or archive acceptance. The runner persists this packet directly as `raw/native-samples.json` and
+before completion or archive acceptance. JSON identities use actual integer encodings rather than Boolean coercion.
+Interval samples must have finite positive Double values without Boolean coercion or lossy large-integer conversion;
+a Swift `NSNumber` cast alone does not enforce that boundary. The runner persists this packet directly as `raw/native-samples.json` and
 binds its path and SHA-256 in `raw/iteration-trace.json`; finalizers consume that durable file, not preferences.
 
 `UserDefaults` is diagnostic only. Its asynchronous plist can still contain a periodic snapshot with
