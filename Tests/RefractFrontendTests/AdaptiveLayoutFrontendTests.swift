@@ -62,6 +62,28 @@ private let adaptiveRepository = URL(fileURLWithPath: #filePath)
     #expect(unit.diagnostics.map(\.code).contains("RFSEM002"))
 }
 
+@Test(arguments: [
+    "@State private var widthSizeClass: WidthSizeClass = .compact",
+    "@Binding var widthSizeClass: WidthSizeClass",
+])
+func widthClassRejectsWrongOwnershipWithAdaptiveDiagnostic(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    struct InvalidAdaptiveOwnership: View {
+        \(declaration)
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == ["RFADAPT001"])
+}
+
 @Test func widthClassCannotOwnTheNativeNavigationPath() throws {
     let fixture = adaptiveRepository.appendingPathComponent("Fixtures/adaptive-reject-navigation")
     let input = try String(contentsOf: fixture.appendingPathComponent("Input.swift"), encoding: .utf8)
