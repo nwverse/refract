@@ -323,5 +323,5 @@ class RefractPluginFunctionalTest {
     private fun runner(vararg arguments: String): GradleRunner = GradleRunner.create()
         .withProjectDir(project)
         .withArguments(*arguments)
-        .withTestKitDir(File(System.getProperty("java.io.tmpdir"), "refract-gradle-test-kit"))
+        .withTestKitDir(File(System.getProperty("refract.test.testKitDir")).canonicalFile)
 }

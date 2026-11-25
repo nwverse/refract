@@ -41,6 +41,13 @@
   properties and Gradle build scripts and restore with `restore-keys`. The compile must still succeed from an
   empty cache; never let a CI job depend on a warm cache to download a pinned toolchain, and never let a pull
   request write a shared cache that a subsequent build treats as authoritative.
+- **Give an isolated TestKit home an explicit read-only dependency cache.** `withTestKitDir` selects a different
+  Gradle user home, so the outer build's `~/.gradle/caches` restoration does not automatically populate it. Pass
+  the outer `gradle.gradleUserHomeDir/caches` as `GRADLE_RO_DEP_CACHE` on the test task, retain the separate
+  writable TestKit home, and keep normal repository resolution rather than assuming the outer build has cached
+  every transitive version the consumer selects. Reproduce with an actually fresh home; a command-line `-D` on the
+  Gradle wrapper is not automatically a system property of its test JVM. Do not copy artifacts, add a mirror or
+  force all TestKit invocations offline to disguise this boundary.
 - **Compile fixtures under their declared package.** When the canonical corpus's `Expected.kt` says
   `package refract.generated` and references `refract.generated.R.string.<name>`, the Gradle module that compiles
   it must use `namespace = "refract.generated"` so the Android plugin generates the matching `R` class. Compiling
