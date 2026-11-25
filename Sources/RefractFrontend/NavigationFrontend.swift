@@ -25,13 +25,15 @@ extension Builder {
             for destination in stack.destinations {
                 guard let screen = module.screens.first(where: { $0.name == destination.viewName }),
                       containsNavigationLink(screen.body) else { continue }
-                if let existing = bindings[screen.name], existing != NavigationOperation(pathName: stack.pathName, enumName: stack.enumName) {
+                let operation = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName,
+                                                    allowsEnclosingGraphPathPlaceholder: true)
+                if let existing = bindings[screen.name], existing != operation {
                     diagnostics.append(Diagnostic(code: "RFNAV003",
                         message: "A linked destination cannot belong to two different navigation graphs.",
                         suggestion: "Use one finite enum and one host callback for this destination graph.",
                         location: screen.location))
                 } else {
-                    bindings[screen.name] = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+                    bindings[screen.name] = operation
                 }
             }
         }

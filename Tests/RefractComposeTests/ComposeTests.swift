@@ -181,8 +181,8 @@ import RefractMapping
     #expect(output.contains("Text(text = stringResource(example.app.R.string.settings_enabled))"))
 }
 
-// Regression coverage for #406: destination links carry a conventional path placeholder, which Compose must replace
-// with the enclosing graph's checked operation. Golden source evidence does not bless ArkUI's separate defect (#413).
+// Regression coverage for #406: an explicit placeholder resolves only against the destination's checked enclosing
+// operation. Golden source evidence does not bless ArkUI's separate destination-forwarding defect (#413).
 @Test func composePreservesCustomDeepNavigationPathCallback() throws {
     let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent()
@@ -191,13 +191,41 @@ import RefractMapping
     let mapping = try Mapping.load(contentsOf: directory.appendingPathComponent("refract.json"))
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: input), mapping: mapping)
     #expect(unit.diagnostics.isEmpty)
-    let output = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    let detail = try #require(unit.module.screens.first { $0.name == "DeepDetailScreen" })
+    #expect(detail.navigation?.allowsEnclosingGraphPathPlaceholder == true)
+    let decoded = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(unit.module))
+    let output = try ComposeBackend().generate(module: decoded, mapping: mapping)
     let expected = try String(contentsOf: directory.appendingPathComponent("Expected.kt"), encoding: .utf8)
     #expect(output == expected)
     #expect(output.contains("onRoutePathNavigate: (DeepRoute) -> Unit"))
     #expect(output.contains("onRoutePathNavigate(DeepRoute.editor)"))
     #expect(output.contains("DeepDetailScreen(model = model, onRoutePathNavigate = onRoutePathNavigate, modifier = modifier)"))
     #expect(!output.contains("onPathNavigate"))
+}
+
+@Test(arguments: ["manual", "decoded"])
+func composeRejectsMismatchedPublicNavigationLinkPath(inputKind: String) throws {
+    let link = ViewNode.navigationLink(
+        title: Expression(.stringLiteral("Open"), type: .string, location: nil),
+        pathName: "path", enumName: "Route", destination: "editor", location: nil)
+    let screen = Screen(
+        name: "Detail",
+        navigation: NavigationOperation(pathName: "routePath", enumName: "Route"),
+        body: link)
+    var module = Module(sourceFile: "Input.swift", screens: [screen],
+                        enums: [EnumDeclaration(name: "Route", cases: ["editor"], isNavigationDestination: true)])
+    if inputKind == "decoded" {
+        module = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(module))
+    }
+    #expect(throws: Diagnostic.self) {
+        _ = try ComposeBackend().generate(module: module)
+    }
+    do {
+        _ = try ComposeBackend().generate(module: module)
+        Issue.record("Expected \(inputKind) IR with a mismatched path to fail")
+    } catch let diagnostic as Diagnostic {
+        #expect(diagnostic.code == "RFNAV003")
+    }
 }
 
 @Test func composeDeterministicOutput() throws {

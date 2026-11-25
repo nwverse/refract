@@ -90,7 +90,12 @@ Sheet/alert presentation and dismissal remain owned by #203; tab selection and o
 This graph does not emit either container or reinterpret a modal Boolean as a stack path.
 
 The `Screen.navigation` IR field binds this linked destination to the enclosing graph after all source declarations
-are parsed. Only generated Views that actually contain a link receive an `onPathNavigate: (Route) -> Unit` parameter
+are parsed. The optional `allowsEnclosingGraphPathPlaceholder` field records that the frontend's qualified link uses
+a conventional `path` placeholder resolved by this checked operation. Otherwise Compose requires exact path equality.
+A backend-only exception for the conventional name `path` cannot distinguish valid frontend output from decoded or
+manually constructed public IR carrying an unrelated path. The optional marker therefore makes the frontend's intent
+explicit; it defaults to false when decoding existing IR and does not change path/enum identity equality.
+Only generated Views that actually contain a link receive an `onPathNavigate: (Route) -> Unit` parameter
 (the actual source path name is preserved). The exhaustive `NavigationScreenDestinations` switch exposes the same
 callback when any branch needs it and forwards it to those branches. Leaf destinations and all two-level #157 APIs
 remain unchanged. This is ordinary explicit callback forwarding, not an environment object, singleton, route table

@@ -23,8 +23,9 @@ extension ComposeBackend {
                             location: SourceLocation?, into out: inout KotlinWriter,
                             context: inout Context) throws {
         let operation = context.currentNavigation ?? NavigationOperation(pathName: pathName, enumName: enumName)
+        let resolvesEnclosingGraph = operation.allowsEnclosingGraphPathPlaceholder && pathName == "path"
         guard operation.enumName == enumName,
-              (operation.pathName == pathName || pathName == "path"),
+              (operation.pathName == pathName || resolvesEnclosingGraph),
               context.module.enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
             throw Diagnostic(code: "RFNAV003", message: "A NavigationLink destination is not in the declared path enum.",
                              suggestion: "Use a static case of the source destination enum", location: location)
