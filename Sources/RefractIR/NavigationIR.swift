@@ -2,32 +2,30 @@
 public struct NavigationOperation: Codable, Equatable, Sendable {
     public let pathName: String
     public let enumName: String
-    /// Optional frontend provenance: a qualified destination's conventional `path` placeholder resolves through
-    /// this operation. Absent in existing decoded IR and in manually constructed operations, which require equality.
-    public let allowsEnclosingGraphPathPlaceholder: Bool
-
-    public init(pathName: String = "path", enumName: String,
-                allowsEnclosingGraphPathPlaceholder: Bool = false) {
+    public init(pathName: String = "path", enumName: String) {
         self.pathName = pathName
         self.enumName = enumName
-        self.allowsEnclosingGraphPathPlaceholder = allowsEnclosingGraphPathPlaceholder
     }
 
     private enum CodingKeys: String, CodingKey {
         case pathName, enumName, allowsEnclosingGraphPathPlaceholder
     }
 
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(pathName, forKey: .pathName)
+        try values.encode(enumName, forKey: .enumName)
+    }
+
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         pathName = try values.decode(String.self, forKey: .pathName)
         enumName = try values.decode(String.self, forKey: .enumName)
-        allowsEnclosingGraphPathPlaceholder = try values.decodeIfPresent(
-            Bool.self, forKey: .allowsEnclosingGraphPathPlaceholder) ?? false
-    }
-
-    /// Placeholder provenance does not change the graph's path/enum identity.
-    public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.pathName == rhs.pathName && lhs.enumName == rhs.enumName
+        // The unmerged marker never established graph membership. Accept it only to decode that transitional IR;
+        // discard it so every manual or decoded operation is checked by exact path/enum equality at the backend.
+        if values.contains(.allowsEnclosingGraphPathPlaceholder) {
+            _ = try values.decode(Bool.self, forKey: .allowsEnclosingGraphPathPlaceholder)
+        }
     }
 }
 

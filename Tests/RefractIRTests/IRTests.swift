@@ -22,3 +22,13 @@ import Testing
     let decoded = try JSONDecoder().decode(Module.self, from: JSONEncoder().encode(module))
     #expect(decoded == module)
 }
+
+@Test func obsoleteNavigationPlaceholderMarkerDecodesWithoutBecomingBinding() throws {
+    let operation = try JSONDecoder().decode(NavigationOperation.self, from: Data("""
+    {"pathName":"routePath","enumName":"Route","allowsEnclosingGraphPathPlaceholder":true}
+    """.utf8))
+    #expect(operation == NavigationOperation(pathName: "routePath", enumName: "Route"))
+    let serialized = try JSONSerialization.jsonObject(with: JSONEncoder().encode(operation))
+    let object = try #require(serialized as? [String: Any])
+    #expect(object["allowsEnclosingGraphPathPlaceholder"] == nil)
+}

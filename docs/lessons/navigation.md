@@ -13,11 +13,13 @@
 - Native host tests cannot set content twice on one Compose activity, and a test rule without its own activity-scenario
   rule cannot use `activityRule.scenario`. For Robolectric recreation, retain the actual `ActivityController`, call its
   `recreate()`, and verify native state rather than replacing the controller with a source-owned route list.
-- A qualified destination link keeps the conventional `path` placeholder only with the typed operation's explicit
-  `allowsEnclosingGraphPathPlaceholder` marker. Compose resolves that operation against the enclosing graph; otherwise
-  it requires exact path equality. Do not restore an unconditional `"path"` wildcard: decoded or manually constructed
-  IR could make an unrelated path silently select the enclosing callback. Decode a missing marker as false, keep it
-  out of path/enum identity equality, and cover a non-default path with a full generated-source golden plus decoded/
-  manual-IR negative controls. Default-name-only fixtures hide unresolved callbacks and wildcard accepts.
+- Resolve a qualified destination link's conventional `path` placeholder during frontend graph linking. Its resulting
+  `NavigationLink` must have exactly the enclosing `NavigationOperation`'s `pathName` and `enumName`; Compose must not
+  treat `path` as a wildcard. A caller-asserted Boolean does not establish graph membership: manually constructed and
+  decoded public IR can both forge it. Test marker-present complete-JSON mismatches, not just marker-absent values.
+  If an obsolete serialized marker must decode, consume and discard it explicitly rather than retaining any authority.
+- Cover a non-default path with a real-frontend full generated-source golden, assert exact typed IR before and after
+  JSON roundtrip, and include manual/decoded negative controls. Default-name-only fixtures hide unresolved callbacks
+  and wildcard accepts.
 - A golden fixture's HarmonyOS resource `catalog` is relative to the fixture root; repeat the form used by the existing
   navigation fixtures. Do not skip second-platform resource validation when the first target already generates.

@@ -12,6 +12,10 @@ extension ComposeBackend {
             throw Diagnostic(code: "RFNAV003", message: "A native navigation stack needs exhaustive finite destinations.",
                              suggestion: "Validate the same-file Hashable destination enum in the frontend", location: location)
         }
+        // Root links have no Screen.navigation parameter; bind them to the checked stack for the same exact validation.
+        let enclosingNavigation = context.currentNavigation
+        context.currentNavigation = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+        defer { context.currentNavigation = enclosingNavigation }
         // The source NavigationStack is a host boundary, not a second native NavHost. Its root content
         // is emitted as an ordinary component and its destination registrations become a typed switch below.
         for child in stack.content {
@@ -22,10 +26,8 @@ extension ComposeBackend {
     func emitNavigationLink(title: Expression, pathName: String, enumName: String, destination: String,
                             location: SourceLocation?, into out: inout KotlinWriter,
                             context: inout Context) throws {
-        let operation = context.currentNavigation ?? NavigationOperation(pathName: pathName, enumName: enumName)
-        let resolvesEnclosingGraph = operation.allowsEnclosingGraphPathPlaceholder && pathName == "path"
-        guard operation.enumName == enumName,
-              (operation.pathName == pathName || resolvesEnclosingGraph),
+        guard let operation = context.currentNavigation,
+              operation.enumName == enumName, operation.pathName == pathName,
               context.module.enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
             throw Diagnostic(code: "RFNAV003", message: "A NavigationLink destination is not in the declared path enum.",
                              suggestion: "Use a static case of the source destination enum", location: location)
