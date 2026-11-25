@@ -13,6 +13,14 @@
 - Native host tests cannot set content twice on one Compose activity, and a test rule without its own activity-scenario
   rule cannot use `activityRule.scenario`. For Robolectric recreation, retain the actual `ActivityController`, call its
   `recreate()`, and verify native state rather than replacing the controller with a source-owned route list.
+- Resolve a qualified destination link's conventional `path` placeholder during frontend graph linking. Its resulting
+  `NavigationLink` must have exactly the enclosing `NavigationOperation`'s `pathName` and `enumName`; Compose must not
+  treat `path` as a wildcard. A caller-asserted Boolean does not establish graph membership: manually constructed and
+  decoded public IR can both forge it. Test marker-present complete-JSON mismatches, not just marker-absent values.
+  If an obsolete serialized marker must decode, consume and discard it explicitly rather than retaining any authority.
+- Cover a non-default path with a real-frontend full generated-source golden, assert exact typed IR before and after
+  JSON roundtrip, and include manual/decoded negative controls. Default-name-only fixtures hide unresolved callbacks
+  and wildcard accepts.
 - While resolving a destination switch, `currentStates` belongs to the enclosing root, not to the referenced
   destination. Check the destination's parsed `StateDeclaration` list instead. Scalar/form `@State` is destination-local,
   whereas `[Route]` state creates an unforwarded native callback and must be rejected as an unsupported nested stack.

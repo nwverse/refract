@@ -32,8 +32,10 @@ public struct ComposeBackend: Sendable {
         try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &bodyWriter)
         for screen in module.screens {
             context.currentModals = screen.modals
+            context.currentNavigation = screen.navigation
             try emit(screen, into: &bodyWriter, context: &context)
             context.currentModals = []
+            context.currentNavigation = nil
             if case let .navigationStack(stack, _) = screen.body {
                 for destination in stack.destinations where destination.model == nil {
                     _ = try InteropResolver(module: module, mapping: mapping)
@@ -631,6 +633,7 @@ public struct ComposeBackend: Sendable {
         var androidResourceClass: String?
         var retainedItem: (name: String, type: String)?
         var currentModals: [ModalPresentation] = []
+        var currentNavigation: NavigationOperation?
         var accessibilityTraversal: AccessibilityTraversal?
         var accessibilityTextValues: [String: Int] = [:]
 

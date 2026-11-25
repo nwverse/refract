@@ -94,18 +94,25 @@ Sheet/alert presentation and dismissal remain owned by #203; tab selection and o
 This graph does not emit either container or reinterpret a modal Boolean as a stack path.
 
 The `Screen.navigation` IR field binds this linked destination to the enclosing graph after all source declarations
-are parsed. Only generated Views that actually contain a link receive an `onPathNavigate: (Route) -> Unit` parameter
+are parsed. During that linking step the frontend replaces a qualified link's conventional `path` placeholder with
+the actual enclosing operation's `pathName` and preserves its checked `enumName`. The resulting `NavigationLink` and
+`Screen.navigation` therefore agree exactly before serialization; Compose requires this equality and never treats
+the string `path` as a wildcard. Manual or decoded IR with mismatched fields fails with `RFNAV003`.
+The unmerged `allowsEnclosingGraphPathPlaceholder` marker was removed as authority and is no longer serialized. Its
+legacy key is accepted only for decoding compatibility and discarded; it cannot waive validation. Older operation
+JSON without that key is unchanged.
+Only generated Views that actually contain a link receive an `onPathNavigate: (Route) -> Unit` parameter
 (the actual source path name is preserved). The exhaustive `NavigationScreenDestinations` switch exposes the same
 callback when any branch needs it and forwards it to those branches. Leaf destinations and all two-level #157 APIs
 remain unchanged. This is ordinary explicit callback forwarding, not an environment object, singleton, route table
 or second stack. `Fixtures/navigation-deep-restoration/` contains the root → detail → editor source and both outputs.
-`Tests/RefractArkUITests/Fixtures/navigation-custom-path/` additionally pins an ArkTS `routePath` regression. The
-frontend resolves each link's path and enum from its checked enclosing graph before backend emission. ArkUI then
-requires exact link/operation equality, including after JSON decoding: a conventional literal `path` does not prove
-frontend provenance. Missing or mismatched graph operations are `RFNAV003`, never a guessed callback. Checked Compose
-goldens remain unchanged, but frontend custom-path Compose call sites may now use the typed callback. Custom-path
-Compose destination-switch forwarding remains the separately tracked #406 until that PR lands. This is source-level
-generation evidence, not Kotlin or ArkTS compilation.
+`Tests/RefractComposeTests/Fixtures/navigation-custom-path/` pins the complete generated Kotlin `routePath` callback,
+and `Tests/RefractArkUITests/Fixtures/navigation-custom-path/` pins its ArkTS counterpart. The shared frontend resolves
+each root or qualified destination link's path and enum from its checked enclosing graph before backend emission.
+Compose and ArkUI then require exact link/operation equality, including after JSON decoding: a conventional literal
+`path` does not prove frontend provenance. Missing or mismatched graph operations are `RFNAV003`, never a guessed
+callback. The same typed path is forwarded by Compose destination switches. This is source-level generation evidence,
+not Kotlin or ArkTS compilation.
 
 Native back and restoration are **not** translated into generated state. The generated Kotlin and ArkTS contain no
 saved-state bundle, serializer, process-restoration observer or path mutation. Native destination-local state uses

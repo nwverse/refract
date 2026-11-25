@@ -25,13 +25,14 @@ extension Builder {
             for destination in stack.destinations {
                 guard let screen = module.screens.first(where: { $0.name == destination.viewName }),
                       containsNavigationLink(screen.body) else { continue }
-                if let existing = bindings[screen.name], existing != NavigationOperation(pathName: stack.pathName, enumName: stack.enumName) {
+                let operation = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+                if let existing = bindings[screen.name], existing != operation {
                     diagnostics.append(Diagnostic(code: "RFNAV003",
                         message: "A linked destination cannot belong to two different navigation graphs.",
                         suggestion: "Use one finite enum and one host callback for this destination graph.",
                         location: screen.location))
                 } else {
-                    bindings[screen.name] = NavigationOperation(pathName: stack.pathName, enumName: stack.enumName)
+                    bindings[screen.name] = operation
                 }
             }
         }
@@ -74,8 +75,9 @@ extension Builder {
     /// came from the frontend: decoded and manually constructed IR must satisfy the same exact operation check.
     private func bindNavigationLinks(_ node: ViewNode, operation: NavigationOperation) -> ViewNode {
         switch node {
-        case let .navigationLink(title, _, enumName, destination, location):
-            guard enumName == operation.enumName,
+        case let .navigationLink(title, pathName, enumName, destination, location):
+            guard (pathName == "path" || pathName == operation.pathName),
+                  enumName == operation.enumName,
                   enums.first(where: { $0.name == enumName })?.cases.contains(destination) == true else {
                 diagnostics.append(Diagnostic(code: "RFNAV003",
                     message: "A linked destination must stay within its host's finite destination enum.",
