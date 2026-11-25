@@ -21,5 +21,8 @@
 - Cover a non-default path with a real-frontend full generated-source golden, assert exact typed IR before and after
   JSON roundtrip, and include manual/decoded negative controls. Default-name-only fixtures hide unresolved callbacks
   and wildcard accepts.
+- While resolving a destination switch, `currentStates` belongs to the enclosing root, not to the referenced
+  destination. Check the destination's parsed `StateDeclaration` list instead. Scalar/form `@State` is destination-local,
+  whereas `[Route]` state creates an unforwarded native callback and must be rejected as an unsupported nested stack.
 - A golden fixture's HarmonyOS resource `catalog` is relative to the fixture root; repeat the form used by the existing
   navigation fixtures. Do not skip second-platform resource validation when the first target already generates.
