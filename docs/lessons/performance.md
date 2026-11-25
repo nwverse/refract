@@ -72,7 +72,8 @@ A pre-compiler source test must inspect the shared model and both native impleme
 or unrelated reference fragments. Bind the model action's delegation and both toggle read/callback paths, paired
 text/typography/accessibility/layout, immutable replacement and list/reuse identity. Validate configuration members
 in their declared objects, not by global substring counts: the checked-in JSON-subset `.json5` files can use the
-standard-library parser with duplicate-key rejection while other JSON5 syntax fails closed. Seed temporary-copy
+standard-library parser with duplicate-key and non-finite-constant rejection while other JSON5 syntax fails closed.
+Seed temporary-copy
 mutations for these identities, imports and build configuration, and prove the unmodified and formatting-only copies
 pass first. These bounded structural checks reject contract drift but establish neither ArkTS compiler acceptance,
 rendered equality nor native behavior.

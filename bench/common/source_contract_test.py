@@ -133,6 +133,11 @@ def unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
+def reject_nonfinite_json_constant(constant: str) -> None:
+    """Keep Python's non-standard JSON5 constants outside the strict JSON subset."""
+    raise ValueError(f"non-finite JSON number is unsupported: {constant}")
+
+
 def harmony_source_contract_errors(harmony: Path) -> list[str]:
     """Check bounded source identities, not ArkTS grammar or compiler acceptance."""
     sources = {}
@@ -240,7 +245,8 @@ def harmony_source_contract_errors(harmony: Path) -> list[str]:
         if owner not in sources:
             continue
         try:
-            configurations[owner] = json.loads(sources[owner], object_pairs_hook=unique_json_object)
+            configurations[owner] = json.loads(sources[owner], object_pairs_hook=unique_json_object,
+                                               parse_constant=reject_nonfinite_json_constant)
         except (TypeError, ValueError) as error:
             # These checked-in files use JSON5's strict JSON subset. Reject other syntax rather than
             # accepting text outside the declared objects or adding a new parser dependency.
@@ -343,6 +349,24 @@ class BenchmarkSourceContractTest(unittest.TestCase):
             configuration["app"]["products"].append({"name": "unrelated"})
             application.write_text(json.dumps(configuration, indent=4), encoding="utf-8")
             self.assertEqual(harmony_source_contract_errors(harmony), [])
+
+    def test_harmony_source_contract_rejects_nonfinite_json_constants(self):
+        for owner in ("application", "entry", "module"):
+            for constant in ("NaN", "Infinity", "-Infinity"):
+                with self.subTest(owner=owner, constant=constant):
+                    with tempfile.TemporaryDirectory(prefix="refract-harmony-contract-json-") as temporary:
+                        harmony = Path(temporary) / "harmony"
+                        shutil.copytree(self.harmony, harmony)
+                        self.assertEqual(harmony_source_contract_errors(harmony), [])
+                        path = harmony / HARMONY_SOURCES[owner]
+                        source = path.read_text(encoding="utf-8")
+                        self.assertTrue(source.endswith("}\n"))
+                        path.write_text(f'{source[:-2]},\n  "unrelated": {constant}\n}}\n',
+                                        encoding="utf-8")
+                        self.assertEqual(harmony_source_contract_errors(harmony), [
+                            f"invalid {HARMONY_SOURCES[owner]} structural contract: "
+                            f"non-finite JSON number is unsupported: {constant}",
+                        ])
 
     def test_harmony_source_contract_rejects_seeded_drift(self):
         mutations = (
