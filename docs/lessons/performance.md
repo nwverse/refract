@@ -28,6 +28,11 @@ On iOS, also require exactly one identity-matched `xcode-metric-json` per timing
 supporting evidence, not a substitute for the native launch or display-interval export. Do not infer ownership from a
 similar filename, duplicate a trace to fill missing iterations, or accept a median as a p99 sample.
 
+A successful `Info.plist` parse does not establish its required dictionary schema: `plistlib` accepts legal top-level
+arrays, strings and null. Require a dictionary and a nonempty string `CFBundleExecutable` before looking up the
+executable, and map malformed or wrong-shaped values to the public evidence diagnostic without bypassing the bounded
+read. Cover a valid dictionary, malformed XML and legal wrong-type plists through both producer and reporter entries.
+
 Native trace execution needs native API and lifecycle verification, not source-wiring tests alone. `XCUIApplication`
 has no supported `processIdentifier` member; obtain the app's own `ProcessInfo` PID through an identity-checked
 handshake. Python's environment does not automatically reach hosted XCTest, so configure an iteration-specific

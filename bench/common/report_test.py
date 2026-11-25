@@ -318,6 +318,16 @@ class PairedReportTest(unittest.TestCase):
             with self.subTest(payload=payload), self.assertRaisesRegex(EvidenceError, "Info.plist"):
                 make_report(self.manifest, self.root)
 
+    def test_non_dictionary_original_plist_is_an_evidence_error(self):
+        path = self.derived_data / "Build/Products/Release-iphonesimulator/RefractBench.app/Info.plist"
+        null_plist = b'<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><null/></plist>'
+        for top_level in (["not", "a", "dictionary"], "not a dictionary", None):
+            payload = null_plist if top_level is None else plistlib.dumps(top_level)
+            self.assertEqual(plistlib.loads(payload), top_level)
+            path.write_bytes(payload)
+            with self.subTest(top_level=top_level), self.assertRaisesRegex(EvidenceError, "Info.plist.*dictionary"):
+                make_report(self.manifest, self.root)
+
     def test_raw_cadinterval_array_drives_p99_not_manifest_source_samples(self):
         measurement = next(entry for entry in self.manifest["measurements"] if entry["scenario"] == "scroll")
         path = next(path for path in measurement["artifacts"] if path.endswith("native-samples.json"))

@@ -75,9 +75,12 @@ def bundle_identity(products: Path, relative: str) -> dict:
     if not files:
         raise BuildProvenanceError(f"Build product bundle has no files: {relative}")
     try:
-        executable = plistlib.loads(bounded_file_bytes(bundle / "Info.plist")).get("CFBundleExecutable")
+        plist = plistlib.loads(bounded_file_bytes(bundle / "Info.plist"))
     except (OSError, plistlib.InvalidFileException, xml.parsers.expat.ExpatError) as error:
         raise BuildProvenanceError(f"Build product bundle Info.plist is missing or invalid: {relative}") from error
+    if not isinstance(plist, dict):
+        raise BuildProvenanceError(f"Build product Info.plist must be a dictionary: {relative}")
+    executable = plist.get("CFBundleExecutable")
     expected_executable = f"{relative}/{executable}" if isinstance(executable, str) and executable else ""
     if not any(item["path"] == expected_executable for item in files):
         raise BuildProvenanceError(f"Build product CFBundleExecutable is missing from its identity: {relative}")

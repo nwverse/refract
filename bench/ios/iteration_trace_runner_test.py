@@ -1623,6 +1623,24 @@ class TraceBuildProvenanceTest(unittest.TestCase):
                 validate_build_provenance(self.derived_data, "a" * 40)
             (products / "RefractBench.app/Info.plist").write_bytes(original)
 
+    def test_non_dictionary_plist_is_normalized_without_changing_runner_io_contract(self):
+        products = self.derived_data / "Build/Products/Release-iphonesimulator"
+        path = products / "RefractBench.app/Info.plist"
+        original = path.read_bytes()
+        null_plist = b'<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><null/></plist>'
+        for top_level in (["not", "a", "dictionary"], "not a dictionary", None):
+            payload = null_plist if top_level is None else plistlib.dumps(top_level)
+            self.assertEqual(plistlib.loads(payload), top_level)
+            path.write_bytes(payload)
+            with self.subTest(entry="record", top_level=top_level), \
+                    self.assertRaisesRegex(HandshakeError, "Info.plist.*dictionary"):
+                record_build_provenance(self.derived_data, "a" * 40)
+            with self.subTest(entry="validate", top_level=top_level), \
+                    self.assertRaisesRegex(HandshakeError, "Info.plist.*dictionary"):
+                validate_build_provenance(self.derived_data, "a" * 40)
+            path.write_bytes(original)
+        self.assertTrue(validate_build_provenance(self.derived_data, "a" * 40))
+
     def test_recorded_provenance_still_rejects_an_executable_identity_change(self):
         fixture = PAIRED_REPORTER_FIXTURE[0](methodName="test_complete_paired_samples_pass_without_claiming_device_gate")
         destination, _ = self.prepare_reporter_provenance(fixture)
