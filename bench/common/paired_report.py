@@ -37,9 +37,14 @@ class EvidenceError(ValueError):
 
 
 def finite_number(value: Any, label: str, positive: bool = False) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise EvidenceError(f"{label} must be a finite number")
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError) as error:
+        raise EvidenceError(f"{label} must be a finite number") from error
+    if not math.isfinite(result):
+        raise EvidenceError(f"{label} must be a finite number")
     if result < 0 or positive and result <= 0:
         raise EvidenceError(f"{label} must be {'positive' if positive else 'non-negative'}")
     return result
@@ -302,6 +307,9 @@ def artifact(entry: Any, root: Path, platform: str, environment: dict[str, Any])
     role = entry["role"]
     if role not in ("timing", "profiler", "memory", "binary", "build-provenance"):
         raise EvidenceError("Artifact has an unsupported native evidence role")
+    trace_kind = {"ios": "xctrace", "harmonyos": "vendor-trace"}[platform]
+    if role == "profiler" and kind != trace_kind:
+        raise EvidenceError(f"A profiler role requires the native {trace_kind} trace kind")
     if role == "build-provenance":
         if identity != ("shared", "build", 2):
             raise EvidenceError("Build provenance uses shared/build identity and a non-timing sentinel iteration")
@@ -612,9 +620,10 @@ def make_report(manifest: Any, root: Path) -> dict[str, Any]:
                             and sample["variant"] == variant]
                 if len(matching) != 1:
                     raise EvidenceError(f"Missing or duplicate raw sample: {variant}.{scenario}.{metric}.iteration{iteration}")
+                trace_kind = {"ios": "xctrace", "harmonyos": "vendor-trace"}[platform]
                 traces = [artifact for artifact in artifacts if artifact["scenario"] == scenario
                           and artifact["variant"] == variant and artifact["iteration"] == iteration
-                          and artifact["role"] == "profiler"]
+                          and artifact["role"] == "profiler" and artifact["kind"] == trace_kind]
                 if len(traces) != 1:
                     raise EvidenceError(f"Need exactly one native trace per iteration: {variant}.{scenario}.{iteration}")
                 if traces[0]["path"] not in {path for sample in samples if sample["scenario"] == scenario

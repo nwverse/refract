@@ -100,14 +100,12 @@ def generated_test_runs(derived_data: Path) -> list[Path]:
 def original_build_provenance(derived_data: Path, revision: str, *, checked_file_bytes=bounded_file_bytes) -> dict:
     """Recompute the canonical identity without writing or trusting a manifest."""
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
-        raise ValueError("Build provenance requires a committed 40-character source revision")
+        raise BuildProvenanceError("Build provenance requires a committed 40-character source revision")
+    try:
+        sources = generated_test_runs(derived_data)
+    except OSError as error:
+        raise BuildProvenanceError(f"Cannot read the original generated xctestrun: {error}") from error
     products = derived_data / "Build/Products/Release-iphonesimulator"
-    sources = sorted(path for path in (derived_data / "Build/Products").glob("*.xctestrun")
-                     if path.name != "iteration-trace-config.xctestrun"
-                     and not path.name.startswith("iteration-trace-config-"))
-    if len(sources) != 1 or sources[0].is_symlink():
-        raise ValueError("Exactly one original generated xctestrun file is required")
-    bounded_regular_file(sources[0])
     digest = hashlib.sha256()
     for offset in range(0, len(data := checked_file_bytes(sources[0])), 1024 * 1024):
         digest.update(data[offset:offset + 1024 * 1024])

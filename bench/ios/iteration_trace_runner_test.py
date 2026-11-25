@@ -1509,6 +1509,28 @@ class TraceBuildProvenanceTest(unittest.TestCase):
             session.capture(recorder.process, recorder.recorder_factory)
         self.assertFalse((run / "raw/iteration-trace.json").exists())
 
+    def test_record_cli_normalizes_missing_or_ambiguous_original_xctestrun(self):
+        script = HERE / "record_build_provenance.py"
+        original = self.source.read_bytes()
+        for state in ("missing", "ambiguous"):
+            with self.subTest(state=state):
+                if state == "missing":
+                    self.source.unlink()
+                else:
+                    self.source.with_name("second.xctestrun").write_bytes(b"second")
+                result = subprocess.run(
+                    [sys.executable, "-I", str(script), "--derived-data", str(self.derived_data),
+                     "--source-revision", "a" * 40], capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("record-build-provenance: ERROR: Exactly one original generated xctestrun",
+                              result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertFalse((self.derived_data / "refract-build-provenance.json.tmp").exists())
+                self.source.write_bytes(original)
+                self.source.with_name("second.xctestrun").unlink(missing_ok=True)
+        self.assertTrue((self.derived_data / "refract-build-provenance.json").is_file())
+
     def test_ambiguous_original_xctestrun_is_rejected_after_provenance_validation(self):
         self.source.with_name("second.xctestrun").write_bytes(b"second")
         run = self.root / "ambiguous-run"

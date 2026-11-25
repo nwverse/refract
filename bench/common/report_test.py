@@ -258,6 +258,45 @@ class PairedReportTest(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, "duration|timestamp"):
             make_report(self.manifest, self.root)
 
+    def test_unrepresentable_selected_native_launch_duration_is_an_evidence_error(self):
+        measurement = self.manifest["measurements"][0]
+        path = next(path for path in measurement["artifacts"] if path.endswith("metrics.json"))
+        selected = {"sourceRevision": "a" * 40, "variant": "generated", "scenario": "startup", "iteration": 2,
+                    "metric": "XCTApplicationLaunchMetric",
+                    "value": {"definition": "XCTApplicationLaunchMetric", "unit": "ms", "duration_ms": 10**400}}
+        canonical = json.dumps(selected, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        measurement["metric_selector"] = {"index": 0, "value_sha256": hashlib.sha256(canonical).hexdigest()}
+        self.replace_json(path, {"measurements": [selected]})
+        with self.assertRaisesRegex(EvidenceError, "finite number"):
+            make_report(self.manifest, self.root)
+
+    def test_unrepresentable_direct_native_launch_duration_is_an_evidence_error(self):
+        self.set_startup_duration(self.manifest["measurements"][0], 10**400)
+        with self.assertRaisesRegex(EvidenceError, "finite number"):
+            make_report(self.manifest, self.root)
+
+    def test_metric_json_cannot_impersonate_a_native_profiler_trace(self):
+        for platform, wrong_kind in (("ios", "xcode-metric-json"), ("harmonyos", "vendor-metric-json")):
+            with self.subTest(platform=platform):
+                manifest = copy.deepcopy(self.manifest)
+                if platform == "harmonyos":
+                    self.use_harmony_native_metrics()
+                    manifest = copy.deepcopy(self.manifest)
+                for entry in manifest["artifacts"]:
+                    if entry["role"] == "profiler":
+                        entry["kind"] = wrong_kind
+                with self.assertRaisesRegex(EvidenceError, "profiler.*native.*trace kind"):
+                    make_report(manifest, self.root)
+
+    def test_native_trace_requirement_checks_kind_and_role_together(self):
+        measurement = self.manifest["measurements"][0]
+        path = next(path for path in measurement["artifacts"] if path.endswith("metrics.json"))
+        for entry in self.manifest["artifacts"]:
+            if entry["path"] == path:
+                entry["role"] = "profiler"
+        with self.assertRaisesRegex(EvidenceError, "profiler.*native.*trace kind"):
+            make_report(self.manifest, self.root)
+
     def test_existing_ios_build_provenance_is_accepted_without_weakening_its_identity(self):
         payload = self.build_payload()
         self.replace_json(self.build_path, payload)
