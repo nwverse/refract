@@ -196,7 +196,7 @@ extension Builder {
                       "Use a literal identifier declared directly on a child of this container.", at: element.expression)
                 return nil
             }
-            guard names.insert(identifier).inserted else {
+            guard !names.contains(identifier) else {
                 error("RFACCESS003", "A direct child can appear only once in its parent's traversal order.",
                       "Keep a unique name for each ordered child.", at: element.expression)
                 return nil
@@ -212,6 +212,7 @@ extension Builder {
                 }
                 after = previous
             }
+            names.insert(identifier)
             steps.append(AccessibilityTraversal.Step(name: identifier, after: after))
         }
         guard Set(names) == children, names.count == children.count, identifiers.count == children.count else {

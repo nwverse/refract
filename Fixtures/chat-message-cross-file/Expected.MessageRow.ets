@@ -28,8 +28,8 @@ export struct MessageRow {
   build() {
     Column() {
       Text(this.message.id)
-      ForEach(message.blocks, (block: ChatBlock) => {
-        MessageBlock({ message: message, block: block })
+      ForEach(this.message.blocks, (block: ChatBlock) => {
+        MessageBlock({ message: this.message, block: block })
       }, (block: ChatBlock): string => block.id)
       Text('Row footer')
     }

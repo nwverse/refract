@@ -10,7 +10,9 @@
   traversal-group scope; a merging actionable child carries its own group/index metadata. Do not add
   `mergeDescendants` to an entire stack just to make a test pass: it can hide separately actionable children.
 - ArkUI `accessibilityNextFocusId` points from a predecessor to its successor, not from a child to its predecessor.
-  Validate the complete acyclic source-order chain before emitting ids.
+  Validate the complete acyclic source-order chain before emitting ids. Do not insert the current name into the
+  predecessor set before validating `after`: that turns a self-reference into an apparently earlier predecessor.
+  Test the frontend's typed IR directly as well as the CLI; backend rejection can mask a frontend acceptance bug.
 - `accessibilityStateDescription` (API 23), `accessibilityCustomActions` (API 26) and
   `accessibilityNextFocusId` (API 18) must be gated by an explicit consumer `minimumAPI`. Missing version evidence
   is a build-time diagnostic, never a reason to drop an accessibility operation silently.
