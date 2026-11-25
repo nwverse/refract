@@ -99,6 +99,13 @@ are parsed. Only generated Views that actually contain a link receive an `onPath
 callback when any branch needs it and forwards it to those branches. Leaf destinations and all two-level #157 APIs
 remain unchanged. This is ordinary explicit callback forwarding, not an environment object, singleton, route table
 or second stack. `Fixtures/navigation-deep-restoration/` contains the root → detail → editor source and both outputs.
+`Tests/RefractArkUITests/Fixtures/navigation-custom-path/` additionally pins an ArkTS `routePath` regression. The
+frontend resolves each link's path and enum from its checked enclosing graph before backend emission. ArkUI then
+requires exact link/operation equality, including after JSON decoding: a conventional literal `path` does not prove
+frontend provenance. Missing or mismatched graph operations are `RFNAV003`, never a guessed callback. Checked Compose
+goldens remain unchanged, but frontend custom-path Compose call sites may now use the typed callback. Custom-path
+Compose destination-switch forwarding remains the separately tracked #406 until that PR lands. This is source-level
+generation evidence, not Kotlin or ArkTS compilation.
 
 Native back and restoration are **not** translated into generated state. The generated Kotlin and ArkTS contain no
 saved-state bundle, serializer, process-restoration observer or path mutation. Native destination-local state uses
