@@ -103,6 +103,134 @@ func widthClassRejectsWrongOwnershipWithAdaptiveDiagnostic(_ declaration: String
     #expect(unit.diagnostics.map(\.code) == ["RFADAPT001", "state.invalid_declaration"])
 }
 
+// Regression: an earlier typed/model dispatch bypassed the reserved-width check.
+// Both wrong-ownership forms must yield RFADAPT001, never RFNAV402 from a sibling.
+@Test(arguments: [
+    "@State private var widthSizeClass: WidthSizeClass = .compact",
+    "@Binding var widthSizeClass: WidthSizeClass",
+])
+func wrongWidthClassOwnershipWithModelSiblingStillReportsAdaptiveDiagnostic(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    protocol SettingsModel: RefractModel { var title: String { get } }
+    struct InvalidAdaptiveOwnership: View {
+        \(declaration)
+        let model: SettingsModel
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == ["RFADAPT001"])
+}
+
+@Test(arguments: [
+    "@State private var widthSizeClass: WidthSizeClass = .compact",
+    "@Binding var widthSizeClass: WidthSizeClass",
+])
+func wrongWidthClassOwnershipWithTypedInputSiblingStillReportsAdaptiveDiagnostic(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    struct InvalidAdaptiveOwnership: View {
+        \(declaration)
+        let title: String
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == ["RFADAPT001"])
+}
+
+@Test(arguments: [
+    "@State private var widthSizeClass: WidthSizeClass = .compact",
+    "@Binding var widthSizeClass: WidthSizeClass",
+])
+func wrongWidthClassOwnershipWithNativeHostSiblingStillReportsAdaptiveDiagnostic(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    protocol Host: RefractNotificationHost {
+        func present(_ id: String, revision: Int) -> Bool
+        func cancel(_ id: String, revision: Int)
+        func confirm(_ id: String, revision: Int)
+    }
+    struct InvalidAdaptiveOwnership: View {
+        \(declaration)
+        let host: Host
+        @RefractNativeValue var event: RefractNotificationEvent
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code).contains("RFADAPT001"))
+}
+
+// Regression: an invalid enum tab sibling must not hide the next sibling's
+// state.invalid_declaration when the reserved width input is already rejected.
+@Test(arguments: [
+    "@State private var widthSizeClass: WidthSizeClass = .compact",
+    "@Binding var widthSizeClass: WidthSizeClass",
+])
+func wrongWidthClassOwnershipPreservesTabAndScalarStateDiagnostics(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    enum HomeTab: Hashable { case home }
+    struct InvalidAdaptiveOwnership: View {
+        \(declaration)
+        @Binding var tab: HomeTab
+        @State private var count: Int
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(verbatim: "Compact")
+            case .expanded: Text(verbatim: "Expanded")
+            }
+        }
+    }
+    """))
+    #expect(unit.hasErrors)
+    #expect(unit.module.screens.isEmpty)
+    #expect(unit.diagnostics.map(\.code) == ["RFADAPT001", "RFNAV402", "state.invalid_declaration"])
+}
+
+// Positive control: valid let widthSizeClass with model and bindings keeps working.
+@Test func validWidthClassWithModelAndBindingsProducesScreen() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    enum WidthSizeClass { case compact; case expanded }
+    protocol SettingsModel: RefractModel { var title: String { get } }
+    struct ValidAdaptiveScreen: View {
+        let model: SettingsModel
+        let widthSizeClass: WidthSizeClass
+        @Binding var displayName: String
+        var body: some View {
+            switch widthSizeClass {
+            case .compact: Text(model.title)
+            case .expanded: Text(displayName)
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let screen = unit.module.screens.first { $0.name == "ValidAdaptiveScreen" }
+    #expect(screen != nil)
+    #expect(screen?.parameters.map(\.name) == ["widthSizeClass"])
+}
+
 @Test func widthClassCannotOwnTheNativeNavigationPath() throws {
     let fixture = adaptiveRepository.appendingPathComponent("Fixtures/adaptive-reject-navigation")
     let input = try String(contentsOf: fixture.appendingPathComponent("Input.swift"), encoding: .utf8)

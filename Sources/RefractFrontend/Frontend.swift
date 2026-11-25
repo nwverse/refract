@@ -223,19 +223,29 @@ final class Builder: SyntaxVisitor {
             member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
                 .as(ArrayTypeSyntax.self) != nil
         }
-        if members.contains(where: { member in
+        let hasWidthClassMember = members.contains { member in
             member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
-        }), isNavigationRoot {
+        }
+        if hasWidthClassMember, isNavigationRoot {
             error("RFADAPT003", "An adaptive layout cannot own the native navigation path or resize a pushed destination.",
                   "Keep NavigationStack in the host and place the adaptive settings content in a sibling root", at: node.name)
+            return .skipChildren
+        }
+        if hasWidthClassMember, statefulWidthClassInput(node) == nil {
+            // Reject wrong width ownership before any typed/model/native dispatch can
+            // misclassify the reserved input as a tab selection. Validate the remaining
+            // members in collect-all mode so one sibling error never hides the next.
+            let otherMembers = node.with(\.memberBlock.members, members.filter { member in
+                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type
+                    .trimmedDescription != "WidthSizeClass"
+            })
+            _ = localStateDeclarations(otherMembers, continueOnError: true)
             return .skipChildren
         }
         if isNavigationRoot {
             // The navigation parser below validates the path and model inputs together.
         } else if hasNativeInputs(node) || hasItemInputs ||
-            (hasTypedInputs(members) && !members.contains(where: { member in
-                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
-            })) {
+            (hasTypedInputs(members) && !hasWidthClassMember) {
             guard let body = typedInputScreen(node, members: members) else { return .skipChildren }
             screens.append(body)
             return .skipChildren
@@ -243,10 +253,7 @@ final class Builder: SyntaxVisitor {
         if hasDeclaredModelInputs(node) && !hasTypedInputs(members) {
             guard localStateDeclarations(node) != nil else { return .skipChildren }
         } else if hasTypedInputs(members) {
-            let isWidthClassSettings = members.contains { member in
-                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
-            }
-            if isWidthClassSettings {
+            if hasWidthClassMember {
                 guard localStateDeclarations(node) != nil else { return .skipChildren }
                 parameters = []
             } else {
@@ -270,16 +277,6 @@ final class Builder: SyntaxVisitor {
         }
         if items.contains(where: { $0.item.as(IfConfigDeclSyntax.self) != nil }) {
             return .visitChildren
-        }
-        if members.contains(where: { member in
-            member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription == "WidthSizeClass"
-        }), statefulWidthClassInput(node) == nil {
-            // Preserve independent state diagnostics without reclassifying the reserved input.
-            let otherMembers = node.with(\.memberBlock.members, members.filter { member in
-                member.decl.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription != "WidthSizeClass"
-            })
-            _ = localStateDeclarations(otherMembers)
-            return .skipChildren
         }
         guard let states = localStateDeclarations(node) else { return .skipChildren }
         if members.contains(where: { member in
