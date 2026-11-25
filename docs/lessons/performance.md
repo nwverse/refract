@@ -94,6 +94,16 @@ well as text. A convenient extra `frame`, asynchronous callback or dropped nativ
 non-equivalent. Compile the canonical source rather than a copied approximation, then verify actual behavior on a
 named target before claiming equivalence.
 
+A pre-compiler source test must inspect the shared model and both native implementations, not only a generated header
+or unrelated reference fragments. Bind the model action's delegation and both toggle read/callback paths, paired
+text/typography/accessibility/layout, immutable replacement and list/reuse identity. Validate configuration members
+in their declared objects, not by global substring counts: the checked-in JSON-subset `.json5` files can use the
+standard-library parser with duplicate-key and non-finite-constant rejection while other JSON5 syntax fails closed.
+Seed temporary-copy
+mutations for these identities, imports and build configuration, and prove the unmodified and formatting-only copies
+pass first. These bounded structural checks reject contract drift but establish neither ArkTS compiler acceptance,
+rendered equality nor native behavior.
+
 Use an explicit, exclusively owned, already-booted target. Never use `booted`, create or reboot a shared simulator,
 or infer ownership from an existing device name. A physical target discovered as unavailable is a blocker, not an
 invitation to relabel simulator results as device evidence.
