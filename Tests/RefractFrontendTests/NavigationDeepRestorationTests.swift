@@ -81,7 +81,7 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
     protocol Model: RefractModel { func confirm() }
     struct DetailScreen: View {
         let model: Model
-        @Binding var visible: Bool
+        @State private var visible: Bool = false
         var body: some View {
             VStack {
                 NavigationLink("navigation.open.editor", value: Route.editor)
@@ -94,7 +94,7 @@ private let navigationFixture = URL(fileURLWithPath: #filePath)
     }
     struct EditorScreen: View {
         let model: Model
-        @Binding var visible: Bool
+        @State private var visible: Bool = false
         var body: some View { Text(verbatim: "Editor") }
     }
     struct RootScreen: View {

@@ -183,7 +183,20 @@ extension Builder {
     }
 
     func validateNavigationDeclarations(_ module: Module) {
+        let destinations = Set(module.screens.flatMap { screen -> [String] in
+            guard case let .navigationStack(stack, _) = screen.body else { return [] }
+            return stack.destinations.map(\.viewName)
+        })
         for screen in module.screens {
+            if destinations.contains(screen.name), let path = screen.states.compactMap({ state -> (String, RefractIR.SourceLocation?)? in
+                guard case let .navigationPath(name, _, location) = state else { return nil }
+                return (name, location)
+            }).first {
+                diagnostics.append(Diagnostic(code: "RFNAV003",
+                    message: "Destination-owned navigation path `\(path.0)` would create an unforwarded callback and a nested stack.",
+                    suggestion: "Use `NavigationLink(\"navigation.open\", value: Route.case)` in the destination and register that case in the root's navigationDestination; nested stacks are unsupported",
+                    location: path.1 ?? screen.location))
+            }
             guard case let .navigationStack(stack, location) = screen.body, stack.rootName == screen.name else { continue }
             if viewDeclarations[stack.rootName + "Destinations"] != nil {
                 diagnostics.append(Diagnostic(code: "RFNAV003",
@@ -404,6 +417,21 @@ extension Builder {
               let label = argument.label?.text,
               let reference = argument.expression.as(DeclReferenceExprSyntax.self),
               let model = currentModels.first(where: { $0.propertyName == reference.baseName.text }),
+              declaration.memberBlock.members.allSatisfy({ member in
+                  guard let variable = member.decl.as(VariableDeclSyntax.self),
+                        variable.bindings.first?.pattern.as(IdentifierPatternSyntax.self)?.identifier.text != "body" else {
+                      return true
+                  }
+                  guard variable.attributes.isEmpty else {
+                      return variable.attributes.count == 1 &&
+                          variable.attributes.first?.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "State"
+                  }
+                  guard variable.bindingSpecifier.tokenKind == .keyword(.let),
+                        let binding = variable.bindings.first,
+                        binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text == label,
+                        binding.typeAnnotation?.type.trimmedDescription == model.protocolName else { return false }
+                  return true
+              }),
               declaration.memberBlock.members.contains(where: { member in
                 guard let variable = member.decl.as(VariableDeclSyntax.self),
                       variable.bindingSpecifier.tokenKind == .keyword(.let), variable.attributes.isEmpty,
