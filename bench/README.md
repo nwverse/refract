@@ -24,16 +24,25 @@ generated observer registry or business-logic interpreter. These are settings-sh
   `.trace.zip` file, not the original package directory. Synthetic unit-test inputs are not timing evidence. No partial
   report is promoted to PASS.
 
-## Current evidence, not a timing claim
+## Current evidence, not a performance acceptance
 
 | Platform | What is verified | What remains blocked |
 | --- | --- | --- |
-| iOS | Xcode 27.2 compiled the canonical Swift screen, independent reference and UI test bundle in Release mode for the simulator SDK and generic iOS SDK. No simulator was created, booted, rebooted or measured. | No executed paired measurements or retained timing traces. The available physical target was unavailable; no physical-device claim is made. |
+| iOS | Xcode 27.2 compiled the canonical Swift screen, independent reference and UI test bundle in Release mode for the simulator SDK and generic iOS SDK. The [final joint #219 audit](https://github.com/nwverse/refract/issues/219#issuecomment-7148267250) accepts exactly three generated/reference **SIMULATOR evidence-integrity pairs** at `eb16e22b3232625d52b25f5e08f61eaf603f2bd0`, one per scenario at iteration 30, on an iPhone 17 Pro iOS 27.0 arm64 simulator (OS build 24A434) using Time Profiler. All six variants have independently verified raw Instruments/xcresult archives and native identity/XCTest completion. | The fixed set 2...30 has **29 identities**; coverage at `eb16e22` is **1/29 pairs per scenario**, not a completed matrix. Startup retains first-display timestamps, not launch durations. Scroll/stateUpdate retain 75/73 and 153/152 display-target intervals respectively, not CPU frame durations or complete paired scalars. No full paired report, memory/binary pairing, performance PASS or physical-device claim follows. |
 | HarmonyOS | The real CLI generated `entry/src/main/ets/generated/SettingsScreen.ets` from the same Swift source. A typed app-owned model and separate `@ComponentV2` reference are source-prepared. | No authorized compiler, SDK, `hdc`, signing configuration or execution target. No ArkTS compile, rendering, memory, startup or frame timing claim is made. |
 
-The [iOS harness](ios/README.md), [HarmonyOS source-prepared harness](harmony/README.md) and their exact unexecuted
-commands are linked from [the production-readiness matrix](../../docs/production-readiness.md). Compile success,
-scenario source, a passing synthetic report test and a manually constructed manifest are not performance evidence.
+The [iOS harness](ios/README.md), [HarmonyOS source-prepared harness](harmony/README.md) and the paired-report commands
+are linked from [the production-readiness matrix](../../docs/production-readiness.md). Compile success, scenario source,
+a passing synthetic report test and a manually constructed manifest are not performance evidence. A native Instruments
+trace and a bounded native sample export prove that the named iteration executed; they do not replace the remaining
+28 identities per scenario, the reporter's native scalar reduction, resource pairs or the performance/device gates.
+The full report is blocked even though raw trace evidence exists.
+
+The three `eb16e22` pairs are a separate evidence domain from the [actual #219
+inventory](https://github.com/nwverse/refract/issues/219#issuecomment-7155061440)'s 76 accepted pairs at `95a0f37`:
+startup 21 (2..22), scroll 27 (2..28) and stateUpdate 28 (2..29). The two revisions are never added into one measurement
+or build identity; rejected attempts add no pair, and seven old roots retain weaker historical readback binding. The
+physical-SDK compile remains compiler-only; all executed results above are explicitly simulator results.
 
 ## Provenance manifest
 
