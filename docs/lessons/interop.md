@@ -133,3 +133,12 @@
   so a cancelled drop never reaches the model. Unicode (non-BMP emoji + CJK) round-trips through
   `ClipData.newPlainText` unchanged; do not introduce a "safe ASCII" encoding — the typed String payload
   is the contract.
+
+- A selection-aware Compose `TextFieldValue` must retain both text and selection across native updates;
+  rebuilding it from an initial range resets selection on recomposition. Compare the updated text with the
+  retained value before calling a replacement action: selection-only movement is not a text edit. Do not
+  translate that callback to ArkUI `onTextSelectionChange`, which has no atomic replacement-text snapshot
+  and fires for movement. Diagnose the unsupported lowering instead of guessing callback ordering.
+- Closed modifier actions need their current screen's model and full synchronous signature, not a
+  module-wide name match. Check labels and parameter types and reject multiple matching model inputs;
+  otherwise a drop/selection event can call an undeclared receiver or an incompatible native method.

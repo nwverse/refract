@@ -1,0 +1,1 @@
+Input.swift:14:9: error [RFNATIVE005]: ArkUI cannot atomically forward a text edit's replacement and resulting selection with the supported callback API. Suggestion: Use a mapped app-owned native text-edit host so selection-only movement remains native; do not treat selection movement as a replacement.

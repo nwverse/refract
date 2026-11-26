@@ -40,11 +40,16 @@ public fun SelectionDropScreen(
     var draft by remember { mutableStateOf("") }
     var dragNote by remember { mutableStateOf("🌸 汉字") }
     Column(modifier = modifier) {
+        var draftSelectionValue by remember { mutableStateOf(TextFieldValue(text = draft, selection = TextRange(0, 0))) }
         TextField(
-            value = TextFieldValue(text = draft, selection = TextRange(0, 0)),
+            value = draftSelectionValue,
             onValueChange = { updated ->
+                val textChanged = updated.text != draftSelectionValue.text
                 draft = updated.text
-                model.replaceSelection(start = updated.selection.start, end = updated.selection.end, replacement = updated.text)
+                draftSelectionValue = updated
+                if (textChanged) {
+                    model.replaceSelection(start = updated.selection.start, end = updated.selection.end, replacement = updated.text)
+                }
             },
             label = { Text(text = stringResource(R.string.settings_display_name)) },
             modifier = Modifier,

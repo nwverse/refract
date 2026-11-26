@@ -12,8 +12,17 @@ struct SelectionDropScreen: View {
 
     var body: some View {
         VStack {
-            TextField("settings.display.name", text: $draft)
-                .refractNativeModifier(.textSelection(start: 0, end: 0, action: "replaceSelection"))
+            refractView(
+                ios: {
+                    TextField("settings.display.name", text: $draft)
+                        .refractNativeModifier(.textSelection(start: 0, end: 0, action: "replaceSelection"))
+                },
+                android: {
+                    TextField("settings.display.name", text: $draft)
+                        .refractNativeModifier(.textSelection(start: 0, end: 0, action: "replaceSelection"))
+                },
+                harmonyOS: { TextField("settings.display.name", text: $draft) }
+            )
             Text(verbatim: "Drag me")
                 .refractNativeModifier(.dragPayload(kind: "note", value: dragNote))
             Text(verbatim: "Drop here")
