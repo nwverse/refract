@@ -50,6 +50,26 @@ func nativeHostContractsGenerateBothBackends(_ name: String) throws {
     }
 }
 
+@Test(arguments: [
+    (".refractOnAppear\n        .refractOnAppear\n        .refractOnDisappear", "refractOnAppear"),
+    (".refractOnAppear\n        .refractOnDisappear\n        .refractOnDisappear", "refractOnDisappear"),
+])
+func nativeLifecycleRejectsDuplicateReservedHooks(_ hooks: String, _ repeated: String) throws {
+    let (fixture, _) = try nativeFixture("interop-native-lifecycle")
+    let input = try String(contentsOf: nativeHostRepository
+        .appendingPathComponent("Fixtures/interop-native-lifecycle/Input.swift"), encoding: .utf8)
+        .replacingOccurrences(of: ".refractOnAppear\n        .refractOnDisappear", with: hooks)
+    #expect(fixture.diagnostics.isEmpty)
+    #expect(fixture.module.screens.first?.lifecycle != nil)
+    #expect(input.components(separatedBy: ".\(repeated)").count == 3)
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: input))
+    #expect(unit.module.nativeHosts.count == 1)
+    #expect(unit.diagnostics.map(\.code) == ["RFHOST003"])
+    let diagnostic = try #require(unit.diagnostics.first)
+    #expect(diagnostic.message.contains("exactly once"))
+    #expect(unit.module.screens.isEmpty)
+}
+
 @Test func nativeHostRolesRejectMissingCorrelationAndExecutionReceipt() {
     let source = """
     protocol Host: RefractNotificationHost {
