@@ -5,6 +5,16 @@
   canonical input in the same native-output step and in the consumer's explicit input set. Regression-test the exact
   workflow transaction over both roots, including missing input and missing generated output, rather than moving the
   file, disabling freshness or creating a hand-maintained substitute list.
+- **Do not turn every read failure into a missing file.** `try? Data(contentsOf:)` also hides permission and
+  destination-type errors, so regeneration advice can point at a command that cannot repair the destination. Inspect
+  the destination with `lstat` before reading: accept only a regular file, treat `ENOENT` as missing, and classify
+  symlinks (including dangling links) as unreadable without following them. `Data(contentsOf:)` follows a destination
+  symlink, even when its target bytes match, while the output writer rejects the link itself. Preserve the
+  `NSFileReadNoSuchFileError` domain-and-code check for a disappearing destination, and retain explicit metadata or
+  read failures as unreadable; do not classify by error text. Test matching and dangling symlinks plus ordinary
+  matching, stale, missing, directory and non-root mode-000 files, and assert that links, targets and old files stay
+  unchanged. This leaf-file check deliberately does not expand into rejecting symlinked ancestor directories when
+  the output writer already accepts them.
 
 - **Test output transactions at the replacement boundary.** Linux Foundation may reject `replaceItem` for a new
   destination and its file-manager wrappers can differ from direct POSIX behavior. Stage beside the destination,
