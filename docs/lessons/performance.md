@@ -142,6 +142,20 @@ reporter integration test itself with actual retained bytes and independent posi
 leaving its assertions after an early return. Startup launch duration is another interface: a selector-bound normalized
 `raw/metrics.json` is not the historical raw-array `raw/exports/xctest-metrics.json`.
 
+Do not repair a pre-export receipt by inserting the normalized metric after export. If that metric already contains
+the receipt's whole-file SHA-256, adding its own path/hash to the receipt creates a cycle or invalidates the original
+receipt. Keep the acquisition receipt immutable, verify its one-way reference from the normalized metric, and bind
+both in a later acceptance record. Acceptance should identify the exact session/PID/configuration and every required
+native packet/resource alias rather than infer acceptance from file presence. Current-producer evidence must not fall
+back to a legacy raw metric when its normalized metric is missing. Older accepted inputs need an explicit compatibility
+branch; do not rewrite them or demand newly introduced producer artifacts retrospectively.
+
+Two publication files cannot be made one atomic filesystem rename. An acceptance may omit its own hash and a final
+inventory may then hash that acceptance, without any cycle. Stage and validate both closed files, use exclusive
+no-clobber publication, and treat only one file surviving as an incomplete publication. On failure remove only newly
+created incomplete records, never pre-existing acceptance or original producer bytes. Test a failure injected between
+the two publications as well as missing/stale bindings; synthetic hashes and successful cleanup are not native evidence.
+
 ## Keep evidence domains and identity counts explicit
 
 An inclusive identity range is not automatically its acquisition count: 2...30 contains **29 identities**. Check the
