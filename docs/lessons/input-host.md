@@ -13,6 +13,15 @@ The presence of a `body` accessor does not establish this native behavior. Check
 SwiftSyntax nodes. An arbitrary body must not yield the same generated host call as the canonical implementation;
 this source contract still does not prove iOS runtime editing or another platform's IME behavior.
 
+Track body presence separately from body validity. A missing `body` must reach the specialized `RFINPUT001` contract
+diagnostic; an invalid present body already has its precise diagnostic and must not also trigger a generic signature
+error. Do not return early merely because the four public fields and focus state are present. Likewise, closure
+signatures and ordinary Swift spelling are not behavior: normalize only the exact `() -> Void` or two-`Int`
+parameter forms, optional `Void` return annotations, explicit `self` receivers, parentheses and a single `return`.
+`$self.property` is a member access whose base is the `$self` declaration reference, not a `$self.property` reference;
+handle that shape explicitly. Keep receiver, operation and statement-order checks intact, and construct every test
+mutation with an exact matched substring so a no-op replacement cannot masquerade as a negative test.
+
 ## Action types are not scalar value types
 
 `action` and `actionString` describe callback shapes. They cannot be decoded by `ValueType(rawValue:)`, and an Optional

@@ -41,6 +41,24 @@ func textInputHostRejectsMissingOrReorderedNativeSemantics(_ body: String) {
     #expect(unit.module.nativeDeclarations.isEmpty)
 }
 
+@Test func textInputHostRejectsMissingBodyWithoutNativeDeclarationOrScreen() {
+    let source = """
+    import SwiftUI
+    struct NativeTextInputHost: RefractTextInputHost {
+        @Binding var draft: String
+        let focusRequest: Int
+        let onDraftCommit: (String) -> Void
+        let onCommit: () -> Void
+        @FocusState private var isHostFocused: Bool
+    }
+    """ + "\n" + hostSource[hostSource.range(of: "protocol ComposerModel:")!.lowerBound...]
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: source))
+    #expect(unit.diagnostics.map(\.code) == ["RFINPUT001", "RFINPUT002"])
+    #expect(unit.diagnostics.first?.message.contains("SwiftUI body") == true)
+    #expect(unit.module.nativeDeclarations.isEmpty)
+    #expect(unit.module.screens.isEmpty)
+}
+
 @Test func textInputHostRejectsNativeBodyAndPreservesCallerDiagnostic() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: hostSource.replacingOccurrences(
         of: "TextField(\"Message\", text: $draft)", with: "Text(\"Message\")")))
@@ -56,6 +74,45 @@ func textInputHostRejectsMissingOrReorderedNativeSemantics(_ body: String) {
         with: ".onChange(of: focusRequest) { _, _ in\n                isHostFocused = true\n            }")
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: source))
     #expect(unit.diagnostics.isEmpty)
+}
+
+@Test(arguments: [
+    hostSource
+        .replacingOccurrences(of: ".onChange(of: focusRequest) { _, _ in",
+                              with: ".onChange(of: focusRequest) { (oldValue: Int, newValue: Int) -> Void in")
+        .replacingOccurrences(of: ".onSubmit {", with: ".onSubmit { () -> Void in"),
+    hostSource.replacingOccurrences(of: "        TextField(\"Message\", text: $draft)",
+                                    with: "        return (TextField(\"Message\", text: $draft))"),
+    hostSource
+        .replacingOccurrences(of: "$isHostFocused", with: "$self.isHostFocused")
+        .replacingOccurrences(of: "of: focusRequest", with: "of: self.focusRequest")
+        .replacingOccurrences(of: "isHostFocused = true", with: "self.isHostFocused = true")
+        .replacingOccurrences(of: "onDraftCommit(draft)", with: "self.onDraftCommit(self.draft)")
+        .replacingOccurrences(of: "                onCommit()", with: "                self.onCommit()"),
+])
+func textInputHostAcceptsEquivalentNativeBodySpelling(_ source: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: source))
+    #expect(unit.diagnostics.isEmpty)
+    #expect(unit.module.nativeDeclarations.map(\.kind) == [.textInputHost])
+    guard let screen = unit.module.screens.first, case let .native(component, _) = screen.body else {
+        Issue.record("Expected the native text-input host call")
+        return
+    }
+    #expect(component.arguments.map(\.type) == [.string, .int, .actionString, .action])
+}
+
+@Test(arguments: [
+    hostSource.replacingOccurrences(of: ".onSubmit {", with: ".onSubmit { (unexpected: Int) -> Void in"),
+    hostSource.replacingOccurrences(of: ".onSubmit {", with: ".onSubmit { () -> String in"),
+    hostSource.replacingOccurrences(of: "{ _, _ in", with: "{ (oldValue: Int, newValue: String) -> Void in"),
+    hostSource.replacingOccurrences(of: "                onCommit()", with: "                self.onCommit"),
+    hostSource.replacingOccurrences(of: "of: focusRequest", with: "of: self.model.focusRequest"),
+])
+func textInputHostRejectsDifferentClosureOrReceiverSemantics(_ source: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: source))
+    #expect(unit.diagnostics.map(\.code) == ["RFINPUT001", "RFINPUT002"])
+    #expect(unit.module.nativeDeclarations.isEmpty)
+    #expect(unit.module.screens.isEmpty)
 }
 
 @Test func textInputHostRejectsLocalDraftAndArbitraryCallbacks() {
