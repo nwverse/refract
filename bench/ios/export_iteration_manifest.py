@@ -32,6 +32,9 @@ from paired_report import (ITERATIONS, SCENARIOS, VARIANTS, EvidenceError, check
                            make_report, percentile, validate_environment)
 from probe_target import find_simulator_targets
 
+PRODUCER_BINDING = "ios-producer-evidence-v1"
+PUBLICATION_NAMES = ("accepted-evidence.json", "retained-file-hashes.json")
+
 
 class ExportError(ValueError):
     pass
@@ -175,9 +178,10 @@ def require_fields(payload: dict[str, Any], expected: dict[str, Any], label: str
             raise ExportError(f"{label} has a missing or mismatched {key}: {payload.get(key)!r}")
 
 
-def verify_retained_files(run: Path) -> dict[str, Any]:
-    accepted = read_object(run / "accepted-evidence.json")
-    retained = read_object(run / "retained-file-hashes.json")
+def verify_retained_files(run: Path, acceptance_name: str = "accepted-evidence.json",
+                          inventory_name: str = "retained-file-hashes.json") -> dict[str, Any]:
+    accepted = read_object(run / acceptance_name)
+    retained = read_object(run / inventory_name)
     files = retained.get("files")
     if retained.get("schema") != 1 or not isinstance(files, dict) or not files:
         raise ExportError("A retained-file manifest with ordinary file hashes is required")
@@ -185,9 +189,11 @@ def verify_retained_files(run: Path) -> dict[str, Any]:
                                           if key != "accepted-evidence.json"}:
         raise ExportError("Accepted evidence and retained-file inventory disagree")
     for relative, record in files.items():
-        if not isinstance(record, dict) or set(record) != {"bytes", "sha256"}:
+        if not isinstance(relative, str) or not isinstance(record, dict) \
+                or set(record) != {"bytes", "sha256"}:
             raise ExportError(f"Malformed retained-file identity: {relative}")
-        size, checksum = file_metadata(safe_member(run, relative))
+        size, checksum = file_metadata(safe_member(
+            run, acceptance_name if relative == "accepted-evidence.json" else relative))
         if type(record["bytes"]) is not int or record["bytes"] != size or record["sha256"] != checksum:
             raise ExportError(f"Retained-file checksum or size mismatch: {relative}")
     return accepted
@@ -315,6 +321,65 @@ def checked_native_packets(run: Path, result: dict[str, Any], identity: tuple[st
     return references
 
 
+def checked_producer_binding(run: Path, accepted: dict[str, Any], result: dict[str, Any],
+                             receipt: dict[str, Any], *, startup: bool, current_producer: bool) -> None:
+    """Bind the new acceptance to the already-exported producer, without a hash cycle."""
+    binding = accepted.get("producer_binding")
+    if binding is None:
+        if current_producer:
+            raise ExportError("Current-producer acceptance requires its explicit acyclic binding")
+        return
+    if not current_producer or not isinstance(binding, dict) or binding.get("protocol") != PRODUCER_BINDING \
+            or set(binding) != {"protocol", "receipt", "configuration", "resources", *(
+                ("normalized_metrics", "native_process_packets") if startup else ())}:
+        raise ExportError("Current-producer acceptance requires its explicit acyclic binding")
+    checked_file_reference(run, binding["receipt"], "raw/iteration-trace.json", "Accepted iteration receipt")
+    checked_file_reference(run, binding["configuration"], "iteration-trace-config.json",
+                           "Accepted trace configuration")
+    resources = binding["resources"]
+    if not isinstance(resources, dict) or set(resources) != {"original", "memory", "binary", "aliases"}:
+        raise ExportError("Accepted native-resource binding has an incomplete schema")
+    checked_file_reference(run, resources["original"], "raw/native-resources.json", "Accepted native resources")
+    checked_file_reference(run, resources["memory"], "raw/native-memory.json", "Accepted native memory")
+    checked_file_reference(run, resources["binary"], "raw/native-binary.json", "Accepted installed binary")
+    aliases = resources["aliases"]
+    if not isinstance(aliases, dict) or set(aliases) != {"residentMemoryBytes", "installedBinaryBytes"}:
+        raise ExportError("Accepted resource aliases must name both native snapshots")
+    receipt_resources = result.get("native_resources", {}).get("exports", {})
+    if not isinstance(receipt_resources, dict):
+        raise ExportError("Iteration receipt does not identify its selected resource aliases")
+    for metric in aliases:
+        reference = aliases[metric]
+        if not isinstance(reference, dict) or set(reference) != {"path", "sha256"} \
+                or receipt_resources.get(metric, {}).get("path") != reference.get("path"):
+            raise ExportError(f"Accepted {metric} alias differs from the iteration receipt")
+        checked_file_reference(run, reference, reference.get("path"), f"Accepted {metric} alias")
+    if not startup:
+        return
+    raw = read_object(safe_member(run, METRICS_PATH))
+    checked_file_reference(run, binding["normalized_metrics"], METRICS_PATH, "Accepted normalized startup metrics")
+    provenance = raw.get("provenance")
+    if not isinstance(provenance, dict):
+        raise ExportError("Normalized startup metrics lack their producer provenance")
+    if provenance.get("trace_receipt_sha256") != binding["receipt"]["sha256"] \
+            or provenance.get("trace_configuration_receipt_sha256") != binding["configuration"]["sha256"]:
+        raise ExportError("Normalized startup metrics do not bind the accepted receipts")
+    packet_map = binding["native_process_packets"]
+    if not isinstance(packet_map, dict) or set(packet_map) != {
+            "native_process", "request", "native_completion", "completion"}:
+        raise ExportError("Accepted startup native-process packet inventory is incomplete")
+    if packet_map != provenance.get("native_process_packets"):
+        raise ExportError("Accepted native-process packets differ from normalized startup provenance")
+    for role, relative in (("native_process", "control/native-process.json"),
+                           ("request", "raw/request.json"),
+                           ("native_completion", "control/native-completion.json"),
+                           ("completion", "raw/completion.json")):
+        packet = packet_map[role]
+        if not isinstance(packet, dict) or packet.get("path") != relative:
+            raise ExportError(f"Accepted startup {role} packet is not bound to the retained bytes")
+        checked_file_reference(run, packet, relative, f"Accepted startup {role} packet")
+
+
 def checked_producer_startup(run: Path, result: dict[str, Any], identity: tuple[str, str, int],
                              revision: str, build_sha256: str, pid: int) -> tuple[dict[str, Any], dict[str, Any]]:
     raw = read_object(safe_member(run, METRICS_PATH))
@@ -373,7 +438,11 @@ def checked_producer_startup(run: Path, result: dict[str, Any], identity: tuple[
 
 
 def checked_resource_receipt(run: Path, result: dict[str, Any], identity: tuple[str, str, int],
-                             metric: str, alias: str | None) -> None:
+                             metric: str, alias: str | None, current_producer: bool = True) -> None:
+    if not current_producer:
+        # Older accepted evidence predates the native-resource receipt. Its
+        # selected native JSON remains checked by the shared schema-2 reader.
+        return
     record = result.get("native_resources")
     if not isinstance(record, dict) or set(record) != {"path", "sha256", "exports"}:
         raise ExportError("Iteration receipt lacks its native-resource identity")
@@ -408,7 +477,12 @@ def checked_resource_receipt(run: Path, result: dict[str, Any], identity: tuple[
 
 
 def checked_resource_packet(run: Path, result: dict[str, Any], identity: tuple[str, str, int],
-                            revision: str, pid: int, metric: str, alias: str | None) -> None:
+                            revision: str, pid: int, metric: str, alias: str | None,
+                            current_producer: bool = True) -> None:
+    if not current_producer:
+        # The old accepted-input contract retained only the selected schema-2
+        # resource JSON. Never demand a newer composite receipt retrospectively.
+        return
     packet = read_json(safe_member(run, "raw/native-resources.json"))
     if not isinstance(packet, list) or len(packet) != 2:
         raise ExportError("The original native-resource packet must retain both snapshots")
@@ -424,7 +498,7 @@ def checked_resource_packet(run: Path, result: dict[str, Any], identity: tuple[s
     require_fields(matches[0], expected, "Original native resource")
     if metric == "residentMemoryBytes" and matches[0].get("pid") != pid:
         raise ExportError("Original resident-memory packet has an unrelated native PID")
-    checked_resource_receipt(run, result, identity, metric, alias)
+    checked_resource_receipt(run, result, identity, metric, alias, current_producer)
 
 
 def resource_bytes(run: Path, relative: str, identity: tuple[str, str, int], metric: str,
@@ -650,8 +724,13 @@ def load_run(run: Path, derived_data: Path, context: RunContext, source_xctestru
             or ("name" in context.target and accepted.get("target_name") != context.target["name"]):
         raise ExportError("Accepted target or toolchain differs from the export environment")
     normalized_metrics = os.path.lexists(safe_member(run, METRICS_PATH))
+    current_producer = result.get("native_resources") is not None or (scenario == "startup" and normalized_metrics)
+    checked_producer_binding(run, accepted, result, receipt, startup=scenario == "startup",
+                             current_producer=current_producer)
+    if scenario == "startup" and (normalized_metrics or current_producer):
+        checked_producer_startup(run, result, identity, context.revision, context.build_sha256, pid)
     checked_target_evidence(run, accepted, context.target,
-                            startup=scenario == "startup" and normalized_metrics)
+                            startup=scenario == "startup" and (normalized_metrics or current_producer))
 
     prefix = f"raw/{variant}-{scenario}-{iteration}"
     trace_source, trace_size, trace_hash = checked_archive(run, accepted, "trace_zip")
@@ -755,10 +834,12 @@ def load_run(run: Path, derived_data: Path, context: RunContext, source_xctestru
     if os.path.lexists(safe_member(run, MEMORY_PATH)):
         if scenario == "startup":
             raise ExportError("Startup cannot supply a frame-iteration resident-memory measurement")
-        checked_resource_packet(run, result, identity, context.revision, pid, "residentMemoryBytes", MEMORY_PATH)
+        checked_resource_packet(run, result, identity, context.revision, pid, "residentMemoryBytes", MEMORY_PATH,
+                                current_producer)
     if scenario == "startup":
         alias = BINARY_PATH if identity == (variant, "startup", 2) else None
-        checked_resource_packet(run, result, identity, context.revision, pid, "installedBinaryBytes", alias)
+        checked_resource_packet(run, result, identity, context.revision, pid, "installedBinaryBytes", alias,
+                                current_producer)
     return jobs, artifacts, measurement, resources
 
 

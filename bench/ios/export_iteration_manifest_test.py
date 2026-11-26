@@ -23,12 +23,22 @@ sys.path.insert(0, str(HERE.parent / "common"))
 
 from build_provenance import BUNDLE_NAMES, original_build_provenance
 from export_iteration_manifest import (BINARY_PATH, JSON_DEPTH_LIMIT, LEGACY_METRICS_PATH, MEMORY_PATH, METRICS_PATH,
-                                       TESTS_PATH, ExportError, checked_target_evidence, checked_xctest_case,
-                                       export_manifest, main)
+                                       PRODUCER_BINDING, TESTS_PATH, ExportError, checked_target_evidence,
+                                       checked_xctest_case, export_manifest, main)
 from paired_report import EvidenceError, make_report
 
 
-class IterationManifestExportTest(unittest.TestCase):
+class IterationManifestFixture:
+    def __init__(self):
+        self.cleanups = []
+
+    def addCleanup(self, function):
+        self.cleanups.append(function)
+
+    def doCleanups(self):
+        for function in reversed(self.cleanups):
+            function()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -116,6 +126,9 @@ class IterationManifestExportTest(unittest.TestCase):
                 packet["completion"] = f"{variant} {scenario} complete 1"
             self.write_producer_packet(run / relative, packet)
             packets[role] = {"path": relative, "sha256": self.file_record(run / relative)["sha256"]}
+            if role == "completion":
+                self.write_producer_packet(run / "raw/recorder-finished.json", {
+                    **packet, "state": "recorder-finished", "recorder_exit": 0})
         memory = self.resource_payload(variant, scenario, iteration, "residentMemoryBytes", pid)
         binary = self.resource_payload(variant, scenario, iteration, "installedBinaryBytes", pid)
         self.write_json(raw / "native-resources.json", [
@@ -143,7 +156,7 @@ class IterationManifestExportTest(unittest.TestCase):
         return {"path": "raw/native-resources.json",
                 "sha256": self.file_record(raw / "native-resources.json")["sha256"], "exports": exports}, packets
 
-    def make_run(self, variant, scenario, iteration):
+    def make_run(self, variant, scenario, iteration, legacy=False):
         run = self.run_path(variant, scenario, iteration)
         control = run / "control"
         raw = run / "raw"
@@ -240,6 +253,19 @@ class IterationManifestExportTest(unittest.TestCase):
             self.write_json(normalized_path, normalized)
         (run / "refract-build-provenance.json").write_bytes(
             (self.derived_data / "refract-build-provenance.json").read_bytes())
+        if legacy:
+            trace.pop("native_resources", None)
+            self.write_producer_packet(raw / "iteration-trace.json", trace)
+            if scenario == "startup":
+                (run / METRICS_PATH).unlink()
+                legacy_native = {"sourceRevision": self.revision, "variant": variant, "scenario": scenario,
+                             "iteration": iteration, "metric": "XCTApplicationLaunchMetric", "unit": "ms",
+                             "durationMs": 10.0}
+                self.write_json(run / LEGACY_METRICS_PATH, {
+                    **legacy_native, "nativeMeasurement": legacy_native,
+                    "nativeMeasurementSha256": hashlib.sha256(json.dumps(
+                        legacy_native, sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+                self.write_json(run / TESTS_PATH, {"devices": [self.xctest_device()]})
         files = {}
         for directory, _, names in os.walk(run):
             for name in sorted(names):
@@ -261,14 +287,22 @@ class IterationManifestExportTest(unittest.TestCase):
         if scenario == "startup":
             accepted["xctest_metrics_sha256"] = hashlib.sha256(
                 (run / LEGACY_METRICS_PATH).read_bytes()).hexdigest()
-            accepted["normalized_metrics_sha256"] = hashlib.sha256(
-                (run / METRICS_PATH).read_bytes()).hexdigest()
+            if not legacy:
+                accepted["normalized_metrics_sha256"] = hashlib.sha256(
+                    (run / METRICS_PATH).read_bytes()).hexdigest()
         else:
             accepted["native_samples_sha256"] = trace["native_samples"]["sha256"]
-        self.write_json(run / "accepted-evidence.json", accepted)
-        files["accepted-evidence.json"] = {"bytes": (run / "accepted-evidence.json").stat().st_size,
-                                           "sha256": hashlib.sha256((run / "accepted-evidence.json").read_bytes()).hexdigest()}
-        self.write_json(run / "retained-file-hashes.json", {"schema": 1, "files": files})
+        if not legacy:
+            from finalize_iteration import finalize_iteration
+            metadata = self.base / f"metadata-{variant}-{scenario}-{iteration}.json"
+            self.write_json(metadata, {"target": self.target, "toolchain": self.toolchain,
+                                       "commands": ["synthetic already-acquired iteration"]})
+            finalize_iteration(run, self.derived_data, metadata)
+        else:
+            self.write_json(run / "accepted-evidence.json", accepted)
+            files["accepted-evidence.json"] = {"bytes": (run / "accepted-evidence.json").stat().st_size,
+                                               "sha256": hashlib.sha256((run / "accepted-evidence.json").read_bytes()).hexdigest()}
+            self.write_json(run / "retained-file-hashes.json", {"schema": 1, "files": files})
 
     def file_record(self, path):
         return {"path": path.relative_to(path.parents[1]).as_posix(), "bytes": path.stat().st_size,
@@ -300,13 +334,40 @@ class IterationManifestExportTest(unittest.TestCase):
                                    "marketingName": self.target["model"],
                                    "cpuType": {"name": self.target["architecture"]}}}]})
 
-    def replace_run_json(self, run, relative, payload):
+    def replace_run_json(self, run, relative, payload, rebind=True):
         self.write_json(run / relative, payload)
-        self.refresh_retained(run)
+        self.refresh_retained(run, rebind=rebind)
 
-    def refresh_retained(self, run):
+    def refresh_retained(self, run, rebind=True):
         accepted_path = run / "accepted-evidence.json"
         accepted = json.loads(accepted_path.read_text())
+        binding = accepted.get("producer_binding")
+        if rebind and binding is not None:
+            # A test that deliberately relocates or replaces a complete valid
+            # synthetic input must rebind every dependent reference. Negative
+            # binding tests bypass this helper and leave the mismatch intact.
+            for key, relative in (("receipt", "raw/iteration-trace.json"),
+                                  ("configuration", "iteration-trace-config.json")):
+                if (run / relative).is_file():
+                    binding[key] = {"path": relative, "sha256": self.file_record(run / relative)["sha256"]}
+            metrics_path = run / METRICS_PATH
+            if metrics_path.is_file() and "normalized_metrics" in binding:
+                normalized = json.loads(metrics_path.read_text())
+                provenance = normalized["provenance"]
+                for field, key in (("trace_receipt_sha256", "receipt"),
+                                   ("trace_configuration_receipt_sha256", "configuration")):
+                    provenance[field] = binding[key]["sha256"]
+                for role, reference in list(provenance["native_process_packets"].items()):
+                    reference["sha256"] = self.file_record(run / reference["path"])["sha256"]
+                binding["native_process_packets"] = provenance["native_process_packets"]
+                self.write_json(metrics_path, normalized)
+                binding["normalized_metrics"] = {"path": METRICS_PATH,
+                                                 "sha256": self.file_record(metrics_path)["sha256"]}
+            resources = binding["resources"]
+            for key, relative in (("original", "raw/native-resources.json"),
+                                  ("memory", "raw/native-memory.json"), ("binary", "raw/native-binary.json")):
+                if (run / relative).is_file():
+                    resources[key] = {"path": relative, "sha256": self.file_record(run / relative)["sha256"]}
         for relative in list(accepted["retained_files"]):
             path = run / relative
             if not path.exists():
@@ -455,7 +516,7 @@ class IterationManifestExportTest(unittest.TestCase):
         path = self.run_path("generated", "startup", 2) / BINARY_PATH
         path.unlink()
         self.refresh_retained(self.run_path("generated", "startup", 2))
-        with self.assertRaisesRegex(ExportError, "installed binary"):
+        with self.assertRaisesRegex(ExportError, "installed binary|ordinary file"):
             self.export()
         self.assertFalse(self.output.exists())
 
@@ -610,13 +671,15 @@ class IterationManifestExportTest(unittest.TestCase):
 
     def test_missing_selector_and_first_display_substitution_fail(self):
         run = self.run_path("generated", "startup", 2)
-        native = self.startup_payload("generated", 2)
+        native = json.loads((run / METRICS_PATH).read_text())
         native.pop("metric_selector")
-        self.replace_run_json(run, METRICS_PATH, native)
+        native.pop("provenance")
+        self.write_json(run / METRICS_PATH, native)
         accepted = json.loads((run / "accepted-evidence.json").read_text())
         accepted["normalized_metrics_sha256"] = hashlib.sha256((run / METRICS_PATH).read_bytes()).hexdigest()
-        self.replace_run_json(run, "accepted-evidence.json", accepted)
-        with self.assertRaisesRegex(KeyError, "provenance"):
+        accepted["producer_binding"]["normalized_metrics"]["sha256"] = accepted["normalized_metrics_sha256"]
+        self.replace_run_json(run, "accepted-evidence.json", accepted, rebind=False)
+        with self.assertRaisesRegex(ExportError, "producer provenance"):
             self.export()
         self.assertFalse(self.output.exists())
         normalized_path = run / METRICS_PATH
@@ -632,9 +695,48 @@ class IterationManifestExportTest(unittest.TestCase):
         accepted = json.loads((run / "accepted-evidence.json").read_text())
         accepted["xctest_tests_sha256"] = self.file_record(run / TESTS_PATH)["sha256"]
         self.replace_run_json(run, "accepted-evidence.json", accepted)
-        with self.assertRaisesRegex(ExportError, "firstDisplay timestamp is not"):
+        with self.assertRaisesRegex(ExportError, "retained JSON|producer binding"):
             self.export()
         self.assertFalse(self.output.exists())
+
+    def test_explicit_legacy_inputs_retain_174_measurements_and_118_resources(self):
+        self.root = self.base / "legacy-runs"
+        for variant in ("generated", "reference"):
+            for scenario in ("startup", "scroll", "stateUpdate"):
+                for iteration in range(2, 31):
+                    self.make_run(variant, scenario, iteration, legacy=True)
+        manifest = self.export(self.base / "legacy-export")
+        self.assertEqual(len(manifest["measurements"]), 174)
+        self.assertEqual(len(manifest["resources"]), 118)
+        startup = next(entry for entry in manifest["measurements"]
+                       if (entry["variant"], entry["scenario"], entry["iteration"])
+                       == ("generated", "startup", 2))
+        self.assertEqual(startup["value"], 10.0)
+        self.assertNotIn("metric_selector", startup)
+        run = self.run_path("generated", "startup", 2)
+        accepted = json.loads((run / "accepted-evidence.json").read_text())
+        self.replace_run_json(run, LEGACY_METRICS_PATH, {
+            "sourceRevision": self.revision, "variant": "generated", "scenario": "startup", "iteration": 2,
+            "firstDisplay": {"clock": "CACurrentMediaTime", "timestamp": "12345.25"}})
+        accepted["xctest_metrics_sha256"] = self.file_record(run / LEGACY_METRICS_PATH)["sha256"]
+        self.replace_run_json(run, "accepted-evidence.json", accepted)
+        with self.assertRaisesRegex((ExportError, EvidenceError), "firstDisplay timestamp is not"):
+            self.export(self.base / "legacy-first-display")
+
+    def test_old_frame_receipt_has_no_new_resource_binding(self):
+        self.root = self.base / "old-frame-runs"
+        for variant in ("generated", "reference"):
+            for scenario in ("startup", "scroll", "stateUpdate"):
+                for iteration in range(2, 31):
+                    self.make_run(variant, scenario, iteration, legacy=True)
+        manifest = self.export(self.base / "old-frame-export")
+        self.assertEqual(len(manifest["measurements"]), 174)
+        self.assertEqual(len(manifest["resources"]), 118)
+        current = self.run_path("generated", "scroll", 2)
+        result = json.loads((current / "raw/iteration-trace.json").read_text())
+        self.assertNotIn("native_resources", result)
+        samples = json.loads((current / "raw/native-samples.json").read_text())
+        self.assertEqual(samples["session"], 1)
 
     def test_corrupt_raw_array_cannot_be_relabelled_with_the_old_p99(self):
         run = self.run_path("generated", "scroll", 2)
@@ -813,6 +915,105 @@ class IterationManifestExportTest(unittest.TestCase):
         self.assertIn("measurements=174", stdout.getvalue())
         self.assertIn("resources=118", stdout.getvalue())
         self.assertTrue((self.output / "manifest.json").is_file())
+
+
+    def subTest(self, **kwargs):
+        import contextlib
+        return contextlib.nullcontext()
+
+    def assertIn(self, member, container, message=None):
+        if member not in container:
+            raise AssertionError(message or f"{member!r} not in {container!r}")
+
+    def assertNotIn(self, member, container, message=None):
+        if member in container:
+            raise AssertionError(message or f"{member!r} unexpectedly in {container!r}")
+
+    def assertIsNotNone(self, value, message=None):
+        if value is None:
+            raise AssertionError(message or "Expected a non-null value")
+
+    def assertIsInstance(self, value, kind, message=None):
+        if not isinstance(value, kind):
+            raise AssertionError(message or f"{value!r} is not {kind}")
+
+    def assertTrue(self, value, message=None):
+        if not value:
+            raise AssertionError(message or f"Expected truthy value, got {value!r}")
+
+    def assertFalse(self, value, message=None):
+        if value:
+            raise AssertionError(message or f"Expected false value, got {value!r}")
+
+    def assertEqual(self, actual, expected, message=None):
+        if actual != expected:
+            raise AssertionError(message or f"{actual!r} != {expected!r}")
+
+    def assertRaises(self, exception):
+        return _AssertRaises(exception)
+
+    def assertRaisesRegex(self, exception, pattern):
+        return _AssertRaises(exception, pattern)
+
+
+class _AssertRaises:
+    def __init__(self, exception, pattern=None):
+        self.exception = exception
+        self.pattern = pattern
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, error, traceback):
+        if kind is None:
+            raise AssertionError(f"Expected {self.exception}")
+        if not issubclass(kind, self.exception):
+            return False
+        import re
+        if self.pattern is not None and re.search(self.pattern, str(error)) is None:
+            raise AssertionError(f"{self.pattern!r} does not match {error}")
+        return True
+
+
+class IterationManifestExportTest(IterationManifestFixture, unittest.TestCase):
+    def __init__(self, methodName="runTest"):
+        unittest.TestCase.__init__(self, methodName)
+
+    def addCleanup(self, function):
+        unittest.TestCase.addCleanup(self, function)
+
+    def doCleanups(self):
+        unittest.TestCase.doCleanups(self)
+
+    def subTest(self, **kwargs):
+        return unittest.TestCase.subTest(self, **kwargs)
+
+    def assertTrue(self, value, message=None):
+        unittest.TestCase.assertTrue(self, value, message)
+
+    def assertFalse(self, value, message=None):
+        unittest.TestCase.assertFalse(self, value, message)
+
+    def assertEqual(self, actual, expected, message=None):
+        unittest.TestCase.assertEqual(self, actual, expected, message)
+
+    def assertIn(self, member, container, message=None):
+        unittest.TestCase.assertIn(self, member, container, message)
+
+    def assertNotIn(self, member, container, message=None):
+        unittest.TestCase.assertNotIn(self, member, container, message)
+
+    def assertIsNotNone(self, value, message=None):
+        unittest.TestCase.assertIsNotNone(self, value, message)
+
+    def assertIsInstance(self, value, kind, message=None):
+        unittest.TestCase.assertIsInstance(self, value, kind, message)
+
+    def assertRaises(self, exception):
+        return unittest.TestCase.assertRaises(self, exception)
+
+    def assertRaisesRegex(self, exception, pattern):
+        return unittest.TestCase.assertRaisesRegex(self, exception, pattern)
 
 
 if __name__ == "__main__":

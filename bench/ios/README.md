@@ -332,9 +332,49 @@ text. Normalized startup uses its embedded `metric_selector`. An optional `--sta
 for older normalized measurement arrays or when it exactly repeats that embedded selector; a conflicting external
 selector is rejected. It binds `source_revision`, `build_provenance_sha256` and a list of
 `{variant, scenario: "startup", iteration, index, value_sha256}`. `firstDisplay` remains only a monotonic
-completion timestamp and is never used as the startup scalar. The durable accepted-evidence finalizer must separately
-retain and bind the normalized metrics, its native packets and resource exports; this offline reader does not create
-that finalizer inventory.
+completion timestamp and is never used as the startup scalar. The durable accepted-evidence finalizer must separately retain and bind the normalized metrics, its native packets
+and resource exports. `finalize_iteration.py` is the offline implementation for current producer-shaped runs. It does
+not change the runner's pre-export `raw/iteration-trace.json`, add its stdout-only `native_launch_metric` to that
+receipt, acquire native data, or reconstruct a measurement. Its `--metadata` input supplies the acquisition-time
+target/toolchain observations and caller-asserted acquisition commands needed by the existing accepted-input reader;
+those observations are checked against the retained XCTest and target-probe exports. For example:
+
+```sh
+python3 -I bench/ios/finalize_iteration.py \
+  --run-directory <completed-current-producer-run> \
+  --derived-data <original-DerivedData> --metadata <finalizer-metadata.json>
+```
+
+The metadata object has exactly `target`, `toolchain` and `commands`, using the same target/toolchain shapes as the
+export environment below. The `target.udid` must match the receipt. This input is not a substitute for a raw artifact.
+
+### Acyclic finalization and compatibility
+
+1. The runner publishes the immutable receipt before launch-metric export. That receipt identifies the exact session,
+   revision, variant, scenario, iteration, native PID, target, build and resource references.
+2. The launch exporter validates the receipt, writes normalized `raw/metrics.json`, and stores the receipt and
+   configuration SHA-256 values in its provenance. This is the only receipt-to-metric hash direction.
+3. The offline finalizer checks that direction, the four exact native process packets, every original/selected
+   resource alias and the complete closed-file inventory. Its acceptance adds `producer_binding` with
+   `protocol=ios-producer-evidence-v1`, receipt/configuration references, native resource references and, for startup,
+   the normalized metric and native packet references. It never inserts a metric hash back into the receipt.
+4. Complete acceptance and inventory bytes are staged, flushed, `fsync`ed and checked through the same reader before
+   two exclusive no-clobber hard-link publications. The acceptance does not contain its own hash; the final inventory
+   binds its bytes. The pair is not a single atomic transaction: a crash or injected failure between links is
+   unfinished and is rejected by the reader. The finalizer cleans only newly created incomplete records, never an
+   existing record.
+
+The reader requires the binding whenever the receipt has current native-resource fields or startup has normalized
+metrics. Missing normalized startup evidence in such a run cannot fall back to the legacy raw array. Explicit older
+accepted inputs without those producer fields retain the legacy normalized startup object and selected resource JSON;
+they are not required to acquire a new composite resource receipt retrospectively. Current-producer resource packets,
+selector/PID/configuration identity, ordinary-file containment and byte aliases remain strict. The complete synthetic
+current and legacy matrices both retain exactly 174 measurements and 118 selected resources; neither supplies a native
+performance result or closes the device gate.
+
+```sh
+python3 -I bench/ios/finalize_iteration_test.py
+```
 
 ```sh
 python3 -I bench/ios/export_iteration_manifest.py \
