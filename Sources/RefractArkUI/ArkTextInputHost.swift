@@ -46,18 +46,26 @@ enum ArkTextInputHost {
             }
         }
         guard let draft = values["draft"], let focusRequest = values["focusRequest"],
-              let onDraftCommit = callbacks["onDraftCommit"], let onCommit = callbacks["onCommit"] else {
+              let onDraftCommit = callbacks["onDraftCommit"], let onCommit = callbacks["onCommit"],
+              let draftLabel = targetLabel("draft", target),
+              let focusRequestLabel = targetLabel("focusRequest", target),
+              let onDraftCommitLabel = targetLabel("onDraftCommit", target),
+              let onCommitLabel = targetLabel("onCommit", target) else {
             throw invalid(location, "The text-input host is missing a required input.")
         }
-        writer.line("NativeTextInputHost({")
+        writer.line("\(target.symbol)({")
         writer.depth += 1
-        writer.line("draft: \(draft),")
-        writer.line("onDraftChange: (value: string): void => { this.onDraftChange(value); },")
-        writer.line("focusRequest: \(focusRequest),")
-        writer.line("onDraftCommit: (value: string): void => { this.\(onDraftCommit)(value); },")
-        writer.line("onCommit: (): void => { \(onCommit) },")
+        writer.line("\(draftLabel): \(draft),")
+        writer.line("on\(draftLabel.prefix(1).uppercased() + draftLabel.dropFirst())Change: (value: string): void => { this.onDraftChange(value); },")
+        writer.line("\(focusRequestLabel): \(focusRequest),")
+        writer.line("\(onDraftCommitLabel): (value: string): void => { this.\(onDraftCommit)(value); },")
+        writer.line("\(onCommitLabel): (): void => { \(onCommit) },")
         writer.depth -= 1
         writer.line("})")
+    }
+
+    private static func targetLabel(_ source: String, _ target: NativeTarget) -> String? {
+        target.arguments.first(where: { $0.source == source })?.target
     }
 
     private static func invalid(_ location: SourceLocation?, _ message: String) -> Diagnostic {

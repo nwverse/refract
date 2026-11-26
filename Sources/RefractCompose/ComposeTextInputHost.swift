@@ -57,7 +57,11 @@ enum ComposeTextInputHost {
         }
         _ = try InteropMapping.validate(declaration: declaration, target: target, platform: .android,
                                         location: location)
-        context.imports.insert("com.example.refract.input.NativeTextInputHost")
+        if !target.module.isEmpty {
+            context.imports.insert("\(target.module).\(target.symbol)")
+        } else if target.symbol == Self.symbol {
+            context.imports.insert("com.example.refract.input.\(Self.symbol)")
+        }
         let modifierArgument = isRoot ? "\(modifierParameter ?? "modifier") = modifier" : nil
         var labels: [String: String] = [:]
         for binding in target.arguments {
@@ -66,9 +70,10 @@ enum ComposeTextInputHost {
             }
             labels[binding.source] = label
         }
-        out.open("NativeTextInputHost(")
-        out.line("\(try label("draft", labels)) = \(draft),")
-        out.line("onDraftChange = \(draftWriter),")
+        let draftLabel = try label("draft", labels)
+        out.open("\(target.symbol)(")
+        out.line("\(draftLabel) = \(draft),")
+        out.line("on\(draftLabel.uppercasingFirst())Change = \(draftWriter),")
         out.line("\(try label("focusRequest", labels)) = \(focusRequest),")
         out.line("\(try label("onDraftCommit", labels)) = { value -> \(onDraftCommit)(value) },")
         out.line("\(try label("onCommit", labels)) = { \(onCommit) },")
