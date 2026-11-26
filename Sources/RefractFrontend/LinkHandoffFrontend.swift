@@ -125,7 +125,15 @@ struct LinkHandoffFrontend {
 
     private func validateHost(_ host: String, at expression: ExprSyntax) -> Bool {
         let labels = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard host.count <= 253, labels.count >= 2, labels.allSatisfy({ label in
+        // URL parsers reserve a numeric final label for IPv4, including shortened and mixed-radix forms.
+        // A final label containing another letter, such as `1x`, is an ordinary DNS name.
+        let lastLabel = labels.last!
+        let isNumeric = lastLabel.utf8.allSatisfy { $0 >= 0x30 && $0 <= 0x39 }
+        let isHex = lastLabel.hasPrefix("0x") && lastLabel.utf8.dropFirst(2).allSatisfy {
+            $0 >= 0x30 && $0 <= 0x39 || $0 >= 0x61 && $0 <= 0x66
+        }
+        let hasNumericIPTerminator = isNumeric || isHex
+        guard !hasNumericIPTerminator, host.count <= 253, labels.count >= 2, labels.allSatisfy({ label in
             guard let first = label.first, let last = label.last,
                   first.isASCII, first.isLetter || first.isNumber,
                   last.isASCII, last.isLetter || last.isNumber else { return false }
