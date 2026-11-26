@@ -125,7 +125,11 @@ struct LinkHandoffFrontend {
 
     private func validateHost(_ host: String, at expression: ExprSyntax) -> Bool {
         let labels = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard host.count <= 253, labels.count >= 2, labels.allSatisfy({ label in
+        let isIPv4Literal = labels.count == 4 && labels.allSatisfy { label in
+            !label.isEmpty && label.utf8.allSatisfy { $0 >= 0x30 && $0 <= 0x39 }
+                && Int(label).map { $0 <= 255 } == true
+        }
+        guard !isIPv4Literal, host.count <= 253, labels.count >= 2, labels.allSatisfy({ label in
             guard let first = label.first, let last = label.last,
                   first.isASCII, first.isLetter || first.isNumber,
                   last.isASCII, last.isLetter || last.isNumber else { return false }

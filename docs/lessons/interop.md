@@ -11,6 +11,10 @@
   cancellation idempotent per request: replacing a destination can explicitly cancel and then dispose the old effect.
   Use current pending state in disposal/completion and assert no duplicate cancellation or cancellation on success.
   Keep destination/policy validation on both sides of native confirmation; never begin a dismissed request.
+  When a host grammar admits digits in DNS labels, explicitly reject numeric IP literals. A dotted quad passes an
+  ordinary lowercase-letter-or-digit label check; test an exactly allowlisted literal so the allowlist does not mask
+  the missing diagnostic, and preserve a numeric-containing DNS-name control. Apply the shared check to both
+  destination and policy before either backend writes output.
 - Prefer correcting pseudo-SwiftUI over adding a compatibility shim for it. `Button(verbatim:)` is not SwiftUI;
   use the ordinary action/label pair with `Text(verbatim:)` and reject the invalid initializer with a source-located
   diagnostic. The typed interop helpers above are different: they carry declared platform-only semantics while

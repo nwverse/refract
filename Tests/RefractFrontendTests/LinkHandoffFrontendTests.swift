@@ -61,6 +61,20 @@ func malformedOrUnsafeLinkInputFailsAtBuildTime(destination: String, code: Strin
     #expect(unit.diagnostics.map(\.code) == [code])
 }
 
+@Test func linkHandoffRejectsAnExactAllowlistedIPLiteral() {
+    let numericHost = "192.0.2.1"
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: linkSource(
+        destination: #"RefractLinkDestination.https(host: "\#(numericHost)", path: "/help")"#,
+        policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "\#(numericHost)")])"#)))
+    #expect(unit.diagnostics.map(\.code) == ["RFLINK002", "RFLINK002"])
+    #expect(unit.module.screens.isEmpty)
+
+    let dnsControl = Frontend.parse(SourceFile(path: "Input.swift", contents: linkSource(
+        destination: #"RefractLinkDestination.https(host: "router2.example.test", path: "/help")"#,
+        policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "router2.example.test")])"#)))
+    #expect(dnsControl.diagnostics.isEmpty)
+}
+
 @Test func aDestinationOutsideItsExactAllowlistIsRejected() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: linkSource(
         destination: #"RefractLinkDestination.https(host: "other.example.test", path: "/help")"#)))
