@@ -1,6 +1,9 @@
 import Testing
+import Foundation
 import RefractIR
 @testable import RefractFrontend
+import RefractCompose
+import RefractArkUI
 import RefractMapping
 
 @Test func textInputHostBuildsBoundedBindingAndModelCallbacks() throws {
@@ -77,6 +80,67 @@ func textInputHostRejectsIncompleteSignature(_ properties: String) {
                                        parameters: [.init(label: "onLink", type: .actionString)],
                                        arguments: [.init(source: "onLink", target: "onLink")])
     _ = try InteropMapping.validate(declaration: selection, target: selectionTarget, platform: .android)
+}
+
+@Test func textInputHostPreservesValidatedTargetSymbolsAndLabels() throws {
+    let directory = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/interop-text-input-host")
+    let input = try String(contentsOf: directory.appendingPathComponent("Input.swift"), encoding: .utf8)
+    let mapping = try Mapping.load(contentsOf: directory.appendingPathComponent("refract.json"))
+    var android = mapping.android
+    var harmonyOS = mapping.harmonyOS
+    android.imports = [NativeImport(module: "example.input.EditorHost", symbols: ["EditorHost"])]
+    harmonyOS.imports = [NativeImport(module: "example.input", symbols: ["EditorComponent"])]
+    let source = try #require(mapping.android.nativeComponents["NativeTextInputHost"])
+    let androidArguments = [
+        ArgumentBinding(source: "draft", target: "text"),
+        ArgumentBinding(source: "focusRequest", target: "focusToken"),
+        ArgumentBinding(source: "onDraftCommit", target: "submitDraft"),
+        ArgumentBinding(source: "onCommit", target: "submit"),
+    ]
+    let harmonySource = try #require(mapping.harmonyOS.nativeComponents["NativeTextInputHost"])
+    let harmonyArguments = [
+        ArgumentBinding(source: "draft", target: "draftValue"),
+        ArgumentBinding(source: "focusRequest", target: "focusToken"),
+        ArgumentBinding(source: "onDraftCommit", target: "submitDraft"),
+        ArgumentBinding(source: "onCommit", target: "submit"),
+    ]
+    android.nativeComponents["NativeTextInputHost"] = Component(
+        parameters: source.parameters, content: source.content, contentParameter: source.contentParameter,
+        modifiers: source.modifiers, target: "EditorHost", argumentStyle: source.argumentStyle,
+        arguments: androidArguments, modifierParameter: source.modifierParameter,
+        attributes: source.attributes, module: "example.input", kind: source.kind,
+        targetTypes: source.targetTypes)
+    harmonyOS.nativeComponents["NativeTextInputHost"] = Component(
+        parameters: harmonySource.parameters, content: harmonySource.content, contentParameter: harmonySource.contentParameter,
+        modifiers: harmonySource.modifiers, target: "EditorComponent", argumentStyle: harmonySource.argumentStyle,
+        arguments: harmonyArguments, modifierParameter: harmonySource.modifierParameter,
+        attributes: harmonySource.attributes, module: "example.input", kind: harmonySource.kind,
+        targetTypes: harmonySource.targetTypes)
+    let remapped = Mapping(android: android, harmonyOS: harmonyOS)
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: input), mapping: remapped)
+    #expect(unit.diagnostics.isEmpty)
+
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: remapped)
+    #expect(kotlin.contains("import example.input.EditorHost"))
+    #expect(kotlin.contains("EditorHost("))
+    #expect(kotlin.contains("text = draft,"))
+    #expect(kotlin.contains("onTextChange = onDraftChange,"))
+    #expect(kotlin.contains("focusToken = focusRequest,"))
+    #expect(kotlin.contains("submitDraft = { value -> model.commitDraft(value) },"))
+    #expect(kotlin.contains("submit = { model.commit() },"))
+    #expect(!kotlin.contains("NativeTextInputHost("))
+
+    let ark = try ArkUIBackend().generate(module: unit.module, mapping: remapped)
+    #expect(ark.contains("import { EditorComponent } from 'example.input';"))
+    #expect(ark.contains("EditorComponent({"))
+    #expect(ark.contains("draftValue: this.draft,"))
+    #expect(ark.contains("onDraftValueChange: (value: string): void => { this.onDraftChange(value); },"))
+    #expect(ark.contains("focusToken: this.focusRequest,"))
+    #expect(ark.contains("submitDraft: (value: string): void => { this.model.commitDraft(value); },"))
+    #expect(ark.contains("submit: (): void => { this.model.commit(); },"))
+    #expect(!ark.contains("NativeTextInputHost({"))
 }
 
 private let hostSource = """
