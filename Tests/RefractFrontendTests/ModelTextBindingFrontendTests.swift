@@ -75,6 +75,28 @@ func frontendRejectsMismatchedModelTextBinding(_ binding: String) {
     #expect(unit.module.screens.isEmpty)
 }
 
+@Test func frontendRejectsAsyncModelTextBindingSetter() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SearchResultsModel: RefractModel {
+        var searchText: String { get }
+        @refractAsync func setSearchText(_ value: String)
+    }
+    struct SearchScreen: View {
+        let model: SearchResultsModel
+        var body: some View {
+            TextField("search.results.placeholder", text: Binding(
+                get: { model.searchText }, set: { model.setSearchText($0) }
+            ))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["state.invalid_projection"])
+    #expect(unit.diagnostics[0].message == "Editable model text binding setter `setSearchText` must be synchronous and return Void; `@refractAsync` returns a native attempt result instead.")
+    #expect(unit.diagnostics[0].suggestion == "Remove `@refractAsync` from `setSearchText` and keep a synchronous Void setter; use `@refractAsync` only for a separately owned asynchronous attempt")
+    #expect(unit.diagnostics[0].location?.line == 8)
+    #expect(unit.module.screens.isEmpty)
+}
+
 @Test func frontendRejectsGetOnlyModelProjectionForTextInput() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol SearchResultsModel: RefractModel {

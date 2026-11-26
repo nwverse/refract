@@ -1,0 +1,1 @@
+Input.swift:9:55: error [state.invalid_projection]: Editable model text binding setter `setSearchText` must be synchronous and return Void; `@refractAsync` returns a native attempt result instead. Suggestion: Remove `@refractAsync` from `setSearchText` and keep a synchronous Void setter; use `@refractAsync` only for a separately owned asynchronous attempt

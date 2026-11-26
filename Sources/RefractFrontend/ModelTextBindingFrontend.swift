@@ -33,6 +33,13 @@ extension Builder {
               argument.expression.as(DeclReferenceExprSyntax.self)?.baseName.text == valueName else {
             return nil
         }
+        guard action.effect == nil else {
+            error("state.invalid_projection",
+                  "Editable model text binding setter `\(action.name)` must be synchronous and return Void; `@refractAsync` returns a native attempt result instead.",
+                  "Remove `@refractAsync` from `\(action.name)` and keep a synchronous Void setter; use `@refractAsync` only for a separately owned asynchronous attempt",
+                  at: expression)
+            return nil
+        }
         return Expression(.valueProperty(.modelScalarBinding(ModelScalarBinding(
             model: model, property: property, action: action.name))), type: .string,
             location: location(of: expression))

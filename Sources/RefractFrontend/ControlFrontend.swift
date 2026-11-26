@@ -179,14 +179,19 @@ extension Builder {
                   let field = declaration.field(named: member.declName.baseName.text) {
             value = Expression(.formField(form: declaration.name, field: field.name), type: .string,
                                location: location(of: member))
-        } else if let binding = modelTextBinding(projection) {
-            value = binding
         } else {
-            error("state.invalid_projection",
-                  "TextField requires a local/parent String binding, a declared form field or an explicit model String property and setter.",
-                  "Use `text: $name`, `text: $form.email`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })",
-                  at: projection)
-            return nil
+            let diagnosticCount = diagnostics.count
+            if let binding = modelTextBinding(projection) {
+                value = binding
+            } else {
+                if diagnostics.count == diagnosticCount {
+                    error("state.invalid_projection",
+                          "TextField requires a local/parent String binding, a declared form field or an explicit model String property and setter.",
+                          "Use `text: $name`, `text: $form.email`, or Binding(get: { model.searchText }, set: { model.setSearchText($0) })",
+                          at: projection)
+                }
+                return nil
+            }
         }
         let placeholder = Expression(.localizedText(LocalizedText(key: key)), type: .string,
                                     location: location(of: titleArgument.expression))
