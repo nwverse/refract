@@ -510,6 +510,10 @@
       "implementationStatus": "pending"
     },
     {
+      "path": "rejected-async-model-text-binding",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "rejected-binding-initializer",
       "implementationStatus": "ready"
     },
