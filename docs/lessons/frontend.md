@@ -71,7 +71,10 @@
   faithful without inventing a writable projection on a get-only protocol. Preserve the model property effect as well as
   its Swift `String` spelling: `@refractText` lowers to a nullable native value and cannot feed an editable String
   binding. Reject that getter instead of generating `State<String?>` or `string | null | undefined` for a nonoptional
-  native text control.
+  native text control. Keep the rejection in the model-binding parser instead of letting the generic TextField remedy
+  repeat the same rejected `Binding(get:set:)`: name the nullable `@refractText` boundary and suggest removing that
+  attribute for an editable property with its existing setter, or moving optional error/presence text to a separate
+  read-only property. Never replace the absent value with an editable empty-string fallback.
 - Nested typed scopes need an explicit owner. A message row and its block can have distinct identities even when their
   Swift closure parameters have the same spelling. Capture the checked parent when entering `ForEach(message.blocks)`,
   initialize the block declaration's scope before parsing its body, and restore both scopes on exit. Parsing the child

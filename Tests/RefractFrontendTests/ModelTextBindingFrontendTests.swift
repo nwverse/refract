@@ -91,6 +91,8 @@ func frontendRejectsMismatchedModelTextBinding(_ binding: String) {
     }
     """))
     #expect(unit.diagnostics.map(\.code) == ["state.invalid_projection"])
+    #expect(unit.diagnostics[0].message == "`@refractText` model property `searchText` is nullable on native platforms and cannot provide an editable String binding.")
+    #expect(unit.diagnostics[0].suggestion == "For an editable property, remove `@refractText` and retain its `setSearchText` action. Alternatively, move optional error or presence text to a separate read-only property")
     #expect(unit.diagnostics[0].location?.line == 8)
     #expect(unit.module.screens.isEmpty)
 }
