@@ -30,7 +30,10 @@ RefractLinkDestination.deepLink(scheme: "app+test", host: "router.example.test",
 scheme. The path is static data, not a URL template. No raw URL string, interpolation, model-produced URL,
 percent-decoding, query or fragment is accepted. The initial path grammar is `/` or absolute ASCII segments made of
 unreserved characters, with no empty, `.` or `..` segment and no trailing slash. Hosts are exact lowercase DNS names
-with at least two labels: no wildcard, suffix match, IP literal, port, user information or credentials. A scheme is
+with at least two labels: no wildcard, suffix match, IP literal, port, user information or credentials. The final
+label must not consist only of decimal digits or be `0x` followed only by hexadecimal digits (including none).
+This bounded syntax rejects the number-ending host forms that platform URL parsers reserve for IPv4, including
+shortened, octal, hexadecimal and mixed-radix spellings, without interpreting or normalizing the host. A scheme is
 at most 32 lowercase ASCII characters; `http`, `file`, `content`, `intent`, `javascript` and `data` are always
 rejected. These are deliberately bounded source rules, not a claim that a URL parser makes an arbitrary destination
 safe.

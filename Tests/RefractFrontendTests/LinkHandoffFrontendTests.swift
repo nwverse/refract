@@ -61,18 +61,47 @@ func malformedOrUnsafeLinkInputFailsAtBuildTime(destination: String, code: Strin
     #expect(unit.diagnostics.map(\.code) == [code])
 }
 
-@Test func linkHandoffRejectsAnExactAllowlistedIPLiteral() {
-    let numericHost = "192.0.2.1"
+@Test(arguments: [
+    "192.0.2.1",
+    "0177.0.0.1",
+    "127.1",
+    "2130706433",
+    "0x7f.0.0.1",
+    "0x7f.0.0x1",
+    "0x7f.0.0.0377",
+    "0x7f.0.0.0x",
+    "0x7f.1",
+    "0x7f000001",
+])
+func linkHandoffRejectsAnExactAllowlistedIPLiteral(host: String) {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: linkSource(
-        destination: #"RefractLinkDestination.https(host: "\#(numericHost)", path: "/help")"#,
-        policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "\#(numericHost)")])"#)))
+        destination: #"RefractLinkDestination.https(host: "\#(host)", path: "/help")"#,
+        policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "\#(host)")])"#)))
     #expect(unit.diagnostics.map(\.code) == ["RFLINK002", "RFLINK002"])
     #expect(unit.module.screens.isEmpty)
+}
 
-    let dnsControl = Frontend.parse(SourceFile(path: "Input.swift", contents: linkSource(
-        destination: #"RefractLinkDestination.https(host: "router2.example.test", path: "/help")"#,
-        policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "router2.example.test")])"#)))
-    #expect(dnsControl.diagnostics.isEmpty)
+@Test func aPolicyOnlyIPLiteralIsRejected() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: linkSource(
+        destination: #"RefractLinkDestination.https(host: "docs.example.test", path: "/help")"#,
+        policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "docs.example.test"), (scheme: "https", host: "0x7f.0.0x1")])"#)))
+    #expect(unit.diagnostics.map(\.code) == ["RFLINK002"])
+    #expect(unit.module.screens.isEmpty)
+}
+
+@Test(arguments: [
+    "router2.example.test",
+    "123.456.example",
+    "2-router.example.test",
+    "0x7f.0.0.1.example",
+    "0x7f.0.0.1x",
+    "example.0xdev",
+])
+func numericContainingDNSNamesRemainAccepted(host: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: linkSource(
+        destination: #"RefractLinkDestination.https(host: "\#(host)", path: "/help")"#,
+        policy: #"RefractLinkPolicy(allowed: [(scheme: "https", host: "\#(host)")])"#)))
+    #expect(unit.diagnostics.isEmpty)
 }
 
 @Test func aDestinationOutsideItsExactAllowlistIsRejected() {
