@@ -8,6 +8,11 @@ child-View declaration registry or let the general View visitor translate its bo
 components and can drop specialized callback arguments. Keep the specialized kind in the IR and dispatch on that kind
 at both frontend and backend boundaries.
 
+The presence of a `body` accessor does not establish this native behavior. Check the bounded `TextField` draft,
+`@FocusState` connection, token-driven focus update, done submit label and ordered draft/overall commit calls with
+SwiftSyntax nodes. An arbitrary body must not yield the same generated host call as the canonical implementation;
+this source contract still does not prove iOS runtime editing or another platform's IME behavior.
+
 ## Action types are not scalar value types
 
 `action` and `actionString` describe callback shapes. They cannot be decoded by `ValueType(rawValue:)`, and an Optional

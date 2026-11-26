@@ -41,7 +41,12 @@ struct TextInputHostFrontend {
                     continue
                 }
                 if name == "body" {
-                    hasBody = binding.accessorBlock != nil
+                    let bodyError = nativeBodyError(declaration, binding)
+                    hasBody = bodyError == nil
+                    if let bodyError {
+                        reject(&result, "The text-input host body \(bodyError).",
+                               "Use TextField(\"Message\", text: $draft).focused($isHostFocused).submitLabel(.done), update focus on focusRequest, then publish onDraftCommit(draft) before onCommit() in onSubmit", binding)
+                    }
                     continue
                 }
                 if name == "isHostFocused" {
@@ -63,6 +68,9 @@ struct TextInputHostFrontend {
             }
         }
         let names = Set(fields.keys)
+        if names == ["draft", "focusRequest", "onDraftCommit", "onCommit"], hasFocusState, !hasBody {
+            return result
+        }
         guard names == ["draft", "focusRequest", "onDraftCommit", "onCommit"], hasBody, hasFocusState else {
             reject(&result, "The text-input host must declare its complete five-input signature and SwiftUI body.",
                    "Supply draft, focusRequest, onDraftCommit and onCommit, plus private native focus state", node.name)
@@ -148,6 +156,105 @@ struct TextInputHostFrontend {
             guard input.count == 1 else { return nil }
             return input.first?.name.text
         }
+    }
+
+    /// Check the native implementation without translating it into generated child views.
+    /// Match syntax nodes rather than source text so ordinary whitespace and multiline closures
+    /// do not change acceptance; arbitrary modifier or statement behavior remains outside this ABI.
+    private func nativeBodyError(_ declaration: VariableDeclSyntax,
+                                 _ binding: PatternBindingSyntax) -> String? {
+        guard declaration.bindingSpecifier.tokenKind == .keyword(.var), declaration.attributes.isEmpty,
+              declaration.modifiers.isEmpty, declaration.bindings.count == 1,
+              binding.typeAnnotation?.type.trimmedDescription == "some View", binding.initializer == nil,
+              let accessors = binding.accessorBlock?.accessors,
+              case let .getter(statements) = accessors, statements.count == 1,
+              let expression = statements.first?.item.as(ExprSyntax.self) else {
+            return "must be a computed `some View` with one native TextField expression"
+        }
+        guard let onSubmitCall = expression.as(FunctionCallExprSyntax.self),
+              let onSubmitReceiver = modifierReceiver(onSubmitCall, named: "onSubmit"),
+              onSubmitCall.arguments.isEmpty, onSubmitCall.additionalTrailingClosures.isEmpty,
+              isOrderedSubmit(onSubmitCall.trailingClosure) else {
+            return "must finish with onSubmit publishing onDraftCommit(draft) before onCommit()"
+        }
+        guard let onChangeCall = onSubmitReceiver.as(FunctionCallExprSyntax.self),
+              let onChangeReceiver = modifierReceiver(onChangeCall, named: "onChange"),
+              onChangeCall.arguments.count == 1, onChangeCall.arguments.first?.label?.text == "of",
+              onChangeCall.arguments.first?.expression.trimmedDescription == "focusRequest",
+              onChangeCall.additionalTrailingClosures.isEmpty,
+              isFocusRequestChange(onChangeCall.trailingClosure) else {
+            return "must set isHostFocused to true on each changed focusRequest"
+        }
+        guard let submitLabelCall = onChangeReceiver.as(FunctionCallExprSyntax.self),
+              let submitLabelReceiver = modifierReceiver(submitLabelCall, named: "submitLabel"),
+              submitLabelCall.trailingClosure == nil, submitLabelCall.additionalTrailingClosures.isEmpty,
+              submitLabelCall.arguments.count == 1, submitLabelCall.arguments.first?.label == nil,
+              submitLabelCall.arguments.first?.expression.trimmedDescription == ".done" else {
+            return "must declare submitLabel(.done) before its focus-token observer"
+        }
+        guard let focusedCall = submitLabelReceiver.as(FunctionCallExprSyntax.self),
+              let input = modifierReceiver(focusedCall, named: "focused")?.as(FunctionCallExprSyntax.self),
+              focusedCall.trailingClosure == nil, focusedCall.additionalTrailingClosures.isEmpty,
+              isProjection(focusedCall.arguments, named: "isHostFocused") else {
+            return "must attach focused($isHostFocused) to the native input"
+        }
+        guard input.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == "TextField",
+              isDraftTextField(input) else {
+            return "must use TextField(\"Message\", text: $draft) without additional input arguments"
+        }
+        return nil
+    }
+
+    private func modifierReceiver(_ call: FunctionCallExprSyntax, named name: String) -> ExprSyntax? {
+        guard let member = call.calledExpression.as(MemberAccessExprSyntax.self),
+              member.declName.baseName.text == name, member.declName.argumentNames == nil else { return nil }
+        return member.base
+    }
+
+    private func isDraftTextField(_ call: FunctionCallExprSyntax) -> Bool {
+        guard call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty,
+              call.arguments.count == 2, call.arguments.first?.label == nil,
+              call.arguments.first?.expression.as(StringLiteralExprSyntax.self)?.representedLiteralValue == "Message",
+              let text = call.arguments.last, text.label?.text == "text",
+              let projection = text.expression.as(DeclReferenceExprSyntax.self) else { return false }
+        return projection.baseName.text == "$draft"
+    }
+
+    private func isProjection(_ arguments: LabeledExprListSyntax, named name: String) -> Bool {
+        guard arguments.count == 1, arguments.first?.label == nil,
+              let projection = arguments.first?.expression.as(DeclReferenceExprSyntax.self) else { return false }
+        return projection.baseName.text == "$" + name
+    }
+
+    private func isFocusRequestChange(_ closure: ClosureExprSyntax?) -> Bool {
+        guard let closure, closure.signature?.returnClause == nil,
+              let parameters = closure.signature?.parameterClause,
+              case let .simpleInput(parameters) = parameters,
+              parameters.map(\.name.tokenKind) == [.wildcard, .wildcard],
+              closure.statements.count == 1,
+              let expression = closure.statements.first?.item.as(ExprSyntax.self),
+              let sequence = expression.as(SequenceExprSyntax.self) else { return false }
+        let elements = Array(sequence.elements)
+        return elements.count == 3
+            && elements[0].as(DeclReferenceExprSyntax.self)?.baseName.text == "isHostFocused"
+            && elements[1].as(AssignmentExprSyntax.self) != nil
+            && elements[2].as(BooleanLiteralExprSyntax.self)?.literal.tokenKind == .keyword(.true)
+    }
+
+    private func isOrderedSubmit(_ closure: ClosureExprSyntax?) -> Bool {
+        guard let closure, closure.signature == nil, closure.statements.count == 2 else { return false }
+        return isCall(closure.statements.first!, name: "onDraftCommit", argument: "draft")
+            && isCall(closure.statements.last!, name: "onCommit", argument: nil)
+    }
+
+    private func isCall(_ statement: CodeBlockItemSyntax, name: String, argument: String?) -> Bool {
+        guard let call = statement.item.as(ExprSyntax.self)?.as(FunctionCallExprSyntax.self),
+              call.calledExpression.as(DeclReferenceExprSyntax.self)?.baseName.text == name,
+              call.trailingClosure == nil, call.additionalTrailingClosures.isEmpty,
+              call.arguments.count == (argument == nil ? 0 : 1) else { return false }
+        guard let argument else { return true }
+        return call.arguments.first?.label == nil
+            && call.arguments.first?.expression.as(DeclReferenceExprSyntax.self)?.baseName.text == argument
     }
 
     private func hostType(_ name: String, _ declaration: VariableDeclSyntax,
