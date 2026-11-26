@@ -137,3 +137,5 @@
 - Closed modifier actions need their current screen's model and full synchronous signature, not a
   module-wide name match. Check labels and parameter types and reject multiple matching model inputs;
   otherwise a drop/selection event can call an undeclared receiver or an incompatible native method.
+  Match Swift calls by `externalName` and type, but emit Kotlin named arguments with the generated
+  declaration's `localName`. ArkTS positional calls forward values, not Swift external-label names.

@@ -227,6 +227,38 @@ func dropTargetRejectsAnIncompatibleOrAsyncAction(_ declaration: String) {
     }
 }
 
+@Test func nativeActionExternalLabelsDoNotRequireMatchingLocalNames() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol Model: RefractModel {
+        func receiveDrop(kind: String, payload value: String)
+        func replaceSelection(start: Int, end: Int, replacement newText: String)
+    }
+    struct Screen: View {
+        let model: Model
+        @State private var text: String = ""
+        var body: some View {
+            VStack {
+                Text(verbatim: "Drop")
+                    .refractNativeModifier(.dropTarget(kind: "note", action: "receiveDrop"))
+                TextField("settings.display.name", text: $text)
+                    .refractNativeModifier(.textSelection(start: 0, end: 0, action: "replaceSelection"))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/v0-text-input/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("public fun receiveDrop(kind: String, value: String)"))
+    #expect(kotlin.contains("model.receiveDrop(kind = \"note\", value = text)"))
+    #expect(kotlin.contains("model.replaceSelection(start = updated.selection.start, end = updated.selection.end, newText = updated.text)"))
+    #expect(ark.contains("this.model.receiveDrop('note', payload);"))
+    #expect(ark.contains("this.model.replaceSelection(selectionStart, selectionEnd, this.text);"))
+}
+
 @Test func nativeActionsBindToTheCurrentScreenInsteadOfAnotherScreensModel() throws {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol ModelA: RefractModel { func receiveDrop(kind: String, payload: String) }

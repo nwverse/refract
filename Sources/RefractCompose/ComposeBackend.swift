@@ -661,13 +661,18 @@ public struct ComposeBackend: Sendable {
             }
         }
 
-        /// Resolves only the current screen's model with the exact closed native callback signature.
-        func currentModelName(forActionNamed name: String, parameters: [ModelParameter]) -> String? {
-            let matches = (currentScreen?.states ?? []).compactMap { state -> String? in
+        /// Resolves one current-screen model and the Kotlin labels for its exact closed native callback.
+        func currentModel(forActionNamed name: String, parameters: [ModelParameter]) -> (model: String, labels: [String])? {
+            let matches = (currentScreen?.states ?? []).compactMap { state -> (model: String, labels: [String])? in
                 guard case let .model(reference, _) = state,
                       let proto = models.first(where: { $0.name == reference.protocolName }),
-                      proto.actions.contains(where: { $0.name == name && $0.parameters == parameters && $0.effect == nil }) else { return nil }
-                return reference.propertyName
+                      let action = proto.actions.first(where: { action in
+                          action.name == name && action.effect == nil && action.parameters.count == parameters.count &&
+                              zip(action.parameters, parameters).allSatisfy { actual, expected in
+                                  actual.externalName == expected.externalName && actual.type == expected.type
+                              }
+                      }) else { return nil }
+                return (reference.propertyName, action.parameters.map(\.localName))
             }
             return matches.count == 1 ? matches[0] : nil
         }

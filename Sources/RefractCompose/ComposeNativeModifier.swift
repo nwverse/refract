@@ -45,7 +45,7 @@ struct ComposeNativeModifier {
                 suggestion: "Bind the TextField to `@State private var text: String`.", location: value.location)
         }
         // The model that owns the action must be a declared model on this screen.
-        guard let modelName = context.currentModelName(forActionNamed: action, parameters: [
+        guard let resolved = context.currentModel(forActionNamed: action, parameters: [
             ModelParameter(externalName: "start", localName: "start", type: .int),
             ModelParameter(externalName: "end", localName: "end", type: .int),
             ModelParameter(externalName: "replacement", localName: "replacement", type: .string),
@@ -72,7 +72,7 @@ struct ComposeNativeModifier {
         out.line("onValueChange = { updated ->")
         out.depth += 1
         out.line("\(name) = updated.text")
-        out.line("\(modelName).\(action)(start = updated.selection.start, end = updated.selection.end, replacement = updated.text)")
+        out.line("\(resolved.model).\(action)(\(resolved.labels[0]) = updated.selection.start, \(resolved.labels[1]) = updated.selection.end, \(resolved.labels[2]) = updated.text)")
         out.depth -= 1
         out.line("},")
         out.line("label = { Text(text = \(label)) },")
@@ -99,8 +99,8 @@ struct ComposeNativeModifier {
                     location: op.location)
             }
         }
-        let modelName: String? = try drop.map { drop in
-            guard let name = context.currentModelName(forActionNamed: drop.action, parameters: [
+        let resolvedDrop: (model: String, labels: [String])? = try drop.map { drop in
+            guard let resolved = context.currentModel(forActionNamed: drop.action, parameters: [
                 ModelParameter(externalName: "kind", localName: "kind", type: .string),
                 ModelParameter(externalName: "payload", localName: "payload", type: .string),
             ]) else {
@@ -109,7 +109,7 @@ struct ComposeNativeModifier {
                     suggestion: "Declare `func \(drop.action)(kind: String, payload: String)` on a `RefractModel` protocol used by this screen.",
                     location: node.sourceLocation)
             }
-            return name
+            return resolved
         }
         // The emitted code uses the Compose Foundation drag-and-drop API directly, which is experimental.
         // We depend only on the platform SDK, never on a runtime bridge.
@@ -147,7 +147,7 @@ struct ComposeNativeModifier {
             out.depth -= 1
             out.line(")")
         }
-        if let drop, let modelName {
+        if let drop, let resolvedDrop {
             context.imports.insert("androidx.compose.ui.draganddrop.DragAndDropEvent")
             context.imports.insert("androidx.compose.ui.draganddrop.DragAndDropTarget")
             context.imports.insert("androidx.compose.ui.draganddrop.toAndroidDragEvent")
@@ -166,7 +166,7 @@ struct ComposeNativeModifier {
             out.depth += 1
             out.line("val text = event.toAndroidDragEvent().clipData?.getItemAt(0)?.text?.toString() ?: return false")
             out.line("if (text.isEmpty()) return false")
-            out.line("\(modelName).\(drop.action)(kind = \"\(drop.kind)\", payload = text)")
+            out.line("\(resolvedDrop.model).\(drop.action)(\(resolvedDrop.labels[0]) = \"\(drop.kind)\", \(resolvedDrop.labels[1]) = text)")
             out.line("return true")
             out.depth -= 1
             out.line("}")

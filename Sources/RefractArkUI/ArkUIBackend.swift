@@ -642,7 +642,12 @@ struct Generation {
         let matches = (currentScreen?.states ?? []).compactMap { state -> String? in
             guard case let .model(reference, _) = state,
                   let proto = models.first(where: { $0.name == reference.protocolName }),
-                  proto.actions.contains(where: { $0.name == name && $0.parameters == parameters && $0.effect == nil }) else { return nil }
+                  proto.actions.contains(where: { action in
+                      action.name == name && action.effect == nil && action.parameters.count == parameters.count &&
+                          zip(action.parameters, parameters).allSatisfy { actual, expected in
+                              actual.externalName == expected.externalName && actual.type == expected.type
+                          }
+                  }) else { return nil }
             return reference.propertyName
         }
         return matches.count == 1 ? matches[0] : nil
