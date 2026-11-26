@@ -160,7 +160,13 @@ extension Builder {
         if hooks.isEmpty {
             lifecycle = nil
         } else {
-            guard Set(hooks) == Set(RefractLifecycleHooks.allCases), let host = lifecycleStates.first,
+            guard Set(hooks) == Set(RefractLifecycleHooks.allCases),
+                  hooks.count == RefractLifecycleHooks.allCases.count else {
+                error("RFHOST003", "Each reserved lifecycle hook must occur exactly once on the generated root.",
+                      "Use one .refractOnAppear and one .refractOnDisappear on the root view.", at: node.name)
+                return nil
+            }
+            guard let host = lifecycleStates.first,
                   let foreground = nativeHost(host, action: "foreground", at: node.name),
                   let background = nativeHost(host, action: "background", at: node.name) else { return nil }
             lifecycle = NativeLifecycle(foreground: foreground, background: background)
