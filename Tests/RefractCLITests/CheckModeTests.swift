@@ -184,12 +184,62 @@ import Foundation
     #expect(generated.status == 0, Comment(rawValue: generated.stderr))
     let originalKotlin = try Data(contentsOf: kotlin)
     let originalArkTS = try Data(contentsOf: arkTS)
+    let kotlinTarget = temporary.appendingPathComponent("matching.kt")
+    let arkTSTarget = temporary.appendingPathComponent("matching.ets")
+    for (destination, target) in [(kotlin, kotlinTarget), (arkTS, arkTSTarget)] {
+        try FileManager.default.moveItem(at: destination, to: target)
+        try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: target)
+    }
+    let matchingSymlinks = try runCheckCLI(arguments, executable: executable)
+    #expect(matchingSymlinks.status == 1)
+    #expect(matchingSymlinks.stderr.contains("unreadable committed output \(kotlin.path)"))
+    #expect(matchingSymlinks.stderr.contains("unreadable committed output \(arkTS.path)"))
+    #expect(matchingSymlinks.stderr.contains("directory, symbolic link or other non-regular file"))
+    #expect(matchingSymlinks.stderr.contains("remove or relocate it explicitly"))
+    #expect(!matchingSymlinks.stderr.contains("missing committed output"))
+    #expect(!matchingSymlinks.stderr.contains("stale committed output"))
+    #expect(!matchingSymlinks.stderr.contains("run `refract generate`"))
+    #expect(matchingSymlinks.stderr.contains("2 committed output(s)"))
+    for (destination, target, expected) in [(kotlin, kotlinTarget, originalKotlin), (arkTS, arkTSTarget, originalArkTS)] {
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: destination.path) == target.path)
+        #expect(try Data(contentsOf: target) == expected)
+    }
+
+    let missingKotlinTarget = temporary.appendingPathComponent("absent.kt")
+    let missingArkTSTarget = temporary.appendingPathComponent("absent.ets")
+    for (destination, target) in [(kotlin, missingKotlinTarget), (arkTS, missingArkTSTarget)] {
+        try FileManager.default.removeItem(at: destination)
+        try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: target)
+    }
+    let danglingSymlinks = try runCheckCLI(arguments, executable: executable)
+    #expect(danglingSymlinks.status == 1)
+    #expect(danglingSymlinks.stderr.contains("unreadable committed output \(kotlin.path)"))
+    #expect(danglingSymlinks.stderr.contains("unreadable committed output \(arkTS.path)"))
+    #expect(danglingSymlinks.stderr.contains("directory, symbolic link or other non-regular file"))
+    #expect(danglingSymlinks.stderr.contains("remove or relocate it explicitly"))
+    #expect(!danglingSymlinks.stderr.contains("missing committed output"))
+    #expect(!danglingSymlinks.stderr.contains("stale committed output"))
+    #expect(!danglingSymlinks.stderr.contains("run `refract generate`"))
+    #expect(danglingSymlinks.stderr.contains("2 committed output(s)"))
+    for (destination, target) in [(kotlin, missingKotlinTarget), (arkTS, missingArkTSTarget)] {
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: destination.path) == target.path)
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
+    #expect(try Data(contentsOf: kotlinTarget) == originalKotlin)
+    #expect(try Data(contentsOf: arkTSTarget) == originalArkTS)
+    for (destination, expected) in [(kotlin, originalKotlin), (arkTS, originalArkTS)] {
+        try FileManager.default.removeItem(at: destination)
+        try expected.write(to: destination)
+    }
+    #expect(try runCheckCLI(arguments, executable: executable).status == 0)
+
     let missing = temporary.appendingPathComponent("missing")
     let absent = try runCheckCLI(["check", "--input", input.path, "--android-out", missing.path,
                                   "--harmony-out", missing.path], executable: executable)
     #expect(absent.status == 1)
     #expect(absent.stderr.contains("missing committed output \(missing.appendingPathComponent("Input.kt").path)"))
     #expect(!absent.stderr.contains("unreadable committed output"))
+    #expect(absent.stderr.contains("run `refract generate`"))
 
     #if os(Linux)
     try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: kotlin.path)
@@ -197,7 +247,9 @@ import Foundation
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: kotlin.path)
     #expect(denied.status == 1)
     #expect(denied.stderr.contains("unreadable committed output \(kotlin.path)"))
-    #expect(!denied.stderr.contains("missing committed output"))
+    #expect(denied.stderr.contains("missing committed output") == false)
+    #expect(denied.stderr.contains("run `refract generate`") == false)
+    #expect(denied.stderr.contains("1 committed output(s)"))
     #endif
     #expect(try Data(contentsOf: kotlin) == originalKotlin)
     #expect(try Data(contentsOf: arkTS) == originalArkTS)

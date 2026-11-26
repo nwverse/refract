@@ -1,4 +1,14 @@
 import Foundation
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
+
+private enum CommittedOutputDestinationError: Error {
+    case missing
+    case nonRegular
+}
 
 struct CommittedOutputChecker {
     private let writeError: (String) -> Void
@@ -17,7 +27,16 @@ struct CommittedOutputChecker {
             let expected = Data(output.contents.utf8)
             let committed: Data
             do {
+                try requireRegularCommittedOutput(at: file)
                 committed = try Data(contentsOf: file)
+            } catch CommittedOutputDestinationError.missing {
+                writeError("refract: missing committed output \(file.path); run `refract generate` with the same inputs, mapping and output directories, then review and commit it")
+                differences += 1
+                continue
+            } catch CommittedOutputDestinationError.nonRegular {
+                writeError("refract: unreadable committed output \(file.path); it is a directory, symbolic link or other non-regular file; remove or relocate it explicitly before checking")
+                differences += 1
+                continue
             } catch let error as NSError where error.domain == NSCocoaErrorDomain
                 && error.code == NSFileReadNoSuchFileError {
                 writeError("refract: missing committed output \(file.path); run `refract generate` with the same inputs, mapping and output directories, then review and commit it")
@@ -47,6 +66,18 @@ struct CommittedOutputChecker {
         }
         guard differences == 0 else {
             throw CLIError.message("check failed: \(differences) committed output(s) are missing, unreadable, stale or unexpected")
+        }
+    }
+
+    private func requireRegularCommittedOutput(at file: URL) throws {
+        var info = stat()
+        guard file.path.withCString({ lstat($0, &info) }) == 0 else {
+            let error = NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            guard error.code == ENOENT else { throw error }
+            throw CommittedOutputDestinationError.missing
+        }
+        guard (info.st_mode & S_IFMT) == S_IFREG else {
+            throw CommittedOutputDestinationError.nonRegular
         }
     }
 }
