@@ -15,8 +15,16 @@ struct CommittedOutputChecker {
             let file = directory.appendingPathComponent(output.filename)
             expectedFiles[directory, default: []].insert(output.filename)
             let expected = Data(output.contents.utf8)
-            guard let committed = try? Data(contentsOf: file) else {
+            let committed: Data
+            do {
+                committed = try Data(contentsOf: file)
+            } catch let error as NSError where error.domain == NSCocoaErrorDomain
+                && error.code == NSFileReadNoSuchFileError {
                 writeError("refract: missing committed output \(file.path); run `refract generate` with the same inputs, mapping and output directories, then review and commit it")
+                differences += 1
+                continue
+            } catch {
+                writeError("refract: unreadable committed output \(file.path); fix its permissions or replace a non-regular destination explicitly before checking: \(error.localizedDescription)")
                 differences += 1
                 continue
             }
@@ -38,7 +46,7 @@ struct CommittedOutputChecker {
             }
         }
         guard differences == 0 else {
-            throw CLIError.message("check failed: \(differences) committed output(s) are missing, stale or unexpected")
+            throw CLIError.message("check failed: \(differences) committed output(s) are missing, unreadable, stale or unexpected")
         }
     }
 }

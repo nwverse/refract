@@ -146,6 +146,64 @@ import Foundation
     #endif
 }
 
+@Test func cliCheckDistinguishesUnreadableOutputsFromMissingFiles() throws {
+    #if os(Linux) || os(macOS)
+    let executable = checkCLIExecutable()
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        Issue.record("Build the refract executable before running CLI tests.")
+        return
+    }
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    let input = temporary.appendingPathComponent("Input.swift")
+    try Data("struct Input: View { var body: some View { Text(verbatim: \"Input\") } }".utf8).write(to: input)
+    let output = temporary.appendingPathComponent("output")
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    let arguments = ["check", "--input", input.path, "--android-out", output.path, "--harmony-out", output.path]
+    let kotlin = output.appendingPathComponent("Input.kt", isDirectory: true)
+    let arkTS = output.appendingPathComponent("Input.ets", isDirectory: true)
+
+    for destination in [kotlin, arkTS] {
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        try Data("keep".utf8).write(to: destination.appendingPathComponent("keep.txt"))
+    }
+    let directories = try runCheckCLI(arguments, executable: executable)
+    #expect(directories.status == 1)
+    #expect(directories.stderr.contains("unreadable committed output \(kotlin.path)"))
+    #expect(directories.stderr.contains("unreadable committed output \(arkTS.path)"))
+    #expect(!directories.stderr.contains("missing committed output"))
+    #expect(!directories.stderr.contains("run `refract generate`"))
+    #expect(directories.stderr.contains("2 committed output(s) are missing, unreadable, stale or unexpected"))
+    for destination in [kotlin, arkTS] {
+        #expect(try String(contentsOf: destination.appendingPathComponent("keep.txt"), encoding: .utf8) == "keep")
+        try FileManager.default.removeItem(at: destination)
+    }
+
+    let generated = try runCheckCLI(arguments.map { $0 == "check" ? "generate" : $0 }, executable: executable)
+    #expect(generated.status == 0, Comment(rawValue: generated.stderr))
+    let originalKotlin = try Data(contentsOf: kotlin)
+    let originalArkTS = try Data(contentsOf: arkTS)
+    let missing = temporary.appendingPathComponent("missing")
+    let absent = try runCheckCLI(["check", "--input", input.path, "--android-out", missing.path,
+                                  "--harmony-out", missing.path], executable: executable)
+    #expect(absent.status == 1)
+    #expect(absent.stderr.contains("missing committed output \(missing.appendingPathComponent("Input.kt").path)"))
+    #expect(!absent.stderr.contains("unreadable committed output"))
+
+    #if os(Linux)
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: kotlin.path)
+    let denied = try runCheckCLI(arguments, executable: executable)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: kotlin.path)
+    #expect(denied.status == 1)
+    #expect(denied.stderr.contains("unreadable committed output \(kotlin.path)"))
+    #expect(!denied.stderr.contains("missing committed output"))
+    #endif
+    #expect(try Data(contentsOf: kotlin) == originalKotlin)
+    #expect(try Data(contentsOf: arkTS) == originalArkTS)
+    #endif
+}
+
 private func checkCLIExecutable() -> URL {
     if let path = ProcessInfo.processInfo.environment["REFRACT_CLI_PATH"] {
         return URL(fileURLWithPath: path)
