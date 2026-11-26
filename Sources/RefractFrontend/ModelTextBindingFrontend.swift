@@ -24,7 +24,17 @@ extension Builder {
               base.baseName.text == model,
               let reference = currentModels.first(where: { $0.propertyName == model }),
               let contract = models.first(where: { $0.name == reference.protocolName }),
-              let action = contract.actions.first(where: { $0.name == member.declName.baseName.text }),
+              let contractProperty = contract.properties.first(where: { $0.name == property }) else {
+            return nil
+        }
+        guard contractProperty.effect == nil else {
+            error("state.invalid_projection",
+                  "`@refractText` model property `\(property)` is nullable on native platforms and cannot provide an editable String binding.",
+                  "For an editable property, remove `@refractText` and retain its `set\(property.prefix(1).uppercased())\(property.dropFirst())` action. Alternatively, move optional error or presence text to a separate read-only property",
+                  at: expression)
+            return nil
+        }
+        guard let action = contract.actions.first(where: { $0.name == member.declName.baseName.text }),
               action.name == "set" + property.prefix(1).uppercased() + property.dropFirst(),
               action.parameters.count == 1, action.parameters[0].type == .string,
               call.arguments.count == 1,

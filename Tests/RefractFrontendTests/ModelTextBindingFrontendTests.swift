@@ -75,6 +75,28 @@ func frontendRejectsMismatchedModelTextBinding(_ binding: String) {
     #expect(unit.module.screens.isEmpty)
 }
 
+@Test func frontendRejectsOptionalModelTextBinding() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol SearchResultsModel: RefractModel {
+        @refractText var searchText: String { get }
+        func setSearchText(_ value: String)
+    }
+    struct SearchScreen: View {
+        let model: SearchResultsModel
+        var body: some View {
+            TextField("search.results.placeholder", text: Binding(
+                get: { model.searchText }, set: { model.setSearchText($0) }
+            ))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.map(\.code) == ["state.invalid_projection"])
+    #expect(unit.diagnostics[0].message == "`@refractText` model property `searchText` is nullable on native platforms and cannot provide an editable String binding.")
+    #expect(unit.diagnostics[0].suggestion == "For an editable property, remove `@refractText` and retain its `setSearchText` action. Alternatively, move optional error or presence text to a separate read-only property")
+    #expect(unit.diagnostics[0].location?.line == 8)
+    #expect(unit.module.screens.isEmpty)
+}
+
 @Test func frontendRejectsGetOnlyModelProjectionForTextInput() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
     protocol SearchResultsModel: RefractModel {

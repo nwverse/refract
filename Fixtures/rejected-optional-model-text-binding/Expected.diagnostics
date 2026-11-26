@@ -1,0 +1,1 @@
+Input.swift:9:55: error [state.invalid_projection]: `@refractText` model property `searchText` is nullable on native platforms and cannot provide an editable String binding. Suggestion: For an editable property, remove `@refractText` and retain its `setSearchText` action. Alternatively, move optional error or presence text to a separate read-only property
