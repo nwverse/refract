@@ -182,6 +182,7 @@ extension Builder {
         }
         var steps: [AccessibilityTraversal.Step] = []
         var names: Set<String> = []
+        var predecessors: Set<String> = []
         for element in array.elements {
             guard let descriptor = element.expression.as(FunctionCallExprSyntax.self),
                   let member = descriptor.calledExpression.as(MemberAccessExprSyntax.self),
@@ -208,6 +209,11 @@ extension Builder {
                       names.contains(previous) else {
                     error("RFACCESS003", "`after` must name an earlier entry in the same traversal sequence.",
                           "Declare the predecessor before the dependent child; cycles cannot be represented.", at: arguments[1].expression)
+                    return nil
+                }
+                guard predecessors.insert(previous).inserted else {
+                    error("RFACCESS003", "An accessibility traversal predecessor must have at most one direct successor.",
+                          "Link the next child to the preceding entry, or keep source order when no override is needed.", at: arguments[1].expression)
                     return nil
                 }
                 after = previous

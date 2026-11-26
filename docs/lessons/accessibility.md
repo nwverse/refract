@@ -13,6 +13,10 @@
   Validate the complete acyclic source-order chain before emitting ids. Do not insert the current name into the
   predecessor set before validating `after`: that turns a self-reference into an apparently earlier predecessor.
   Test the frontend's typed IR directly as well as the CLI; backend rejection can mask a frontend acceptance bug.
+  A single ArkUI link cannot represent two children with the same `after` predecessor. Reject that branch rather than
+  emitting repeated property calls with ambiguous behavior. Compose's numeric traversal indices are not evidence that
+  a branched predecessor graph is portable. Test direct IR validators separately: name-based focused filters may
+  otherwise execute only the frontend test and report a false green.
 - `accessibilityStateDescription` (API 23), `accessibilityCustomActions` (API 26) and
   `accessibilityNextFocusId` (API 18) must be gated by an explicit consumer `minimumAPI`. Missing version evidence
   is a build-time diagnostic, never a reason to drop an accessibility operation silently.
