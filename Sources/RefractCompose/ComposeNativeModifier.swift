@@ -45,7 +45,11 @@ struct ComposeNativeModifier {
                 suggestion: "Bind the TextField to `@State private var text: String`.", location: value.location)
         }
         // The model that owns the action must be a declared model on this screen.
-        guard let modelName = context.currentModelName(forActionNamed: action) else {
+        guard let modelName = context.currentModelName(forActionNamed: action, parameters: [
+            ModelParameter(externalName: "start", localName: "start", type: .int),
+            ModelParameter(externalName: "end", localName: "end", type: .int),
+            ModelParameter(externalName: "replacement", localName: "replacement", type: .string),
+        ]) else {
             throw Diagnostic(code: "RFNATIVE005",
                 message: "Selection action `\(action)` must name a method on a declared model.",
                 suggestion: "Declare `func \(action)(start: Int, end: Int, replacement: String)` on a `RefractModel` protocol used by this screen.",
@@ -96,7 +100,10 @@ struct ComposeNativeModifier {
             }
         }
         let modelName: String? = try drop.map { drop in
-            guard let name = context.currentModelName(forActionNamed: drop.action) else {
+            guard let name = context.currentModelName(forActionNamed: drop.action, parameters: [
+                ModelParameter(externalName: "kind", localName: "kind", type: .string),
+                ModelParameter(externalName: "payload", localName: "payload", type: .string),
+            ]) else {
                 throw Diagnostic(code: "RFNATIVE005",
                     message: "Drop action `\(drop.action)` must name a method on a declared model.",
                     suggestion: "Declare `func \(drop.action)(kind: String, payload: String)` on a `RefractModel` protocol used by this screen.",
