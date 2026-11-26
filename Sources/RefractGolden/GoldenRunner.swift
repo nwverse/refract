@@ -142,6 +142,10 @@ public enum GoldenRunner {
         if let expected = fixture.expectedArkTS, result.arkTS != expected {
             differences.append("\(fixture.name): Expected.ets differs from regenerated ArkUI output.")
         }
+        if fixture.expectedDiagnostics != nil,
+           result.kotlin != nil || result.arkTS != nil || !result.additionalOutputs.isEmpty {
+            differences.append("\(fixture.name): A diagnostics-only case unexpectedly generated native output; record the diagnostic or provide both hand-reviewed native expectations.")
+        }
         for expected in fixture.additionalOutputs {
             guard let actual = result.additionalOutputs.first(where: { $0.source == expected.source }) else {
                 differences.append("\(fixture.name): Missing generated output for \(expected.source).")
