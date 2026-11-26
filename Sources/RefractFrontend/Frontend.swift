@@ -554,9 +554,15 @@ final class Builder: SyntaxVisitor {
         case "refractView":
             return platformView(call)
         default:
-            if let declaration = viewDeclarations[name], interop.declarations.contains(where: {
-                $0.name == name && $0.kind == .textInputHost
-            }) == false {
+            let isTextInputHost = viewDeclarations[name]?.inheritanceClause?.inheritedTypes.contains(where: {
+                $0.type.trimmedDescription == "RefractTextInputHost"
+            }) == true
+            if isTextInputHost, interop.invalidDeclarations.contains(name) {
+                error("RFINPUT002", "NativeTextInputHost calls require a valid specialized host declaration.",
+                      "Fix the RFINPUT001 host declaration error before generating its native calls", at: call)
+                return nil
+            }
+            if let declaration = viewDeclarations[name], !isTextInputHost {
                 return childView(call, declaration: declaration)
             }
             if interop.declarations.contains(where: { $0.name == name }) == false,
