@@ -177,6 +177,136 @@ import RefractArkUI
     #expect(kotlin.contains("if (text.isEmpty()) return false"))
 }
 
+// Closed native callback names must resolve to one current-screen model with the exact signature.
+@Test(arguments: [
+    "func receiveDrop(kind: Int, payload: Bool)",
+    "func receiveDrop(kind: String)",
+    "@refractAsync func receiveDrop(kind: String, payload: String)",
+    "func receiveDrop(_ kind: String, payload: String)",
+])
+func dropTargetRejectsAnIncompatibleOrAsyncAction(_ declaration: String) {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol Model: RefractModel { \(declaration) }
+    struct Screen: View {
+        let model: Model
+        var body: some View {
+            Text(verbatim: "Drop")
+                .refractNativeModifier(.dropTarget(kind: "note", action: "receiveDrop"))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    for backend in ["compose", "arkui"] {
+        let diagnostic = #expect(throws: Diagnostic.self) {
+            if backend == "compose" { _ = try ComposeBackend().generate(module: unit.module) }
+            else { _ = try ArkUIBackend().generate(module: unit.module) }
+        }
+        #expect(diagnostic?.code == "RFNATIVE005", "\(backend) accepted \(declaration)")
+    }
+}
+
+@Test func textSelectionRejectsAWrongSignatureOnBothBackends() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol Model: RefractModel { func replaceSelection(start: Int, end: Int) }
+    struct Screen: View {
+        let model: Model
+        @State private var text: String = ""
+        var body: some View {
+            TextField("settings.display.name", text: $text)
+                .refractNativeModifier(.textSelection(start: 0, end: 0, action: "replaceSelection"))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    for backend in ["compose", "arkui"] {
+        let diagnostic = #expect(throws: Diagnostic.self) {
+            if backend == "compose" { _ = try ComposeBackend().generate(module: unit.module) }
+            else { _ = try ArkUIBackend().generate(module: unit.module) }
+        }
+        #expect(diagnostic?.code == "RFNATIVE005", "\(backend) accepted an incomplete signature")
+    }
+}
+
+@Test func nativeActionExternalLabelsDoNotRequireMatchingLocalNames() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol Model: RefractModel {
+        func receiveDrop(kind: String, payload value: String)
+        func replaceSelection(start: Int, end: Int, replacement newText: String)
+    }
+    struct Screen: View {
+        let model: Model
+        @State private var text: String = ""
+        var body: some View {
+            VStack {
+                Text(verbatim: "Drop")
+                    .refractNativeModifier(.dropTarget(kind: "note", action: "receiveDrop"))
+                TextField("settings.display.name", text: $text)
+                    .refractNativeModifier(.textSelection(start: 0, end: 0, action: "replaceSelection"))
+            }
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/v0-text-input/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("public fun receiveDrop(kind: String, value: String)"))
+    #expect(kotlin.contains("model.receiveDrop(kind = \"note\", value = text)"))
+    #expect(kotlin.contains("model.replaceSelection(start = updated.selection.start, end = updated.selection.end, newText = updated.text)"))
+    #expect(ark.contains("this.model.receiveDrop('note', payload);"))
+    #expect(ark.contains("this.model.replaceSelection(selectionStart, selectionEnd, this.text);"))
+}
+
+@Test func nativeActionsBindToTheCurrentScreenInsteadOfAnotherScreensModel() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol ModelA: RefractModel { func receiveDrop(kind: String, payload: String) }
+    protocol ModelB: RefractModel { func receiveDrop(kind: String, payload: String) }
+    struct FirstScreen: View {
+        let modelA: ModelA
+        var body: some View { Text(verbatim: "First") }
+    }
+    struct DropScreen: View {
+        let modelB: ModelB
+        var body: some View {
+            Text(verbatim: "Drop")
+                .refractNativeModifier(.dropTarget(kind: "note", action: "receiveDrop"))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let kotlin = try ComposeBackend().generate(module: unit.module)
+    let ark = try ArkUIBackend().generate(module: unit.module)
+    #expect(kotlin.contains("modelB.receiveDrop(kind = \"note\", payload = text)"))
+    #expect(ark.contains("this.modelB.receiveDrop('note', payload);"))
+    #expect(!kotlin.contains("modelA.receiveDrop("))
+    #expect(!ark.contains("this.modelA.receiveDrop("))
+}
+
+@Test func nativeActionsRejectMultipleMatchingModelsOnOneScreen() {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol ModelA: RefractModel { func receiveDrop(kind: String, payload: String) }
+    protocol ModelB: RefractModel { func receiveDrop(kind: String, payload: String) }
+    struct Screen: View {
+        let modelA: ModelA
+        let modelB: ModelB
+        var body: some View {
+            Text(verbatim: "Drop")
+                .refractNativeModifier(.dropTarget(kind: "note", action: "receiveDrop"))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    for backend in ["compose", "arkui"] {
+        let diagnostic = #expect(throws: Diagnostic.self) {
+            if backend == "compose" { _ = try ComposeBackend().generate(module: unit.module) }
+            else { _ = try ArkUIBackend().generate(module: unit.module) }
+        }
+        #expect(diagnostic?.code == "RFNATIVE005", "\(backend) chose an arbitrary model")
+    }
+}
+
 // Payload value must be a typed String; an Int literal is rejected.
 @Test func dragPayloadRejectsNonStringValue() {
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """

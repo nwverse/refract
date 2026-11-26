@@ -32,6 +32,7 @@ public struct ComposeBackend: Sendable {
         try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &bodyWriter)
         for screen in module.screens {
             context.currentModals = screen.modals
+            context.currentScreen = screen
             context.currentNavigation = screen.navigation
             try emit(screen, into: &bodyWriter, context: &context)
             context.currentModals = []
@@ -634,6 +635,7 @@ public struct ComposeBackend: Sendable {
         var retainedItem: (name: String, type: String)?
         var currentModals: [ModalPresentation] = []
         var currentNavigation: NavigationOperation?
+        var currentScreen: Screen?
         var accessibilityTraversal: AccessibilityTraversal?
         var accessibilityTextValues: [String: Int] = [:]
 
@@ -659,19 +661,20 @@ public struct ComposeBackend: Sendable {
             }
         }
 
-        /// Looks up the declared model property that exposes a synchronous method `name`
-        /// whose signature matches the given typed scalar parameters, in declaration order.
-        func currentModelName(forActionNamed name: String) -> String? {
-            for screen in module.screens {
-                for state in screen.states {
-                    if case let .model(reference, _) = state,
-                       let proto = module.models.first(where: { $0.name == reference.protocolName }),
-                       proto.actions.contains(where: { $0.name == name }) {
-                        return reference.propertyName
-                    }
-                }
+        /// Resolves one current-screen model and the Kotlin labels for its exact closed native callback.
+        func currentModel(forActionNamed name: String, parameters: [ModelParameter]) -> (model: String, labels: [String])? {
+            let matches = (currentScreen?.states ?? []).compactMap { state -> (model: String, labels: [String])? in
+                guard case let .model(reference, _) = state,
+                      let proto = models.first(where: { $0.name == reference.protocolName }),
+                      let action = proto.actions.first(where: { action in
+                          action.name == name && action.effect == nil && action.parameters.count == parameters.count &&
+                              zip(action.parameters, parameters).allSatisfy { actual, expected in
+                                  actual.externalName == expected.externalName && actual.type == expected.type
+                              }
+                      }) else { return nil }
+                return (reference.propertyName, action.parameters.map(\.localName))
             }
-            return nil
+            return matches.count == 1 ? matches[0] : nil
         }
     }
 }

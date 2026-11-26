@@ -27,6 +27,7 @@ struct Generation {
     var listItemTypes: [String: String] = [:]
     var currentModals: [ModalPresentation] = []
     var currentNavigation: NavigationOperation?
+    var currentScreen: Screen?
 
     init(module: Module, mapping: Mapping, nativeSource: NativeSource,
          models: [ModelProtocol], itemTypes: [ItemType], enums: [EnumDeclaration]) {
@@ -96,6 +97,7 @@ struct Generation {
         try emitCollectionProjections(collectProjectedLists(module.screens.map(\.body)), into: &writer)
         for screen in module.screens {
             currentNavigation = try checkedNavigationContext(for: screen)
+            currentScreen = screen
             defer { currentNavigation = nil }
             if case let .navigationStack(stack, _) = screen.body {
                 try emitNavigationDestinations(stack, into: &writer)
@@ -534,7 +536,11 @@ struct Generation {
                 message: "A selection-aware TextInput must read its value from a local @State String.",
                 suggestion: "Bind the TextField to `@State private var text: String`.", location: value.location)
         }
-        guard let modelName = currentModelName(forActionNamed: action) else {
+        guard let modelName = currentModelName(forActionNamed: action, parameters: [
+            ModelParameter(externalName: "start", localName: "start", type: .int),
+            ModelParameter(externalName: "end", localName: "end", type: .int),
+            ModelParameter(externalName: "replacement", localName: "replacement", type: .string),
+        ]) else {
             throw Diagnostic(code: "RFNATIVE005",
                 message: "Selection action `\(action)` must name a method on a declared model.",
                 suggestion: "Declare `func \(action)(start: Int, end: Int, replacement: String)` on a `RefractModel` protocol used by this screen.",
@@ -581,7 +587,10 @@ struct Generation {
             }
         }
         let modelName: String? = try drop.map { drop in
-            guard let name = currentModelName(forActionNamed: drop.action) else {
+            guard let name = currentModelName(forActionNamed: drop.action, parameters: [
+                ModelParameter(externalName: "kind", localName: "kind", type: .string),
+                ModelParameter(externalName: "payload", localName: "payload", type: .string),
+            ]) else {
                 throw Diagnostic(code: "RFNATIVE005",
                     message: "Drop action `\(drop.action)` must name a method on a declared model.",
                     suggestion: "Declare `func \(drop.action)(kind: String, payload: String)` on a `RefractModel` protocol used by this screen.",
@@ -628,18 +637,20 @@ struct Generation {
         writer.depth -= 1
     }
 
-    /// Looks up a model property whose declared protocol exposes `name` as a synchronous action.
-    private func currentModelName(forActionNamed name: String) -> String? {
-        for screen in module.screens {
-            for state in screen.states {
-                if case let .model(reference, _) = state,
-                   let proto = module.models.first(where: { $0.name == reference.protocolName }),
-                   proto.actions.contains(where: { $0.name == name }) {
-                    return reference.propertyName
-                }
-            }
+    /// Resolves only the current screen's model with the exact closed native callback signature.
+    private func currentModelName(forActionNamed name: String, parameters: [ModelParameter]) -> String? {
+        let matches = (currentScreen?.states ?? []).compactMap { state -> String? in
+            guard case let .model(reference, _) = state,
+                  let proto = models.first(where: { $0.name == reference.protocolName }),
+                  proto.actions.contains(where: { action in
+                      action.name == name && action.effect == nil && action.parameters.count == parameters.count &&
+                          zip(action.parameters, parameters).allSatisfy { actual, expected in
+                              actual.externalName == expected.externalName && actual.type == expected.type
+                          }
+                  }) else { return nil }
+            return reference.propertyName
         }
-        return nil
+        return matches.count == 1 ? matches[0] : nil
     }
 }
 
