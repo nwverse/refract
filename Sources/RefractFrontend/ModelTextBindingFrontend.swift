@@ -24,6 +24,7 @@ extension Builder {
               base.baseName.text == model,
               let reference = currentModels.first(where: { $0.propertyName == model }),
               let contract = models.first(where: { $0.name == reference.protocolName }),
+              contract.properties.first(where: { $0.name == property })?.effect == nil,
               let action = contract.actions.first(where: { $0.name == member.declName.baseName.text }),
               action.name == "set" + property.prefix(1).uppercased() + property.dropFirst(),
               action.parameters.count == 1, action.parameters[0].type == .string,

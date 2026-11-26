@@ -68,7 +68,10 @@
 - A model-backed text `Binding` must tie the getter and setter to the same logical property, not merely to any String
   action on the model. Otherwise `get: { model.otherText }` can silently write `searchText`. The closed
   `set<Property>` convention, owner/type/label checks and a mismatched-property negative test keep this source path
-  faithful without inventing a writable projection on a get-only protocol.
+  faithful without inventing a writable projection on a get-only protocol. Preserve the model property effect as well as
+  its Swift `String` spelling: `@refractText` lowers to a nullable native value and cannot feed an editable String
+  binding. Reject that getter instead of generating `State<String?>` or `string | null | undefined` for a nonoptional
+  native text control.
 - Nested typed scopes need an explicit owner. A message row and its block can have distinct identities even when their
   Swift closure parameters have the same spelling. Capture the checked parent when entering `ForEach(message.blocks)`,
   initialize the block declaration's scope before parsing its body, and restore both scopes on exit. Parsing the child
