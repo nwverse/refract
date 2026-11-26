@@ -151,6 +151,9 @@ public enum CorpusLoader {
         guard primaryShape else {
             throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) needs both Expected.kt/Expected.ets, or only Expected.diagnostics; a multi-file case needs per-file Expected.<name> outputs.")
         }
+        if diagnostics?.isEmpty == true {
+            throw CorpusError(code: "fixture.shape", message: "Case \(entry.path) has an empty Expected.diagnostics; record the exact rejection or provide both expected native outputs.")
+        }
         var additionalInputs: [String: String] = [:]
         var additionalOutputs: [FixtureCase.Output] = []
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()

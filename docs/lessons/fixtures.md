@@ -19,6 +19,9 @@
 - **Do not invent default spacing.** An omitted SwiftUI stack `spacing` is not a universal 8 dp/fp value. Leave
   native default behavior intact unless the source supplies a typed spacing token. Explicit values still need a
   common typed representation accepted by both backends.
+- **A diagnostics-only golden must reject native output too.** Comparing only non-nil native expectations lets an
+  empty `Expected.diagnostics` accept successful generation with no output review. Reject that empty shape at load,
+  and make any native result for a diagnostics-only case a mismatch even when the expected diagnostic also differs.
 - **Generated-source staging must not own native support code.** `check_fixture_compilation.py` removes its Java and
   resource staging trees before each run. Hand-written native components belong in a separate source set (for
   example `src/native`), referenced by the Android `sourceSets.getByName("main").kotlin` container in AGP 9.
