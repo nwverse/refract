@@ -83,8 +83,13 @@ extension ArkModifiers {
                 suggestion: "Give each direct child one unique accessibilityIdentifier and list it in the parent's sequence.",
                 location: modifier.location)
         }
+        var predecessors: Set<String> = []
         for (index, step) in traversal.steps.enumerated() {
             guard let after = step.after else { continue }
+            guard predecessors.insert(after).inserted else {
+                throw Diagnostic(code: "RFACCESS003", message: "An accessibility traversal predecessor must have at most one direct successor.",
+                    suggestion: "Link the next child to the preceding entry, or keep source order when no override is needed.", location: modifier.location)
+            }
             guard traversal.steps[..<index].contains(where: { $0.name == after }) else {
                 throw Diagnostic(code: "RFACCESS003", message: "An accessibility traversal predecessor must precede its dependent child.",
                     suggestion: "Use an acyclic source-order sequence with `after` naming an earlier child.", location: modifier.location)

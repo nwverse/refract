@@ -67,8 +67,9 @@ accessibility focus. The shared source therefore uses the existing declared `ref
 - Android/HarmonyOS branches may put `.accessibilityTraversal([...])` on a direct stack. Entries use
   `.accessibility("name")` or `.accessibility("name", after: "predecessor")` and refer to literal
   `.accessibilityIdentifier("name")` values on direct Button, Toggle, TextField or Image children. Every named
-  actionable direct child must appear exactly once. A forward/cyclic predecessor, duplicate identifier, unknown name
-  or identifier on a decorative/non-merging container is a build-time error rather than a best-effort order.
+  actionable direct child must appear exactly once, and a predecessor may have at most one direct successor. A
+  forward/cyclic predecessor, duplicate identifier, unknown name or identifier on a decorative/non-merging container
+  is a build-time error rather than a best-effort order.
 
 On Compose the stack emits `isTraversalGroup = true`; named actionable children emit their own
 `isTraversalGroup = true` and zero-based `traversalIndex` because their native semantics already merge descendants.
