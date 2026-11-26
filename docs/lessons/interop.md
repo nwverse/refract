@@ -133,3 +133,7 @@
   so a cancelled drop never reaches the model. Unicode (non-BMP emoji + CJK) round-trips through
   `ClipData.newPlainText` unchanged; do not introduce a "safe ASCII" encoding — the typed String payload
   is the contract.
+
+- Closed modifier actions need their current screen's model and full synchronous signature, not a
+  module-wide name match. Check labels and parameter types and reject multiple matching model inputs;
+  otherwise a drop/selection event can call an undeclared receiver or an incompatible native method.
