@@ -35,11 +35,57 @@ import RefractArkUI
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Fixtures/v0-text-input/refract.json"))
     let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
-    #expect(kotlin.contains("TextFieldValue(text = text, selection = TextRange(0, 0))"))
+    #expect(kotlin.contains("value = textSelectionValue,"))
+    #expect(kotlin.contains("val textChanged = updated.text != textSelectionValue.text"))
+    #expect(kotlin.contains("textSelectionValue = updated"))
+    #expect(kotlin.contains("if (textChanged) {"))
     #expect(kotlin.contains("model.replaceSelection(start = updated.selection.start, end = updated.selection.end, replacement = updated.text)"))
-    let ark = try ArkUIBackend().generate(module: unit.module, mapping: mapping)
-    #expect(ark.contains("onTextSelectionChange"))
-    #expect(ark.contains("this.model.replaceSelection(selectionStart, selectionEnd, this.text);"))
+    let arkDiagnostic = #expect(throws: Diagnostic.self) { try ArkUIBackend().generate(module: unit.module, mapping: mapping) }
+    #expect(arkDiagnostic?.code == "RFNATIVE005")
+    #expect(arkDiagnostic?.message.contains("atomically forward") == true)
+}
+
+// Selection movement keeps the native TextFieldValue without notifying the replacement action.
+@Test func composeSelectionMovementIsNotATextReplacement() throws {
+    let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: """
+    protocol Model: RefractModel {
+        func replaceSelection(start: Int, end: Int, replacement: String)
+    }
+    struct Screen: View {
+        let model: Model
+        @State private var text: String = "abc"
+        var body: some View {
+            TextField("settings.display.name", text: $text)
+                .refractNativeModifier(.textSelection(start: 1, end: 2, action: "replaceSelection"))
+        }
+    }
+    """))
+    #expect(unit.diagnostics.isEmpty)
+    let mapping = try Mapping.load(contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/v0-text-input/refract.json"))
+    let kotlin = try ComposeBackend().generate(module: unit.module, mapping: mapping)
+    #expect(kotlin.contains("TextFieldValue(text = text, selection = TextRange(1, 2))"))
+    let action = try #require(kotlin.range(of: "model.replaceSelection("))
+    let editGate = try #require(kotlin.range(of: "if (textChanged) {"))
+    let retainedValue = try #require(kotlin.range(of: "textSelectionValue = updated"))
+    #expect(retainedValue.upperBound < editGate.lowerBound)
+    #expect(editGate.upperBound <= action.lowerBound)
+    #expect(!kotlin.contains("if (updated.selection.start"))
+}
+
+@Test func selectionComposeGoldenPreservesTheTextEditBoundary() throws {
+    let fixture = FixtureCase(name: "selection-dragdrop", status: .ready,
+        input: try String(contentsOfFile: "Fixtures/selection-dragdrop/Input.swift", encoding: .utf8),
+        mapping: try String(contentsOfFile: "Fixtures/selection-dragdrop/refract.json", encoding: .utf8),
+        expectedKotlin: nil, expectedArkTS: nil, expectedDiagnostics: nil)
+    let result = try GoldenRunner.generate(fixture)
+    #expect(result.diagnostics.isEmpty, Comment(rawValue: result.renderedDiagnostics))
+    let kotlin = try #require(result.kotlin)
+    let expected = try String(contentsOfFile: "Fixtures/selection-dragdrop/Expected.kt", encoding: .utf8)
+    #expect(kotlin == expected)
+    let ark = try #require(result.arkTS)
+    #expect(!ark.contains("replaceSelection(selectionStart"))
 }
 
 // Selection edits must bind to a local @State String, not to a parent binding or a model property.

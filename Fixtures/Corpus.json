@@ -546,6 +546,10 @@
       "implementationStatus": "ready"
     },
     {
+      "path": "selection-arkui-reject-text-edit",
+      "implementationStatus": "ready"
+    },
+    {
       "path": "selection-dragdrop",
       "implementationStatus": "ready"
     },

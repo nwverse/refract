@@ -54,9 +54,10 @@ leaking into the generated code.
 
 ### Compose (`Sources/RefractCompose/ComposeNativeModifier.swift`)
 
-- `textSelection` lowers to `TextField(value = TextFieldValue(text, selection = TextRange(start, end)))`
-  whose `onValueChange` writes the new text into `@State` and calls the declared model action with the
-  updated `selection.start`/`selection.end`.
+- `textSelection` initializes one remembered `TextFieldValue` with the declared range. Its `onValueChange`
+  retains the complete native value, writes the new text into `@State`, and calls the declared model action
+  with the updated `selection.start`/`selection.end` only when the text actually changed. Selection-only
+  movement invokes no model action and does not reset the native range to the initial declaration.
 - `dragPayload` lowers to `Modifier.dragAndDropSource { DragAndDropTransferData(ClipData.newPlainText(kind, value)) }`.
   `ClipData.newPlainText` is the Android SDK primitive for a plain-text clip; no URI is constructed.
 - `dropTarget` lowers to `Modifier.dragAndDropTarget(...)` with a `remember`ed `DragAndDropTarget` whose
@@ -66,8 +67,12 @@ leaking into the generated code.
 
 ### ArkUI (`Sources/RefractArkUI/ArkUIBackend.swift`)
 
-- `textSelection` lowers to `TextInput({ text })` with `.onTextSelectionChange((start, end) => ...)` calling
-  the declared model action with the current text.
+- `textSelection` must be attached inside the explicit Compose branch of `refractView`; the same iOS
+  branch retains the ordinary native declaration. Attaching it directly to a `TextField` in a shared or
+  HarmonyOS branch is an `RFNATIVE005` build-time diagnostic because the supported `TextInput` callbacks
+  do not atomically supply the post-edit selection and replacement text. The generator does not infer
+  callback ordering or treat selection-only movement as a replacement; an explicitly mapped app-owned
+  native text-edit host is the alternative when a HarmonyOS screen needs that edit callback.
 - `dragPayload` lowers to `.draggable(true)` plus `.onDragStart((event) => event.setData({ [kind]: value }))`.
 - `dropTarget` lowers to `.allowDrop([{ type: kind }])` plus `.onDrop` that gates on `payload.length > 0`.
 
@@ -81,16 +86,20 @@ leaking into the generated code.
   are the platform toolkit's. The generated code only supplies the typed payload and the callback.
 - **Cancellation**: a cancelled drag (no drop event) calls nothing; a drop with an empty payload is gated
   in the generated wrapper before the model action is invoked. The model never sees empty payloads.
+  A selection-only movement is not a text replacement and does not call `replaceSelection`.
 
 ## Evidence
 
-- **Golden fixtures** (`Fixtures/selection-dragdrop/`): a single Swift input that uses all three operations,
-  with the generated Kotlin and ArkTS committed and diffed by the golden test runner.
-- **Rejected fixture** (`Fixtures/selection-reject-uri-payload/`): a non-`String` payload (an `Int` literal
-  standing in for an arbitrary object) is rejected at parse time with `RFNATIVE005`.
-- **Frontend unit tests** (`Tests/RefractFrontendTests/SelectionDragDropTests.swift`): 11 tests covering
-  typed payload acceptance, kind-identifier validation, undeclared-action rejection, receiver-type
-  validation, and Unicode payload round-trips.
+- **Golden fixtures** (`Fixtures/selection-dragdrop/`): one Swift input that uses all three operations.
+  The Compose text-selection declaration is in the explicit Compose branch; HarmonyOS explicitly selects
+  its ordinary native `TextInput` without pretending to support the selection action. Generated Kotlin
+  and ArkTS are committed and diffed by the golden runner.
+- **Rejected fixtures** (`Fixtures/selection-reject-uri-payload/` and
+  `Fixtures/selection-arkui-reject-text-edit/`): a non-`String` payload and the unsupported direct ArkUI
+  selection-edit lowering produce `RFNATIVE005` diagnostics instead of partial native output.
+- **Frontend unit tests** (`Tests/RefractFrontendTests/SelectionDragDropTests.swift`) cover typed payload
+  acceptance, kind-identifier validation, undeclared-action rejection, receiver-type validation, Unicode
+  payloads, Compose selection-only movement without a model callback, and the explicit ArkUI diagnostic.
 - **Android Kotlin compilation**: `Fixtures/selection-dragdrop/Expected.kt` is staged by
   `scripts/check_fixture_compilation.py` and compiled by `./gradlew :fixtures:compileDebugKotlin`
   in `examples/android/`. This is a compile-only gate; no emulator or device is involved.
@@ -111,9 +120,8 @@ leaking into the generated code.
 
 - The generated Kotlin compiles against `androidx.compose.foundation:foundation` via the standard BOM
   pinned in `examples/android/fixtures/build.gradle.kts`. Compose drag-and-drop is experimental; the
-  `@OptIn` annotation makes that explicit at the file level.
-- The generated ArkTS uses `onTextSelectionChange` (API 12+) and `onDragStart`/`onDrop`. The HarmonyOS
-  toolchain is not installed on the verification machine, so ArkTS compilation is **not verified**;
-  the ArkTS output is reviewed as source against the documented API surface.
+  `@OptIn` annotation makes that explicit at the file level. ArkUI `onDragStart`/`onDrop` remains
+  source-only: the authorized HarmonyOS compiler is unavailable, and ArkUI `textSelection` is explicitly
+  rejected rather than presented as compiled or runtime-verified behavior.
 - No emulator, device or simulator is used; native evidence is source-level Kotlin compilation plus
   Native JVM unit tests of the gating logic.

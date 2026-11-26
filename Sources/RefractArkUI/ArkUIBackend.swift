@@ -519,17 +519,17 @@ struct Generation {
 
     // MARK: - Selection, drag and drop
 
-    /// ArkUI selection editing lowers to a `TextInput` whose text is driven by `@State` and whose
-    /// `onTextSelectionChange` callback invokes the declared model action with (start, end, replacement).
+    /// The available callbacks cannot atomically capture an edit's resulting selection and replacement text.
+    /// Reject rather than misreporting native selection movement as a model-owned replacement.
     func emitArkSelectionField(_ node: ViewNode, start: Expression, end: Expression, action: String,
                                into writer: inout ArkWriter, item: String?, mapping: Mapping) throws {
-        guard case let .textInput(placeholder, value, modifiers, location) = node else {
+        guard case let .textInput(_, value, _, location) = node else {
             throw Diagnostic(code: "RFNATIVE005",
                 message: "Text selection editing requires a TextField receiver.",
                 suggestion: "Attach `.textSelection(start:end:action:)` directly to the TextField it edits.",
                 location: node.sourceLocation)
         }
-        guard case let .valueProperty(.state(name)) = value.value else {
+        guard case .valueProperty(.state) = value.value else {
             throw Diagnostic(code: "RFNATIVE005",
                 message: "A selection-aware TextInput must read its value from a local @State String.",
                 suggestion: "Bind the TextField to `@State private var text: String`.", location: value.location)
@@ -540,24 +540,13 @@ struct Generation {
                 suggestion: "Declare `func \(action)(start: Int, end: Int, replacement: String)` on a `RefractModel` protocol used by this screen.",
                 location: location)
         }
-        var arguments = ["text: this.\(name)"]
-        if let placeholder {
-            arguments.insert("placeholder: \(try ArkExpression.emit(placeholder, mapping: mapping))", at: 0)
-        }
-        writer.line("TextInput({ \(arguments.joined(separator: ", ")) })")
-        writer.depth += 1
-        writer.open(".onChange((value: string) =>")
-        writer.line("this.\(name) = value;")
-        writer.close(suffix: ")")
-        let startExpr = try emitLocalExpression(start, item: item, mapping: mapping)
-        let endExpr = try emitLocalExpression(end, item: item, mapping: mapping)
-        writer.open(".onTextSelectionChange((selectionStart: number, selectionEnd: number) =>")
-        writer.line("this.\(modelName).\(action)(selectionStart, selectionEnd, this.\(name));")
-        writer.close(suffix: ")")
-        // Touch the typed expressions so unused references are validated.
-        _ = startExpr; _ = endExpr
-        writer.line(try ArkModifiers.emit(modifiers, item: item, mapping: mapping), unlessEmpty: true)
-        writer.depth -= 1
+        _ = currentModelName(forActionNamed: action)
+        _ = try emitLocalExpression(start, item: item, mapping: mapping)
+        _ = try emitLocalExpression(end, item: item, mapping: mapping)
+        throw Diagnostic(code: "RFNATIVE005",
+            message: "ArkUI cannot atomically forward a text edit's replacement and resulting selection with the supported callback API.",
+            suggestion: "Use a mapped app-owned native text-edit host so selection-only movement remains native; do not treat selection movement as a replacement.",
+            location: location)
     }
 
     /// ArkUI drag and drop lower to `.draggable(true)` plus `onDragStart` for the source and

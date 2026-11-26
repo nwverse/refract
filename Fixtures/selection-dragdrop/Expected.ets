@@ -19,9 +19,6 @@ export struct SelectionDropScreen {
         .onChange((value: string) => {
           this.draft = value;
         })
-        .onTextSelectionChange((selectionStart: number, selectionEnd: number) => {
-          this.model.replaceSelection(selectionStart, selectionEnd, this.draft);
-        })
       Stack() {
         Text('Drag me')
       }
