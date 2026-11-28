@@ -98,6 +98,13 @@ a hosted retry. This fixture correction does not diagnose a separate saved-path 
 XCTest stderr need the retained recorder output and command log. Keep the production reader join and exact saved-path
 check intact, and do not claim that an unrelated hosted failure is fixed without reproducing its actual output.
 
+The ordinary stop handshake also needs one finalization path. A synthetic recorder that observes `recorder-stop` and
+then falls off the end of its script exits with status 0 without publishing the exact saved-package line. A runner can
+correctly reject that status-0 process even though the recorder never received SIGINT. Route both the signal handlers
+and the ordinary stop path through the same `finish()` function, and gate a real `Session.capture` regression so the
+recorder's natural exit is observed before `poll()`; the old fixture must fail specifically on the missing saved path.
+Do not add a sleep, send an unnecessary signal, weaken the exact-path gate, or change the production runner.
+
 A Swift `[String: Any]` expectation containing a JSON nested dictionary cannot be checked by a comparator that only
 handles scalar strings and integers. Do not add a blanket recursive `Any` comparison or numeric tolerance to repair
 such a handshake: numeric JSON decoding may bridge through `NSNumber`, and a second JSON writer may choose a different

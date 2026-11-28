@@ -219,12 +219,9 @@ if {recorder_stop_status!r}:
     while not (control / "completion.json").exists():
         time.sleep(0.001)
     sys.exit({recorder_stop_status!r})
-if {write_trace!r}:
-    trace = pathlib.Path(output)
-    (trace / "Data").mkdir(parents=True, exist_ok=True)
-    (trace / "Data" / "samples.bin").write_bytes(b"synthetic package member")
 while not (control / "recorder-stop").exists():
     time.sleep(0.01)
+finish(0)
 ''')
         self.process = subprocess.Popen(
             ["python3", "-I", str(app_script), str(self.root / "control")],
@@ -286,6 +283,39 @@ class StopRaceRecorder:
 
     def communicate(self, timeout):
         return "", ""
+
+
+class NaturalExitRecorder:
+    """Observe a recorder's ordinary stop only after its child exits naturally."""
+
+    def __init__(self, process, stop_path):
+        self.process = process
+        self.stop_path = stop_path
+        self.pid = process.pid
+        self.stdout = process.stdout
+        self.returncode = None
+        self.signals = []
+
+    def poll(self):
+        if self.returncode is None:
+            self.returncode = self.process.poll()
+            if self.returncode is None and self.stop_path.exists():
+                self.returncode = self.process.wait(timeout=5)
+        return self.returncode
+
+    def send_signal(self, signal_number):
+        self.signals.append(signal_number)
+        self.process.send_signal(signal_number)
+
+    def wait(self, timeout):
+        self.returncode = self.process.wait(timeout=timeout)
+        return self.returncode
+
+    def kill(self):
+        self.process.kill()
+
+    def communicate(self, timeout):
+        return self.process.communicate(timeout=timeout)
 
 
 class IterationTraceRunnerTest(unittest.TestCase):
@@ -1458,6 +1488,27 @@ while True:
             self.capture(session)
         self.assertFalse((self.root / "raw/generated-scroll-2.trace.zip").exists())
         self.assertTrue((self.root / "raw/completion.json").is_file())
+
+    def test_natural_exit_after_stop_finalizes_the_exact_package(self):
+        session = self.launch()
+        base_factory = self.recorder.recorder_factory
+        observed = []
+
+        def natural_exit_factory(command, stream):
+            recorder = NaturalExitRecorder(
+                base_factory(command, stream), self.root / "control/recorder-stop")
+            observed.append(recorder)
+            return recorder
+
+        self.recorder.recorder_factory = natural_exit_factory
+        result = self.capture(session)
+        self.recorder.process.wait(timeout=5)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0].returncode, 0)
+        self.assertEqual(observed[0].signals, [])
+        self.assertIn(f"Output saved: {self.trace}\n",
+                      (self.root / "raw/recorder.log").read_text())
 
     def test_saved_path_for_another_package_is_rejected(self):
         session = self.launch(saved_path="/tmp/another.trace")
