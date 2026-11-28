@@ -1,6 +1,8 @@
+import Foundation
 import Testing
 import RefractIR
 @testable import RefractFrontend
+import RefractGolden
 import RefractMapping
 
 @Test func textInputHostBuildsBoundedBindingAndModelCallbacks() throws {
@@ -25,6 +27,39 @@ import RefractMapping
     let unit = Frontend.parse(SourceFile(path: "Input.swift", contents: source))
     #expect(unit.diagnostics.filter { $0.code == "RFINPUT002" }.count == 2)
     #expect(unit.hasErrors)
+}
+
+@Test func textInputHostOnlyForwardsAnExplicitModifierParameter() throws {
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let fixture = root.appendingPathComponent("Fixtures/interop-text-input-host")
+    let input = try String(contentsOf: fixture.appendingPathComponent("Input.swift"), encoding: .utf8)
+    let mapping = try String(contentsOf: fixture.appendingPathComponent("refract.json"), encoding: .utf8)
+    let expected = try String(contentsOf: fixture.appendingPathComponent("Expected.kt"), encoding: .utf8)
+
+    let declared = try GoldenRunner.generate(FixtureCase(
+        name: "interop-text-input-host", status: .ready, input: input, mapping: mapping,
+        expectedKotlin: nil, expectedArkTS: nil, expectedDiagnostics: nil))
+    #expect(declared.kotlin == expected)
+
+    let parsedMapping = try JSONSerialization.jsonObject(with: Data(mapping.utf8))
+    var object = try #require(parsedMapping as? [String: Any])
+    var android = try #require(object["android"] as? [String: Any])
+    var nativeComponents = try #require(android["nativeComponents"] as? [String: Any])
+    var host = try #require(nativeComponents["NativeTextInputHost"] as? [String: Any])
+    #expect(host.removeValue(forKey: "modifierParameter") as? String == "modifier")
+    nativeComponents["NativeTextInputHost"] = host
+    android["nativeComponents"] = nativeComponents
+    object["android"] = android
+    let undeclaredMapping = String(
+        decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+        as: UTF8.self)
+    let undeclared = try GoldenRunner.generate(FixtureCase(
+        name: "interop-text-input-host", status: .ready, input: input, mapping: undeclaredMapping,
+        expectedKotlin: nil, expectedArkTS: nil, expectedDiagnostics: nil))
+    #expect(undeclared.kotlin == expected.replacingOccurrences(
+        of: "        modifier = modifier,\n", with: ""))
+    #expect(undeclared.arkTS == declared.arkTS)
 }
 
 @Test(arguments: [

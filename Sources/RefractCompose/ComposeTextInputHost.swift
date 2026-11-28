@@ -58,7 +58,7 @@ enum ComposeTextInputHost {
         _ = try InteropMapping.validate(declaration: declaration, target: target, platform: .android,
                                         location: location)
         context.imports.insert("com.example.refract.input.NativeTextInputHost")
-        let modifierArgument = isRoot ? "\(modifierParameter ?? "modifier") = modifier" : nil
+        let modifierArgument = isRoot ? modifierParameter.map { "\($0) = modifier" } : nil
         var labels: [String: String] = [:]
         for binding in target.arguments {
             guard let label = binding.target else {
