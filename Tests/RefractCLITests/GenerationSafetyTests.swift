@@ -134,6 +134,53 @@ import Testing
     #endif
 }
 
+@Test func cliOnlyForwardsAnExplicitTextInputHostModifierArgument() throws {
+    #if os(Linux) || os(macOS)
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let executable = try requireCLIExecutable()
+    let fixture = root.appendingPathComponent("Fixtures/interop-text-input-host")
+    let temporary = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: temporary) }
+
+    let mappingText = try String(contentsOf: fixture.appendingPathComponent("refract.json"), encoding: .utf8)
+    let parsedMapping = try JSONSerialization.jsonObject(with: Data(mappingText.utf8))
+    var mapping = try #require(parsedMapping as? [String: Any])
+    var android = try #require(mapping["android"] as? [String: Any])
+    var nativeComponents = try #require(android["nativeComponents"] as? [String: Any])
+    var host = try #require(nativeComponents["NativeTextInputHost"] as? [String: Any])
+    #expect(host.removeValue(forKey: "modifierParameter") as? String == "modifier")
+    nativeComponents["NativeTextInputHost"] = host
+    android["nativeComponents"] = nativeComponents
+    mapping["android"] = android
+    let omittedMapping = temporary.appendingPathComponent("refract.json")
+    try JSONSerialization.data(withJSONObject: mapping, options: [.sortedKeys]).write(to: omittedMapping)
+
+    let expected = try String(contentsOf: fixture.appendingPathComponent("Expected.kt"), encoding: .utf8)
+    let declared = try runCLI(
+        ["generate", "--input", fixture.appendingPathComponent("Input.swift").path,
+         "--mapping", fixture.appendingPathComponent("refract.json").path,
+         "--android-out", temporary.appendingPathComponent("android-declared").path,
+         "--harmony-out", temporary.appendingPathComponent("harmony-declared").path], executable: executable)
+    #expect(declared.status == 0, Comment(rawValue: declared.stderr))
+    #expect(try String(contentsOf: temporary.appendingPathComponent("android-declared/Input.kt"), encoding: .utf8)
+        == expected)
+
+    let omitted = try runCLI(
+        ["generate", "--input", fixture.appendingPathComponent("Input.swift").path,
+         "--mapping", omittedMapping.path,
+         "--android-out", temporary.appendingPathComponent("android-omitted").path,
+         "--harmony-out", temporary.appendingPathComponent("harmony-omitted").path], executable: executable)
+    #expect(omitted.status == 0, Comment(rawValue: omitted.stderr))
+    let generated = try String(
+        contentsOf: temporary.appendingPathComponent("android-omitted/Input.kt"), encoding: .utf8)
+    #expect(generated == expected.replacingOccurrences(of: "        modifier = modifier,\n", with: ""))
+    #expect(!generated.contains("modifier = modifier"))
+    #expect(try String(contentsOf: temporary.appendingPathComponent("harmony-declared/Input.ets"), encoding: .utf8)
+        == String(contentsOf: temporary.appendingPathComponent("harmony-omitted/Input.ets"), encoding: .utf8))
+    #endif
+}
+
 private func requireCLIExecutable() throws -> URL {
     let executable = builtCLIExecutable()
     guard FileManager.default.isExecutableFile(atPath: executable.path) else {
