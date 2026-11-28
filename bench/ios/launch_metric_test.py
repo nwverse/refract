@@ -715,8 +715,9 @@ class TracedStartupSourceTest(unittest.TestCase):
             source = Path(temporary) / "main.swift"
             source.write_text(script)
             executable = Path(temporary) / "launch-metric-contract"
+            # CI compiles this alongside the full Swift suite; leave room for a queued compiler.
             result = subprocess.run([swift, str(source), "-o", str(executable)],
-                                    capture_output=True, text=True, timeout=60, check=False)
+                                    capture_output=True, text=True, timeout=120, check=False)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=30, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

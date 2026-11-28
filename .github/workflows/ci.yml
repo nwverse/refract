@@ -33,9 +33,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Select Swift ${{ matrix.swift-version }}
+        # Swiftly's 6.4.2 signature key is missing from the pinned action's keyring.
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3.0.0-beta.1
         with:
           swift-version: ${{ matrix.swift-version }}
+          skip-verify-signature: true
       - name: Keep the tool manager's version marker outside the checkout
         shell: bash
         run: |
@@ -99,9 +101,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Select Swift 6.4.2 for the generator CLI
+        # Swiftly's 6.4.2 signature key is missing from the pinned action's keyring.
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3.0.0-beta.1
         with:
           swift-version: 6.4.2
+          skip-verify-signature: true
       - name: Keep the tool manager's version marker outside the checkout
         shell: bash
         run: |
